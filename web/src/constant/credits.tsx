@@ -1,6 +1,8 @@
 import type { ComponentProps } from "react";
 import { Zap } from "lucide-react";
 
+import { modelOptionName } from "@/stores/use-config-store";
+
 export function CreditSymbol({ className, ...props }: ComponentProps<"span">) {
     return (
         <span {...props} className={`inline-flex items-center justify-center ${className || ""}`}>
@@ -15,7 +17,8 @@ export type ModelCreditCost = {
 };
 
 function modelCreditCost(modelCosts: ModelCreditCost[] | undefined, model: string) {
-    return modelCosts?.find((item) => item.model === model)?.credits || 0;
+    const modelName = modelOptionName(model);
+    return modelCosts?.find((item) => item.model === modelName)?.credits || 0;
 }
 
 export function requestCreditCost(options: { channelMode: string; modelCosts?: ModelCreditCost[]; model: string; count?: string | number }) {

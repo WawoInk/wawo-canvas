@@ -33,6 +33,11 @@ const emptySettings: AdminSettings = {
             defaultImageModel: "",
             defaultVideoModel: "",
             defaultTextModel: "",
+            defaultAudioModel: "",
+            imageModels: [],
+            videoModels: [],
+            textModels: [],
+            audioModels: [],
             systemPrompt: "",
             allowCustomChannel: true,
         },
@@ -418,24 +423,53 @@ export default function AdminSettingsPage() {
                                             <Select mode="multiple" placeholder="请选择系统可用模型" options={channelModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
-                                    <Col xs={24} md={6}>
+                                    <Col xs={24} md={12} lg={4}>
                                         <Form.Item name={["public", "modelChannel", "defaultModel"]} label="默认模型">
                                             <Select showSearch allowClear options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
-                                    <Col xs={24} md={6}>
+                                    <Col xs={24} md={12} lg={4}>
                                         <Form.Item name={["public", "modelChannel", "defaultImageModel"]} label="默认图片模型">
                                             <Select showSearch allowClear options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
-                                    <Col xs={24} md={6}>
+                                    <Col xs={24} md={12} lg={4}>
                                         <Form.Item name={["public", "modelChannel", "defaultVideoModel"]} label="默认视频模型">
                                             <Select showSearch allowClear options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
-                                    <Col xs={24} md={6}>
+                                    <Col xs={24} md={12} lg={4}>
                                         <Form.Item name={["public", "modelChannel", "defaultTextModel"]} label="默认文本模型">
                                             <Select showSearch allowClear options={publicModels.map((item) => ({ label: item, value: item }))} />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col xs={24} md={12} lg={4}>
+                                        <Form.Item name={["public", "modelChannel", "defaultAudioModel"]} label="默认音频模型">
+                                            <Select showSearch allowClear options={publicModels.map((item) => ({ label: item, value: item }))} />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={24}>
+                                        <Typography.Title level={5}>各能力可选模型</Typography.Title>
+                                        <Typography.Text type="secondary">留空则自动从可用模型按名称推导，保存后所有用户的前台模型下拉仅展示此列表中勾选的模型。</Typography.Text>
+                                    </Col>
+                                    <Col xs={24} md={12}>
+                                        <Form.Item name={["public", "modelChannel", "imageModels"]} label="图片模型可选项" extra="留空则从可用模型自动推导">
+                                            <Select mode="multiple" showSearch allowClear placeholder="选择图片模型" options={publicModels.map((item) => ({ label: item, value: item }))} />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col xs={24} md={12}>
+                                        <Form.Item name={["public", "modelChannel", "videoModels"]} label="视频模型可选项" extra="留空则从可用模型自动推导">
+                                            <Select mode="multiple" showSearch allowClear placeholder="选择视频模型" options={publicModels.map((item) => ({ label: item, value: item }))} />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col xs={24} md={12}>
+                                        <Form.Item name={["public", "modelChannel", "textModels"]} label="文本模型可选项" extra="留空则从可用模型自动推导">
+                                            <Select mode="multiple" showSearch allowClear placeholder="选择文本模型" options={publicModels.map((item) => ({ label: item, value: item }))} />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col xs={24} md={12}>
+                                        <Form.Item name={["public", "modelChannel", "audioModels"]} label="音频模型可选项" extra="留空则从可用模型自动推导">
+                                            <Select mode="multiple" showSearch allowClear placeholder="选择音频模型" options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={24}>
@@ -444,7 +478,7 @@ export default function AdminSettingsPage() {
                                         </Form.Item>
                                     </Col>
                                     <Col span={24}>
-                                        <Form.Item name={["public", "modelChannel", "allowCustomChannel"]} label="是否允许用户自定义渠道" extra="开启后，前端可提供走后端渠道和用户自定义 baseUrl 直连两种模式" valuePropName="checked">
+                                        <Form.Item name={["public", "modelChannel", "allowCustomChannel"]} label="允许用户自定义渠道" extra="开启后，前端可提供走后端渠道和用户自定义 baseUrl 直连两种模式。关闭后，整个平台强制使用后台渠道，用户不再能自行配置渠道与模型，生成请求统一走后端代理并消耗算力点。" valuePropName="checked">
                                             <Switch />
                                         </Form.Item>
                                     </Col>
@@ -467,15 +501,17 @@ export default function AdminSettingsPage() {
                                                     dataIndex: "credits",
                                                     width: 220,
                                                     render: (_, item) => (
-                                                        <InputNumber
-                                                            min={0}
-                                                            step={1}
-                                                            precision={0}
-                                                            className="!w-full"
-                                                            value={item.credits}
-                                                            addonAfter="点"
-                                                            onChange={(value) => setModelCost(form, setModelCosts, item.model, Number(value) || 0)}
-                                                        />
+                                                        <Space.Compact className="!w-full">
+                                                            <InputNumber
+                                                                min={0}
+                                                                step={1}
+                                                                precision={0}
+                                                                className="!w-full"
+                                                                value={item.credits}
+                                                                onChange={(value) => setModelCost(form, setModelCosts, item.model, Number(value) || 0)}
+                                                            />
+                                                            <Input style={{ width: 40 }} value="点" disabled />
+                                                        </Space.Compact>
                                                     ),
                                                 },
                                             ]}

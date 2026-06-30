@@ -5,6 +5,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { nanoid } from "nanoid";
 
+import { fetchPublicSettings, type PublicSettings } from "@/services/api/settings";
+
 export type ApiCallFormat = "openai" | "gemini";
 
 export type ModelChannel = {
@@ -114,11 +116,13 @@ export const defaultWebdavSyncConfig: WebdavSyncConfig = {
 type ConfigStore = {
     config: AiConfig;
     webdav: WebdavSyncConfig;
+    publicSettings: PublicSettings | null;
     isConfigOpen: boolean;
     shouldPromptContinue: boolean;
     updateConfig: <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
     updateWebdavConfig: <K extends keyof WebdavSyncConfig>(key: K, value: WebdavSyncConfig[K]) => void;
     isAiConfigReady: (config: AiConfig, model: string) => boolean;
+    loadPublicSettings: () => Promise<void>;
     openConfigDialog: (shouldPromptContinue?: boolean) => void;
     setConfigDialogOpen: (isOpen: boolean) => void;
     clearPromptContinue: () => void;
@@ -174,6 +178,7 @@ export const useConfigStore = create<ConfigStore>()(
         (set, get) => ({
             config: defaultConfig,
             webdav: defaultWebdavSyncConfig,
+            publicSettings: null,
             isConfigOpen: false,
             shouldPromptContinue: false,
             updateConfig: (key, value) =>
@@ -191,6 +196,58 @@ export const useConfigStore = create<ConfigStore>()(
                     },
                 })),
             isAiConfigReady: (config, model) => isAiConfigReady(config, model),
+            loadPublicSettings: async () => {
+                try {
+                    const settings = await fetchPublicSettings();
+                    const { availableModels, defaultModel, defaultImageModel, defaultVideoModel, defaultTextModel, defaultAudioModel, allowCustomChannel, imageModels: remoteImageModels, videoModels: remoteVideoModels, textModels: remoteTextModels, audioModels: remoteAudioModels } = settings.modelChannel;
+                    set({ publicSettings: settings });
+                    // Only auto-switch to remote when admin has disabled custom channels (forced remote)
+                    if (!allowCustomChannel && availableModels.length) {
+                        const models = availableModels.map((m) => m.trim()).filter(Boolean);
+                        // Use admin-configured per-capability lists when present; fall back to name-based derivation for backward compatibility
+                        const imageModels = remoteImageModels?.length ? remoteImageModels.filter((m) => models.includes(m)) : models.filter(isImageModelName);
+                        const videoModels = remoteVideoModels?.length ? remoteVideoModels.filter((m) => models.includes(m)) : models.filter(isVideoModelName);
+                        const textModels = remoteTextModels?.length ? remoteTextModels.filter((m) => models.includes(m)) : models.filter(isTextModelName);
+                        const audioModels = remoteAudioModels?.length ? remoteAudioModels.filter((m) => models.includes(m)) : models.filter(isAudioModelName);
+                        const current = get().config;
+                        const isAlreadyRemote = current.channelMode === "remote";
+                        // Only populate model lists from availableModels on first transition to remote;
+                        // if already remote, preserve user's per-capability selections from config modal
+                        const nextModels = isAlreadyRemote ? preserveOrFilter(current.models, models) : models;
+                        const nextImageModels = isAlreadyRemote ? preserveOrFilter(current.imageModels, models) : imageModels;
+                        const nextVideoModels = isAlreadyRemote ? preserveOrFilter(current.videoModels, models) : videoModels;
+                        const nextTextModels = isAlreadyRemote ? preserveOrFilter(current.textModels, models) : textModels;
+                        const nextAudioModels = isAlreadyRemote ? preserveOrFilter(current.audioModels, models) : audioModels;
+                        const pick = (currentValue: string, defaultVal: string, fallbackModels: string[]) => {
+                            const persisted = currentValue?.trim();
+                            if (persisted && models.includes(persisted)) return persisted;
+                            if (defaultVal?.trim() && models.includes(defaultVal.trim())) return defaultVal.trim();
+                            return fallbackModels[0] || "";
+                        };
+                        set({
+                            config: {
+                                ...current,
+                                channelMode: "remote",
+                                model: pick(current.model, defaultModel, nextTextModels),
+                                imageModel: pick(current.imageModel, defaultImageModel, nextImageModels),
+                                videoModel: pick(current.videoModel, defaultVideoModel, nextVideoModels),
+                                textModel: pick(current.textModel, defaultTextModel, nextTextModels),
+                                audioModel: pick(current.audioModel, defaultAudioModel, nextAudioModels),
+                                models: nextModels,
+                                imageModels: nextImageModels,
+                                videoModels: nextVideoModels,
+                                textModels: nextTextModels,
+                                audioModels: nextAudioModels,
+                            },
+                        });
+                    } else if (allowCustomChannel && get().config.channelMode === "remote") {
+                        // Admin re-enabled custom channels — revert to local
+                        set({ config: { ...get().config, channelMode: "local" } });
+                    }
+                } catch {
+                    // 静默失败——后台不可用时允许使用本地配置
+                }
+            },
             openConfigDialog: (shouldPromptContinue = false) => set({ isConfigOpen: true, shouldPromptContinue }),
             setConfigDialogOpen: (isConfigOpen) => set({ isConfigOpen }),
             clearPromptContinue: () => set({ shouldPromptContinue: false }),
@@ -368,6 +425,15 @@ function uniqueRawModels(models: string[]) {
 
 function uniqueModelOptions(models: string[]) {
     return Array.from(new Set((models || []).map((model) => model.trim()).filter(Boolean)));
+}
+
+/** Keep user's persisted selections that are still in the available pool, falling back to the full pool only when nothing was persisted. */
+function preserveOrFilter(persisted: string[], available: string[]) {
+    if (!Array.isArray(persisted)) return filterModelsByCapability(available);
+    const trimmed = persisted.map((m) => m.trim()).filter(Boolean);
+    if (!trimmed.length) return filterModelsByCapability(available);
+    const pool = new Set(available);
+    return trimmed.filter((m) => pool.has(m));
 }
 
 export function buildApiUrl(baseUrl: string, path: string) {

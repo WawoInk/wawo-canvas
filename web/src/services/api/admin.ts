@@ -174,6 +174,11 @@ export type AdminPublicModelChannelSettings = {
     defaultImageModel: string;
     defaultVideoModel: string;
     defaultTextModel: string;
+    defaultAudioModel: string;
+    imageModels: string[];
+    videoModels: string[];
+    textModels: string[];
+    audioModels: string[];
     systemPrompt: string;
     allowCustomChannel: boolean;
 };

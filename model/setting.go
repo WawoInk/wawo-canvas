@@ -36,6 +36,11 @@ type PublicModelChannelSetting struct {
 	DefaultImageModel  string      `json:"defaultImageModel"`
 	DefaultVideoModel  string      `json:"defaultVideoModel"`
 	DefaultTextModel   string      `json:"defaultTextModel"`
+	DefaultAudioModel  string      `json:"defaultAudioModel"`
+	ImageModels        []string    `json:"imageModels"`
+	VideoModels        []string    `json:"videoModels"`
+	TextModels         []string    `json:"textModels"`
+	AudioModels        []string    `json:"audioModels"`
 	SystemPrompt       string      `json:"systemPrompt"`
 	AllowCustomChannel *bool       `json:"allowCustomChannel"`
 }

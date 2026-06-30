@@ -69,9 +69,23 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 	} else {
 		setting.ModelChannel.AvailableModels = uniqueModelNames(setting.ModelChannel.AvailableModels)
 	}
+	// nil → empty for new per-capability list fields (backward compatible)
+	if setting.ModelChannel.ImageModels == nil {
+		setting.ModelChannel.ImageModels = []string{}
+	}
+	if setting.ModelChannel.VideoModels == nil {
+		setting.ModelChannel.VideoModels = []string{}
+	}
+	if setting.ModelChannel.TextModels == nil {
+		setting.ModelChannel.TextModels = []string{}
+	}
+	if setting.ModelChannel.AudioModels == nil {
+		setting.ModelChannel.AudioModels = []string{}
+	}
 	setting.ModelChannel.DefaultTextModel = repairDefaultModel(setting.ModelChannel.DefaultTextModel, setting.ModelChannel.AvailableModels, isTextModelName)
 	setting.ModelChannel.DefaultImageModel = repairDefaultModel(setting.ModelChannel.DefaultImageModel, setting.ModelChannel.AvailableModels, isImageModelName)
 	setting.ModelChannel.DefaultVideoModel = repairDefaultModel(setting.ModelChannel.DefaultVideoModel, setting.ModelChannel.AvailableModels, isVideoModelName)
+	setting.ModelChannel.DefaultAudioModel = repairDefaultModel(setting.ModelChannel.DefaultAudioModel, setting.ModelChannel.AvailableModels, isAudioModelName)
 	setting.ModelChannel.DefaultModel = repairDefaultModel(setting.ModelChannel.DefaultModel, setting.ModelChannel.AvailableModels, isTextModelName)
 	return setting
 }

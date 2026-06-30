@@ -34,7 +34,11 @@ export async function fetchPrompts({ keyword = "", tag = [], category = ALL_PROM
     );
     const response = await fetch(`/api/prompts${params.size ? `?${params}` : ""}`);
     if (!response.ok) throw new Error("获取提示词失败");
-    return (await response.json()) as PromptListResponse;
+    const envelope = await response.json();
+    if (!envelope || typeof envelope !== "object" || (typeof envelope.code === "number" && envelope.code !== 0)) {
+        throw new Error(envelope?.msg || "获取提示词失败");
+    }
+    return envelope.data as PromptListResponse;
 }
 
 export function formatPromptDate(value: string) {

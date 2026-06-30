@@ -2,7 +2,7 @@
 
 import { App, Button, Form, Input, Modal, Progress, Segmented, Select, Tabs } from "antd";
 import { CircleAlert, Cloud, Plus, RefreshCw, Trash2, Wifi } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ModelPicker } from "@/components/model-picker";
 import { fetchChannelModels } from "@/services/api/image";
@@ -66,6 +66,7 @@ export function AppConfigModal() {
     const [webdavSyncStatus, setWebdavSyncStatus] = useState("");
     const [webdavDomainProgress, setWebdavDomainProgress] = useState(createWebdavDomainProgress);
     const config = useConfigStore((state) => state.config);
+    const publicSettings = useConfigStore((state) => state.publicSettings);
     const webdav = useConfigStore((state) => state.webdav);
     const updateConfig = useConfigStore((state) => state.updateConfig);
     const updateWebdavConfig = useConfigStore((state) => state.updateWebdavConfig);
@@ -75,6 +76,15 @@ export function AppConfigModal() {
     const clearPromptContinue = useConfigStore((state) => state.clearPromptContinue);
     const modelOptions = config.models.map((model) => ({ label: modelOptionLabel(config, model), value: model }));
     const webdavReady = Boolean(webdav.url.trim());
+    const isRemote = config.channelMode === "remote";
+    const forcedRemote = isRemote && publicSettings?.modelChannel.allowCustomChannel === false;
+
+    // 当弹窗打开且当前 Tab 不可见时（如远程模式无渠道 Tab），自动切到模型 Tab
+    useEffect(() => {
+        if (isConfigOpen && forcedRemote && activeTab === "channels") {
+            setActiveTab("models");
+        }
+    }, [isConfigOpen, forcedRemote, activeTab]);
 
     const saveConfig = (nextConfig: AiConfig) => {
         (Object.keys(nextConfig) as Array<keyof AiConfig>).forEach((key) => updateConfig(key, nextConfig[key]));
@@ -207,34 +217,14 @@ export function AppConfigModal() {
         }
     };
 
-    return (
-        <Modal
-            title={
-                <div>
-                    <div className="text-lg font-semibold">配置与用户偏好</div>
-                    <div className="mt-1 text-xs font-normal text-stone-500">渠道聚合、模型选择和同步偏好</div>
-                </div>
-            }
-            open={isConfigOpen}
-            width={980}
-            centered
-            onCancel={() => setConfigDialogOpen(false)}
-            styles={{ body: { maxHeight: "72vh", overflowY: "auto", paddingRight: 12 } }}
-            footer={
-                <Button type="primary" onClick={finishConfig}>
-                    完成
-                </Button>
-            }
-        >
-            <Tabs
-                activeKey={activeTab}
-                onChange={setActiveTab}
-                items={[
-                    {
-                        key: "channels",
-                        label: "渠道",
-                        children: (
-                            <Form layout="vertical" requiredMark={false}>
+    const tabItems = useMemo(() => {
+        const items: Parameters<typeof Tabs>[0]["items"] = [];
+        if (!forcedRemote && !isRemote) {
+            items.push({
+                key: "channels",
+                label: "渠道",
+                children: (
+                    <Form layout="vertical" requiredMark={false}>
                                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 p-3 dark:border-stone-800">
                                     <div className="min-w-0 flex-1">
                                         <div className="flex w-fit max-w-full flex-wrap items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-100">
@@ -294,23 +284,29 @@ export function AppConfigModal() {
                                 </div>
                             </Form>
                         ),
-                    },
-                    {
-                        key: "models",
+            });
+        }
+        items.push({
+            key: "models",
                         label: "模型",
                         children: (
                             <Form layout="vertical" requiredMark={false}>
                                 <div className="mb-4 rounded-lg border border-stone-200 p-3 dark:border-stone-800">
                                     <div className="text-sm font-semibold">默认模型和可选项</div>
-                                    <div className="mt-1 text-xs leading-5 text-stone-500">可选项决定各处下拉框展示哪些模型；同名模型会以括号里的渠道名区分。</div>
+                                    <div className="mt-1 text-xs leading-5 text-stone-500">
+                                        {forcedRemote
+                                            ? "管理员已统一配置各能力可选项，仅可选择默认模型。"
+                                            : "可选项决定各处下拉框展示哪些模型；同名模型会以括号里的渠道名区分。"}
+                                    </div>
                                 </div>
                                 <div className="grid gap-4 md:grid-cols-2">
                                     {modelGroups.map((group) => (
                                         <Form.Item key={group.modelsKey} label={group.optionsLabel} className="mb-0">
                                             <Select
-                                                mode="tags"
+                                                mode={forcedRemote ? "multiple" : "tags"}
+                                                disabled={forcedRemote}
                                                 showSearch
-                                                allowClear
+                                                allowClear={!forcedRemote}
                                                 maxTagCount="responsive"
                                                 placeholder={config.models.length ? `请选择或输入${group.optionsLabel}` : "先到渠道里填写或拉取模型"}
                                                 value={config[group.modelsKey]}
@@ -427,9 +423,39 @@ export function AppConfigModal() {
                                 </section>
                             </Form>
                         ),
-                    },
-                ]}
-            />
+        });
+        return items;
+    }, [forcedRemote, isRemote, config, modelOptions, loadingChannelId, webdavReady, webdav, testingWebdav, syncingWebdav, webdavSyncStatus, webdavDomainProgress]);
+
+    return (
+        <Modal
+            title={
+                <div>
+                    <div className="text-lg font-semibold">配置与用户偏好</div>
+                    <div className="mt-1 text-xs font-normal text-stone-500">渠道聚合、模型选择和同步偏好</div>
+                </div>
+            }
+            open={isConfigOpen}
+            width={980}
+            centered
+            onCancel={() => setConfigDialogOpen(false)}
+            styles={{ body: { maxHeight: "72vh", overflowY: "auto", paddingRight: 12 } }}
+            footer={
+                <Button type="primary" onClick={finishConfig}>
+                    完成
+                </Button>
+            }
+        >
+            {forcedRemote ? (
+                <div className="mb-4 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-700/60 dark:bg-blue-950/30 dark:text-blue-100">
+                    管理员已强制使用后台渠道，所有生成请求将由后台代理并消耗算力点，无法自行配置渠道
+                </div>
+            ) : isRemote ? (
+                <div className="mb-4 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-700/60 dark:bg-blue-950/30 dark:text-blue-100">
+                    正在使用后台配置的远程渠道，生成请求将由后台代理并消耗算力点
+                </div>
+            ) : null}
+            <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
         </Modal>
     );
 }
