@@ -9,6 +9,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/basketikun/infinite-canvas/model"
@@ -41,6 +42,10 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		return
 	}
 	resolved := resolveUpstreamRequest(channel, modelName, path, body, contentType)
+	if resolved.URL == "" {
+		proxyFail(w, "AI 接口请求失败")
+		return
+	}
 	request, err := http.NewRequest(http.MethodPost, resolved.URL, bytes.NewReader(body))
 	if err != nil {
 		proxyAILogf("AI proxy build request failed: url=%s err=%v", resolved.URL, err)
@@ -76,6 +81,10 @@ func ProxyAIGetRequest(w http.ResponseWriter, r *http.Request, path string) {
 		return
 	}
 	resolved := resolveUpstreamRequest(channel, modelName, path, nil, "")
+	if resolved.URL == "" {
+		proxyFail(w, "AI 接口请求失败")
+		return
+	}
 	request, err := http.NewRequest(http.MethodGet, resolved.URL, nil)
 	if err != nil {
 		proxyFail(w, "AI 接口请求失败")
@@ -95,9 +104,58 @@ type upstreamRequest struct {
 	Body    []byte
 }
 
-// resolveUpstreamRequest 按渠道协议构造上游请求（本任务仅 openai）。
+// resolveUpstreamRequest 按渠道协议构造上游请求。
 func resolveUpstreamRequest(channel model.ModelChannel, modelName, path string, body []byte, contentType string) upstreamRequest {
+	if channel.Protocol == "gemini" {
+		return buildGeminiUpstream(channel, modelName, path, body)
+	}
 	return buildOpenAIUpstream(channel, modelName, path, body, contentType)
+}
+
+func buildGeminiUpstream(channel model.ModelChannel, modelName, path string, body []byte) upstreamRequest {
+	action, err := geminiActionFor(path)
+	if err != nil {
+		return upstreamRequest{URL: ""}
+	}
+	stream := isGeminiStream(path, body)
+	if stream {
+		action = "streamGenerateContent"
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(channel.BaseURL), "/")
+	urlStr := fmt.Sprintf("%s/models/%s:%s?key=%s", baseURL, modelName, action, url.QueryEscape(channel.APIKey))
+	if stream {
+		urlStr = fmt.Sprintf("%s/models/%s:%s?alt=sse&key=%s", baseURL, modelName, action, url.QueryEscape(channel.APIKey))
+	}
+	headers := http.Header{}
+	headers.Set("Content-Type", "application/json")
+	return upstreamRequest{URL: urlStr, Headers: headers, Body: body}
+}
+
+// geminiActionFor 把 /api/v1/* 路径映射到 Gemini action。不支持返回 error。
+func geminiActionFor(path string) (string, error) {
+	switch path {
+	case "/chat/completions", "/images/generations", "/images/edits":
+		return "generateContent", nil
+	case "/audio/speech", "/videos":
+		return "", fmt.Errorf("Gemini 协议不支持 %s", path)
+	default:
+		if strings.HasPrefix(path, "/videos/") {
+			return "", fmt.Errorf("Gemini 协议不支持 %s", path)
+		}
+		return "generateContent", nil
+	}
+}
+
+// isGeminiStream 仅对 /chat/completions 检测请求体 stream 字段。
+func isGeminiStream(path string, body []byte) bool {
+	if path != "/chat/completions" {
+		return false
+	}
+	var payload struct {
+		Stream bool `json:"stream"`
+	}
+	_ = json.Unmarshal(body, &payload)
+	return payload.Stream
 }
 
 func buildOpenAIUpstream(channel model.ModelChannel, modelName, path string, body []byte, contentType string) upstreamRequest {
@@ -133,10 +191,22 @@ func isArkSeedanceVideo(baseURL string, modelName string) bool {
 	return strings.Contains(model, "seedance") || strings.Contains(model, "doubao-seedance") || strings.Contains(base, "/api/plan/v3")
 }
 
+// redactUpstreamURL 移除 URL 中的 key= 等敏感查询参数，用于日志。
+func redactUpstreamURL(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	q := parsed.Query()
+	q.Del("key")
+	parsed.RawQuery = q.Encode()
+	return parsed.String()
+}
+
 func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func()) {
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		log.Printf("AI proxy request failed: url=%s err=%v", request.URL.String(), err)
+		log.Printf("AI proxy request failed: url=%s err=%v", redactUpstreamURL(request.URL.String()), err)
 		if onFailure != nil {
 			onFailure()
 		}
@@ -147,7 +217,7 @@ func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure
 
 	if response.StatusCode >= http.StatusBadRequest {
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-		log.Printf("AI upstream error: url=%s status=%d", request.URL.String(), response.StatusCode)
+		log.Printf("AI upstream error: url=%s status=%d", redactUpstreamURL(request.URL.String()), response.StatusCode)
 		if onFailure != nil {
 			onFailure()
 		}

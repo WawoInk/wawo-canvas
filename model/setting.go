@@ -11,6 +11,7 @@ const (
 
 // ModelChannel 模型渠道配置。
 type ModelChannel struct {
+	// Protocol 渠道协议：openai（默认）或 gemini。决定后端 AI 代理构造上游 URL 与鉴权方式。
 	Protocol string   `json:"protocol"`
 	Name     string   `json:"name"`
 	BaseURL  string   `json:"baseUrl"`
