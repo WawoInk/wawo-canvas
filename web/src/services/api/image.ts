@@ -1,6 +1,7 @@
 import axios from "axios";
 
 import { buildApiUrl, resolveModelRequestConfig, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
+import { useUserStore } from "@/stores/use-user-store";
 import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
@@ -229,14 +230,20 @@ function withSystemPrompt(config: AiConfig, prompt: string) {
 }
 
 function aiApiUrl(config: AiConfig, path: string) {
-    return buildApiUrl(config.baseUrl, path);
+    return config.channelMode === "remote" ? `/api/v1${path}` : buildApiUrl(config.baseUrl, path);
 }
 
 function aiHeaders(config: AiConfig, contentType?: string) {
-    return {
-        Authorization: `Bearer ${config.apiKey}`,
-        ...(contentType ? { "Content-Type": contentType } : {}),
-    };
+    const token = useUserStore.getState().token;
+    return config.channelMode === "remote"
+        ? {
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              ...(contentType ? { "Content-Type": contentType } : {}),
+          }
+        : {
+              Authorization: `Bearer ${config.apiKey}`,
+              ...(contentType ? { "Content-Type": contentType } : {}),
+          };
 }
 
 function geminiBaseUrl(config: Pick<AiConfig, "baseUrl">) {
@@ -493,7 +500,28 @@ function toGeminiToolOptions(tools: ResponseFunctionTool[], toolChoice: ToolChoi
     };
 }
 
+/**
+ * Remote-mode wrapper for Gemini requests: sends the Gemini-formatted body
+ * to the backend proxy at `/api/v1*` using `aiApiUrl`/`aiHeaders`.
+ * The backend re-writes the protocol to Gemini upstream per the selected channel.
+ */
+async function postGeminiViaBackend(config: AiConfig, path: string, geminiBody: Record<string, unknown>): Promise<GeminiPayload> {
+    const url = aiApiUrl(config, path);
+    const headers = { ...aiHeaders(config, "application/json"), Accept: "application/json" };
+    const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(geminiBody),
+    });
+    if (!response.ok) throw new Error(await readFetchError(response, "后端代理请求失败"));
+    return (await response.json()) as GeminiPayload;
+}
+
 async function requestGeminiStreamingResponse(config: AiConfig, body: Record<string, unknown>, onDelta?: (text: string) => void, options?: RequestOptions): Promise<ToolResponseResult> {
+    if (config.channelMode === "remote") {
+        const payload = await postGeminiViaBackend(config, "/chat/completions", body);
+        return parseGeminiToolResponse(payload);
+    }
     const response = await fetch(`${geminiApiUrl(config, "streamGenerateContent")}?alt=sse`, {
         method: "POST",
         headers: geminiHeaders(config),
@@ -579,6 +607,14 @@ async function requestGeminiImagesOnce(config: AiConfig, prompt: string, referen
     const parts: GeminiPart[] = [{ text: prompt }];
     for (const image of references) {
         parts.push(toGeminiImagePart(await imageToDataUrl(image)));
+    }
+    if (config.channelMode === "remote") {
+        const body = {
+            ...toGeminiBody(config, [{ role: "user", content: prompt }], { generationConfig: { responseModalities: ["TEXT", "IMAGE"] } }),
+            contents: [{ role: "user", parts }],
+        };
+        const payload = await postGeminiViaBackend(config, "/images/generations", body);
+        return parseGeminiImagePayload(payload);
     }
     const response = await axios.post<GeminiPayload>(
         geminiApiUrl(config, "generateContent"),
