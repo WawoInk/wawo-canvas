@@ -177,16 +177,9 @@ func promptTagsFromItems(items []model.Prompt) []string {
 	return tags
 }
 
-// promptJSONTagsContains 返回提示词 tags 的 JSON 包含条件。
+// promptJSONTagsContains 返回提示词 tags 的 JSON 包含条件（PostgreSQL）。
 func promptJSONTagsContains(tx *gorm.DB) string {
-	switch tx.Dialector.Name() {
-	case "mysql":
-		return "JSON_CONTAINS(tags, JSON_QUOTE(?))"
-	case "postgres":
-		return "jsonb_exists(tags::jsonb, ?)"
-	default:
-		return "EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?)"
-	}
+	return "jsonb_exists(tags::jsonb, ?)"
 }
 
 // isActivePromptOption 判断提示词筛选项有效状态。

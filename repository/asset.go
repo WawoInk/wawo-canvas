@@ -114,16 +114,9 @@ func assetTagsFromItems(items []model.Asset) []string {
 	return tags
 }
 
-// assetJSONTagsContains 返回素材 tags 的 JSON 包含条件。
+// assetJSONTagsContains 返回素材 tags 的 JSON 包含条件（PostgreSQL）。
 func assetJSONTagsContains(tx *gorm.DB) string {
-	switch tx.Dialector.Name() {
-	case "mysql":
-		return "JSON_CONTAINS(tags, JSON_QUOTE(?))"
-	case "postgres":
-		return "jsonb_exists(tags::jsonb, ?)"
-	default:
-		return "EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?)"
-	}
+	return "jsonb_exists(tags::jsonb, ?)"
 }
 
 // isActiveAssetOption 判断素材筛选项有效状态。
