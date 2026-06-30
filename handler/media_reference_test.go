@@ -1,10 +1,9 @@
 package handler
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/basketikun/infinite-canvas/config"
 )
 
 func TestNormalizeReferenceMediaTypeSupportsAudio(t *testing.T) {
@@ -44,13 +43,13 @@ func TestReferenceMediaTypeMaxBytes(t *testing.T) {
 	}
 }
 
-func TestReferenceMediaDirUsesAbsoluteSQLiteDataDir(t *testing.T) {
-	previous := config.Cfg
-	t.Cleanup(func() { config.Cfg = previous })
-	root := t.TempDir()
-	config.Cfg = config.Config{StorageDriver: "sqlite", DatabaseDSN: filepath.Join(root, "infinite-canvas.db")}
-
-	if got := referenceMediaDir(); got != filepath.Join(root, "reference-media") {
-		t.Fatalf("referenceMediaDir = %q", got)
+func TestReferenceMediaDirFallsBackToData(t *testing.T) {
+	// postgres-only：referenceDataDir 不再依赖 DSN，只看 /app/data 是否存在，否则 "data"。
+	// 测试环境无 /app/data → 期望 "data"。
+	if _, err := os.Stat("/app/data"); err == nil {
+		t.Skip("/app/data exists in this environment; fallback test not applicable")
+	}
+	if got := referenceMediaDir(); got != filepath.Join("data", "reference-media") {
+		t.Fatalf("referenceMediaDir = %q, want %q", got, filepath.Join("data", "reference-media"))
 	}
 }

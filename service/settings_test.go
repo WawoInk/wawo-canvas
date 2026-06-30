@@ -98,3 +98,18 @@ func TestNormalizeSettingsPublishesEnabledChannelModelsAndRepairsDefaults(t *tes
 		t.Fatalf("default video model = %q, want seedance", channel.DefaultVideoModel)
 	}
 }
+
+func TestNormalizePrivateSettingAcceptsGeminiProtocol(t *testing.T) {
+	got := normalizePrivateSetting(model.PrivateSetting{
+		Channels: []model.ModelChannel{
+			{Protocol: "gemini", Name: "g", BaseURL: "https://x", APIKey: "k", Models: []string{"gemini-2.5-flash"}},
+			{Protocol: "", Name: "o", BaseURL: "https://y", APIKey: "k", Models: []string{"gpt-5.5"}},
+		},
+	})
+	if got.Channels[0].Protocol != "gemini" {
+		t.Fatalf("gemini protocol should be preserved, got %q", got.Channels[0].Protocol)
+	}
+	if got.Channels[1].Protocol != "openai" {
+		t.Fatalf("empty protocol should default to openai, got %q", got.Channels[1].Protocol)
+	}
+}
