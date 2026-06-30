@@ -117,7 +117,7 @@ infinite-canvas/
 
 4. **移除 SQLite/MySQL 专有 tag 过滤分支**。`repository/prompt.go` 与 `asset.go` 的 `JSON_CONTAINS`（MySQL）/ `jsonb_exists`（Postgres）/ `json_each`（SQLite）分支 → postgres-only 重构后**仅保留 `jsonb_exists` 分支**，删另两个。行为中立的简化。
 
-5. **`credit_logs` 类型不新增枚举**。沿用 0.3.0 三类 `ai_consume` / `ai_refund` / `admin_adjust`。Web Agent Loop / canvas-agent 调用计费时，用 `remark` 区分（如 "agent chat" vs "image generation"），不改枚举、不改 schema。
+5. **`credit_logs` 类型不新增枚举**。沿用 0.3.0 三类 `ai_consume` / `ai_refund` / `admin_adjust`。Web Agent Loop（online canvas-agent）调用计费时，用 `remark` 区分（如 "agent chat" vs "image generation"），不改枚举、不改 schema。local canvas-agent 不计费（见 5.4）。
 
 ### 3.2 建库策略
 
@@ -199,12 +199,16 @@ func resolveUpstreamRequest(channel ModelChannel, modelName, path string, body [
 - **路径重写表**（扩展 0.3.0 已有的 `resolveAIProxyPath`，按 protocol × path 索引）：
   - `openai`：既有行为 + Seedance 特例（`/videos` → `/contents/generations/tasks`）
   - `gemini`：`/chat/completions` → `:streamGenerateContent?alt=sse`（流式）或 `:generateContent`（非流式）；`/images/generations` 与 `/images/edits` → `:generateContent`；`/audio/speech` → Gemini 不支持（报错）；`/videos` → Gemini 不支持（报错）
-- **流式检测**：按请求体 JSON 的 `stream` 字段（最简、契合前端现状）。
+- **流式检测**：仅对 gemini `/chat/completions`（JSON 请求体）按 `stream` 字段决定 `:streamGenerateContent?alt=sse` 或 `:generateContent`。openai 协议保持 0.3.0 的纯透传（不检测 `stream`、不特殊处理，原样流回）—— multipart 请求（openai `/images/edits`）同样不涉及流式检测。
 - **multipart（`/images/edits`）**：Gemini 的 edit 走 JSON（`inlineData` base64），前端在 Gemini 模式已构造 JSON（非 multipart），故后端 multipart 读取路径不会在 Gemini edit 触发；`readAIRequest` 已同时处理 JSON 与 multipart。✓
 
 ### 5.4 新功能算力点计费（Web Agent Loop / canvas-agent）
 
-两者已调用 `@/services/api/image.ts` 的 `requestToolResponse` / `requestStreamingResponse`，这些函数在 `channelMode === "remote"` 时 POST 到 `/api/v1/chat/completions`。一旦重新启用 remote 模式，这些调用**自动**经后端代理 → `ConsumeUserCredits` / `RefundUserCredits`。**后端无需新增计费代码** —— 同一 `proxyAIRequest` 路径、同一 `ModelCost` 查询。agent 文本模型的成本由后台 `modelCosts[]` 配置决定。`SelectModelChannel` 按模型名筛选渠道（Gemini 渠道只在 `Models[]` 列 Gemini 模型），加权随机不变。`ModelCost` 查询对 Gemini 模型名（如 `gemini-2.5-flash-image`）同样匹配，机制不变。
+canvas-agent 有两种模式：**online（Web Agent Loop）** = 浏览器 → 后端 `/api/v1/chat/completions`（走代理、计费）；**local** = 浏览器 → 本机 Canvas Agent（`127.0.0.1:17371`）→ 用户本机 Codex/Claude Code（**不经过后端、不计费**，模型由用户本地 agent 自带）。**仅 online/Web Agent Loop 路径计费。**
+
+online 路径已调用 `@/services/api/image.ts` 的 `requestToolResponse` / `requestStreamingResponse`，这些函数在 `channelMode === "remote"` 时 POST 到 `/api/v1/chat/completions`。一旦重新启用 remote 模式，这些调用**自动**经后端代理 → `ConsumeUserCredits` / `RefundUserCredits`。**后端无需新增计费代码** —— 同一 `proxyAIRequest` 路径、同一 `ModelCost` 查询。agent 文本模型的成本由后台 `modelCosts[]` 配置决定；用 `credit_logs.remark`（如 "agent chat"）区分 agent 与普通调用（见 3.1 第 5 点，不改枚举）。`SelectModelChannel` 按模型名筛选渠道（Gemini 渠道只在 `Models[]` 列 Gemini 模型），加权随机不变。`ModelCost` 查询对 Gemini 模型名（如 `gemini-2.5-flash-image`）同样匹配，机制不变。
+
+**local 模式 canvas-agent 不计费、不经后端** —— 这是目标既有行为，迁移不改变。
 
 ---
 
@@ -331,7 +335,7 @@ volumes:
 6. 后台：用户 / 算力点 / 设置 / 渠道 / 提示词 / 素材 CRUD
 7. remote 模式 + openai 渠道 AI 生成 —— 算力点预扣、失败返还
 8. remote 模式 + gemini 渠道 AI 生成 —— 正确 `:generateContent?key=` URL、算力点预扣/返还
-9. remote 模式 Web Agent Loop —— 算力点预扣
+9. remote 模式 Web Agent Loop（online canvas-agent）—— 算力点预扣；local canvas-agent 仍不经后端、不计费
 10. 提示词同步调度器运行（检查 cron 日志）
 11. local 模式仍工作（浏览器直连、不计费）
 12. 生产 compose 起来（api + web + postgres）
