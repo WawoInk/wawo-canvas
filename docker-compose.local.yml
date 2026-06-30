@@ -1,9 +1,58 @@
 services:
-  app:
-    image: infinite-canvas:local
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: eldenpdx
+      POSTGRES_DB: infinite-canvas
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eldenpdx -d infinite-canvas"]
+      interval: 3s
+      retries: 10
+
+  api:
+    image: infinite-canvas:local-api-dev
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
+      target: api-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - PORT=8088
+      - DATABASE_DSN=postgresql://eldenpdx@postgres:5432/infinite-canvas?sslmode=disable
+    volumes:
+      - ./data:/app/data
+      - .:/app
+    ports:
+      - "127.0.0.1:8088:8088"
+    restart: unless-stopped
+
+  web:
+    image: infinite-canvas:local-web-dev
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: web-dev
+    depends_on:
+      api:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      - API_BASE_URL=http://api:8088
+    volumes:
+      - ./web:/app/web
+      - /app/web/node_modules
     ports:
       - "3000:3000"
     restart: unless-stopped
+
+volumes:
+  pgdata:

@@ -1,0 +1,13 @@
+root = "."
+tmp_dir = "/tmp/air"
+
+[build]
+  cmd = "go build -o /app/server ."
+  bin = "/app/server"
+  include_ext = ["go"]
+  exclude_dir = ["web", "data", ".git"]
+  log = "build-errors.log"
+  delay = 200
+  stop_on_error = false
+  send_interrupt = true
+  kill_delay = 500
