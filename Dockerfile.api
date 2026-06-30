@@ -1,0 +1,26 @@
+# 构建 Go 后端二进制。
+FROM golang:1.25-alpine AS api-build
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY config ./config
+COPY handler ./handler
+COPY middleware ./middleware
+COPY model ./model
+COPY repository ./repository
+COPY router ./router
+COPY service ./service
+COPY main.go ./
+RUN go build -o /server .
+
+# 运行镜像。
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates
+WORKDIR /app
+COPY --from=api-build /server /app/server
+RUN mkdir -p /app/data
+ENV PORT=8088
+EXPOSE 8088
+CMD ["/app/server"]

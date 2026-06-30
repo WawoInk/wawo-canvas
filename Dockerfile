@@ -9,7 +9,7 @@ COPY CHANGELOG.md /app/CHANGELOG.md
 COPY web ./
 RUN bun run build
 
-# 运行镜像：只启动 Next.js，AI 请求由浏览器前台直连用户自己的接口。
+# 运行镜像：Next.js standalone。
 FROM node:22-bookworm-slim
 
 WORKDIR /app
