@@ -2,8 +2,12 @@
 
 ## Unreleased
 
-+ [新增] 渠道兼容Gemini格式。
-+ [新增] 新增Codex App插件支持。
++ [新增] 迁移 0.3.0 完整 Go 后端（认证/算力点/后台/Linux.do OAuth/AI 代理/提示词同步）。
++ [新增] 后端 AI 代理支持 Gemini 协议（`protocol: "gemini"`）。
++ [重构] 后端改为 PostgreSQL-only，移除 sqlite/mysql 驱动与 StorageDriver 配置。
++ [重构] 拆分 settings.go 为 settings + channel + channel_admin；抽出 ai_proxy.go。
++ [新增] Docker 多容器部署（开发 docker-compose.local.yml + 生产 docker-compose.yml，api + web + postgres）。
++ [调整] 前端重新接入认证/后台/remote 模式；移除内存提示词路由与 Vercel 一键部署。
 
 ## v0.4.0 - 2026-06-16
 

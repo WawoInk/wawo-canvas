@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { App, Button } from "antd";
 import { Download, FileUp, Plus } from "lucide-react";
@@ -15,7 +15,15 @@ import { useCanvasStore } from "./stores/use-canvas-store";
 import { useCanvasUiStore } from "./stores/use-canvas-ui-store";
 import { exportCanvasProjects } from "./utils/canvas-export";
 
-export default function CanvasPage() {
+export default function Page() {
+    return (
+        <Suspense fallback={<main className="flex h-full items-center justify-center bg-background text-sm text-stone-500">正在加载...</main>}>
+            <CanvasPage />
+        </Suspense>
+    );
+}
+
+function CanvasPage() {
     const { message } = App.useApp();
     const router = useRouter();
     const searchParams = useSearchParams();
