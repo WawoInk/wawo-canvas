@@ -85,3 +85,43 @@ func TestRedactUpstreamURLStripsKey(t *testing.T) {
 		t.Fatalf("non-key param lost: %q", got)
 	}
 }
+
+func TestResolveAIProxyPathPassesThroughTasksPath(t *testing.T) {
+	base := "https://ark.cn-beijing.volces.com/api/plan/v3"
+	got := resolveAIProxyPath(base, "seedance-2.0", "/contents/generations/tasks")
+	if got != "/contents/generations/tasks" {
+		t.Fatalf("tasks path should pass through unchanged, got %q", got)
+	}
+}
+
+func TestResolveAIProxyPathPassesThroughTasksIdAndRemixPath(t *testing.T) {
+	base := "https://ark.cn-beijing.volces.com/api/plan/v3"
+	cases := []string{
+		"/contents/generations/tasks/pub_abc123",
+		"/contents/generations/tasks/pub_abc123/remix",
+	}
+	for _, path := range cases {
+		got := resolveAIProxyPath(base, "seedance-2.0", path)
+		if got != path {
+			t.Fatalf("path %q should pass through unchanged, got %q", path, got)
+		}
+	}
+}
+
+func TestResolveAIProxyPathStillRewritesVideosForSeedance(t *testing.T) {
+	base := "https://ark.cn-beijing.volces.com/api/plan/v3"
+	got := resolveAIProxyPath(base, "seedance-2.0", "/videos")
+	if got != "/contents/generations/tasks" {
+		t.Fatalf("legacy /videos should still rewrite for seedance, got %q", got)
+	}
+	// /videos/:id（非 /content 结尾）也应改写
+	gotID := resolveAIProxyPath(base, "seedance-2.0", "/videos/pub_abc")
+	if gotID != "/contents/generations/tasks/pub_abc" {
+		t.Fatalf("legacy /videos/:id should still rewrite, got %q", gotID)
+	}
+	// /videos/:id/content 不改写（保持现状）
+	gotContent := resolveAIProxyPath(base, "seedance-2.0", "/videos/pub_abc/content")
+	if gotContent != "/videos/pub_abc/content" {
+		t.Fatalf("legacy /videos/:id/content should not rewrite, got %q", gotContent)
+	}
+}
