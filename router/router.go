@@ -41,6 +41,17 @@ func New() *gin.Engine {
 	v1.GET("/videos/:id/content", func(c *gin.Context) {
 		handler.AIVideoContent(c.Writer, c.Request, c.Param("id"))
 	})
+	// 视频生成标准入口（对齐 xvanai /v1/contents/generations/tasks）。旧 /videos 路由保留为遗留。
+	v1.POST("/contents/generations/tasks", gin.WrapF(handler.CreateVideoTask))
+	v1.GET("/contents/generations/tasks/:id", func(c *gin.Context) {
+		handler.GetVideoTask(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.DELETE("/contents/generations/tasks/:id", func(c *gin.Context) {
+		handler.CancelVideoTask(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.POST("/contents/generations/tasks/:id/remix", func(c *gin.Context) {
+		handler.RemixVideoTask(c.Writer, c.Request, c.Param("id"))
+	})
 	api.GET("/prompts", middleware.OptionalAuth, gin.WrapF(handler.Prompts))
 	api.GET("/assets", middleware.OptionalAuth, gin.WrapF(handler.Assets))
 	api.POST("/admin/login", gin.WrapF(handler.AdminLogin))
