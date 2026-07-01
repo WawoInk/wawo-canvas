@@ -125,3 +125,29 @@ func TestResolveAIProxyPathStillRewritesVideosForSeedance(t *testing.T) {
 		t.Fatalf("legacy /videos/:id/content should not rewrite, got %q", gotContent)
 	}
 }
+
+func TestBuildOpenAIUpstreamTasksCreateURL(t *testing.T) {
+	channel := model.ModelChannel{Protocol: "openai", BaseURL: "https://ark.cn-beijing.volces.com/api/plan/v3", APIKey: "ark-key", Models: []string{"seedance-2.0"}}
+	body := []byte(`{"model":"seedance-2.0","content":[{"type":"text","text":"a cat"}]}`)
+	got := resolveUpstreamRequest(channel, "seedance-2.0", "/contents/generations/tasks", body, "application/json")
+	if got.URL != "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks" {
+		t.Fatalf("tasks create URL = %q", got.URL)
+	}
+	if got.Headers.Get("Authorization") != "Bearer ark-key" {
+		t.Fatalf("tasks create Bearer = %q", got.Headers.Get("Authorization"))
+	}
+	if string(got.Body) != string(body) {
+		t.Fatalf("tasks create body should be preserved, got %q", string(got.Body))
+	}
+}
+
+func TestBuildOpenAIUpstreamTasksRemixURL(t *testing.T) {
+	channel := model.ModelChannel{Protocol: "openai", BaseURL: "https://ark.cn-beijing.volces.com/api/plan/v3", APIKey: "ark-key", Models: []string{"seedance-2.0"}}
+	got := resolveUpstreamRequest(channel, "seedance-2.0", "/contents/generations/tasks/pub_abc/remix", []byte(`{"prompt":"x"}`), "application/json")
+	if got.URL != "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks/pub_abc/remix" {
+		t.Fatalf("tasks remix URL = %q", got.URL)
+	}
+	if got.Headers.Get("Authorization") != "Bearer ark-key" {
+		t.Fatalf("tasks remix Bearer = %q", got.Headers.Get("Authorization"))
+	}
+}
