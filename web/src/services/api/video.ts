@@ -143,7 +143,15 @@ async function createSeedanceTask(config: AiConfig, model: string, prompt: strin
 
 async function pollSeedanceTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
     try {
-        const state = unwrapSeedanceTask((await axios.get<ApiEnvelope<SeedanceTask>>(seedanceApiUrl(config, task.id), { headers: aiHeaders(config), signal: options?.signal })).data);
+        const state = unwrapSeedanceTask(
+            (
+                await axios.get<ApiEnvelope<SeedanceTask>>(seedanceApiUrl(config, task.id), {
+                    headers: aiHeaders(config),
+                    params: { model: modelOptionName(task.model) },
+                    signal: options?.signal,
+                })
+            ).data,
+        );
         if (state.status === "succeeded") {
             const url = state.content?.video_url;
             if (!url) return { status: "failed", error: "Seedance 任务成功但没有返回视频 URL" };
@@ -179,7 +187,8 @@ function assertSeedanceAudioReferences(audioReferences: ReferenceAudio[]) {
 }
 
 function seedanceApiUrl(config: AiConfig, taskId?: string) {
-    return buildApiUrl(config.baseUrl, `/contents/generations/tasks${taskId ? `/${encodeURIComponent(taskId)}` : ""}`);
+    const path = `/contents/generations/tasks${taskId ? `/${encodeURIComponent(taskId)}` : ""}`;
+    return config.channelMode === "remote" ? `/api/v1${path}` : buildApiUrl(config.baseUrl, path);
 }
 
 async function buildSeedanceContent(config: AiConfig, prompt: string, references: ReferenceImage[], videoReferences: ReferenceVideo[], audioReferences: ReferenceAudio[]) {
@@ -338,4 +347,47 @@ function blobToDataUrl(blob: Blob) {
         reader.onerror = () => reject(new Error("读取本地素材失败"));
         reader.readAsDataURL(blob);
     });
+}
+
+export async function cancelVideoGenerationTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<void> {
+    const requestConfig = resolveModelRequestConfig(config, task.model);
+    assertVideoConfig(requestConfig, requestConfig.model);
+    if (task.provider !== "seedance") {
+        throw new Error("当前视频接口不支持取消任务，请切换到 Seedance 2.0 / 火山 Agent Plan 模型");
+    }
+    try {
+        await axios.delete(seedanceApiUrl(requestConfig, task.id), {
+            headers: aiHeaders(requestConfig),
+            params: { model: modelOptionName(task.model) },
+            signal: options?.signal,
+        });
+    } catch (error) {
+        throw new Error(readAxiosError(error, "视频任务取消失败"));
+    }
+}
+
+export async function remixVideoGenerationTask(config: AiConfig, task: VideoGenerationTask, newPrompt: string, options?: RequestOptions): Promise<VideoGenerationTask> {
+    const requestConfig = resolveModelRequestConfig(config, task.model);
+    assertVideoConfig(requestConfig, requestConfig.model);
+    if (task.provider !== "seedance") {
+        throw new Error("当前视频接口不支持二次创作，请切换到 Seedance 2.0 / 火山 Agent Plan 模型");
+    }
+    const payload = {
+        model: modelOptionName(task.model),
+        prompt: newPrompt,
+    };
+    try {
+        const created = unwrapSeedanceTask(
+            (
+                await axios.post<ApiEnvelope<SeedanceTask>>(seedanceApiUrl(requestConfig, task.id) + "/remix", payload, {
+                    headers: aiHeaders(requestConfig, "application/json"),
+                    signal: options?.signal,
+                })
+            ).data,
+        );
+        if (!created.id) throw new Error("Seedance 接口没有返回任务 ID");
+        return { id: created.id, provider: "seedance", model: task.model };
+    } catch (error) {
+        throw new Error(readAxiosError(error, "视频二次创作失败"));
+    }
 }
