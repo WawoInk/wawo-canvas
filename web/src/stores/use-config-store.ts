@@ -169,6 +169,8 @@ function modelListKey(capability: ModelCapability) {
 }
 
 function isAiConfigReady(config: AiConfig, model: string) {
+    // 远程模式下渠道凭证由后台持有，前端只需确认已选择模型即可；本地模式才校验渠道 baseUrl/apiKey。
+    if (config.channelMode === "remote") return Boolean(model.trim());
     const channel = resolveModelChannel(config, model);
     return Boolean(model.trim() && channel.baseUrl.trim() && channel.apiKey.trim());
 }
