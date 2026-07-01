@@ -10,16 +10,18 @@ import { saveAs } from "file-saver";
 import { AssetPickerModal, type InsertAssetPayload } from "@/app/(user)/canvas/components/asset-picker-modal";
 import { ModelPicker } from "@/components/model-picker";
 import { PromptSelectDialog } from "@/components/prompts/prompt-select-dialog";
-import { VideoSettingsPanel, normalizeVideoResolutionValue, normalizeVideoSizeValue, videoSizeLabel } from "@/components/video-settings-panel";
+import { VideoSettingsPanel, normalizeVideoResolutionValue, videoSizeLabel } from "@/components/video-settings-panel";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { formatBytes, formatDuration } from "@/lib/image-utils";
-import { boolConfig, isSeedanceVideoConfig, normalizeSeedanceRatio, seedanceReferenceLabel, seedanceVideoReferenceError, seedanceVideoReferenceHint, SEEDANCE_REFERENCE_LIMITS } from "@/lib/seedance-video";
+import { boolConfig, normalizeSeedanceRatio, seedanceReferenceLabel, SEEDANCE_REFERENCE_LIMITS } from "@/lib/seedance-video";
 import { deleteStoredMedia, resolveMediaUrl, uploadMediaFile } from "@/services/file-storage";
 import { resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { cancelVideoGenerationTask, createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, type VideoGenerationTask } from "@/services/api/video";
+import { fetchVideoHistory, deleteGenerationTask, type VideoHistoryItem } from "@/services/api/generation-tasks";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { modelOptionLabel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
+import { useUserStore } from "@/stores/use-user-store";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 
@@ -62,12 +64,17 @@ type GenerationLog = {
     error?: string;
 };
 
-type GenerationLogConfig = Pick<AiConfig, "model" | "videoModel" | "size" | "vquality" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark">;
+type GenerationLogConfig = Pick<AiConfig, "model" | "videoModel" | "size" | "vquality" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark" | "channelMode">;
 
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
 
 const LOG_STORE_KEY = "infinite-canvas:video_generation_logs";
-const logStore = localforage.createInstance({ name: "infinite-canvas", storeName: "video_generation_logs" });
+
+function logStoreForUser() {
+    const user = useUserStore.getState().user;
+    const userId = user?.id || "anonymous";
+    return localforage.createInstance({ name: "infinite-canvas", storeName: `video_generation_logs_${userId}` });
+}
 
 export default function VideoPage() {
     const { message } = App.useApp();
@@ -78,6 +85,7 @@ export default function VideoPage() {
     const effectiveConfig = useEffectiveConfig();
     const updateConfig = useConfigStore((state) => state.updateConfig);
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
+    const configHydrated = useConfigStore((state) => state.configHydrated);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const addAsset = useAssetStore((state) => state.addAsset);
     const [prompt, setPrompt] = useState("");
@@ -98,7 +106,7 @@ export default function VideoPage() {
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
     const model = effectiveConfig.videoModel || effectiveConfig.model;
-    const canGenerate = Boolean(prompt.trim());
+    const canGenerate = Boolean((prompt ?? "").trim());
 
     useEffect(() => {
         if (!running || !startedAt) return;
@@ -107,8 +115,26 @@ export default function VideoPage() {
     }, [running, startedAt]);
 
     useEffect(() => {
-        void refreshLogs();
-    }, []);
+        if (!configHydrated) return;
+        // Wait for user store to be ready (token may be hydrated but user not yet fetched)
+        const checkAndRefresh = () => {
+            const user = useUserStore.getState().user;
+            const isReady = useUserStore.getState().isReady;
+            if (isReady) {
+                void refreshLogs();
+            } else {
+                // User not yet hydrated, wait for it
+                const unsub = useUserStore.subscribe((state) => {
+                    if (state.isReady) {
+                        unsub();
+                        void refreshLogs();
+                    }
+                });
+                return () => unsub();
+            }
+        };
+        return checkAndRefresh();
+    }, [configHydrated]);
 
     const addReferences = async (files?: FileList | null) => {
         const selectedFiles = Array.from(files || []);
@@ -201,11 +227,6 @@ export default function VideoPage() {
             openConfigDialog(true);
             return null;
         }
-        const videoReferenceError = seedanceVideoReferenceError(videoReferences);
-        if (videoReferenceError) {
-            message.error(`${videoReferenceError}。${seedanceVideoReferenceHint}`);
-            return null;
-        }
         return { text, config: buildVideoConfig(effectiveConfig, model), references: [...references], videoReferences: [...videoReferences], audioReferences: [...audioReferences] };
     };
 
@@ -254,31 +275,97 @@ export default function VideoPage() {
         setPreviewLog(null);
     };
 
-    const deleteSelectedLogs = () => {
+    const deleteSelectedLogs = async () => {
+        const ids = [...selectedLogIds];
         const mediaKeys = logs
             .filter((log) => selectedLogIds.includes(log.id))
             .map((log) => log.video?.storageKey)
             .filter((key): key is string => Boolean(key));
-        void Promise.all([deleteStoredMedia(mediaKeys), ...selectedLogIds.map((id) => logStore.removeItem(id))]).then(refreshLogs);
+
+        // Delete from backend and local cache
+        await Promise.all([
+            deleteStoredMedia(mediaKeys),
+            ...ids.map((id) => logStoreForUser().removeItem(id)),
+            ...ids.map((id) => deleteGenerationTask(id).catch(() => {})),
+        ]);
+
         if (previewLog && selectedLogIds.includes(previewLog.id)) {
             setPreviewLog(null);
             setResults([]);
         }
         setSelectedLogIds([]);
         setDeleteConfirmOpen(false);
+        await refreshLogs();
     };
 
     const saveLog = async (log: GenerationLog) => {
-        await logStore.setItem(log.id, serializeLog(log));
+        await logStoreForUser().setItem(log.id, serializeLog(log));
         await refreshLogs();
     };
 
     const refreshLogs = async () => {
+        // Load from backend (source of truth) for online users
+        const user = useUserStore.getState().user;
+        if (user?.id) {
+            try {
+                const result = await fetchVideoHistory(1, 50);
+                const backendLogs = result.items.map(toGenerationLog);
+                // Filter out invalid logs
+                const validLogs = backendLogs.filter((log) => log.id);
+                setLogs(validLogs);
+                // Also cache locally for offline fallback
+                for (const log of validLogs) {
+                    await logStoreForUser().setItem(log.id, serializeLog(log));
+                }
+                resumePendingLogs(validLogs);
+                return validLogs;
+            } catch {
+                // Fallback to local cache
+            }
+        }
         const nextLogs = await readStoredLogs();
         setLogs(nextLogs);
         resumePendingLogs(nextLogs);
         return nextLogs;
     };
+
+    // Map VideoHistoryItem DTO to local GenerationLog type for backward compat.
+    // Does NOT make extra HTTP requests — uses only the data already in the list response.
+    function toGenerationLog(item: VideoHistoryItem): GenerationLog {
+        const isPending = item.status === "pending";
+        const log: GenerationLog = {
+            id: item.id,
+            createdAt: new Date(item.createdAt).getTime(),
+            title: item.title,
+            prompt: item.prompt || "",
+            time: item.createdAt,
+            model: item.model,
+            config: {
+                model: item.model,
+                videoModel: item.model || "",
+                size: item.size || "",
+                vquality: item.vquality || "",
+                videoSeconds: item.videoSeconds || "",
+                videoGenerateAudio: item.genAudio || "true",
+                videoWatermark: item.watermark || "false",
+                channelMode: "remote",
+            },
+            references: [],
+            videoReferences: [],
+            audioReferences: [],
+            durationMs: item.durationMs,
+            size: item.size || "",
+            resolution: item.vquality || "",
+            seconds: item.videoSeconds || "",
+            status: item.status === "success" ? "成功" : item.status === "failed" ? "失败" : "生成中",
+            error: item.error,
+        };
+        // Rebuild polling task from upstreamTaskId so pending tasks resume after refresh
+        if (isPending && item.upstreamTaskId) {
+            log.task = { id: item.upstreamTaskId, model: item.model };
+        }
+        return log;
+    }
 
     const resumePendingLogs = (items: GenerationLog[]) => {
         for (const log of items) {
@@ -317,7 +404,7 @@ export default function VideoPage() {
                 }
                 if (state.status === "failed") throw new Error(state.error);
                 if (attempt === 119) throw new Error("视频生成超时，请稍后重试");
-                await delay(log.task.provider === "seedance" ? 5000 : 2500, abortController.signal);
+                await delay(5000, abortController.signal);
             }
         } catch (error) {
             const aborted = abortController.signal.aborted || (error instanceof DOMException && error.name === "AbortError");
@@ -341,10 +428,6 @@ export default function VideoPage() {
         if (!controller) return;
         controller.abort();
         abortControllersRef.current.delete(log.id);
-        if (log.task.provider !== "seedance") {
-            message.info("当前视频接口不支持取消任务");
-            return;
-        }
         try {
             const taskConfig = buildVideoConfig({ ...effectiveConfig, ...log.config }, log.task.model || log.model);
             await cancelVideoGenerationTask(taskConfig, log.task);
@@ -702,7 +785,7 @@ async function readStoredLogs() {
     if (typeof window === "undefined") return [];
     try {
         const logs: GenerationLog[] = [];
-        await logStore.iterate<GenerationLog, void>((value) => {
+        await logStoreForUser().iterate<GenerationLog, void>((value) => {
             logs.push(value);
         });
         return (await Promise.all(logs.map(normalizeLog))).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -815,6 +898,7 @@ function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
         videoSeconds: log.config?.videoSeconds || log.seconds || "",
         videoGenerateAudio: log.config?.videoGenerateAudio || "true",
         videoWatermark: log.config?.videoWatermark || "false",
+        channelMode: log.config?.channelMode || "local",
     };
 }
 
@@ -827,6 +911,7 @@ function buildLog({ prompt, model, config, references, videoReferences, audioRef
         videoSeconds: config.videoSeconds,
         videoGenerateAudio: config.videoGenerateAudio,
         videoWatermark: config.videoWatermark,
+        channelMode: config.channelMode,
     };
     return {
         id: nanoid(),
@@ -851,12 +936,11 @@ function buildLog({ prompt, model, config, references, videoReferences, audioRef
 }
 
 function buildVideoConfig(config: AiConfig, model: string): AiConfig {
-    const seedance = isSeedanceVideoConfig({ ...config, model });
     return {
         ...config,
         model,
         videoModel: model,
-        size: seedance ? normalizeSeedanceRatio(config.size) : normalizeVideoSize(config.size),
+        size: normalizeSeedanceRatio(config.size),
         videoSeconds: normalizeVideoSeconds(config.videoSeconds),
         vquality: normalizeResolution(config.vquality),
         videoGenerateAudio: String(boolConfig(config.videoGenerateAudio, true)),
@@ -868,10 +952,6 @@ function normalizeVideoSeconds(value: string) {
     if (String(value).trim() === "-1") return "-1";
     const seconds = Math.floor(Number(value) || 6);
     return String(Math.max(1, Math.min(20, seconds)));
-}
-
-function normalizeVideoSize(value: string) {
-    return normalizeVideoSizeValue(value);
 }
 
 function normalizeResolution(value: string) {

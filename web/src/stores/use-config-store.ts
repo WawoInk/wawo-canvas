@@ -119,6 +119,7 @@ type ConfigStore = {
     publicSettings: PublicSettings | null;
     isConfigOpen: boolean;
     shouldPromptContinue: boolean;
+    configHydrated: boolean;
     updateConfig: <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
     updateWebdavConfig: <K extends keyof WebdavSyncConfig>(key: K, value: WebdavSyncConfig[K]) => void;
     isAiConfigReady: (config: AiConfig, model: string) => boolean;
@@ -183,6 +184,7 @@ export const useConfigStore = create<ConfigStore>()(
             publicSettings: null,
             isConfigOpen: false,
             shouldPromptContinue: false,
+            configHydrated: false,
             updateConfig: (key, value) =>
                 set((state) => ({
                     config: {
@@ -257,6 +259,9 @@ export const useConfigStore = create<ConfigStore>()(
         {
             name: CONFIG_STORE_KEY,
             partialize: (state) => ({ config: state.config, webdav: state.webdav }),
+            onRehydrateStorage: () => (state) => {
+                if (state) state.configHydrated = true;
+            },
             merge: (persisted, current) => {
                 const persistedState = (persisted || {}) as Partial<ConfigStore>;
                 const persistedConfig = (persistedState.config || {}) as Partial<AiConfig>;

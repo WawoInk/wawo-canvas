@@ -330,6 +330,10 @@ func AdjustUserCredits(id string, credits int) (model.User, error) {
 }
 
 func ConsumeUserCredits(userID string, modelName string, credits int, path string) error {
+	return ConsumeUserCreditsWithTask(userID, modelName, credits, path, "")
+}
+
+func ConsumeUserCreditsWithTask(userID string, modelName string, credits int, path string, taskID string) error {
 	if credits <= 0 {
 		return nil
 	}
@@ -344,6 +348,7 @@ func ConsumeUserCredits(userID string, modelName string, credits int, path strin
 	_, err = repository.SaveCreditLog(model.CreditLog{
 		ID:        newID("credit"),
 		UserID:    userID,
+		TaskID:    taskID,
 		Type:      model.CreditLogTypeAIConsume,
 		Amount:    -credits,
 		Balance:   user.Credits,
@@ -355,6 +360,10 @@ func ConsumeUserCredits(userID string, modelName string, credits int, path strin
 }
 
 func RefundUserCredits(userID string, modelName string, credits int, path string) error {
+	return RefundUserCreditsWithTask(userID, modelName, credits, path, "")
+}
+
+func RefundUserCreditsWithTask(userID string, modelName string, credits int, path string, taskID string) error {
 	if credits <= 0 {
 		return nil
 	}
@@ -369,6 +378,7 @@ func RefundUserCredits(userID string, modelName string, credits int, path string
 	_, err = repository.SaveCreditLog(model.CreditLog{
 		ID:        newID("credit"),
 		UserID:    userID,
+		TaskID:    taskID,
 		Type:      model.CreditLogTypeAIRefund,
 		Amount:    credits,
 		Balance:   user.Credits,
@@ -381,6 +391,15 @@ func RefundUserCredits(userID string, modelName string, credits int, path string
 
 func ListCreditLogs(q model.Query) (model.CreditLogList, error) {
 	logs, total, err := repository.ListCreditLogs(q)
+	if err != nil {
+		return model.CreditLogList{}, err
+	}
+	return model.CreditLogList{Items: logs, Total: int(total)}, nil
+}
+
+// ListUserCreditLogs 查询当前用户的积分流水。
+func ListUserCreditLogs(userID string, q model.Query) (model.CreditLogList, error) {
+	logs, total, err := repository.ListCreditLogsByUserID(userID, q)
 	if err != nil {
 		return model.CreditLogList{}, err
 	}

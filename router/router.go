@@ -52,6 +52,26 @@ func New() *gin.Engine {
 	v1.POST("/contents/generations/tasks/:id/remix", func(c *gin.Context) {
 		handler.RemixVideoTask(c.Writer, c.Request, c.Param("id"))
 	})
+	// Generation task history
+	v1.GET("/generation-tasks", gin.WrapF(handler.ListGenerationTasks))
+	v1.POST("/generation-tasks", gin.WrapF(handler.RecordGenerationTask))
+	v1.GET("/generation-tasks/:id", func(c *gin.Context) {
+		handler.GetGenerationTaskDetail(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.DELETE("/generation-tasks/:id", func(c *gin.Context) {
+		handler.DeleteGenerationTask(c.Writer, c.Request, c.Param("id"))
+	})
+	// User credit logs
+	v1.GET("/credit-logs", gin.WrapF(handler.UserCreditLogs))
+	// Canvas project sync
+	v1.GET("/canvas/projects", gin.WrapF(handler.ListCanvasProjects))
+	v1.POST("/canvas/projects", gin.WrapF(handler.CreateCanvasProject))
+	v1.PUT("/canvas/projects/:id", func(c *gin.Context) {
+		handler.UpdateCanvasProject(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.DELETE("/canvas/projects/:id", func(c *gin.Context) {
+		handler.DeleteCanvasProject(c.Writer, c.Request, c.Param("id"))
+	})
 	api.GET("/prompts", middleware.OptionalAuth, gin.WrapF(handler.Prompts))
 	api.GET("/assets", middleware.OptionalAuth, gin.WrapF(handler.Assets))
 	api.POST("/admin/login", gin.WrapF(handler.AdminLogin))
@@ -86,6 +106,11 @@ func New() *gin.Engine {
 	admin.POST("/assets", gin.WrapF(handler.AdminSaveAsset))
 	admin.DELETE("/assets/:id", func(c *gin.Context) {
 		handler.AdminDeleteAsset(c.Writer, c.Request, c.Param("id"))
+	})
+	// Admin generation task detail (with payload access)
+	admin.GET("/generation-tasks", gin.WrapF(handler.AdminListGenerationTasks))
+	admin.GET("/generation-tasks/:id", func(c *gin.Context) {
+		handler.AdminGetGenerationTaskDetail(c.Writer, c.Request, c.Param("id"))
 	})
 
 	router.NoRoute(middleware.NotFoundJSON)

@@ -19,7 +19,9 @@ import { formatBytes, formatDuration, getDataUrlByteSize, readImageMeta } from "
 import { requestEdit, requestGeneration } from "@/services/api/image";
 import { deleteStoredImages, resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { useAssetStore } from "@/stores/use-asset-store";
+import { useUserStore } from "@/stores/use-user-store";
 import type { ReferenceImage } from "@/types/image";
+import { fetchImageHistory, deleteGenerationTask, recordGenerationTask, type ImageHistoryItem } from "@/services/api/generation-tasks";
 
 type GeneratedImage = {
     id: string;
@@ -54,7 +56,7 @@ type GenerationLog = {
     imageCount: number;
     size: string;
     quality: string;
-    status: "成功" | "失败";
+    status: "生成中" | "成功" | "失败";
     images: GeneratedImage[];
     thumbnails: string[];
 };
@@ -65,7 +67,12 @@ type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => 
 
 const LOG_STORE_KEY = "infinite-canvas:image_generation_logs";
 const RESULT_ACTION_BUTTON_CLASS = "min-w-0 px-1.5 [&_.ant-btn-icon]:shrink-0 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate";
-const logStore = localforage.createInstance({ name: "infinite-canvas", storeName: "image_generation_logs" });
+
+function logStoreForUser() {
+	const user = useUserStore.getState().user;
+	const userId = user?.id || "anonymous";
+	return localforage.createInstance({ name: "infinite-canvas", storeName: `image_generation_logs_${userId}` });
+}
 
 export default function ImagePage() {
     const { message } = App.useApp();
@@ -101,9 +108,26 @@ export default function ImagePage() {
         return () => window.clearInterval(timer);
     }, [running, startedAt]);
 
+    const configHydrated = useConfigStore((state) => state.configHydrated);
+
     useEffect(() => {
-        void refreshLogs();
-    }, []);
+        if (!configHydrated) return;
+        const checkAndRefresh = () => {
+            const { isReady } = useUserStore.getState();
+            if (isReady) {
+                void refreshLogs();
+            } else {
+                const unsub = useUserStore.subscribe((state) => {
+                    if (state.isReady) {
+                        unsub();
+                        void refreshLogs();
+                    }
+                });
+                return () => unsub();
+            }
+        };
+        return checkAndRefresh();
+    }, [configHydrated]);
 
     const addReferences = async (files?: FileList | null) => {
         const imageFiles = Array.from(files || []).filter((file) => file.type.startsWith("image/"));
@@ -239,22 +263,109 @@ export default function ImagePage() {
         setPreviewLog(null);
     };
 
-    const deleteSelectedLogs = () => {
+    const deleteSelectedLogs = async () => {
+        const ids = [...selectedLogIds];
         const imageKeys = logs.filter((log) => selectedLogIds.includes(log.id)).flatMap((log) => log.images.map((image) => image.storageKey).filter((key): key is string => Boolean(key)));
-        void Promise.all([deleteStoredImages(imageKeys), ...selectedLogIds.map((id) => logStore.removeItem(id))]).then(refreshLogs);
+        await Promise.all([
+            deleteStoredImages(imageKeys),
+            ...ids.map((id) => logStoreForUser().removeItem(id)),
+            ...ids.map((id) => deleteGenerationTask(id).catch(() => {})),
+        ]);
         if (previewLog && selectedLogIds.includes(previewLog.id)) {
             setPreviewLog(null);
             setResults([]);
         }
         setSelectedLogIds([]);
         setDeleteConfirmOpen(false);
+        await refreshLogs();
     };
 
-    const saveLog = (log: GenerationLog) => {
-        void logStore.setItem(log.id, serializeLog(log)).then(refreshLogs);
+    const saveLog = async (log: GenerationLog) => {
+        // Save to local cache first
+        await logStoreForUser().setItem(log.id, serializeLog(log));
+        // Sync to backend so refreshLogs can find it
+        const user = useUserStore.getState().user;
+        if (user?.id) {
+            try {
+                const status = log.status === "成功" ? "success" : log.status === "失败" ? "failed" : "pending";
+                await recordGenerationTask({
+                    taskType: "image",
+                    provider: "openai",
+                    model: log.model || "unknown",
+                    status,
+                    credits: 0,
+                    latencyMs: log.durationMs,
+                    upstreamTaskId: "",
+                    requestBody: JSON.stringify({
+                        prompt: log.prompt,
+                        model: log.model,
+                        size: log.config.size,
+                        quality: log.config.quality,
+                        count: log.config.count,
+                    }),
+                    responseBody: JSON.stringify({
+                        data: log.images.map((img) => ({ url: img.dataUrl })),
+                    }),
+                });
+            } catch { /* non-blocking */ }
+        }
+        await refreshLogs();
     };
 
-    const refreshLogs = async () => setLogs(await readStoredLogs());
+    const refreshLogs = async () => {
+        // Load from backend (source of truth) for online users
+        const user = useUserStore.getState().user;
+        if (user?.id) {
+            try {
+                const result = await fetchImageHistory(1, 50);
+                const backendLogs = result.items.map(toGenerationLog);
+                setLogs(backendLogs);
+                for (const log of backendLogs) {
+                    await logStoreForUser().setItem(log.id, serializeLog(log));
+                }
+                return;
+            } catch {
+                // Fallback to local cache
+            }
+        }
+        setLogs(await readStoredLogs());
+    };
+
+    function toGenerationLog(item: ImageHistoryItem): GenerationLog {
+        const isSuccess = item.status === "success";
+        return {
+            id: item.id,
+            createdAt: new Date(item.createdAt).getTime(),
+            title: item.title,
+            prompt: item.prompt,
+            time: item.createdAt,
+            model: item.model,
+            config: {
+                model: item.model,
+                imageModel: item.model || "",
+                quality: item.quality || "",
+                size: item.size || "",
+                count: item.count || "1",
+            },
+            references: [],
+            images: item.imageUrls?.map((url) => ({
+                id: nanoid(),
+                dataUrl: url,
+                durationMs: item.durationMs,
+                width: 1024,
+                height: 1024,
+                bytes: 0,
+            })) || [],
+            thumbnails: item.imageUrls || [],
+            durationMs: item.durationMs,
+            successCount: isSuccess ? 1 : 0,
+            failCount: isSuccess ? 0 : 1,
+            imageCount: item.imageUrls?.length || 1,
+            size: item.size || "",
+            quality: item.quality || "",
+            status: item.status === "success" ? "成功" as const : item.status === "failed" ? "失败" as const : "生成中" as const,
+        };
+    }
 
     const previewGenerationLog = async (log: GenerationLog) => {
         setPreviewLog(log);
@@ -690,7 +801,7 @@ async function readStoredLogs() {
     if (typeof window === "undefined") return [];
     try {
         const values: GenerationLog[] = [];
-        await logStore.iterate<GenerationLog, void>((value) => {
+        await logStoreForUser().iterate<GenerationLog, void>((value) => {
             values.push(value);
         });
         const logs = await Promise.all(values.map(normalizeLog));

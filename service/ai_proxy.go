@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/basketikun/infinite-canvas/model"
 )
@@ -57,15 +58,34 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 			request.Header.Add(key, value)
 		}
 	}
-	if err := ConsumeUserCredits(user.ID, modelName, credits, path); err != nil {
+
+	// ── 生成任务日志：开始 ──
+	taskType := DetermineTaskType(path)
+	provider := DetermineProvider(channel)
+	genTaskID, _ := LogTaskStart(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers))
+	startTime := time.Now()
+
+	if err := ConsumeUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
+		LogTaskFailure(genTaskID, "INSUFFICIENT_CREDITS", err.Error(), "", time.Since(startTime).Milliseconds(), credits)
 		proxyFailError(w, err)
 		return
 	}
-	proxyCopyAIResponse(w, request, func() {
-		if err := RefundUserCredits(user.ID, modelName, credits, path); err != nil {
-			proxyAILogf("AI proxy refund credits failed: user=%s model=%s credits=%d err=%v", user.ID, modelName, credits, err)
-		}
-	})
+	proxyCopyAIResponse(w, request,
+		func() {
+			if err := RefundUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
+				proxyAILogf("AI proxy refund credits failed: user=%s model=%s credits=%d err=%v", user.ID, modelName, credits, err)
+			}
+		},
+		func(respBody []byte, respHeaders string) {
+			latencyMs := time.Since(startTime).Milliseconds()
+			upstreamTaskID := ExtractUpstreamTaskID(respBody)
+			LogTaskSuccess(genTaskID, respBody, respHeaders, latencyMs, credits, upstreamTaskID)
+		},
+		func(errCode string, errMsg string, rawError string) {
+			latencyMs := time.Since(startTime).Milliseconds()
+			LogTaskFailure(genTaskID, errCode, errMsg, rawError, latencyMs, credits)
+		},
+	)
 }
 
 // ProxyAIGetRequest 处理 GET 类 AI 代理请求（视频查询/内容）。
@@ -95,7 +115,7 @@ func ProxyAIGetRequest(w http.ResponseWriter, r *http.Request, path string) {
 			request.Header.Add(key, value)
 		}
 	}
-	proxyCopyAIResponse(w, request, nil)
+	proxyCopyAIResponse(w, request, nil, nil, nil)
 }
 
 type upstreamRequest struct {
@@ -203,10 +223,17 @@ func redactUpstreamURL(rawURL string) string {
 	return parsed.String()
 }
 
-func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func()) {
+// proxyCopyAIResponse 执行上游请求并回写响应，同时通过回调通知结果。
+// onFailure — 上游返回错误或网络异常时调用（退款回调）。
+// onSuccess — 上游成功时调用，传入完整响应体与序列化响应头。
+// onFailureDetail — 上游返回 >=400 时调用，传入错误码与消息。
+func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func(), onSuccess func(respBody []byte, respHeaders string), onFailureDetail func(errCode string, errMsg string, rawError string)) {
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		log.Printf("AI proxy request failed: url=%s err=%v", redactUpstreamURL(request.URL.String()), err)
+		if onFailureDetail != nil {
+			onFailureDetail("NETWORK_ERROR", err.Error(), err.Error())
+		}
 		if onFailure != nil {
 			onFailure()
 		}
@@ -215,13 +242,20 @@ func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure
 	}
 	defer response.Body.Close()
 
+	respBody, _ := io.ReadAll(response.Body)
+	respHeaders := headerToJSON(response.Header)
+
 	if response.StatusCode >= http.StatusBadRequest {
-		body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
 		log.Printf("AI upstream error: url=%s status=%d", redactUpstreamURL(request.URL.String()), response.StatusCode)
+		code := fmt.Sprintf("UPSTREAM_%d", response.StatusCode)
+		errMsg := proxyAIUpstreamStatusMessage(response.StatusCode, respBody)
+		if onFailureDetail != nil {
+			onFailureDetail(code, errMsg, string(respBody))
+		}
 		if onFailure != nil {
 			onFailure()
 		}
-		proxyFail(w, proxyAIUpstreamStatusMessage(response.StatusCode, body))
+		proxyFail(w, errMsg)
 		return
 	}
 
@@ -234,7 +268,24 @@ func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure
 		}
 	}
 	w.WriteHeader(response.StatusCode)
-	_, _ = io.Copy(w, response.Body)
+	_, _ = w.Write(respBody)
+
+	if onSuccess != nil {
+		onSuccess(respBody, respHeaders)
+	}
+}
+
+// headerToJSON 将 http.Header 转为简单 JSON 字符串。
+func headerToJSON(headers http.Header) string {
+	m := make(map[string]string, len(headers))
+	for key := range headers {
+		m[key] = headers.Get(key)
+	}
+	data, err := json.Marshal(m)
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
 }
 
 func readAIRequest(r *http.Request) ([]byte, string, string, error) {
@@ -404,7 +455,7 @@ func proxyFailError(w http.ResponseWriter, err error) {
 	proxyFail(w, msg)
 }
 
-// ProxyVideoTaskCreate 处理标准入口 POST /contents/generations/tasks：选渠道、扣算力点、转发上游、失败返还。
+// ProxyVideoTaskCreate 处理标准入口 POST /contents/generations/tasks：选渠道、扣算力点、转发上游、失败返还，并记录所有权映射。
 func ProxyVideoTaskCreate(w http.ResponseWriter, r *http.Request) {
 	proxyVideoTaskPost(w, r, "/contents/generations/tasks")
 }
@@ -414,8 +465,7 @@ func ProxyVideoTaskRemix(w http.ResponseWriter, r *http.Request, path string) {
 	proxyVideoTaskPost(w, r, path)
 }
 
-// proxyVideoTaskPost POST 类标准入口视频任务：读请求→选渠道→预扣→透传上游→失败返还。
-// 上游 path 已是标准 /contents/generations/tasks...，resolveAIProxyPath 原样返回，不走 /videos 改写。
+// proxyVideoTaskPost POST 类标准入口视频任务：读请求→选渠道→预扣→透传上游→失败返还，同时写入生成任务日志和视频任务所有权映射。
 func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 	body, contentType, modelName, err := readAIRequest(r)
 	if err != nil {
@@ -457,19 +507,66 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 			request.Header.Add(key, value)
 		}
 	}
-	if err := ConsumeUserCredits(user.ID, modelName, credits, path); err != nil {
+
+	// ── 生成任务日志：开始 ──
+	taskType := DetermineTaskType(path)
+	provider := DetermineProvider(channel)
+	genTaskID, _ := LogTaskStart(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers))
+	startTime := time.Now()
+
+	if err := ConsumeUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
+		LogTaskFailure(genTaskID, "INSUFFICIENT_CREDITS", err.Error(), "", time.Since(startTime).Milliseconds(), credits)
 		proxyFailError(w, err)
 		return
 	}
-	proxyCopyAIResponse(w, request, func() {
-		if err := RefundUserCredits(user.ID, modelName, credits, path); err != nil {
-			proxyAILogf("video task refund credits failed: user=%s model=%s credits=%d err=%v", user.ID, modelName, credits, err)
-		}
-	})
+	proxyCopyAIResponse(w, request,
+		func() {
+			if err := RefundUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
+				proxyAILogf("video task refund credits failed: user=%s model=%s credits=%d err=%v", user.ID, modelName, credits, err)
+			}
+		},
+		func(respBody []byte, respHeaders string) {
+			latencyMs := time.Since(startTime).Milliseconds()
+			upstreamTaskID := ExtractUpstreamTaskID(respBody)
+			proxyAILogf("video task created: genTaskID=%s upstreamTaskID=%s latency=%dms", genTaskID, upstreamTaskID, latencyMs)
+			// Async task — created but still running; poll to completion
+			LogTaskCreated(genTaskID, upstreamTaskID, latencyMs, credits)
+			// ── 视频任务所有权映射 ──
+			if upstreamTaskID != "" {
+				if err := SaveVideoTask(user.ID, upstreamTaskID, modelName); err != nil {
+					proxyAILogf("video task save ownership failed: user=%s task=%s err=%v", user.ID, upstreamTaskID, err)
+				}
+			}
+		},
+		func(errCode string, errMsg string, rawError string) {
+			latencyMs := time.Since(startTime).Milliseconds()
+			LogTaskFailure(genTaskID, errCode, errMsg, rawError, latencyMs, credits)
+		},
+	)
 }
 
-// ProxyVideoTaskDelete 处理标准入口 DELETE /contents/generations/tasks/:id：按 ?model= 选渠道，透传上游，不计费。
+// ProxyVideoTaskDelete 处理标准入口 DELETE /contents/generations/tasks/:id：校验所有权后转发上游，不计费。
 func ProxyVideoTaskDelete(w http.ResponseWriter, r *http.Request, path string) {
+	// 提取上游 task ID（path 格式：/contents/generations/tasks/{id}）
+	parts := strings.Split(strings.TrimPrefix(path, "/contents/generations/tasks/"), "/")
+	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
+		proxyFail(w, "缺少任务 ID")
+		return
+	}
+	upstreamTaskID := parts[0]
+
+	// ── 校验所有权 ──
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		proxyFail(w, "未登录或权限不足")
+		return
+	}
+	if _, err := GetVideoTaskByTaskIDAndUser(upstreamTaskID, user.ID); err != nil {
+		proxyAILogf("video task ownership check failed: task=%s user=%s err=%v", upstreamTaskID, user.ID, err)
+		proxyFail(w, "任务不存在或无权操作")
+		return
+	}
+
 	modelName := r.URL.Query().Get("model")
 	if strings.TrimSpace(modelName) == "" {
 		proxyFail(w, "缺少模型名称")
@@ -496,5 +593,23 @@ func ProxyVideoTaskDelete(w http.ResponseWriter, r *http.Request, path string) {
 			request.Header.Add(key, value)
 		}
 	}
-	proxyCopyAIResponse(w, request, nil)
+
+	proxyCopyAIResponse(w, request, nil,
+		func(_ []byte, _ string) {
+			LogTaskCancelled(upstreamTaskID)
+		},
+		nil,
+	)
+}
+
+// ── Video Task Ownership (thin wrappers around repository) ──────────
+
+// SaveVideoTask 保存视频任务所有权映射。
+func SaveVideoTask(userID, taskID, modelName string) error {
+	return saveVideoTaskInRepo(userID, taskID, modelName)
+}
+
+// GetVideoTaskByTaskIDAndUser 校验用户是否拥有该视频任务。
+func GetVideoTaskByTaskIDAndUser(taskID, userID string) (*model.VideoTask, error) {
+	return getVideoTaskByTaskIDAndUser(taskID, userID)
 }

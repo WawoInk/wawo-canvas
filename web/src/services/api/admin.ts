@@ -84,6 +84,59 @@ export async function deleteAdminCreditLog(token: string, id: string) {
     return apiDelete<boolean>(`/api/admin/credit-logs/${encodeURIComponent(id)}`, token);
 }
 
+// ─── Generation Tasks ──────────────────────────────────────────────
+
+export type AdminGenerationTask = {
+    id: string;
+    userId: string;
+    taskType: string;
+    provider: string;
+    model: string;
+    status: string;
+    credits: number;
+    latencyMs: number;
+    upstreamTaskId: string;
+    traceId: string;
+    errorCode: string;
+    errorMessage: string;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type AdminGenerationTaskListResponse = {
+    items: AdminGenerationTask[];
+    total: number;
+};
+
+export type AdminGenerationTaskQuery = {
+    user_id?: string;
+    task_type?: string;
+    status?: string;
+    start_time?: string;
+    end_time?: string;
+    page?: number;
+    pageSize?: number;
+};
+
+export type AdminGenerationTaskDetailResponse = {
+    task: AdminGenerationTask;
+    payload?: {
+        requestHeaders: string;
+        requestBody: string;
+        responseHeaders: string;
+        responseBody: string;
+        rawError: string;
+    } | null;
+};
+
+export async function fetchAdminGenerationTasks(token: string, query: AdminGenerationTaskQuery = {}) {
+    return apiGet<AdminGenerationTaskListResponse>("/api/admin/generation-tasks", compactApiParams(query), token);
+}
+
+export async function fetchAdminGenerationTaskDetail(token: string, id: string) {
+    return apiGet<AdminGenerationTaskDetailResponse>(`/api/admin/generation-tasks/${encodeURIComponent(id)}?include_payload=true`, undefined, token);
+}
+
 export async function fetchAdminPromptCategories(token: string) {
     return apiGet<AdminPromptCategory[]>("/api/admin/prompt-categories", undefined, token);
 }
