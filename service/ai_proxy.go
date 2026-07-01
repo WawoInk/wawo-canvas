@@ -403,3 +403,98 @@ func proxyFailError(w http.ResponseWriter, err error) {
 	log.Printf("AI proxy error: %v", err)
 	proxyFail(w, msg)
 }
+
+// ProxyVideoTaskCreate 处理标准入口 POST /contents/generations/tasks：选渠道、扣算力点、转发上游、失败返还。
+func ProxyVideoTaskCreate(w http.ResponseWriter, r *http.Request) {
+	proxyVideoTaskPost(w, r, "/contents/generations/tasks")
+}
+
+// ProxyVideoTaskRemix 处理标准入口 POST /contents/generations/tasks/:id/remix：同创建计费链路。
+func ProxyVideoTaskRemix(w http.ResponseWriter, r *http.Request, path string) {
+	proxyVideoTaskPost(w, r, path)
+}
+
+// proxyVideoTaskPost POST 类标准入口视频任务：读请求→选渠道→预扣→透传上游→失败返还。
+// 上游 path 已是标准 /contents/generations/tasks...，resolveAIProxyPath 原样返回，不走 /videos 改写。
+func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
+	body, contentType, modelName, err := readAIRequest(r)
+	if err != nil {
+		proxyAILogf("video task request read failed: %v", err)
+		proxyFail(w, "AI 接口请求失败")
+		return
+	}
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		proxyFail(w, "未登录或权限不足")
+		return
+	}
+	credits, err := ModelCost(modelName)
+	if err != nil {
+		proxyAILogf("video task read model cost failed: model=%s err=%v", modelName, err)
+		proxyFail(w, "AI 接口请求失败")
+		return
+	}
+	credits *= readAIRequestCount(body, contentType)
+	channel, err := SelectModelChannel(modelName)
+	if err != nil {
+		proxyAILogf("video task select channel failed: model=%s err=%v", modelName, err)
+		proxyFail(w, "AI 接口请求失败")
+		return
+	}
+	resolved := buildOpenAIUpstream(channel, modelName, path, body, contentType)
+	if resolved.URL == "" {
+		proxyFail(w, "AI 接口请求失败")
+		return
+	}
+	request, err := http.NewRequest(http.MethodPost, resolved.URL, bytes.NewReader(body))
+	if err != nil {
+		proxyAILogf("video task build request failed: url=%s err=%v", resolved.URL, err)
+		proxyFail(w, "AI 接口请求失败")
+		return
+	}
+	for key, values := range resolved.Headers {
+		for _, value := range values {
+			request.Header.Add(key, value)
+		}
+	}
+	if err := ConsumeUserCredits(user.ID, modelName, credits, path); err != nil {
+		proxyFailError(w, err)
+		return
+	}
+	proxyCopyAIResponse(w, request, func() {
+		if err := RefundUserCredits(user.ID, modelName, credits, path); err != nil {
+			proxyAILogf("video task refund credits failed: user=%s model=%s credits=%d err=%v", user.ID, modelName, credits, err)
+		}
+	})
+}
+
+// ProxyVideoTaskDelete 处理标准入口 DELETE /contents/generations/tasks/:id：按 ?model= 选渠道，透传上游，不计费。
+func ProxyVideoTaskDelete(w http.ResponseWriter, r *http.Request, path string) {
+	modelName := r.URL.Query().Get("model")
+	if strings.TrimSpace(modelName) == "" {
+		proxyFail(w, "缺少模型名称")
+		return
+	}
+	channel, err := SelectModelChannel(modelName)
+	if err != nil {
+		proxyAILogf("video task select channel failed: model=%s err=%v", modelName, err)
+		proxyFail(w, "AI 接口请求失败")
+		return
+	}
+	resolved := buildOpenAIUpstream(channel, modelName, path, nil, "")
+	if resolved.URL == "" {
+		proxyFail(w, "AI 接口请求失败")
+		return
+	}
+	request, err := http.NewRequest(http.MethodDelete, resolved.URL, nil)
+	if err != nil {
+		proxyFail(w, "AI 接口请求失败")
+		return
+	}
+	for key, values := range resolved.Headers {
+		for _, value := range values {
+			request.Header.Add(key, value)
+		}
+	}
+	proxyCopyAIResponse(w, request, nil)
+}
