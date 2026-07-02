@@ -22,6 +22,9 @@ function responseHeaders(response: Response) {
     headers.delete("content-length");
     headers.delete("content-encoding");
     headers.delete("transfer-encoding");
+    // Preserve generation task ID header for frontend metadata enrichment
+    const genTaskId = response.headers.get("x-generation-task-id");
+    if (genTaskId) headers.set("x-generation-task-id", genTaskId);
     return headers;
 }
 

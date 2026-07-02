@@ -64,6 +64,8 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 	provider := DetermineProvider(channel)
 	source := DetermineSource(r)
 	genTaskID, _ := LogTaskStart(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers), source, "")
+	// Expose generation task ID to frontend for metadata enrichment
+	w.Header().Set("X-Generation-Task-Id", genTaskID)
 	startTime := time.Now()
 
 	if err := ConsumeUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
@@ -513,6 +515,8 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 	taskType := DetermineTaskType(path)
 	provider := DetermineProvider(channel)
 	genTaskID, _ := LogTaskStart(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers), string(model.SourceVideoWorkbench), "")
+	// Expose generation task ID to frontend for metadata enrichment
+	w.Header().Set("X-Generation-Task-Id", genTaskID)
 	startTime := time.Now()
 
 	if err := ConsumeUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
