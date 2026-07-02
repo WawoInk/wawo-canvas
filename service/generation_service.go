@@ -160,6 +160,32 @@ func ListUserTasks(ctx model.AuthUser, q model.GenerationTaskQuery) (model.Gener
 	return model.GenerationTaskList{Items: tasks, Total: total}, nil
 }
 
+// AdminGenerationTaskListWithUser 管理端任务列表（含用户名）。
+type AdminGenerationTaskListWithUser struct {
+	Items []repository.AdminGenerationTaskWithUser `json:"items"`
+	Total int64                                    `json:"total"`
+}
+
+// AdminListTasksWithUsername 管理员查看所有用户的任务列表（含用户名）。
+func AdminListTasksWithUsername(q model.GenerationTaskQuery) (*AdminGenerationTaskListWithUser, error) {
+	tasks, total, err := repository.ListGenerationTasksWithUsername(q)
+	if err != nil {
+		return nil, err
+	}
+	return &AdminGenerationTaskListWithUser{Items: tasks, Total: total}, nil
+}
+
+// AdminDeleteTask 管理员删除单条任务（无所有权校验）。
+func AdminDeleteTask(taskID string) error {
+	_, err := repository.AdminDeleteGenerationTasks([]string{taskID})
+	return err
+}
+
+// AdminBatchDeleteTasks 管理员批量删除任务。
+func AdminBatchDeleteTasks(ids []string) (int64, error) {
+	return repository.AdminDeleteGenerationTasks(ids)
+}
+
 // AdminListTasks 管理员查看所有用户的任务列表（无用户过滤）。
 func AdminListTasks(q model.GenerationTaskQuery) (model.GenerationTaskList, error) {
 	tasks, total, err := repository.ListGenerationTasks(q)
