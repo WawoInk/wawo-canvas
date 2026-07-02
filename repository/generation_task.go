@@ -97,6 +97,19 @@ func GetGenerationPayloadByTaskID(taskID string) (model.GenerationPayload, error
 	return payload, result.Error
 }
 
+// UpdateGenerationPayload 更新任务的响应负载。
+func UpdateGenerationPayload(taskID string, respBody string, respHeaders string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	return db.Model(&model.GenerationPayload{}).Where("task_id = ?", taskID).
+		Updates(map[string]any{
+			"response_body":    respBody,
+			"response_headers": respHeaders,
+		}).Error
+}
+
 // DeleteGenerationTask 删除任务及其负载（需校验所有权）。
 func DeleteGenerationTask(id, userID string) error {
 	db, err := DB()
