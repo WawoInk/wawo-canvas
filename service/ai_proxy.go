@@ -537,6 +537,14 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 					proxyAILogf("video task save ownership failed: user=%s task=%s err=%v", user.ID, upstreamTaskID, err)
 				}
 			}
+			// ── 启动异步状态同步 ──
+			if upstreamTaskID != "" {
+				syncCfg := DefaultTaskSyncConfig()
+				syncCfg.GenTaskID = genTaskID
+				syncCfg.UpstreamTaskID = upstreamTaskID
+				syncCfg.Channel = channel
+				SyncTaskStatus(syncCfg)
+			}
 		},
 		func(errCode string, errMsg string, rawError string) {
 			latencyMs := time.Since(startTime).Milliseconds()
@@ -597,6 +605,10 @@ func ProxyVideoTaskDelete(w http.ResponseWriter, r *http.Request, path string) {
 	proxyCopyAIResponse(w, request, nil,
 		func(_ []byte, _ string) {
 			LogTaskCancelled(upstreamTaskID)
+			// ── 取消异步状态同步 ──
+			if genTaskID, err := getGenerationTaskByUpstreamTaskID(upstreamTaskID); err == nil && genTaskID != "" {
+				CancelTaskSync(genTaskID)
+			}
 		},
 		nil,
 	)

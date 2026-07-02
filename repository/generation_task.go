@@ -65,6 +65,20 @@ func GetGenerationTaskByCallbackToken(token string) (string, error) {
 	return task.ID, nil
 }
 
+// GetGenerationTaskByUpstreamTaskID 根据上游任务 ID 查找生成任务 ID。
+func GetGenerationTaskByUpstreamTaskID(upstreamTaskID string) (string, error) {
+	db, err := DB()
+	if err != nil {
+		return "", err
+	}
+	var task model.GenerationTask
+	result := db.Where("upstream_task_id = ?", upstreamTaskID).Select("id").First(&task)
+	if result.Error != nil {
+		return "", result.Error
+	}
+	return task.ID, nil
+}
+
 // ListGenerationTasks 按查询条件分页查询任务。
 func ListGenerationTasks(q model.GenerationTaskQuery) ([]model.GenerationTask, int64, error) {
 	db, err := DB()
