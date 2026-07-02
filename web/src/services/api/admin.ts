@@ -89,6 +89,7 @@ export async function deleteAdminCreditLog(token: string, id: string) {
 export type AdminGenerationTask = {
     id: string;
     userId: string;
+    username: string;
     taskType: string;
     provider: string;
     model: string;
@@ -135,6 +136,14 @@ export async function fetchAdminGenerationTasks(token: string, query: AdminGener
 
 export async function fetchAdminGenerationTaskDetail(token: string, id: string) {
     return apiGet<AdminGenerationTaskDetailResponse>(`/api/admin/generation-tasks/${encodeURIComponent(id)}?include_payload=true`, undefined, token);
+}
+
+export async function deleteAdminGenerationTask(token: string, id: string): Promise<boolean> {
+    return apiDelete<boolean>(`/api/admin/generation-tasks/${encodeURIComponent(id)}`, token);
+}
+
+export async function batchDeleteAdminGenerationTasks(token: string, ids: string[]): Promise<{ deleted: number }> {
+    return apiPost<{ deleted: number }>("/api/admin/generation-tasks/batch-delete", { ids }, token);
 }
 
 export async function fetchAdminPromptCategories(token: string) {

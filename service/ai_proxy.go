@@ -62,7 +62,10 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 	// ── 生成任务日志：开始 ──
 	taskType := DetermineTaskType(path)
 	provider := DetermineProvider(channel)
-	genTaskID, _ := LogTaskStart(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers))
+	source := DetermineSource(r)
+	genTaskID, _ := LogTaskStart(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers), source, "")
+	// Expose generation task ID to frontend for metadata enrichment
+	w.Header().Set("X-Generation-Task-Id", genTaskID)
 	startTime := time.Now()
 
 	if err := ConsumeUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
@@ -511,7 +514,9 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 	// ── 生成任务日志：开始 ──
 	taskType := DetermineTaskType(path)
 	provider := DetermineProvider(channel)
-	genTaskID, _ := LogTaskStart(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers))
+	genTaskID, _ := LogTaskStart(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers), string(model.SourceVideoWorkbench), "")
+	// Expose generation task ID to frontend for metadata enrichment
+	w.Header().Set("X-Generation-Task-Id", genTaskID)
 	startTime := time.Now()
 
 	if err := ConsumeUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
@@ -536,6 +541,14 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 				if err := SaveVideoTask(user.ID, upstreamTaskID, modelName); err != nil {
 					proxyAILogf("video task save ownership failed: user=%s task=%s err=%v", user.ID, upstreamTaskID, err)
 				}
+			}
+			// ── 启动异步状态同步 ──
+			if upstreamTaskID != "" {
+				syncCfg := DefaultTaskSyncConfig()
+				syncCfg.GenTaskID = genTaskID
+				syncCfg.UpstreamTaskID = upstreamTaskID
+				syncCfg.Channel = channel
+				SyncTaskStatus(syncCfg)
 			}
 		},
 		func(errCode string, errMsg string, rawError string) {
@@ -597,6 +610,12 @@ func ProxyVideoTaskDelete(w http.ResponseWriter, r *http.Request, path string) {
 	proxyCopyAIResponse(w, request, nil,
 		func(_ []byte, _ string) {
 			LogTaskCancelled(upstreamTaskID)
+			// ── 取消异步状态同步 ──
+			if genTaskID, err := getGenerationTaskByUpstreamTaskID(upstreamTaskID); err == nil && genTaskID != "" {
+				CancelTaskSync(genTaskID)
+			} else if err != nil {
+				proxyAILogf("video task cancel-sync lookup failed: upstreamTask=%s err=%v", upstreamTaskID, err)
+			}
 		},
 		nil,
 	)

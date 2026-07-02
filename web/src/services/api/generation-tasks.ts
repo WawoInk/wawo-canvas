@@ -102,6 +102,11 @@ export async function deleteGenerationTask(taskId: string): Promise<boolean> {
     return apiDelete<boolean>(`/api/v1/generation-tasks/${encodeURIComponent(taskId)}`, token);
 }
 
+export async function patchGenerationTaskMetadata(taskId: string, metadata: string): Promise<boolean> {
+    const token = authToken();
+    return apiPost<boolean>(`/api/v1/generation-tasks/${encodeURIComponent(taskId)}/metadata`, { metadata }, token);
+}
+
 export interface RecordGenerationTaskRequest {
     taskType: string;
     provider: string;

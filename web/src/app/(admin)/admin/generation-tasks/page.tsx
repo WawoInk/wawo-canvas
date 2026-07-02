@@ -1,6 +1,6 @@
 "use client";
 
-import { EyeOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EyeOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { Button, Card, Col, Form, Input, Modal, Row, Select, Space, Tag, Tooltip, Typography } from "antd";
 import dayjs from "dayjs";
@@ -40,10 +40,37 @@ const statusColors: Record<string, string> = {
 };
 
 export default function AdminGenerationTasksPage() {
-    const { tasks, keyword, taskType, status, page, pageSize, total, isLoading, searchLogs, filterByType, filterByStatus, changePage, changePageSize, resetFilters, refreshLogs, fetchDetail } =
+    const { tasks, keyword, taskType, status, page, pageSize, total, isLoading, isDeleting, searchLogs, filterByType, filterByStatus, changePage, changePageSize, resetFilters, refreshLogs, fetchDetail, deleteTask, batchDeleteTasks } =
         useAdminGenerationTasks();
     const [keywordText, setKeywordText] = useState(keyword);
     const [detail, setDetail] = useState<AdminGenerationTaskDetailResponse | null>(null);
+    const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+
+    const handleDelete = (item: AdminGenerationTask) => {
+        Modal.confirm({
+            title: "确认删除",
+            content: `确定删除该条使用日志吗？用户: ${item.username || item.userId}, 模型: ${item.model}`,
+            okText: "删除",
+            okType: "danger",
+            cancelText: "取消",
+            onOk: () => deleteTask(item.id),
+        });
+    };
+
+    const handleBatchDelete = () => {
+        if (selectedRowKeys.length === 0) return;
+        Modal.confirm({
+            title: "确认批量删除",
+            content: `确定删除选中的 ${selectedRowKeys.length} 条使用日志吗？此操作不可恢复。`,
+            okText: "删除",
+            okType: "danger",
+            cancelText: "取消",
+            onOk: () => {
+                batchDeleteTasks(selectedRowKeys);
+                setSelectedRowKeys([]);
+            },
+        });
+    };
 
     useEffect(() => setKeywordText(keyword), [keyword]);
 
@@ -61,6 +88,14 @@ export default function AdminGenerationTasksPage() {
                 <Typography.Text copyable ellipsis style={{ maxWidth: 180 }}>
                     {item.userId}
                 </Typography.Text>
+            ),
+        },
+        {
+            title: "用户名",
+            dataIndex: "username",
+            width: 120,
+            render: (_, item) => (
+                <Typography.Text>{item.username || "-"}</Typography.Text>
             ),
         },
         {
@@ -123,12 +158,17 @@ export default function AdminGenerationTasksPage() {
         {
             title: "操作",
             key: "actions",
-            width: 72,
+            width: 108,
             align: "right",
             render: (_, item) => (
-                <Tooltip title="查看详情">
-                    <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => void openDetail(item)} />
-                </Tooltip>
+                <Space size={0}>
+                    <Tooltip title="查看详情">
+                        <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => void openDetail(item)} />
+                    </Tooltip>
+                    <Tooltip title="删除">
+                        <Button type="text" size="small" danger icon={<DeleteOutlined />} loading={isDeleting} onClick={() => handleDelete(item)} />
+                    </Tooltip>
+                </Space>
             ),
         },
     ];
@@ -213,10 +253,19 @@ export default function AdminGenerationTasksPage() {
                     tableLayout="fixed"
                     scroll={{ x: 1400 }}
                     cardProps={{ variant: "borderless" }}
+                    rowSelection={{
+                        selectedRowKeys,
+                        onChange: (keys) => setSelectedRowKeys(keys as string[]),
+                    }}
                     headerTitle={
                         <Space>
                             <Typography.Text strong>使用日志</Typography.Text>
                             <Tag>{total} 条</Tag>
+                            {selectedRowKeys.length > 0 && (
+                                <Button size="small" danger icon={<DeleteOutlined />} loading={isDeleting} onClick={handleBatchDelete}>
+                                    删除选中 ({selectedRowKeys.length})
+                                </Button>
+                            )}
                         </Space>
                     }
                     options={{ density: true, setting: true, reload: () => void refreshLogs() }}

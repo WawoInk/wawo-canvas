@@ -10,6 +10,15 @@ const (
 	TaskTypeChat  TaskType = "chat"
 )
 
+// Source 生成任务来源场景。
+type Source string
+
+const (
+	SourceCanvas         Source = "canvas"
+	SourceImageWorkbench Source = "image_workbench"
+	SourceVideoWorkbench Source = "video_workbench"
+)
+
 // TaskStatus 任务生命周期状态。
 type TaskStatus string
 
@@ -26,15 +35,18 @@ type GenerationTask struct {
 	ID             string     `json:"id" gorm:"primaryKey"`
 	UserID         string     `json:"userId" gorm:"index"`
 	TaskType       TaskType   `json:"taskType" gorm:"index"`
+	Source         string     `json:"source" gorm:"index"`
 	Provider       string     `json:"provider"`
 	Model          string     `json:"model"`
 	Status         TaskStatus `json:"status"`
 	Credits        int        `json:"credits"`
 	LatencyMs      int64      `json:"latencyMs"`
-	UpstreamTaskID string     `json:"upstreamTaskId"`
+	UpstreamTaskID string     `json:"upstreamTaskId" gorm:"index"`
+	CallbackToken  string     `json:"callbackToken,omitempty" gorm:"index"`
 	TraceID        string     `json:"traceId"`
 	ErrorCode      string     `json:"errorCode,omitempty"`
 	ErrorMessage   string     `json:"errorMessage,omitempty"`
+	Metadata       string     `json:"metadata" gorm:"type:text"`
 	CreatedAt      string     `json:"createdAt"`
 	UpdatedAt      string     `json:"updatedAt"`
 }

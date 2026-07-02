@@ -18,3 +18,8 @@ func getVideoTaskByTaskIDAndUser(taskID, userID string) (*model.VideoTask, error
 	}
 	return &vt, nil
 }
+
+// getGenerationTaskByUpstreamTaskID 根据上游任务 ID 查找生成任务 ID。
+func getGenerationTaskByUpstreamTaskID(upstreamTaskID string) (string, error) {
+	return repository.GetGenerationTaskByUpstreamTaskID(upstreamTaskID)
+}
