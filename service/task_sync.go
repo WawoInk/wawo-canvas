@@ -54,7 +54,8 @@ func DefaultTaskSyncConfig() TaskSyncConfig {
 }
 
 var (
-	taskSyncCancels sync.Map // genTaskID -> context.CancelFunc
+	taskSyncCancels    sync.Map         // genTaskID -> context.CancelFunc
+	upstreamHTTPClient = &http.Client{Timeout: 30 * time.Second}
 )
 
 // SyncTaskStatus 启动异步任务状态同步。
@@ -76,10 +77,14 @@ func SyncTaskStatus(cfg TaskSyncConfig) {
 		})
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	taskSyncCancels.Store(cfg.GenTaskID, cancel)
+
 	if cfg.Mode == TaskSyncCallback && cfg.Channel.SupportsCallback() {
-		go waitForCallback(cfg)
+		go waitForCallback(ctx, cfg)
 	} else {
-		go pollUntilTerminal(cfg)
+		// 回调模式但渠道不支持时，回退到轮询。
+		go pollUntilTerminal(ctx, cfg)
 	}
 }
 
@@ -91,9 +96,7 @@ func CancelTaskSync(genTaskID string) {
 }
 
 // pollUntilTerminal 轮询上游直到任务进入终态。
-func pollUntilTerminal(cfg TaskSyncConfig) {
-	ctx, cancel := context.WithCancel(context.Background())
-	taskSyncCancels.Store(cfg.GenTaskID, cancel)
+func pollUntilTerminal(ctx context.Context, cfg TaskSyncConfig) {
 	defer taskSyncCancels.Delete(cfg.GenTaskID)
 
 	for i := 0; i < cfg.MaxRetries; i++ {
@@ -128,10 +131,10 @@ func pollUntilTerminal(cfg TaskSyncConfig) {
 }
 
 // waitForCallback 等待厂商回调（占位轮询 fallback）。
-func waitForCallback(cfg TaskSyncConfig) {
+func waitForCallback(ctx context.Context, cfg TaskSyncConfig) {
 	// 存储 callback_token 供 webhook 验证
 	// 启动一个长超时轮询作为 fallback（厂商可能不回调）
-	pollUntilTerminal(cfg)
+	pollUntilTerminal(ctx, cfg)
 }
 
 // queryUpstreamTask 通过 HTTP 查询上游任务状态。
@@ -151,14 +154,17 @@ func queryUpstreamTaskViaHTTP(cfg TaskSyncConfig) (model.TaskStatus, TaskResult)
 	req.Header.Set("Authorization", "Bearer "+cfg.Channel.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := upstreamHTTPClient.Do(req)
 	if err != nil {
 		log.Printf("task_sync: HTTP query failed: genTask=%s url=%s err=%v", cfg.GenTaskID, targetURL, err)
 		return model.TaskStatusRunning, TaskResult{}
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		log.Printf("task_sync: read upstream response failed: genTask=%s err=%v", cfg.GenTaskID, readErr)
+	}
 	var result struct {
 		ID     string `json:"id"`
 		Status string `json:"status"`
@@ -167,7 +173,13 @@ func queryUpstreamTaskViaHTTP(cfg TaskSyncConfig) (model.TaskStatus, TaskResult)
 			Message string `json:"message"`
 		} `json:"error"`
 	}
-	json.Unmarshal(body, &result)
+	if err := json.Unmarshal(body, &result); err != nil {
+		snippet := string(body)
+		if len(snippet) > 200 {
+			snippet = snippet[:200]
+		}
+		log.Printf("task_sync: parse upstream response failed: genTask=%s status=%d body=%s err=%v", cfg.GenTaskID, resp.StatusCode, snippet, err)
+	}
 
 	status := mapArkStatusToModel(result.Status)
 	taskResult := TaskResult{ResponseBody: string(body)}
@@ -214,7 +226,4 @@ func OnTaskCompleted(genTaskID string, status model.TaskStatus, result TaskResul
 			log.Printf("task_sync: update payload failed: genTask=%s err=%v", genTaskID, err)
 		}
 	}
-
-	// 清理取消上下文
-	taskSyncCancels.Delete(genTaskID)
 }
