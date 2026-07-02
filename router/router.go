@@ -28,6 +28,8 @@ func New() *gin.Engine {
 	api.HEAD("/media/references/:id", func(c *gin.Context) {
 		handler.ReferenceMedia(c.Writer, c.Request, c.Param("id"))
 	})
+	// Callback webhook: no UserAuth — external providers have no session.
+	api.POST("/v1/generation-tasks/callback", gin.WrapF(handler.HandleTaskCallback))
 	v1 := api.Group("/v1", middleware.UserAuth)
 	v1.POST("/images/generations", gin.WrapF(handler.AIImagesGenerations))
 	v1.POST("/images/edits", gin.WrapF(handler.AIImagesEdits))
@@ -61,7 +63,6 @@ func New() *gin.Engine {
 	v1.DELETE("/generation-tasks/:id", func(c *gin.Context) {
 		handler.DeleteGenerationTask(c.Writer, c.Request, c.Param("id"))
 	})
-	v1.POST("/generation-tasks/callback", gin.WrapF(handler.HandleTaskCallback))
 	v1.POST("/generation-tasks/:id/metadata", func(c *gin.Context) {
 		handler.UpdateGenerationTaskMetadata(c.Writer, c.Request, c.Param("id"))
 	})

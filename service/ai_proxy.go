@@ -613,6 +613,8 @@ func ProxyVideoTaskDelete(w http.ResponseWriter, r *http.Request, path string) {
 			// ── 取消异步状态同步 ──
 			if genTaskID, err := getGenerationTaskByUpstreamTaskID(upstreamTaskID); err == nil && genTaskID != "" {
 				CancelTaskSync(genTaskID)
+			} else if err != nil {
+				proxyAILogf("video task cancel-sync lookup failed: upstreamTask=%s err=%v", upstreamTaskID, err)
 			}
 		},
 		nil,

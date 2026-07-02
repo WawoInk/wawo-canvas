@@ -29,7 +29,7 @@ type TaskSyncConfig struct {
 	UpstreamTaskID  string             // 上游厂商任务 ID
 	Channel         model.ModelChannel // 渠道配置
 	Mode            TaskSyncMode       // poll 或 callback
-	MaxRetries      int                // 最大轮询次数，默认 20
+	MaxRetries      int                // 最大轮询次数，默认 90
 	PollIntervalMin time.Duration      // 起始轮询间隔，默认 5s
 	PollIntervalMax time.Duration      // 最大轮询间隔，默认 10s
 	CallbackToken   string             // 回调验证令牌
@@ -47,7 +47,7 @@ type TaskResult struct {
 func DefaultTaskSyncConfig() TaskSyncConfig {
 	return TaskSyncConfig{
 		Mode:            TaskSyncPoll,
-		MaxRetries:      20,
+		MaxRetries:      90,
 		PollIntervalMin: 5 * time.Second,
 		PollIntervalMax: 10 * time.Second,
 	}
@@ -61,7 +61,7 @@ var (
 // SyncTaskStatus 启动异步任务状态同步。
 func SyncTaskStatus(cfg TaskSyncConfig) {
 	if cfg.MaxRetries <= 0 {
-		cfg.MaxRetries = 20
+		cfg.MaxRetries = 90
 	}
 	if cfg.PollIntervalMin <= 0 {
 		cfg.PollIntervalMin = 5 * time.Second
@@ -72,9 +72,11 @@ func SyncTaskStatus(cfg TaskSyncConfig) {
 	if cfg.CallbackToken == "" {
 		cfg.CallbackToken = fmt.Sprintf("cbtok-%s", cfg.GenTaskID)
 		// persist callback token so webhook handler can validate
-		repository.UpdateGenerationTask(cfg.GenTaskID, map[string]any{
+		if err := repository.UpdateGenerationTask(cfg.GenTaskID, map[string]any{
 			"callback_token": cfg.CallbackToken,
-		})
+		}); err != nil {
+			log.Printf("task_sync: persist callback_token failed: genTask=%s err=%v", cfg.GenTaskID, err)
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

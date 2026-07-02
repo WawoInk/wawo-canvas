@@ -41,8 +41,8 @@ type GenerationTask struct {
 	Status         TaskStatus `json:"status"`
 	Credits        int        `json:"credits"`
 	LatencyMs      int64      `json:"latencyMs"`
-	UpstreamTaskID string     `json:"upstreamTaskId"`
-	CallbackToken  string     `json:"callbackToken,omitempty"`
+	UpstreamTaskID string     `json:"upstreamTaskId" gorm:"index"`
+	CallbackToken  string     `json:"callbackToken,omitempty" gorm:"index"`
 	TraceID        string     `json:"traceId"`
 	ErrorCode      string     `json:"errorCode,omitempty"`
 	ErrorMessage   string     `json:"errorMessage,omitempty"`
