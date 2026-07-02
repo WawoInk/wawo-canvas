@@ -51,6 +51,20 @@ func GetGenerationTaskByIDAndUser(id, userID string) (model.GenerationTask, erro
 	return task, result.Error
 }
 
+// GetGenerationTaskByCallbackToken 根据回调令牌查找任务。
+func GetGenerationTaskByCallbackToken(token string) (string, error) {
+	db, err := DB()
+	if err != nil {
+		return "", err
+	}
+	var task model.GenerationTask
+	result := db.Where("callback_token = ?", token).Select("id").First(&task)
+	if result.Error != nil {
+		return "", result.Error
+	}
+	return task.ID, nil
+}
+
 // ListGenerationTasks 按查询条件分页查询任务。
 func ListGenerationTasks(q model.GenerationTaskQuery) ([]model.GenerationTask, int64, error) {
 	db, err := DB()
