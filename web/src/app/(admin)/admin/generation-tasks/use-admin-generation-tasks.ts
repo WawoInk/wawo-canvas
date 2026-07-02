@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { App } from "antd";
 
-import { fetchAdminGenerationTasks, fetchAdminGenerationTaskDetail, type AdminGenerationTask } from "@/services/api/admin";
+import { fetchAdminGenerationTasks, fetchAdminGenerationTaskDetail, deleteAdminGenerationTask, batchDeleteAdminGenerationTasks, type AdminGenerationTask } from "@/services/api/admin";
 import { useUserStore } from "@/stores/use-user-store";
 
 const defaultPageSize = 10;
@@ -47,6 +47,28 @@ export function useAdminGenerationTasks() {
 
     const data = query.data;
 
+    const deleteMutation = useMutation({
+        mutationFn: (id: string) => deleteAdminGenerationTask(token, id),
+        onSuccess: () => {
+            message.success("已删除");
+            queryClient.invalidateQueries({ queryKey: ["admin", "generation-tasks"] });
+        },
+        onError: (error: Error) => {
+            message.error(error.message || "删除失败");
+        },
+    });
+
+    const batchDeleteMutation = useMutation({
+        mutationFn: (ids: string[]) => batchDeleteAdminGenerationTasks(token, ids),
+        onSuccess: (data) => {
+            message.success(`已删除 ${data?.deleted || 0} 条记录`);
+            queryClient.invalidateQueries({ queryKey: ["admin", "generation-tasks"] });
+        },
+        onError: (error: Error) => {
+            message.error(error.message || "批量删除失败");
+        },
+    });
+
     return {
         tasks: data?.items || [],
         keyword,
@@ -74,5 +96,8 @@ export function useAdminGenerationTasks() {
                 return null;
             }
         },
+        deleteTask: (id: string) => deleteMutation.mutate(id),
+        batchDeleteTasks: (ids: string[]) => batchDeleteMutation.mutate(ids),
+        isDeleting: deleteMutation.isPending || batchDeleteMutation.isPending,
     };
 }
