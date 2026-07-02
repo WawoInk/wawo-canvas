@@ -22,6 +22,11 @@ type ModelChannel struct {
 	Remark   string   `json:"remark"`
 }
 
+// SupportsCallback 判断渠道是否支持异步回调通知。
+func (ch ModelChannel) SupportsCallback() bool {
+	return ch.Protocol == "aidrama"
+}
+
 // ModelCost 模型算力点配置。
 type ModelCost struct {
 	Model   string `json:"model"`
