@@ -120,6 +120,35 @@ func RecordGenerationTask(w http.ResponseWriter, r *http.Request) {
 	OK(w, task)
 }
 
+// UpdateGenerationTaskMetadata POST /api/v1/generation-tasks/:id/metadata — 业务层补充元数据。
+func UpdateGenerationTaskMetadata(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	var body struct {
+		Metadata string `json:"metadata"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		Fail(w, "参数格式错误")
+		return
+	}
+	// 校验 metadata 是合法 JSON
+	if body.Metadata != "" {
+		var js json.RawMessage
+		if err := json.Unmarshal([]byte(body.Metadata), &js); err != nil {
+			Fail(w, "metadata 必须是合法的 JSON 字符串")
+			return
+		}
+	}
+	if err := service.UpdateTaskMetadata(id, user.ID, body.Metadata); err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, true)
+}
+
 // AdminGetGenerationTaskDetail GET /api/admin/generation-tasks/:id — 管理员查看任意任务详情（含 Payload）。
 func AdminGetGenerationTaskDetail(w http.ResponseWriter, r *http.Request, id string) {
 	includePayload := r.URL.Query().Get("include_payload") == "true"

@@ -62,6 +62,9 @@ func New() *gin.Engine {
 		handler.DeleteGenerationTask(c.Writer, c.Request, c.Param("id"))
 	})
 	v1.POST("/generation-tasks/callback", gin.WrapF(handler.HandleTaskCallback))
+	v1.POST("/generation-tasks/:id/metadata", func(c *gin.Context) {
+		handler.UpdateGenerationTaskMetadata(c.Writer, c.Request, c.Param("id"))
+	})
 	// User credit logs
 	v1.GET("/credit-logs", gin.WrapF(handler.UserCreditLogs))
 	// Canvas project sync
