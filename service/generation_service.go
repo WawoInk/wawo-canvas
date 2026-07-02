@@ -2,7 +2,9 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -40,8 +42,33 @@ func DetermineProvider(channel model.ModelChannel) string {
 	}
 }
 
+// DetermineSource 根据请求头推断生成来源（优先 X-Source，fallback Referer/路径）。
+func DetermineSource(r *http.Request) string {
+	if src := r.Header.Get("X-Source"); src != "" {
+		return src
+	}
+	referer := r.Referer()
+	if strings.Contains(referer, "/canvas") {
+		return string(model.SourceCanvas)
+	}
+	return DetermineSourceFromPath(r.URL.Path)
+}
+
+// DetermineSourceFromPath 根据 API 路径推断来源。
+func DetermineSourceFromPath(path string) string {
+	if strings.Contains(path, "/contents/generations/tasks") {
+		return string(model.SourceVideoWorkbench)
+	}
+	if strings.Contains(path, "/images/") {
+		return string(model.SourceImageWorkbench)
+	}
+	return ""
+}
+
 // LogTaskStart 创建任务记录（status=running）并保存 Payload，返回 taskID。
-func LogTaskStart(user model.AuthUser, taskType model.TaskType, provider string, modelName string, reqBody []byte, reqHeaders string) (string, error) {
+func LogTaskStart(user model.AuthUser, taskType model.TaskType, provider string,
+	modelName string, reqBody []byte, reqHeaders string,
+	source string, metadata string) (string, error) {
 	id := "gentask-" + uuid.NewString()
 	now := time.Now().Format(time.RFC3339)
 
@@ -52,6 +79,8 @@ func LogTaskStart(user model.AuthUser, taskType model.TaskType, provider string,
 		Provider:  provider,
 		Model:     modelName,
 		Status:    model.TaskStatusRunning,
+		Source:    source,
+		Metadata:  metadata,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -148,6 +177,21 @@ func LogTaskCancelled(taskID string) {
 	if err := repository.UpdateGenerationTask(taskID, updates); err != nil {
 		log.Printf("generation task: update cancelled failed: task=%s err=%v", taskID, err)
 	}
+}
+
+// UpdateTaskMetadata 业务层补充任务元数据（所有权校验，仅允许更新 metadata 字段）。
+func UpdateTaskMetadata(taskID string, userID string, metadata string) error {
+	_, err := repository.GetGenerationTaskByIDAndUser(taskID, userID)
+	if err != nil {
+		return err
+	}
+	if len(metadata) > 4096 {
+		return fmt.Errorf("metadata too large: %d bytes (max 4096)", len(metadata))
+	}
+	return repository.UpdateGenerationTask(taskID, map[string]any{
+		"metadata":   metadata,
+		"updated_at": time.Now().Format(time.RFC3339),
+	})
 }
 
 // ListUserTasks 获取用户的任务列表。
