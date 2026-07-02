@@ -131,6 +131,36 @@ func AdminGetGenerationTaskDetail(w http.ResponseWriter, r *http.Request, id str
 	OK(w, map[string]any{"task": task, "payload": payload})
 }
 
+// AdminDeleteGenerationTask DELETE /api/admin/generation-tasks/:id — 管理员删除单条任务。
+func AdminDeleteGenerationTask(w http.ResponseWriter, r *http.Request, id string) {
+	if err := service.AdminDeleteTask(id); err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, true)
+}
+
+// AdminBatchDeleteGenerationTasks POST /api/admin/generation-tasks/batch-delete — 管理员批量删除。
+func AdminBatchDeleteGenerationTasks(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs []string `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		Fail(w, "参数格式错误")
+		return
+	}
+	if len(req.IDs) == 0 {
+		Fail(w, "请选择要删除的记录")
+		return
+	}
+	deleted, err := service.AdminBatchDeleteTasks(req.IDs)
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, map[string]any{"deleted": deleted})
+}
+
 // AdminListGenerationTasks GET /api/admin/generation-tasks — 管理员查看所有用户的任务列表。
 func AdminListGenerationTasks(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -145,7 +175,7 @@ func AdminListGenerationTasks(w http.ResponseWriter, r *http.Request) {
 		Page:      page,
 		PageSize:  pageSize,
 	}
-	result, err := service.AdminListTasks(query)
+	result, err := service.AdminListTasksWithUsername(query)
 	if err != nil {
 		FailError(w, err)
 		return
