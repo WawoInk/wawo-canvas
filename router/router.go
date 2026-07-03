@@ -35,6 +35,7 @@ func New() *gin.Engine {
 	v1.POST("/images/edits", gin.WrapF(handler.AIImagesEdits))
 	v1.POST("/chat/completions", gin.WrapF(handler.AIChatCompletions))
 	v1.POST("/audio/speech", gin.WrapF(handler.AIAudioSpeech))
+	v1.POST("/xvanai/chat/completions", gin.WrapF(handler.XvanaiChatCompletions))
 	v1.POST("/videos", gin.WrapF(handler.AIVideos))
 	v1.POST("/media/references", gin.WrapF(handler.UploadReferenceMedia))
 	v1.GET("/videos/:id", func(c *gin.Context) {
@@ -76,6 +77,15 @@ func New() *gin.Engine {
 	})
 	v1.DELETE("/canvas/projects/:id", func(c *gin.Context) {
 		handler.DeleteCanvasProject(c.Writer, c.Request, c.Param("id"))
+	})
+	// User file upload / S3 storage
+	v1.POST("/files", gin.WrapF(handler.UploadUserFile))
+	v1.GET("/files", gin.WrapF(handler.ListUserFiles))
+	v1.GET("/files/:id", func(c *gin.Context) {
+		handler.GetUserFileByID(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.DELETE("/files/:id", func(c *gin.Context) {
+		handler.DeleteUserFileHandler(c.Writer, c.Request, c.Param("id"))
 	})
 	api.GET("/prompts", middleware.OptionalAuth, gin.WrapF(handler.Prompts))
 	api.GET("/assets", middleware.OptionalAuth, gin.WrapF(handler.Assets))

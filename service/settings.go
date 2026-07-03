@@ -120,7 +120,24 @@ func normalizePrivateSetting(setting model.PrivateSetting) model.PrivateSetting 
 			setting.Channels[i].Weight = 1
 		}
 	}
+	setting.FileSizeLimits = normalizeFileSizeLimits(setting.FileSizeLimits)
 	return setting
+}
+
+func normalizeFileSizeLimits(f model.FileSizeLimits) model.FileSizeLimits {
+	if f.Image <= 0 {
+		f.Image = 30 << 20 // 30 MB
+	}
+	if f.Video <= 0 {
+		f.Video = 50 << 20 // 50 MB
+	}
+	if f.Audio <= 0 {
+		f.Audio = 15 << 20 // 15 MB
+	}
+	if f.Prompt <= 0 {
+		f.Prompt = 5 << 20 // 5 MB
+	}
+	return f
 }
 
 func hidePrivateAPIKeys(settings model.Settings) model.Settings {

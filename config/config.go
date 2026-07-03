@@ -20,6 +20,10 @@ type Config struct {
 	LinuxDoAuthorizeURL string `env:"LINUX_DO_AUTHORIZE_URL" envDefault:"https://connect.linux.do/oauth2/authorize"`
 	LinuxDoTokenURL     string `env:"LINUX_DO_TOKEN_URL" envDefault:"https://connect.linux.do/oauth2/token"`
 	LinuxDoUserInfoURL  string `env:"LINUX_DO_USERINFO_URL" envDefault:"https://connect.linux.do/api/user"`
+	AmazonS3URL         string `env:"AMAZON_S3_URL"`
+	AmazonRegion        string `env:"AMAZON_REGION" envDefault:"ap-southeast-1"`
+	AmazonS3AccessKey   string `env:"AMAZON_S3_ACCESS_KEY"`
+	AmazonS3SecretKey   string `env:"AMAZON_S3_SECRET_KEY"`
 }
 
 var Cfg Config

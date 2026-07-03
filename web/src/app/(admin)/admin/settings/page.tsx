@@ -43,7 +43,7 @@ const emptySettings: AdminSettings = {
         },
         auth: { allowRegister: true, linuxDo: { enabled: false } },
     },
-    private: { channels: [], promptSync: { enabled: true, cron: "*/5 * * * *" }, auth: { linuxDo: { clientId: "", clientSecret: "" } } },
+    private: { channels: [], promptSync: { enabled: true, cron: "*/5 * * * *" }, auth: { linuxDo: { clientId: "", clientSecret: "" } }, fileSizeLimits: { image: 30 * 1024 * 1024, video: 50 * 1024 * 1024, audio: 15 * 1024 * 1024, prompt: 5 * 1024 * 1024 } },
 };
 const emptyChannel: AdminModelChannel = { protocol: "openai", name: "", baseUrl: "", apiKey: "", models: [], weight: 1, enabled: true, remark: "" };
 
@@ -584,6 +584,33 @@ export default function AdminSettingsPage() {
                                         </Col>
                                     </Row>
                                 </Card>
+                                <Card size="small" title="文件上传大小限制">
+                                    <Typography.Text type="secondary" style={{ display: "block", marginBottom: 16 }}>
+                                        设置各类型文件上传到 S3 存储桶的单个文件大小上限（单位：MB）。
+                                    </Typography.Text>
+                                    <Row gutter={16}>
+                                        <Col xs={24} md={6}>
+                                            <Form.Item name={["private", "fileSizeLimits", "image"]} label="图片（images）" getValueFromEvent={mbValue} getValueProps={mbProps}>
+                                                <InputNumber min={1} step={1} className="!w-full" />
+                                            </Form.Item>
+                                        </Col>
+                                        <Col xs={24} md={6}>
+                                            <Form.Item name={["private", "fileSizeLimits", "video"]} label="视频（videos）" getValueFromEvent={mbValue} getValueProps={mbProps}>
+                                                <InputNumber min={1} step={1} className="!w-full" />
+                                            </Form.Item>
+                                        </Col>
+                                        <Col xs={24} md={6}>
+                                            <Form.Item name={["private", "fileSizeLimits", "audio"]} label="音频（audios）" getValueFromEvent={mbValue} getValueProps={mbProps}>
+                                                <InputNumber min={1} step={1} className="!w-full" />
+                                            </Form.Item>
+                                        </Col>
+                                        <Col xs={24} md={6}>
+                                            <Form.Item name={["private", "fileSizeLimits", "prompt"]} label="提示词（prompts）" getValueFromEvent={mbValue} getValueProps={mbProps}>
+                                                <InputNumber min={1} step={1} className="!w-full" />
+                                            </Form.Item>
+                                        </Col>
+                                    </Row>
+                                </Card>
                                 <Button type="primary" icon={<PlusOutlined />} onClick={() => openChannelDrawer(null)}>
                                     新增渠道
                                 </Button>
@@ -673,7 +700,7 @@ export default function AdminSettingsPage() {
                             </Col>
                             <Col span={12}>
                                 <Form.Item name="protocol" label="协议">
-                                    <Select options={[{ label: "OpenAI", value: "openai" }]} />
+                                    <Select options={[{ label: "OpenAI", value: "openai" }, { label: "XvanAI", value: "xvanai" }]} />
                                 </Form.Item>
                             </Col>
                             <Col span={12}>
@@ -902,12 +929,18 @@ function normalizePrivateSetting(setting: Partial<AdminSettings["private"]> = {}
                 clientSecret: setting.auth?.linuxDo?.clientSecret || "",
             },
         },
+        fileSizeLimits: {
+            image: Math.max(0, Number(setting.fileSizeLimits?.image) || 30 * 1024 * 1024),
+            video: Math.max(0, Number(setting.fileSizeLimits?.video) || 50 * 1024 * 1024),
+            audio: Math.max(0, Number(setting.fileSizeLimits?.audio) || 15 * 1024 * 1024),
+            prompt: Math.max(0, Number(setting.fileSizeLimits?.prompt) || 5 * 1024 * 1024),
+        },
     };
 }
 
 function normalizeChannel(item: Partial<AdminModelChannel> = {}): AdminModelChannel {
     return {
-        protocol: "openai",
+        protocol: item.protocol || "openai",
         name: item.name || "",
         baseUrl: item.baseUrl || "",
         apiKey: item.apiKey || "",
@@ -943,6 +976,16 @@ function mergeChannelApiKeys(currentChannels: AdminModelChannel[], saved: AdminS
 
 function collectChannelModels(channels: AdminModelChannel[]) {
     return uniqueModels(channels.filter((channel) => channel.enabled).flatMap((channel) => channel.models || []));
+}
+
+// ponytail: simple byte↔MB converters for file size limit inputs
+
+function mbValue(value: number | null) {
+    return value != null ? value * 1024 * 1024 : 0;
+}
+
+function mbProps(value: number | null) {
+    return { value: value != null ? value / (1024 * 1024) : 0 };
 }
 
 function collectKnownModels(settings: AdminSettings) {

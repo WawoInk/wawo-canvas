@@ -52,6 +52,7 @@ func DB() (*gorm.DB, error) {
 			&model.GenerationPayload{},
 			&model.CanvasProject{},
 			&model.VideoTask{},
+			&model.UserFile{},
 		)
 	})
 	return db, dbErr

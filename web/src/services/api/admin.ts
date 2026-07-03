@@ -219,7 +219,7 @@ export async function deleteAdminAsset(token: string, id: string) {
 }
 
 export type AdminModelChannel = {
-    protocol: "openai";
+    protocol: string;
     name: string;
     baseUrl: string;
     apiKey: string;
@@ -271,6 +271,12 @@ export type AdminPrivateSettings = {
             clientId: string;
             clientSecret: string;
         };
+    };
+    fileSizeLimits: {
+        image: number;
+        video: number;
+        audio: number;
+        prompt: number;
     };
 };
 
