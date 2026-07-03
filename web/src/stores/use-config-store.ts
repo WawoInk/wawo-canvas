@@ -214,34 +214,30 @@ export const useConfigStore = create<ConfigStore>()(
                         const textModels = remoteTextModels?.length ? remoteTextModels.filter((m) => models.includes(m)) : models.filter(isTextModelName);
                         const audioModels = remoteAudioModels?.length ? remoteAudioModels.filter((m) => models.includes(m)) : models.filter(isAudioModelName);
                         const current = get().config;
-                        const isAlreadyRemote = current.channelMode === "remote";
-                        // Only populate model lists from availableModels on first transition to remote;
-                        // if already remote, preserve user's per-capability selections from config modal
-                        const nextModels = isAlreadyRemote ? preserveOrFilter(current.models, models) : models;
-                        const nextImageModels = isAlreadyRemote ? preserveOrFilter(current.imageModels, models) : imageModels;
-                        const nextVideoModels = isAlreadyRemote ? preserveOrFilter(current.videoModels, models) : videoModels;
-                        const nextTextModels = isAlreadyRemote ? preserveOrFilter(current.textModels, models) : textModels;
-                        const nextAudioModels = isAlreadyRemote ? preserveOrFilter(current.audioModels, models) : audioModels;
+                        // ponytail: admin lists are authoritative; don't preserve user selections that may be stale
                         const pick = (currentValue: string, defaultVal: string, fallbackModels: string[]) => {
+                            // ponytail: admin default wins over user-persisted — single source of truth
+                            const adminDefault = defaultVal?.trim();
+                            if (adminDefault && models.includes(adminDefault)) return adminDefault;
                             const persisted = currentValue?.trim();
                             if (persisted && models.includes(persisted)) return persisted;
-                            if (defaultVal?.trim() && models.includes(defaultVal.trim())) return defaultVal.trim();
                             return fallbackModels[0] || "";
                         };
                         set({
                             config: {
                                 ...current,
                                 channelMode: "remote",
-                                model: pick(current.model, defaultModel, nextTextModels),
-                                imageModel: pick(current.imageModel, defaultImageModel, nextImageModels),
-                                videoModel: pick(current.videoModel, defaultVideoModel, nextVideoModels),
-                                textModel: pick(current.textModel, defaultTextModel, nextTextModels),
-                                audioModel: pick(current.audioModel, defaultAudioModel, nextAudioModels),
-                                models: nextModels,
-                                imageModels: nextImageModels,
-                                videoModels: nextVideoModels,
-                                textModels: nextTextModels,
-                                audioModels: nextAudioModels,
+                                model: pick(current.model, defaultModel, textModels),
+                                imageModel: pick(current.imageModel, defaultImageModel, imageModels),
+                                videoModel: pick(current.videoModel, defaultVideoModel, videoModels),
+                                textModel: pick(current.textModel, defaultTextModel, textModels),
+                                audioModel: pick(current.audioModel, defaultAudioModel, audioModels),
+                                models,
+                                imageModels,
+                                videoModels,
+                                textModels,
+                                audioModels,
+                                systemPrompt: settings.modelChannel.systemPrompt ?? current.systemPrompt,
                             },
                         });
                     } else if (allowCustomChannel && get().config.channelMode === "remote") {

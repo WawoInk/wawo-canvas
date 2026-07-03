@@ -319,7 +319,7 @@ export function AppConfigModal() {
                                 <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                                     {modelGroups.map((group) => (
                                         <Form.Item key={group.modelKey} label={group.defaultLabel} className="mb-0">
-                                            <ModelPicker config={config} value={config[group.modelKey]} onChange={(model) => updateConfig(group.modelKey, model)} capability={group.capability} fullWidth />
+                                            <ModelPicker config={config} value={config[group.modelKey]} onChange={(model) => updateConfig(group.modelKey, model)} capability={group.capability} fullWidth disabled={forcedRemote} />
                                         </Form.Item>
                                     ))}
                                 </div>
@@ -364,7 +364,7 @@ export function AppConfigModal() {
                                     <Input.TextArea rows={2} value={config.audioInstructions} placeholder="例如：自然、温暖、适合旁白。" onChange={(event) => updateConfig("audioInstructions", event.target.value)} />
                                 </Form.Item>
                                 <Form.Item label="系统提示词" className="mb-0">
-                                    <Input.TextArea rows={4} value={config.systemPrompt} placeholder="例如：你是一位擅长电影感写实摄影的视觉导演。" onChange={(event) => updateConfig("systemPrompt", event.target.value)} />
+                                    <Input.TextArea rows={4} value={config.systemPrompt} disabled={forcedRemote} placeholder={forcedRemote ? "由管理员统一配置" : "例如：你是一位擅长电影感写实摄影的视觉导演。"} onChange={(event) => updateConfig("systemPrompt", event.target.value)} />
                                 </Form.Item>
                             </Form>
                         ),
