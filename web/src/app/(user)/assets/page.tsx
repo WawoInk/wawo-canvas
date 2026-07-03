@@ -41,6 +41,7 @@ export default function AssetsPage() {
     const addAsset = useAssetStore((state) => state.addAsset);
     const updateAsset = useAssetStore((state) => state.updateAsset);
     const removeAsset = useAssetStore((state) => state.removeAsset);
+    const removeAssetWithFile = useAssetStore((state) => state.removeAssetWithFile);
     const refreshAssetUrls = useAssetStore((state) => state.refreshAssetUrls);
     const [keyword, setKeyword] = useState("");
     const [kindFilter, setKindFilter] = useState<AssetKind | "all">("all");
@@ -214,7 +215,12 @@ export default function AssetsPage() {
 
     const confirmDelete = () => {
         if (!deletingAsset) return;
-        removeAsset(deletingAsset.id);
+        const fileId = deletingAsset.data?.fileId;
+        if (fileId) {
+            void removeAssetWithFile(deletingAsset.id, fileId);
+        } else {
+            removeAsset(deletingAsset.id);
+        }
         message.success("素材已删除");
         setDeletingAsset(null);
     };

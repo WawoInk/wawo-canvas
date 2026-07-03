@@ -31,6 +31,7 @@ type AssetStore = {
     addAsset: (asset: Omit<Asset, "id" | "createdAt" | "updatedAt">) => string;
     updateAsset: (id: string, patch: Partial<Omit<Asset, "id" | "createdAt">>) => void;
     removeAsset: (id: string) => void;
+    removeAssetWithFile: (id: string, fileId: string) => Promise<void>;
     replaceAssets: (assets: Asset[]) => void;
     refreshAssetUrls: (ids: string[]) => Promise<void>;
 };
@@ -69,6 +70,18 @@ export const useAssetStore = create<AssetStore>()(
                 set((state) => ({
                     assets: state.assets.filter((asset) => asset.id !== id),
                 })),
+            removeAssetWithFile: async (id, fileId) => {
+                // Delete from S3 via API, then remove from local store
+                try {
+                    const token = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
+                    const parsed = JSON.parse(token);
+                    const tokenValue = parsed?.state?.token || "";
+                    await fetch(`/api/v1/files/${encodeURIComponent(fileId)}`, { method: "DELETE", headers: { Authorization: `Bearer ${tokenValue}` } });
+                } catch { /* network error — still remove from local */ }
+                set((state) => ({
+                    assets: state.assets.filter((asset) => asset.id !== id),
+                }));
+            },
             replaceAssets: (assets) => set({ assets }),
             refreshAssetUrls: async (ids) => {
                 const token = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
