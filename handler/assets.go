@@ -45,7 +45,7 @@ func AdminDeleteAsset(w http.ResponseWriter, r *http.Request, id string) {
 	OK(w, true)
 }
 
-// AdminUploadAssetImage POST /api/admin/assets/upload-image — 上传素材图片到 S3，返回 URL。
+// AdminUploadAssetImage POST /api/admin/assets/upload-image — 上传素材图片到 S3，返回预签名 URL。
 func AdminUploadAssetImage(w http.ResponseWriter, r *http.Request) {
 	const maxBytes = 30 << 20
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes+1)

@@ -56,7 +56,7 @@ func assetCoverURL(item model.Asset) string {
 	return ""
 }
 
-// UploadAssetImage 上传素材图片到 S3 images/admin/ 目录。
+// UploadAssetImage 上传素材图片到 S3 images/admin/ 目录，返回预签名下载 URL。
 func UploadAssetImage(ctx context.Context, filename, mimeType string, file io.Reader) (string, error) {
 	data, err := io.ReadAll(file)
 	if err != nil {
@@ -64,5 +64,8 @@ func UploadAssetImage(ctx context.Context, filename, mimeType string, file io.Re
 	}
 	ext := strings.ToLower(filepath.Ext(filename))
 	key := fmt.Sprintf("images/admin/%s%s", uuid.NewString(), ext)
-	return S3Upload(ctx, key, bytes.NewReader(data), mimeType)
+	if _, err := S3Upload(ctx, key, bytes.NewReader(data), mimeType); err != nil {
+		return "", err
+	}
+	return S3PresignGet(ctx, key, 1*time.Hour)
 }

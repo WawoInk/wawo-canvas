@@ -51,6 +51,15 @@ func GetUserFileByID(id, userID string) (model.UserFile, bool, error) {
 	return item, true, nil
 }
 
+// UpdateUserFile 更新用户文件记录。
+func UpdateUserFile(item model.UserFile) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	return db.Save(&item).Error
+}
+
 func DeleteUserFile(id, userID string) (bool, error) {
 	db, err := DB()
 	if err != nil {

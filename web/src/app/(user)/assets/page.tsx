@@ -6,8 +6,7 @@ import { App, Button, Card, Drawer, Empty, Form, Image, Input, Modal, Pagination
 import { saveAs } from "file-saver";
 
 import { useCopyText } from "@/hooks/use-copy-text";
-import { formatBytes, readFileAsDataUrl } from "@/lib/image-utils";
-import { uploadImage } from "@/services/image-storage";
+import { formatBytes, readFileAsDataUrl, readImageMeta } from "@/lib/image-utils";
 import { cn } from "@/lib/utils";
 import { useAssetStore, type Asset, type AssetKind, type ImageAsset } from "@/stores/use-asset-store";
 import { exportAssets, readAssetPackage } from "./asset-transfer";
@@ -136,8 +135,31 @@ export default function AssetsPage() {
 
     const readImageFile = async (file?: File) => {
         if (!file || !file.type.startsWith("image/")) return;
-        const image = await uploadImage(file);
-        const draft = { dataUrl: image.url, storageKey: image.storageKey, width: image.width, height: image.height, bytes: image.bytes, mimeType: image.mimeType };
+        const token = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
+        const parsed = JSON.parse(token);
+        const tokenValue = parsed?.state?.token || "";
+        const authHeader = { Authorization: `Bearer ${tokenValue}` };
+
+        // Step 1: get presigned upload URL
+        const body = JSON.stringify({ fileType: "images", fileName: file.name, mimeType: file.type });
+        const presignResp = await fetch("/api/v1/files/upload-url", { method: "POST", body, headers: { ...authHeader, "Content-Type": "application/json" } });
+        const presignJson = await presignResp.json();
+        if (presignJson.code !== 0) throw new Error(presignJson.msg || "获取上传地址失败");
+
+        const { uploadUrl, confirmId } = presignJson.data;
+
+        // Step 2: upload directly to S3
+        const putResp = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+        if (!putResp.ok) throw new Error("上传到存储失败");
+
+        // Step 3: confirm upload, get presigned download URL
+        const confirmResp = await fetch("/api/v1/files/confirm", { method: "POST", body: JSON.stringify({ confirmId, bytes: file.size }), headers: { ...authHeader, "Content-Type": "application/json" } });
+        const confirmJson = await confirmResp.json();
+        if (confirmJson.code !== 0) throw new Error(confirmJson.msg || "确认上传失败");
+
+        const s3Url = confirmJson.data.s3Key;
+        const meta = await readImageMeta(URL.createObjectURL(file));
+        const draft = { dataUrl: s3Url, storageKey: confirmJson.data.id, width: meta.width, height: meta.height, bytes: file.size, mimeType: file.type || meta.mimeType };
         setImageDraft(draft);
         if (!form.getFieldValue("coverUrl")) form.setFieldValue("coverUrl", draft.dataUrl);
         if (!form.getFieldValue("title")) form.setFieldValue("title", file.name);

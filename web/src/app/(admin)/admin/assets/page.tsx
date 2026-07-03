@@ -1,6 +1,6 @@
 "use client";
 
-import { CopyOutlined, DeleteOutlined, EditOutlined, EyeOutlined, LoadingOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, UploadOutlined } from "@ant-design/icons";
+import { CopyOutlined, DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, UploadOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { App, Button, Card, Col, Flex, Form, Image, Input, Modal, Row, Select, Space, Tag, Tooltip, Typography, Upload, type UploadFile } from "antd";
 import { useEffect, useState } from "react";
@@ -303,10 +303,15 @@ export default function AdminAssetsPage() {
 async function uploadAssetImage(file: UploadFile) {
     const origin = file.originFileObj || (file as unknown as File);
     if (!origin) throw new Error("文件不可读");
+    const token = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
+    const parsed = JSON.parse(token);
+    const tokenValue = parsed?.state?.token || "";
+
+    if (file.status === "done" && file.response) return file.response as string;
+
     const formData = new FormData();
     formData.append("file", origin);
-    const token = localStorage.getItem("infinite-canvas:admin_token") || "";
-    const response = await fetch("/api/admin/assets/upload-image", { method: "POST", body: formData, headers: { Authorization: `Bearer ${token}` } });
+    const response = await fetch("/api/admin/assets/upload-image", { method: "POST", body: formData, headers: { Authorization: `Bearer ${tokenValue}` } });
     const json = await response.json();
     if (json.code !== 0) throw new Error(json.msg || "上传失败");
     return json.data.url as string;
