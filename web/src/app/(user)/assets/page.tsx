@@ -41,6 +41,7 @@ export default function AssetsPage() {
     const addAsset = useAssetStore((state) => state.addAsset);
     const updateAsset = useAssetStore((state) => state.updateAsset);
     const removeAsset = useAssetStore((state) => state.removeAsset);
+    const refreshAssetUrls = useAssetStore((state) => state.refreshAssetUrls);
     const [keyword, setKeyword] = useState("");
     const [kindFilter, setKindFilter] = useState<AssetKind | "all">("all");
     const [page, setPage] = useState(1);
@@ -75,6 +76,14 @@ export default function AssetsPage() {
         const maxPage = Math.max(1, Math.ceil(filteredAssets.length / pageSize));
         setPage((value) => Math.min(value, maxPage));
     }, [filteredAssets.length, pageSize]);
+
+    // Refresh presigned URLs for all S3-backed assets on mount
+    useEffect(() => {
+        const fileIds = assets
+            .filter((a) => (a.kind === "image" || a.kind === "video") && a.data.fileId)
+            .map((a) => a.data.fileId!);
+        if (fileIds.length) void refreshAssetUrls(fileIds);
+    }, []);
 
     const openCreate = () => {
         setEditingAsset(null);
@@ -158,8 +167,9 @@ export default function AssetsPage() {
         if (confirmJson.code !== 0) throw new Error(confirmJson.msg || "确认上传失败");
 
         const s3Url = confirmJson.data.s3Key;
+        const fileId = confirmJson.data.id;
         const meta = await readImageMeta(URL.createObjectURL(file));
-        const draft = { dataUrl: s3Url, storageKey: confirmJson.data.id, width: meta.width, height: meta.height, bytes: file.size, mimeType: file.type || meta.mimeType };
+        const draft = { dataUrl: s3Url, fileId, width: meta.width, height: meta.height, bytes: file.size, mimeType: file.type || meta.mimeType };
         setImageDraft(draft);
         if (!form.getFieldValue("coverUrl")) form.setFieldValue("coverUrl", draft.dataUrl);
         if (!form.getFieldValue("title")) form.setFieldValue("title", file.name);
