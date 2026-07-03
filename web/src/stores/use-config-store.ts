@@ -430,15 +430,6 @@ function uniqueModelOptions(models: string[]) {
     return Array.from(new Set((models || []).map((model) => model.trim()).filter(Boolean)));
 }
 
-/** Keep user's persisted selections that are still in the available pool, falling back to the full pool only when nothing was persisted. */
-function preserveOrFilter(persisted: string[], available: string[]) {
-    if (!Array.isArray(persisted)) return filterModelsByCapability(available);
-    const trimmed = persisted.map((m) => m.trim()).filter(Boolean);
-    if (!trimmed.length) return filterModelsByCapability(available);
-    const pool = new Set(available);
-    return trimmed.filter((m) => pool.has(m));
-}
-
 export function buildApiUrl(baseUrl: string, path: string) {
     let normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
     normalizedBaseUrl = normalizeArkPlanBaseUrl(normalizedBaseUrl);
