@@ -33,3 +33,7 @@ func AIVideo(w http.ResponseWriter, r *http.Request, id string) {
 func AIVideoContent(w http.ResponseWriter, r *http.Request, id string) {
 	service.ProxyAIGetRequest(w, r, "/videos/"+id+"/content")
 }
+
+func XvanaiChatCompletions(w http.ResponseWriter, r *http.Request) {
+	service.ProxyAIRequest(w, r, "/chat/completions")
+}

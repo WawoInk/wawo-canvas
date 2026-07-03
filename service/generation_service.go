@@ -240,7 +240,7 @@ func AdminListTasks(q model.GenerationTaskQuery) (model.GenerationTaskList, erro
 }
 
 // RecordUserTask 记录一个同步生成任务（如图片生成）。创建任务并立即设为成功状态，保存请求和响应。
-func RecordUserTask(user model.AuthUser, taskType model.TaskType, provider string, modelName string,
+func RecordUserTask(user model.AuthUser, taskType model.TaskType, source string, provider string, modelName string,
 	status model.TaskStatus, credits int, latencyMs int64, upstreamTaskID string, reqBody string, respBody string) (*model.GenerationTask, error) {
 
 	id := "gentask-" + uuid.NewString()
@@ -250,6 +250,7 @@ func RecordUserTask(user model.AuthUser, taskType model.TaskType, provider strin
 		ID:             id,
 		UserID:         user.ID,
 		TaskType:       taskType,
+		Source:         source,
 		Provider:       provider,
 		Model:          modelName,
 		Status:         status,

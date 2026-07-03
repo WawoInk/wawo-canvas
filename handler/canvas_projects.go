@@ -73,7 +73,18 @@ func CreateCanvasProject(w http.ResponseWriter, r *http.Request) {
 		name = "Untitled"
 	}
 
-	project, err := service.CreateCanvasProject(user.ID, name, projectJSON)
+	// 从前端传来的 project JSON 中提取 id，保持 ID 一致，避免前后端 ID 不匹配
+	// 导致后续 PUT 更新失败，产生重复项目
+	frontendID := ""
+	if req.Project != nil {
+		if m, ok := req.Project.(map[string]any); ok {
+			if id, ok := m["id"].(string); ok {
+				frontendID = id
+			}
+		}
+	}
+
+	project, err := service.CreateCanvasProject(user.ID, frontendID, name, projectJSON)
 	if err != nil {
 		FailError(w, err)
 		return

@@ -73,6 +73,7 @@ type GenerationTaskList struct {
 type GenerationTaskQuery struct {
 	UserID    string
 	TaskType  TaskType
+	Source    string `json:"source"`
 	Status    TaskStatus
 	StartTime string
 	EndTime   string

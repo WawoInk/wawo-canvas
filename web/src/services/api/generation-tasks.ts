@@ -77,17 +77,20 @@ function authToken() {
     return useUserStore.getState().token;
 }
 
-export async function fetchVideoHistory(page = 1, pageSize = 50): Promise<GenerationTaskList<VideoHistoryItem>> {
-    return fetchGenerationHistory<VideoHistoryItem>("video", page, pageSize);
+export async function fetchVideoHistory(page = 1, pageSize = 50, source?: string): Promise<GenerationTaskList<VideoHistoryItem>> {
+    return fetchGenerationHistory<VideoHistoryItem>("video", page, pageSize, source);
 }
 
-export async function fetchImageHistory(page = 1, pageSize = 50): Promise<GenerationTaskList<ImageHistoryItem>> {
-    return fetchGenerationHistory<ImageHistoryItem>("image", page, pageSize);
+export async function fetchImageHistory(page = 1, pageSize = 50, source?: string): Promise<GenerationTaskList<ImageHistoryItem>> {
+    return fetchGenerationHistory<ImageHistoryItem>("image", page, pageSize, source);
 }
 
-export async function fetchGenerationHistory<T>(taskType: string, page = 1, pageSize = 50): Promise<GenerationTaskList<T>> {
+export async function fetchGenerationHistory<T>(taskType: string, page = 1, pageSize = 50, source?: string): Promise<GenerationTaskList<T>> {
     const token = authToken();
     const params = new URLSearchParams({ task_type: taskType, page: String(page), pageSize: String(pageSize) });
+    if (source) {
+        params.append("source", source);
+    }
     return apiGet<GenerationTaskList<T>>(`/api/v1/generation-tasks?${params.toString()}`, undefined, token);
 }
 
@@ -115,6 +118,7 @@ export interface RecordGenerationTaskRequest {
     credits: number;
     latencyMs: number;
     upstreamTaskId?: string;
+    source?: string;
     requestBody: string;
     responseBody: string;
 }

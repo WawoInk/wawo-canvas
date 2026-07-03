@@ -36,16 +36,14 @@ type CanvasStore = {
     renameProject: (id: string, title: string) => void;
     deleteProjects: (ids: string[]) => void;
     replaceProjects: (projects: CanvasProject[]) => void;
+    clearProjects: () => void;
     updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport">>) => void;
-    /** Triggered after hydration to pull backend projects and merge. */
+    /** Triggered after hydration to pull backend projects and replace local state. */
     syncFromBackend: () => Promise<void>;
 };
 
 const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
 const CANVAS_STORE_KEY = "infinite-canvas:canvas_store";
-type PersistedCanvasState = Pick<CanvasStore, "projects">;
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let queuedPersistState: PersistedCanvasState | null = null;
 
 // ─── Debounced update timers (prevent API flood during editing) ──────────
 const syncTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -116,27 +114,27 @@ if (typeof window !== "undefined") {
     });
 }
 
-// ─── Persist storage adapter (same as before) ───────────────────────────
+// ─── Persist storage adapter (user-scoped) ───────────────────────────
+
+function userStoreKey(name: string) {
+    const userId = useUserStore.getState().user?.id;
+    return userId ? `${name}:${userId}` : name;
+}
 
 const canvasStorage: PersistStorage<CanvasStore> = {
     getItem: async (name) => {
-        const value = await localForageStorage.getItem(name);
+        const userId = useUserStore.getState().user?.id;
+        if (!userId) return null;
+        const value = await localForageStorage.getItem(userStoreKey(name));
         if (!value) return null;
-        const parsed = JSON.parse(value) as StorageValue<CanvasStore>;
-        queuedPersistState = parsed.state as PersistedCanvasState;
-        return parsed;
+        return JSON.parse(value) as StorageValue<CanvasStore>;
     },
     setItem: (name, value) => {
-        const nextState = value.state as PersistedCanvasState;
-        if (queuedPersistState && queuedPersistState.projects === nextState.projects) return;
-        queuedPersistState = nextState;
-        if (saveTimer) clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => {
-            saveTimer = null;
-            void localForageStorage.setItem(name, JSON.stringify(value));
-        }, 400);
+        const userId = useUserStore.getState().user?.id;
+        if (!userId) return;
+        void localForageStorage.setItem(userStoreKey(name), JSON.stringify(value));
     },
-    removeItem: (name) => localForageStorage.removeItem(name),
+    removeItem: (name) => localForageStorage.removeItem(userStoreKey(name)),
 };
 
 // ─── Store ──────────────────────────────────────────────────────────────
@@ -223,30 +221,19 @@ export const useCanvasStore = create<CanvasStore>()(
                 const user = useUserStore.getState().user;
                 if (!user?.id) return;
                 try {
-                    const backendProjects = await fetchCanvasProjects();
-                    if (!backendProjects.length) return;
-                    // Merge: backend is source of truth for version, but local has latest edits
-                    // For simplicity, only pull projects not already in local
-                    const localIds = new Set(get().projects.map((p) => p.id));
-                    const newProjects: CanvasProject[] = [];
-                    for (const item of backendProjects) {
-                        if (!localIds.has(item.id)) {
-                            // New project from another device/session
-                            try {
-                                const detailResp = await fetch(
-                                    `/api/v1/canvas/projects/${encodeURIComponent(item.id)}?detail=true`,
-                                    {
-                                        headers: {
-                                            Authorization: `Bearer ${useUserStore.getState().token}`,
-                                        },
-                                    },
-                                );
-                                if (detailResp.ok) {
-                                    const detail = await detailResp.json();
-                                    // The GET /canvas/projects doesn't return full JSON, so skip for now
-                                }
-                            } catch { /* skip */ }
-                            newProjects.push({
+                    const backendItems = await fetchCanvasProjects();
+                    if (!backendItems.length) return;
+                    const localProjects = get().projects;
+                    // Start with all local projects (preserves local-only ones not in backend)
+                    const projects: CanvasProject[] = [...localProjects];
+                    for (const item of backendItems) {
+                        const existsLocally = projects.some((p) => p.id === item.id);
+                        if (existsLocally) {
+                            // Keep local version (has latest in-memory edits) — already in projects array
+                            continue;
+                        } else {
+                            // New project from backend — try to load full data
+                            let fullProject: CanvasProject = {
                                 id: item.id,
                                 title: item.name,
                                 createdAt: item.createdAt,
@@ -258,13 +245,36 @@ export const useCanvasStore = create<CanvasStore>()(
                                 backgroundMode: "lines",
                                 showImageInfo: false,
                                 viewport: initialViewport,
-                            });
+                            };
+                            try {
+                                const resp = await fetch(
+                                    `/api/v1/canvas/projects/${encodeURIComponent(item.id)}`,
+                                    {
+                                        headers: {
+                                            Authorization: `Bearer ${useUserStore.getState().token}`,
+                                        },
+                                    },
+                                );
+                                if (resp.ok) {
+                                    const detail = await resp.json() as { data?: { projectJson?: string } };
+                                    if (detail.data?.projectJson) {
+                                        const parsed = JSON.parse(detail.data.projectJson) as Partial<CanvasProject>;
+                                        fullProject = { ...fullProject, ...parsed, id: item.id, title: parsed.title || item.name, createdAt: item.createdAt, updatedAt: item.updatedAt };
+                                    }
+                                }
+                            } catch { /* skip */ }
+                            projects.push(fullProject);
                         }
                     }
-                    if (newProjects.length) {
-                        set((state) => ({ projects: [...newProjects, ...state.projects] }));
-                    }
+                    set({ projects });
                 } catch { /* offline — no-op */ }
+            },
+
+            clearProjects: () => {
+                // Clear all pending sync timers
+                for (const timer of syncTimers.values()) clearTimeout(timer);
+                syncTimers.clear();
+                set({ projects: [], hydrated: false });
             },
         }),
         {
@@ -293,6 +303,24 @@ useCanvasStore.subscribe((state) => {
     const deleted = prev.filter((p) => !currIds.has(p.id)).map((p) => p.id);
     if (deleted.length) fireDeleteProjects(deleted);
 
+    // Detect data changes (schedule backend sync)
+    for (const cp of curr) {
+        const pp = prev.find((p) => p.id === cp.id);
+        if (!pp) continue;
+
+        // Check if any data content field changed
+        const dataFields: (keyof CanvasProject)[] = [
+            "nodes", "connections", "chatSessions", "activeChatId",
+            "backgroundMode", "showImageInfo", "viewport",
+        ];
+        const hasDataChange = dataFields.some(
+            (field) => JSON.stringify(pp[field]) !== JSON.stringify(cp[field]),
+        );
+        if (hasDataChange) {
+            scheduleBackendSync(cp.id);
+        }
+    }
+
     // Detect renamed projects
     for (const cp of curr) {
         const pp = prev.find((p) => p.id === cp.id);
@@ -303,3 +331,28 @@ useCanvasStore.subscribe((state) => {
 
     prevProjects = curr;
 });
+
+// ─── Subscribe to user changes (logout / switch user) ─────────────────
+
+if (typeof window !== "undefined") {
+    let lastUserId: string | undefined = useUserStore.getState().user?.id;
+    useUserStore.subscribe((state) => {
+        const currentId = state.user?.id;
+        if (currentId === lastUserId) return;
+        lastUserId = currentId;
+
+        // Clear current user's state
+        useCanvasStore.getState().clearProjects();
+
+        if (currentId) {
+            // New user logged in — rehydrate their data and sync from backend
+            void useCanvasStore.persist.rehydrate().then(() => {
+                const store = useCanvasStore.getState();
+                if (!store.hydrated) {
+                    useCanvasStore.setState({ hydrated: true });
+                }
+                void store.syncFromBackend();
+            });
+        }
+    });
+}

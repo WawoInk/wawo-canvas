@@ -15,10 +15,15 @@ func ListCanvasProjects(userID string) ([]model.CanvasProject, error) {
 }
 
 // CreateCanvasProject 创建画布项目。
-func CreateCanvasProject(userID string, name string, projectJSON string) (model.CanvasProject, error) {
+// frontendID 为前端生成的 ID，若非空则用于数据库记录 ID，保持前后端 ID 一致。
+func CreateCanvasProject(userID string, frontendID string, name string, projectJSON string) (model.CanvasProject, error) {
+	id := frontendID
+	if id == "" {
+		id = "canvas-" + uuid.NewString()
+	}
 	now := time.Now().Format(time.RFC3339)
 	project := model.CanvasProject{
-		ID:          "canvas-" + uuid.NewString(),
+		ID:          id,
 		UserID:      userID,
 		Name:        name,
 		ProjectJSON: projectJSON,

@@ -7,7 +7,7 @@ import { nanoid } from "nanoid";
 
 import { fetchPublicSettings, type PublicSettings } from "@/services/api/settings";
 
-export type ApiCallFormat = "openai" | "gemini";
+export type ApiCallFormat = "openai" | "gemini" | "xvanai";
 
 export type ModelChannel = {
     id: string;
@@ -63,6 +63,7 @@ export type ModelCapability = "image" | "video" | "text" | "audio";
 const CHANNEL_MODEL_SEPARATOR = "::";
 const OPENAI_BASE_URL = "https://api.openai.com";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
+const XVANAI_BASE_URL = "https://xvan.ai/v1";
 
 export const defaultConfig: AiConfig = {
     channelMode: "local",
@@ -415,11 +416,15 @@ function normalizeChannels(config: AiConfig) {
 }
 
 export function defaultBaseUrlForApiFormat(apiFormat: ApiCallFormat) {
-    return apiFormat === "gemini" ? GEMINI_BASE_URL : OPENAI_BASE_URL;
+    if (apiFormat === "gemini") return GEMINI_BASE_URL;
+    if (apiFormat === "xvanai") return XVANAI_BASE_URL;
+    return OPENAI_BASE_URL;
 }
 
 function normalizeApiFormat(apiFormat: unknown): ApiCallFormat {
-    return apiFormat === "gemini" ? "gemini" : "openai";
+    if (apiFormat === "gemini") return "gemini";
+    if (apiFormat === "xvanai") return "xvanai";
+    return "openai";
 }
 
 function uniqueRawModels(models: string[]) {

@@ -132,6 +132,9 @@ func resolveUpstreamRequest(channel model.ModelChannel, modelName, path string, 
 	if channel.Protocol == "gemini" {
 		return buildGeminiUpstream(channel, modelName, path, body)
 	}
+	if channel.Protocol == "xvanai" {
+		return buildXvanaiUpstream(channel, modelName, path, body, contentType)
+	}
 	return buildOpenAIUpstream(channel, modelName, path, body, contentType)
 }
 
@@ -179,6 +182,20 @@ func isGeminiStream(path string, body []byte) bool {
 	}
 	_ = json.Unmarshal(body, &payload)
 	return payload.Stream
+}
+
+// buildXvanaiUpstream 构造 xvanai 协议上游请求，统一走 /chat/completions 路径。
+func buildXvanaiUpstream(channel model.ModelChannel, modelName, path string, body []byte, contentType string) upstreamRequest {
+	headers := http.Header{}
+	headers.Set("Authorization", "Bearer "+channel.APIKey)
+	if contentType != "" {
+		headers.Set("Content-Type", contentType)
+	}
+	return upstreamRequest{
+		URL:     BuildModelChannelURL(channel, "/chat/completions"),
+		Headers: headers,
+		Body:    body,
+	}
 }
 
 func buildOpenAIUpstream(channel model.ModelChannel, modelName, path string, body []byte, contentType string) upstreamRequest {

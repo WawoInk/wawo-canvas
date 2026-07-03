@@ -22,9 +22,11 @@ func ListGenerationTasks(w http.ResponseWriter, r *http.Request) {
 	pageSize, _ := strconv.Atoi(q.Get("pageSize"))
 	taskType := model.TaskType(strings.TrimSpace(q.Get("task_type")))
 	status := model.TaskStatus(strings.TrimSpace(q.Get("status")))
+	source := strings.TrimSpace(q.Get("source"))
 
 	query := model.GenerationTaskQuery{
 		TaskType:  taskType,
+		Source:    source,
 		Status:    status,
 		StartTime: q.Get("start_time"),
 		EndTime:   q.Get("end_time"),
@@ -100,6 +102,7 @@ func RecordGenerationTask(w http.ResponseWriter, r *http.Request) {
 	}
 	var payload struct {
 		TaskType       string `json:"taskType"`
+		Source         string `json:"source"`
 		Provider       string `json:"provider"`
 		Model          string `json:"model"`
 		Status         string `json:"status"`
@@ -111,7 +114,7 @@ func RecordGenerationTask(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewDecoder(r.Body).Decode(&payload)
 
-	task, err := service.RecordUserTask(user, model.TaskType(payload.TaskType), payload.Provider, payload.Model,
+	task, err := service.RecordUserTask(user, model.TaskType(payload.TaskType), payload.Source, payload.Provider, payload.Model,
 		model.TaskStatus(payload.Status), payload.Credits, payload.LatencyMs, payload.UpstreamTaskID, payload.RequestBody, payload.ResponseBody)
 	if err != nil {
 		FailError(w, err)
@@ -198,6 +201,7 @@ func AdminListGenerationTasks(w http.ResponseWriter, r *http.Request) {
 	query := model.GenerationTaskQuery{
 		UserID:    strings.TrimSpace(q.Get("user_id")),
 		TaskType:  model.TaskType(strings.TrimSpace(q.Get("task_type"))),
+		Source:    strings.TrimSpace(q.Get("source")),
 		Status:    model.TaskStatus(strings.TrimSpace(q.Get("status"))),
 		StartTime: q.Get("start_time"),
 		EndTime:   q.Get("end_time"),

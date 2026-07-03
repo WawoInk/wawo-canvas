@@ -296,6 +296,7 @@ export default function ImagePage() {
                     credits: 0,
                     latencyMs: log.durationMs,
                     upstreamTaskId: "",
+                    source: "image_workbench",
                     requestBody: JSON.stringify({
                         prompt: log.prompt,
                         model: log.model,
@@ -317,7 +318,7 @@ export default function ImagePage() {
         const user = useUserStore.getState().user;
         if (user?.id) {
             try {
-                const result = await fetchImageHistory(1, 50);
+                const result = await fetchImageHistory(1, 50, "image_workbench");
                 const backendLogs = result.items.map(toGenerationLog);
                 setLogs(backendLogs);
                 for (const log of backendLogs) {

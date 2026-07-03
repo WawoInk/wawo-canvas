@@ -14,6 +14,7 @@ import type { CanvasExportFile } from "./export-types";
 import { useCanvasStore } from "./stores/use-canvas-store";
 import { useCanvasUiStore } from "./stores/use-canvas-ui-store";
 import { exportCanvasProjects } from "./utils/canvas-export";
+import { useUserStore } from "@/stores/use-user-store";
 
 export default function Page() {
     return (
@@ -33,8 +34,10 @@ function CanvasPage() {
     const projects = useCanvasStore((state) => state.projects);
     const createProject = useCanvasStore((state) => state.createProject);
     const importProject = useCanvasStore((state) => state.importProject);
+    const syncFromBackend = useCanvasStore((state) => state.syncFromBackend);
     const selectedIds = useCanvasUiStore((state) => state.selectedProjectIds);
     const setDeleteIds = useCanvasUiStore((state) => state.setDeleteProjectIds);
+    const user = useUserStore((state) => state.user);
 
     const mode = searchParams.get("mode");
     const agentMode = mode === "new" || mode === "recent" || mode === "choose";
@@ -74,6 +77,13 @@ function CanvasPage() {
         autoOpenRef.current = true;
         enterProject(mode === "new" ? createProject(`无限画布 ${projects.length + 1}`) : projects[0]?.id || createProject(`无限画布 ${projects.length + 1}`));
     }, [createProject, hydrated, mode, projects]);
+
+    // Sync from backend when hydrated and user is logged in
+    useEffect(() => {
+        if (hydrated && user?.id) {
+            void syncFromBackend();
+        }
+    }, [hydrated, user?.id, syncFromBackend]);
 
     if (hydrated && (mode === "new" || mode === "recent")) return <main className="flex h-full items-center justify-center bg-background text-sm text-stone-500">正在打开画布...</main>;
 

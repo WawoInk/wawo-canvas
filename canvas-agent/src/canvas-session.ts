@@ -61,8 +61,9 @@ export class CanvasSession {
             tool = "canvas_apply_ops";
         }
         if (tool === "canvas_create_text_node") {
-            const text = input as { text?: string; x?: number; y?: number; title?: string; width?: number; height?: number };
-            input = { ops: [textNodeOp(text, text.x ?? nextCanvasX(this.canvasState), text.y ?? 0)] };
+            const data = input as { text: string; x?: number; y?: number; title?: string; width?: number; height?: number };
+            if (!data.text) throw new Error("text 必须是非空字符串");
+            input = { ops: [textNodeOp(data, data.x ?? nextCanvasX(this.canvasState), data.y ?? 0)] };
             tool = "canvas_apply_ops";
         }
         if (tool === "canvas_create_text_nodes") {

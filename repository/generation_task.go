@@ -88,6 +88,9 @@ func ListGenerationTasks(q model.GenerationTaskQuery) ([]model.GenerationTask, i
 	q.Normalize()
 	tx := db.Model(&model.GenerationTask{})
 
+	if q.Source != "" {
+		tx = tx.Where("source = ?", q.Source)
+	}
 	if q.UserID != "" {
 		tx = tx.Where("user_id = ?", q.UserID)
 	}
@@ -176,6 +179,9 @@ func ListGenerationTasksWithUsername(q model.GenerationTaskQuery) ([]AdminGenera
 		Select("gt.*, u.username").
 		Joins("LEFT JOIN users u ON gt.user_id = u.id")
 
+	if q.Source != "" {
+		tx = tx.Where("source = ?", q.Source)
+	}
 	if q.UserID != "" {
 		tx = tx.Where("gt.user_id = ?", q.UserID)
 	}

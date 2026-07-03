@@ -308,7 +308,7 @@ export default function VideoPage() {
         const user = useUserStore.getState().user;
         if (user?.id) {
             try {
-                const result = await fetchVideoHistory(1, 50);
+                const result = await fetchVideoHistory(1, 50, "video_workbench");
                 const backendLogs = result.items.map(toGenerationLog);
                 // Filter out invalid logs
                 const validLogs = backendLogs.filter((log) => log.id);
