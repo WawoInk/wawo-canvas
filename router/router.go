@@ -119,6 +119,7 @@ func New() *gin.Engine {
 	})
 	admin.GET("/assets", gin.WrapF(handler.AdminAssets))
 	admin.POST("/assets", gin.WrapF(handler.AdminSaveAsset))
+	admin.POST("/assets/upload-image", gin.WrapF(handler.AdminUploadAssetImage))
 	admin.DELETE("/assets/:id", func(c *gin.Context) {
 		handler.AdminDeleteAsset(c.Writer, c.Request, c.Param("id"))
 	})

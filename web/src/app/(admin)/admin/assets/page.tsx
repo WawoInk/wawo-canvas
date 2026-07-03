@@ -1,8 +1,8 @@
 "use client";
 
-import { CopyOutlined, DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import { CopyOutlined, DeleteOutlined, EditOutlined, EyeOutlined, LoadingOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, UploadOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import { Button, Card, Col, Flex, Form, Image, Input, Modal, Row, Select, Space, Tag, Tooltip, Typography } from "antd";
+import { App, Button, Card, Col, Flex, Form, Image, Input, Modal, Row, Select, Space, Tag, Tooltip, Typography, Upload, type UploadFile } from "antd";
 import { useEffect, useState } from "react";
 
 import { useCopyText } from "@/hooks/use-copy-text";
@@ -21,17 +21,23 @@ const editTypeOptions = typeOptions.slice(1);
 
 export default function AdminAssetsPage() {
     const { assets, tags, keyword, kind, tag, page, pageSize, total, isLoading, searchAssets, changeKind, changeTag, changePage, changePageSize, resetFilters, refreshAssets, saveAsset: saveAdminAsset, deleteAsset } = useAdminAssets();
+    const { message: appMessage } = App.useApp();
     const copyText = useCopyText();
     const [form] = Form.useForm<AssetFormValues>();
     const [keywordText, setKeywordText] = useState(keyword);
     const [editingAsset, setEditingAsset] = useState<Partial<AdminAsset> | null>(null);
     const [detailAsset, setDetailAsset] = useState<AdminAsset | null>(null);
     const [deletingAsset, setDeletingAsset] = useState<AdminAsset | null>(null);
+    const [imageFile, setImageFile] = useState<UploadFile | null>(null);
+    const [uploading, setUploading] = useState(false);
     const formType = Form.useWatch("type", form) || editingAsset?.type || "text";
     const tagOptions = tags.map((item) => ({ label: item, value: item }));
 
     useEffect(() => {
-        if (editingAsset) form.setFieldsValue({ ...editingAsset, tagText: editingAsset.tags?.join(", ") || "" });
+        if (editingAsset) {
+            form.setFieldsValue({ ...editingAsset, tagText: editingAsset.tags?.join(", ") || "" });
+            setImageFile(null);
+        }
     }, [editingAsset, form]);
 
     useEffect(() => setKeywordText(keyword), [keyword]);
@@ -39,17 +45,28 @@ export default function AdminAssetsPage() {
     const saveAsset = async () => {
         const value = await form.validateFields();
         const nextType = value.type || "text";
+        let url = value.url;
+        if (nextType === "image" && imageFile) {
+            setUploading(true);
+            try {
+                url = await uploadAssetImage(imageFile);
+            } finally {
+                setUploading(false);
+            }
+        }
         await saveAdminAsset({
             ...editingAsset,
             ...value,
             type: nextType,
-            coverUrl: value.coverUrl || (nextType === "image" ? value.url : ""),
+            url,
+            coverUrl: value.coverUrl || (nextType === "image" ? url : ""),
             tags: (value.tagText || "")
                 .split(",")
                 .map((item) => item.trim())
                 .filter(Boolean),
         });
         setEditingAsset(null);
+        setImageFile(null);
     };
 
     const columns: ProColumns<AdminAsset>[] = [
@@ -209,8 +226,21 @@ export default function AdminAssetsPage() {
                         <Input.TextArea rows={3} />
                     </Form.Item>
                     {formType === "image" ? (
-                        <Form.Item name="url" label="图片 URL" rules={[{ required: true, message: "请输入图片 URL" }]}>
-                            <Input />
+                        <Form.Item label="图片文件" required extra="上传后自动填充 S3 URL">
+                            <Upload
+                                accept="image/*"
+                                maxCount={1}
+                                fileList={imageFile ? [imageFile] : []}
+                                beforeUpload={(file) => {
+                                    setImageFile(file as unknown as UploadFile);
+                                    return false;
+                                }}
+                                onRemove={() => setImageFile(null)}
+                            >
+                                <Button icon={<UploadOutlined />} loading={uploading}>
+                                    选择图片
+                                </Button>
+                            </Upload>
                         </Form.Item>
                     ) : (
                         <Form.Item name="content" label="文本内容" rules={[{ required: true, message: "请输入文本内容" }]}>
@@ -268,4 +298,16 @@ export default function AdminAssetsPage() {
             </Modal>
         </main>
     );
+}
+
+async function uploadAssetImage(file: UploadFile) {
+    const origin = file.originFileObj || (file as unknown as File);
+    if (!origin) throw new Error("文件不可读");
+    const formData = new FormData();
+    formData.append("file", origin);
+    const token = localStorage.getItem("infinite-canvas:admin_token") || "";
+    const response = await fetch("/api/admin/assets/upload-image", { method: "POST", body: formData, headers: { Authorization: `Bearer ${token}` } });
+    const json = await response.json();
+    if (json.code !== 0) throw new Error(json.msg || "上传失败");
+    return json.data.url as string;
 }

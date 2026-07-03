@@ -1,10 +1,17 @@
 package service
 
 import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/basketikun/infinite-canvas/model"
 	"github.com/basketikun/infinite-canvas/repository"
+	"github.com/google/uuid"
 )
 
 func ListAssets(q model.Query) (model.AssetList, error) {
@@ -47,4 +54,15 @@ func assetCoverURL(item model.Asset) string {
 		return item.URL
 	}
 	return ""
+}
+
+// UploadAssetImage 上传素材图片到 S3 images/admin/ 目录。
+func UploadAssetImage(ctx context.Context, filename, mimeType string, file io.Reader) (string, error) {
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return "", fmt.Errorf("读取图片失败: %w", err)
+	}
+	ext := strings.ToLower(filepath.Ext(filename))
+	key := fmt.Sprintf("images/admin/%s%s", uuid.NewString(), ext)
+	return S3Upload(ctx, key, bytes.NewReader(data), mimeType)
 }
