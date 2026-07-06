@@ -31,7 +31,7 @@ import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 type GeneratedVideo = {
     id: string;
     url: string;
-    storageKey: string;
+    storageKey?: string;
     fileId?: string;
     durationMs: number;
     width: number;
@@ -257,7 +257,7 @@ export default function VideoPage() {
             message.success("已加入我的素材");
             return;
         }
-        const blob = await getMediaBlob(video.storageKey);
+        const blob = await getMediaBlob(video.storageKey!);
         if (!blob) return message.error("视频文件已丢失，请重新生成");
         const stored = await uploadBlob(blob, "videos");
         addAsset({

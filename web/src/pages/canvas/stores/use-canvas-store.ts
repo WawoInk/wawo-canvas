@@ -346,7 +346,7 @@ if (typeof window !== "undefined") {
 
         if (currentId) {
             // New user logged in — rehydrate their data and sync from backend
-            void useCanvasStore.persist.rehydrate().then(() => {
+            void useCanvasStore.persist.rehydrate()?.then(() => {
                 const store = useCanvasStore.getState();
                 if (!store.hydrated) {
                     useCanvasStore.setState({ hydrated: true });

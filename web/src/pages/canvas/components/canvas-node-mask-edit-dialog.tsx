@@ -45,7 +45,7 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
         const point = readCanvasPoint(event.currentTarget, event.clientX, event.clientY);
         const maskCanvas = maskCanvasRef.current;
         const context = maskCanvas?.getContext("2d");
-        if (!context) return;
+        if (!context || !maskCanvas) return;
         context.lineCap = "round";
         context.lineJoin = "round";
         context.lineWidth = brushSize;

@@ -93,6 +93,7 @@ export function ImageToolSettingsModal({
     useEffect(() => {
         if (!open) return;
         const toolbar = previewToolbarRef.current;
+        if (!toolbar) return;
         const sync = () => syncPreviewScroll();
         const frames: number[] = [];
         const firstFrame = window.requestAnimationFrame(() => {

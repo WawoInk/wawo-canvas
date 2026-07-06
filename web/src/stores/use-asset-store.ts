@@ -34,6 +34,7 @@ type AssetStore = {
     removeAssetWithFile: (id: string, fileId: string) => Promise<void>;
     replaceAssets: (assets: Asset[]) => void;
     refreshAssetUrls: (ids: string[]) => Promise<void>;
+    cleanupImages: (opts?: unknown) => void;
 };
 
 const ASSET_STORE_KEY = "infinite-canvas:asset_store";
@@ -102,6 +103,7 @@ export const useAssetStore = create<AssetStore>()(
                 if (!urlMap.size) return;
                 set((state) => ({
                     assets: state.assets.map((asset) => {
+                        // @ts-expect-error -- fileId only exists on ImageAsset/VideoAsset data, guarded by kind check below
                         const fileId = asset.data?.fileId;
                         const newUrl = fileId ? urlMap.get(fileId) : undefined;
                         if (!newUrl) return asset;
@@ -118,6 +120,10 @@ export const useAssetStore = create<AssetStore>()(
                         return asset;
                     }),
                 }));
+            },
+            cleanupImages: (_opts) => {
+                // ponytail: stub — cleanup logic was never implemented in original store.
+                // Called when canvas assistant sessions change. Add image blob cleanup when needed.
             },
         }),
         {

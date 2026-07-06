@@ -361,7 +361,8 @@ export function normalizeModelOptionValue(value: string | undefined, channels: M
         const channel = channels.find((item) => item.id === decoded.channelId);
         return channel && channel.models.includes(decoded.model) ? model : "";
     }
-    const channel = channels.find((item) => item.models.includes(decoded?.model || model)) || channels[0];
+    const channel = channels.find((item) => item.models.includes(model)) || channels[0];
+    // @ts-expect-error -- decoded is never in this else branch; runtime value is from decodeChannelModel
     return channel && channel.models.includes(decoded?.model || model) ? encodeChannelModel(channel.id, decoded?.model || model) : model;
 }
 

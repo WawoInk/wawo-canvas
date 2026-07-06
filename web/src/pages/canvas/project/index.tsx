@@ -223,7 +223,7 @@ function InfiniteCanvasPage() {
     const params = useParams<{ id: string }>();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const projectId = params.id;
+    const projectId = params.id!;
     const localAgentConnected = useCanvasAgentStore((state) => state.connected);
     const localAgentActivity = useCanvasAgentStore((state) => state.activity);
     const localAgentEnabled = useCanvasAgentStore((state) => state.enabled);
@@ -2178,11 +2178,11 @@ function InfiniteCanvasPage() {
                         }
                         const videoSize = fitNodeSize(stored.width || spec.width, stored.height || spec.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
                         const nextNode = {
-                            ...node,
+                            ...videoNode,
                             width: videoSize.width,
                             height: videoSize.height,
-                            position: { x: node.position.x + node.width / 2 - videoSize.width / 2, y: node.position.y + node.height / 2 - videoSize.height / 2 },
-                            metadata: { ...node.metadata, content: stored.url, storageKey: "", fileId: stored.fileId, status: "success", naturalWidth: stored.width, naturalHeight: stored.height, bytes: stored.bytes, mimeType: stored.mimeType, durationMs: 0 },
+                            position: { x: videoNode.position.x + videoNode.width / 2 - videoSize.width / 2, y: videoNode.position.y + videoNode.height / 2 - videoSize.height / 2 },
+                            metadata: { ...videoNode.metadata, content: stored.url, storageKey: "", fileId: stored.fileId, status: "success" as const, naturalWidth: stored.width, naturalHeight: stored.height, bytes: stored.bytes, mimeType: stored.mimeType, durationMs: 0 },
                             prompt: effectivePrompt,
                             model: generationConfig.model,
                             size: generationConfig.size,
@@ -2361,11 +2361,11 @@ function InfiniteCanvasPage() {
                     }
                     const videoSize = fitNodeSize(stored.width || node.width, stored.height || node.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
                     const nextNode = {
-                            ...item,
+                            ...node,
                             width: videoSize.width,
                             height: videoSize.height,
-                            position: { x: item.position.x + item.width / 2 - videoSize.width / 2, y: item.position.y + item.height / 2 - videoSize.height / 2 },
-                            metadata: { ...item.metadata, content: stored.url, storageKey: "", fileId: stored.fileId, status: "success", naturalWidth: stored.width, naturalHeight: stored.height, bytes: stored.bytes, mimeType: stored.mimeType, durationMs: 0 },
+                            position: { x: node.position.x + node.width / 2 - videoSize.width / 2, y: node.position.y + node.height / 2 - videoSize.height / 2 },
+                            metadata: { ...node.metadata, content: stored.url, storageKey: "", fileId: stored.fileId, status: "success" as const, naturalWidth: stored.width, naturalHeight: stored.height, bytes: stored.bytes, mimeType: stored.mimeType, durationMs: 0 },
                             prompt,
                             model: generationConfig.model,
                             size: generationConfig.size,

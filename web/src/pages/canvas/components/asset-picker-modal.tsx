@@ -12,11 +12,12 @@ export type InsertAssetPayload = { kind: "text"; content: string; title: string 
 
 type Props = {
     open: boolean;
+    defaultTab?: string;
     onInsert: (payload: InsertAssetPayload) => void;
     onClose: () => void;
 };
 
-export function AssetPickerModal({ open, onInsert, onClose }: Props) {
+export function AssetPickerModal({ open, defaultTab: _defaultTab, onInsert, onClose }: Props) {
     return (
         <Modal title="选择素材" open={open} onCancel={onClose} footer={null} width={860} destroyOnHidden styles={{ body: { padding: "0 24px 24px", minHeight: 480 } }}>
             <MyAssetsTab onInsert={onInsert} />

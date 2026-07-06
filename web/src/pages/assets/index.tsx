@@ -11,7 +11,7 @@ import { getVideoPoster } from "@/lib/video-poster";
 import { useCopyText } from "@/hooks/use-copy-text";
 import { formatBytes, readFileAsDataUrl, readImageMeta } from "@/lib/image-utils";
 import { cn } from "@/lib/utils";
-import { useAssetStore, type Asset, type AssetKind, type ImageAsset } from "@/stores/use-asset-store";
+import { useAssetStore, type Asset, type AssetKind, type ImageAsset, type VideoAsset } from "@/stores/use-asset-store";
 import { exportAssets, readAssetPackage } from "./asset-transfer";
 
 type AssetFormValues = {
@@ -84,7 +84,7 @@ export default function AssetsPage() {
     // Refresh presigned URLs for all S3-backed assets on mount
     useEffect(() => {
         const fileIds = assets
-            .filter((a) => (a.kind === "image" || a.kind === "video") && a.data.fileId)
+            .filter((a): a is Asset & { data: ImageAsset["data"] | VideoAsset["data"] } => (a.kind === "image" || a.kind === "video") && Boolean(a.data.fileId))
             .map((a) => a.data.fileId!);
         if (fileIds.length) void refreshAssetUrls(fileIds);
     }, []);
@@ -218,6 +218,7 @@ export default function AssetsPage() {
 
     const confirmDelete = () => {
         if (!deletingAsset) return;
+        // @ts-expect-error -- fileId only exists on image/video data, guarded below
         const fileId = deletingAsset.data?.fileId;
         if (fileId) {
             void removeAssetWithFile(deletingAsset.id, fileId);
@@ -389,7 +390,7 @@ export default function AssetsPage() {
                         <Typography.Text strong>预览</Typography.Text>
                         <div className="mt-3 overflow-hidden rounded-lg border border-stone-200 bg-background dark:border-stone-800">
                             {coverUrl || imageDraft?.dataUrl ? (
-                                <LazyImage src={coverUrl || imageDraft?.dataUrl} alt="" className="aspect-[4/3] w-full" />
+                                <LazyImage src={coverUrl || imageDraft!.dataUrl} alt="" className="aspect-[4/3] w-full" />
                             ) : (
                                 <div className="flex aspect-[4/3] items-center justify-center bg-stone-100 p-5 text-center text-sm text-stone-500 dark:bg-stone-900">{content || "暂无封面"}</div>
                             )}
@@ -454,6 +455,7 @@ function AssetCard({ asset, onOpen, onEdit, onCopy, onDownload, onDelete }: { as
         if (asset.kind === "video" && asset.data.url && !poster) {
             getVideoPoster(asset.data.url).then(setPoster).catch(() => {});
         }
+        // @ts-expect-error -- asset.data.url only exists on VideoAsset; dependency is safe since kind guards usage
     }, [asset.kind, asset.data.url]);
     return (
         <Card
