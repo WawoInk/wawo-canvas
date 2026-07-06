@@ -2,10 +2,13 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/basketikun/infinite-canvas/service"
 )
@@ -135,3 +138,46 @@ func UploadUserFileDirect(w http.ResponseWriter, r *http.Request) {
 	}
 	OK(w, item)
 }
+
+// ProxyUpload POST /api/v1/files/proxy-upload -- backend proxy: download external URL then upload to S3.
+func ProxyUpload(w http.ResponseWriter, r *http.Request) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	var req struct {
+		URL      string `json:"url"`
+		FileType string `json:"fileType"`
+		FileName string `json:"fileName"`
+	}
+	body, _ := io.ReadAll(r.Body)
+	if err := json.Unmarshal(body, &req); err != nil || req.URL == "" || req.FileName == "" {
+		Fail(w, "请提供 url 和 fileName")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+	client := &http.Client{Timeout: 4 * time.Minute}
+	resp, err := client.Get(req.URL)
+	if err != nil {
+		log.Printf("proxy download: %v", err)
+		Fail(w, "下载文件失败")
+		return
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("proxy read: %v", err)
+		Fail(w, "读取文件失败")
+		return
+	}
+	item, err := service.UploadUserFile(ctx, user.ID, req.FileType, req.FileName, resp.Header.Get("Content-Type"), bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		log.Printf("proxy upload: %v", err)
+		Fail(w, err.Error())
+		return
+	}
+	OK(w, item)
+}
+

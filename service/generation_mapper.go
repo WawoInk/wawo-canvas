@@ -11,23 +11,24 @@ import (
 
 // VideoHistoryDTO 视频页历史记录展示模型。
 type VideoHistoryDTO struct {
-	ID             string  `json:"id"`
-	Title          string  `json:"title"`
-	Prompt         string  `json:"prompt"`
-	Status         string  `json:"status"`
-	Model          string  `json:"model"`
-	UpstreamTaskID string  `json:"upstreamTaskId"`
-	Credits        int     `json:"credits"`
-	DurationMs     int64   `json:"durationMs"`
-	VideoURL       string  `json:"videoUrl,omitempty"`
-	ThumbnailURL   string  `json:"thumbnailUrl,omitempty"`
-	Size           string  `json:"size,omitempty"`
-	Vquality       string  `json:"vquality,omitempty"`
-	VideoSeconds   string  `json:"videoSeconds,omitempty"`
-	GenAudio       string  `json:"genAudio,omitempty"`
-	Watermark      string  `json:"watermark,omitempty"`
-	ErrorMessage   string  `json:"error,omitempty"`
-	CreatedAt      string  `json:"createdAt"`
+	ID             string   `json:"id"`
+	Title          string   `json:"title"`
+	Prompt         string   `json:"prompt"`
+	Status         string   `json:"status"`
+	Model          string   `json:"model"`
+	UpstreamTaskID string   `json:"upstreamTaskId"`
+	Credits        int      `json:"credits"`
+	DurationMs     int64    `json:"durationMs"`
+	VideoURL       string   `json:"videoUrl,omitempty"`
+	ThumbnailURL   string   `json:"thumbnailUrl,omitempty"`
+	FileIDs        []string `json:"fileIds,omitempty"`
+	Size           string   `json:"size,omitempty"`
+	Vquality       string   `json:"vquality,omitempty"`
+	VideoSeconds   string   `json:"videoSeconds,omitempty"`
+	GenAudio       string   `json:"genAudio,omitempty"`
+	Watermark      string   `json:"watermark,omitempty"`
+	ErrorMessage   string   `json:"error,omitempty"`
+	CreatedAt      string   `json:"createdAt"`
 }
 
 // ToVideoHistoryDTO 将 Task + Payload 转为视频历史 DTO。
@@ -42,6 +43,7 @@ func ToVideoHistoryDTO(task model.GenerationTask, payload *model.GenerationPaylo
 		Credits:        task.Credits,
 		DurationMs:     task.LatencyMs,
 		CreatedAt:      task.CreatedAt,
+		FileIDs:        extractFileIDsFromMetadata(task.Metadata),
 	}
 	// Extract video config from request payload
 	if payload != nil && payload.RequestBody != "" {
@@ -94,6 +96,7 @@ type ImageHistoryDTO struct {
 	Credits      int      `json:"credits"`
 	DurationMs   int64    `json:"durationMs"`
 	ImageURLs    []string `json:"imageUrls,omitempty"`
+	FileIDs      []string `json:"fileIds,omitempty"`
 	Quality      string   `json:"quality,omitempty"`
 	Size         string   `json:"size,omitempty"`
 	Count        string   `json:"count,omitempty"`
@@ -112,6 +115,7 @@ func ToImageHistoryDTO(task model.GenerationTask, payload *model.GenerationPaylo
 		Credits:    task.Credits,
 		DurationMs: task.LatencyMs,
 		CreatedAt:  task.CreatedAt,
+		FileIDs:    extractFileIDsFromMetadata(task.Metadata),
 	}
 	// Extract image config from request payload
 	if payload != nil && payload.RequestBody != "" {
@@ -230,4 +234,18 @@ func extractImageURLsFromPayload(payload *model.GenerationPayload) []string {
 		}
 	}
 	return urls
+}
+
+// extractFileIDsFromMetadata 从 task.Metadata JSON 中提取 fileIds 数组。
+func extractFileIDsFromMetadata(metadata string) []string {
+	if metadata == "" {
+		return nil
+	}
+	var parsed struct {
+		FileIDs []string `json:"fileIds"`
+	}
+	if err := json.Unmarshal([]byte(metadata), &parsed); err != nil {
+		return nil
+	}
+	return parsed.FileIDs
 }

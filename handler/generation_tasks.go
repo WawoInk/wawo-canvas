@@ -109,6 +109,7 @@ func RecordGenerationTask(w http.ResponseWriter, r *http.Request) {
 		Credits        int    `json:"credits"`
 		LatencyMs      int64  `json:"latencyMs"`
 		UpstreamTaskID string `json:"upstreamTaskId"`
+		Metadata       string `json:"metadata"`
 		RequestBody    string `json:"requestBody"`
 		ResponseBody   string `json:"responseBody"`
 	}
@@ -119,6 +120,9 @@ func RecordGenerationTask(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		FailError(w, err)
 		return
+	}
+	if payload.Metadata != "" {
+		service.UpdateTaskMetadata(task.ID, user.ID, payload.Metadata)
 	}
 	OK(w, task)
 }

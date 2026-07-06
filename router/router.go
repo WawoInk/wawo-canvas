@@ -82,6 +82,7 @@ func New() *gin.Engine {
 	v1.POST("/files/upload-url", gin.WrapF(handler.CreateUploadURL))
 	v1.POST("/files/confirm", gin.WrapF(handler.ConfirmUpload))
 	v1.POST("/files", gin.WrapF(handler.UploadUserFileDirect))
+	v1.POST("/files/proxy-upload", gin.WrapF(handler.ProxyUpload))
 	v1.GET("/files", gin.WrapF(handler.ListUserFiles))
 	v1.GET("/files/:id", func(c *gin.Context) {
 		handler.GetUserFileByID(c.Writer, c.Request, c.Param("id"))

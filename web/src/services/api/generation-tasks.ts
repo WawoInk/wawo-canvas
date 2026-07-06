@@ -16,6 +16,7 @@ export interface VideoHistoryItem {
     durationMs: number;
     videoUrl?: string;
     thumbnailUrl?: string;
+    fileIds?: string[];
     size?: string;
     vquality?: string;
     videoSeconds?: string;
@@ -34,6 +35,7 @@ export interface ImageHistoryItem {
     credits: number;
     durationMs: number;
     imageUrls?: string[];
+    fileIds?: string[];
     quality?: string;
     size?: string;
     count?: string;
@@ -119,6 +121,7 @@ export interface RecordGenerationTaskRequest {
     latencyMs: number;
     upstreamTaskId?: string;
     source?: string;
+    metadata?: string;
     requestBody: string;
     responseBody: string;
 }

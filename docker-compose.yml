@@ -30,19 +30,11 @@ services:
     restart: unless-stopped
 
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    depends_on:
-      api:
-        condition: service_started
-    env_file:
-      - .env
-    environment:
-      - API_BASE_URL=http://api:8088
+    build: .
     ports:
       - "3000:3000"
-    restart: unless-stopped
+    depends_on:
+      - api
 
 volumes:
   pgdata:

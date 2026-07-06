@@ -8,8 +8,8 @@ import { downloadWebdavFile, uploadWebdavFile, WEBDAV_MANIFEST_FILE_NAME } from 
 import type { Asset } from "@/stores/use-asset-store";
 import { useAssetStore } from "@/stores/use-asset-store";
 import type { WebdavSyncConfig } from "@/stores/use-config-store";
-import type { CanvasProject } from "@/app/(user)/canvas/stores/use-canvas-store";
-import { useCanvasStore } from "@/app/(user)/canvas/stores/use-canvas-store";
+import type { CanvasProject } from "@/pages/canvas/stores/use-canvas-store";
+import { useCanvasStore } from "@/pages/canvas/stores/use-canvas-store";
 
 type StoredLog = Record<string, unknown> & { id?: string };
 export type AppSyncDomainKey = "canvas" | "assets" | "image-workbench" | "video-workbench";

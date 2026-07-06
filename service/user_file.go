@@ -16,10 +16,12 @@ import (
 )
 
 var validFileTypes = map[string]bool{
-	"images":  true,
-	"videos":  true,
-	"audios":  true,
-	"prompts": true,
+	"images":         true,
+	"videos":         true,
+	"audios":         true,
+	"prompts":        true,
+	"results/images": true,
+	"results/videos": true,
 }
 
 var presignExpiry = 1 * time.Hour
