@@ -5,7 +5,7 @@
       "name": "vite-dev",
       "runtimeExecutable": "bun",
       "runtimeArgs": ["run", "dev"],
-      "port": 5173,
+      "port": 3000,
       "cwd": "/Users/eldenpdx/git-project/infinite-canvas/web"
     }
   ]
