@@ -8,7 +8,7 @@ const latestChangelogUrl = "https://raw.githubusercontent.com/basketikun/infinit
 
 function readLocalReleases(): ReleaseInfo[] {
     try {
-        return JSON.parse(process.env.NEXT_PUBLIC_APP_RELEASES || "[]");
+        return __APP_RELEASES__ || [];
     } catch {
         return [];
     }
