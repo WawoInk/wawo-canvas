@@ -1,6 +1,6 @@
 {
     "compilerOptions": {
-        "target": "ES2017",
+        "target": "ES2018",
         "lib": ["dom", "dom.iterable", "esnext"],
         "allowJs": true,
         "skipLibCheck": true,
@@ -12,16 +12,10 @@
         "resolveJsonModule": true,
         "isolatedModules": true,
         "jsx": "react-jsx",
-        "incremental": true,
-        "plugins": [
-            {
-                "name": "next"
-            }
-        ],
         "paths": {
             "@/*": ["./src/*"]
         }
     },
-    "include": ["next-env.d.ts", "next.config.ts", "src/**/*.ts", "src/**/*.tsx", ".next/types/**/*.ts", ".next/dev/types/**/*.ts"],
+    "include": ["vite.config.ts", "src/**/*.ts", "src/**/*.tsx"],
     "exclude": ["node_modules"]
 }
