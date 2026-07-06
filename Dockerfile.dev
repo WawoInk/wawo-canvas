@@ -13,7 +13,7 @@ COPY .air.toml ./
 EXPOSE 8088
 CMD ["air"]
 
-# ==================== Next.js Frontend Dev (HMR via bun) ====================
+# ==================== Vite Frontend Dev (HMR via bun) ====================
 FROM oven/bun:1.3.13 AS web-dev
 
 WORKDIR /app/web
@@ -22,6 +22,8 @@ COPY VERSION /app/VERSION
 COPY CHANGELOG.md /app/CHANGELOG.md
 COPY web/package.json web/bun.lock ./
 RUN bun install --frozen-lockfile
+
+COPY web/ .
 
 EXPOSE 3000
 CMD ["bun", "run", "dev"]
