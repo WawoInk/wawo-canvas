@@ -17,40 +17,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # --- 1. Generate .env from secrets ---
-      - name: Generate .env
-        run: |
-          cat > /tmp/prod-env <<'EOF'
-          ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
-          ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
-          JWT_EXPIRE_HOURS=${{ secrets.JWT_EXPIRE_HOURS }}
-          PORT=8088
-          PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}
-          DATABASE_DSN=${{ secrets.DATABASE_DSN }}
-          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
-          AMAZON_S3_URL=${{ secrets.AMAZON_S3_URL }}
-          AMAZON_REGION=${{ secrets.AMAZON_REGION }}
-          AMAZON_S3_ACCESS_KEY=${{ secrets.AMAZON_S3_ACCESS_KEY }}
-          AMAZON_S3_SECRET_KEY=${{ secrets.AMAZON_S3_SECRET_KEY }}
-          LINUX_DO_CLIENT_ID=${{ secrets.LINUX_DO_CLIENT_ID }}
-          LINUX_DO_CLIENT_SECRET=${{ secrets.LINUX_DO_CLIENT_SECRET }}
-          EOF
-
-      # --- 2. SCP files to remote ---
-      - uses: appleboy/scp-action@v0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          source: docker-compose.prod.yml,Caddyfile,/tmp/prod-env
-          target: /opt/infinite-canvas/
-          strip_components: 0
-
-      # --- 3-7. Deploy ---
       - uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -61,9 +27,85 @@ jobs:
             set -e
             cd /opt/infinite-canvas
 
-            # Move .env into place
-            mv -f /tmp/prod-env .env
+            # 1. Write .env from secrets
+            cat > .env <<'ENVEOF'
+            ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
+            ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            JWT_EXPIRE_HOURS=${{ secrets.JWT_EXPIRE_HOURS }}
+            PORT=8088
+            PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}
+            DATABASE_DSN=${{ secrets.DATABASE_DSN }}
+            POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+            AMAZON_S3_URL=${{ secrets.AMAZON_S3_URL }}
+            AMAZON_REGION=${{ secrets.AMAZON_REGION }}
+            AMAZON_S3_ACCESS_KEY=${{ secrets.AMAZON_S3_ACCESS_KEY }}
+            AMAZON_S3_SECRET_KEY=${{ secrets.AMAZON_S3_SECRET_KEY }}
+            LINUX_DO_CLIENT_ID=${{ secrets.LINUX_DO_CLIENT_ID }}
+            LINUX_DO_CLIENT_SECRET=${{ secrets.LINUX_DO_CLIENT_SECRET }}
+            ENVEOF
             chmod 600 .env
+
+            # 1b. Write Caddyfile
+            cat > Caddyfile <<'CADDYEOF'
+            :3000 {
+              root * /usr/share/nginx/html
+              file_server
+              try_files {path} /index.html
+
+              handle /api/* {
+                reverse_proxy api:8088
+              }
+            }
+            CADDYEOF
+
+            # 1c. Write docker-compose.prod.yml
+            cat > docker-compose.prod.yml <<'COMPOSEEOF'
+            services:
+              postgres:
+                image: postgres:16-alpine
+                environment:
+                  POSTGRES_USER: ${POSTGRES_USER}
+                  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+                  POSTGRES_DB: ${POSTGRES_DB}
+                volumes:
+                  - pgdata:/var/lib/postgresql/data
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+                  interval: 3s
+                  retries: 10
+
+              api:
+                image: ghcr.io/eldenpdx/infinite-canvas-api:${IMAGE_TAG:-latest}
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                env_file:
+                  - .env
+                environment:
+                  - PORT=8088
+                volumes:
+                  - ./data:/app/data
+                restart: unless-stopped
+
+              web:
+                image: ghcr.io/eldenpdx/infinite-canvas:${IMAGE_TAG:-latest}
+                ports:
+                  - "80:3000"
+                depends_on:
+                  - api
+                env_file:
+                  - .env
+                volumes:
+                  - ./Caddyfile:/etc/caddy/Caddyfile:ro
+                restart: unless-stopped
+
+            volumes:
+              pgdata:
+            COMPOSEEOF
 
             # Docker login
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
