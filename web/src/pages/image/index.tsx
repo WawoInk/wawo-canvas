@@ -25,6 +25,8 @@ import { useAssetStore } from "@/stores/use-asset-store";
 import { useUserStore } from "@/stores/use-user-store";
 import type { ReferenceImage } from "@/types/image";
 import { fetchImageHistory, deleteGenerationTask, recordGenerationTask, type ImageHistoryItem } from "@/services/api/generation-tasks";
+import { syncClient } from "@/services/sync-client";
+import { syncScheduler } from "@/services/sync-scheduler";
 
 type GeneratedImage = {
     id: string;
@@ -78,6 +80,12 @@ function logStoreForUser() {
 	return localforage.createInstance({ name: "infinite-canvas", storeName: `image_generation_logs_${userId}` });
 }
 
+// ponytail: module-level bridge between syncClient (singleton) and component (closure-scoped refreshLogs)
+let refreshLogsHandler: (() => void) | null = null;
+syncClient.onDelta("tasks", () => {
+    if (refreshLogsHandler) refreshLogsHandler();
+});
+
 export default function ImagePage() {
     const { message } = App.useApp();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -113,6 +121,11 @@ export default function ImagePage() {
     }, [running, startedAt]);
 
     const configHydrated = useConfigStore((state) => state.configHydrated);
+
+    useEffect(() => {
+        refreshLogsHandler = () => { void refreshLogs(); };
+        return () => { refreshLogsHandler = null; };
+    }, []);
 
     useEffect(() => {
         if (!configHydrated) return;
@@ -182,6 +195,7 @@ export default function ImagePage() {
 
         setElapsedMs(0);
         setRunning(true);
+        syncScheduler.onRunningTaskCountChange(1);
         setPreviewLog(null);
         setResults(Array.from({ length: generationCount }, () => ({ id: nanoid(), status: "pending" })));
         const batchStartedAt = performance.now();
@@ -218,6 +232,7 @@ export default function ImagePage() {
             successCount ? message.success("图片已生成") : message.error(failed?.reason instanceof Error ? failed.reason.message : "生成失败");
         } finally {
             setRunning(false);
+            syncScheduler.onRunningTaskCountChange(0);
         }
     };
 

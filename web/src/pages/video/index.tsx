@@ -21,6 +21,8 @@ import { resolveFileUrls } from "@/services/resolve-file-urls";
 import { patchGenerationTaskMetadata } from "@/services/api/generation-tasks";
 import { cancelVideoGenerationTask, createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, type VideoGenerationTask } from "@/services/api/video";
 import { fetchVideoHistory, deleteGenerationTask, type VideoHistoryItem } from "@/services/api/generation-tasks";
+import { syncClient } from "@/services/sync-client";
+import { syncScheduler } from "@/services/sync-scheduler";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { modelOptionLabel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
@@ -80,6 +82,12 @@ function logStoreForUser() {
     return localforage.createInstance({ name: "infinite-canvas", storeName: `video_generation_logs_${userId}` });
 }
 
+// ponytail: module-level bridge between syncClient (singleton) and component (closure-scoped refreshLogs)
+let refreshLogsHandler: (() => void) | null = null;
+syncClient.onDelta("tasks", () => {
+    if (refreshLogsHandler) refreshLogsHandler();
+});
+
 export default function VideoPage() {
     const { message } = App.useApp();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -117,6 +125,11 @@ export default function VideoPage() {
         const timer = window.setInterval(() => setElapsedMs(performance.now() - startedAt), 1000);
         return () => window.clearInterval(timer);
     }, [running, startedAt]);
+
+    useEffect(() => {
+        refreshLogsHandler = () => { void refreshLogs(); };
+        return () => { refreshLogsHandler = null; };
+    }, []);
 
     useEffect(() => {
         if (!configHydrated) return;
@@ -202,6 +215,7 @@ export default function VideoPage() {
         if (!snapshot) return;
         setElapsedMs(0);
         setRunning(true);
+        syncScheduler.onRunningTaskCountChange(1);
         setPreviewLog(null);
         setResults([{ id: nanoid(), status: "pending" }]);
         const batchStartedAt = performance.now();
@@ -217,6 +231,7 @@ export default function VideoPage() {
             await saveLog(buildLog({ prompt: snapshot.text, model, config: snapshot.config, references: snapshot.references, videoReferences: snapshot.videoReferences, audioReferences: snapshot.audioReferences, durationMs: performance.now() - batchStartedAt, status: "失败", error: errorMessage }));
             message.error(errorMessage);
             setRunning(false);
+            syncScheduler.onRunningTaskCountChange(0);
         }
     };
 
