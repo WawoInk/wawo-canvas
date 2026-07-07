@@ -47,6 +47,11 @@ func enrichAssetURLs(items []model.Asset) {
 }
 
 func SaveAsset(userID string, item model.Asset) (model.Asset, error) {
+	return SaveAssetWithLock(userID, item, "")
+}
+
+// SaveAssetWithLock 保存素材。expectedUpdatedAt 用于乐观锁：更新时匹配当前版本，插入时传空。
+func SaveAssetWithLock(userID string, item model.Asset, expectedUpdatedAt string) (model.Asset, error) {
 	now := time.Now().Format(time.RFC3339)
 	if item.Type == "" {
 		item.Type = model.AssetTypeText
@@ -60,7 +65,7 @@ func SaveAsset(userID string, item model.Asset) (model.Asset, error) {
 	if item.CoverURL == "" {
 		item.CoverURL = assetCoverURL(item)
 	}
-	return repository.SaveAsset(item)
+	return repository.SaveAssetWithLock(item, expectedUpdatedAt)
 }
 
 func DeleteAsset(userID, id string) error {

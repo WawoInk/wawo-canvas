@@ -2,9 +2,11 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/basketikun/infinite-canvas/model"
+	"github.com/basketikun/infinite-canvas/repository"
 	"github.com/basketikun/infinite-canvas/service"
 )
 
@@ -22,16 +24,25 @@ func Assets(w http.ResponseWriter, r *http.Request) {
 	OK(w, result)
 }
 
+// SaveAsset 用户端保存素材（乐观锁）。body 携带 expectedUpdatedAt，过期返回 409 + current。
 func SaveAsset(w http.ResponseWriter, r *http.Request) {
 	user, ok := service.UserFromContext(r.Context())
 	if !ok {
 		Fail(w, "未登录或权限不足")
 		return
 	}
-	var item model.Asset
-	_ = json.NewDecoder(r.Body).Decode(&item)
-	result, err := service.SaveAsset(user.ID, item)
+	var body struct {
+		model.Asset
+		ExpectedUpdatedAt string `json:"expectedUpdatedAt"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+
+	result, err := service.SaveAssetWithLock(user.ID, body.Asset, body.ExpectedUpdatedAt)
 	if err != nil {
+		if errors.Is(err, repository.ErrConflict) {
+			Conflict(w, "资产已被其他会话修改", result)
+			return
+		}
 		FailError(w, err)
 		return
 	}
