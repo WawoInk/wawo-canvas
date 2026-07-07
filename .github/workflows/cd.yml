@@ -3,147 +3,183 @@ name: CD (Deploy)
 on:
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: "Candidate image tag to deploy"
+      site:
+        description: '选择部署动作'
         required: true
-        default: "latest"
+        type: choice
+        options:
+          - deploy
+          - rollback
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   deploy:
+    name: Deploy (${{ inputs.site }})
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: appleboy/ssh-action@v1
+      - name: Compute lowercase GHCR path
+        id: ghcr
+        run: |
+          owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          echo "owner=${owner}" >> "$GITHUB_OUTPUT"
+          echo "candidate-api=ghcr.io/${owner}/infinite-canvas-api:candidate-arm64" >> "$GITHUB_OUTPUT"
+          echo "candidate-web=ghcr.io/${owner}/infinite-canvas:candidate-arm64" >> "$GITHUB_OUTPUT"
+
+      # ═══════════════════════════════════════════════════════════════
+      # deploy
+      # ═══════════════════════════════════════════════════════════════
+
+      - name: deploy — sync deploy assets
+        if: inputs.site == 'deploy'
+        run: |
+          HOST="${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
+          KEY="$HOME/.ssh/deploy-key"
+
+          mkdir -p "$HOME/.ssh"
+          echo "${{ secrets.SSH_KEY }}" > "$KEY"
+          chmod 600 "$KEY"
+
+          ssh -i "$KEY" -o StrictHostKeyChecking=accept-new "$HOST" "mkdir -p /opt/infinite-canvas"
+          scp -i "$KEY" -o StrictHostKeyChecking=accept-new \
+            deploy/docker-compose.prod.yml \
+            deploy/Caddyfile \
+            "$HOST:/opt/infinite-canvas/"
+
+      - name: deploy — generate .env from secrets and sync
+        if: inputs.site == 'deploy'
+        run: |
+          HOST="${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
+          KEY="$HOME/.ssh/deploy-key"
+
+          cat > /tmp/infinite-canvas.env <<'ENVEOF'
+          ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
+          ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_EXPIRE_HOURS=${{ secrets.JWT_EXPIRE_HOURS }}
+          PORT=8088
+          PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}
+          DATABASE_DSN=${{ secrets.DATABASE_DSN }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          AMAZON_S3_URL=${{ secrets.AMAZON_S3_URL }}
+          AMAZON_REGION=${{ secrets.AMAZON_REGION }}
+          AMAZON_S3_ACCESS_KEY=${{ secrets.AMAZON_S3_ACCESS_KEY }}
+          AMAZON_S3_SECRET_KEY=${{ secrets.AMAZON_S3_SECRET_KEY }}
+          LINUX_DO_CLIENT_ID=${{ secrets.LINUX_DO_CLIENT_ID }}
+          LINUX_DO_CLIENT_SECRET=${{ secrets.LINUX_DO_CLIENT_SECRET }}
+          ENVEOF
+
+          scp -i "$KEY" -o StrictHostKeyChecking=accept-new \
+            /tmp/infinite-canvas.env "$HOST:/opt/infinite-canvas/.env"
+          ssh -i "$KEY" -o StrictHostKeyChecking=accept-new "$HOST" "chmod 600 /opt/infinite-canvas/.env"
+          rm -f /tmp/infinite-canvas.env
+
+      - name: deploy — pull, tag, restart
+        if: inputs.site == 'deploy'
+        uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT }}
           script: |
             set -e
+            CANDIDATE_API="${{ steps.ghcr.outputs.candidate-api }}"
+            CANDIDATE_WEB="${{ steps.ghcr.outputs.candidate-web }}"
             cd /opt/infinite-canvas
 
-            # 1. Write .env from secrets
-            cat > .env <<'ENVEOF'
-            ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
-            ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            JWT_EXPIRE_HOURS=${{ secrets.JWT_EXPIRE_HOURS }}
-            PORT=8088
-            PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}
-            DATABASE_DSN=${{ secrets.DATABASE_DSN }}
-            POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-            POSTGRES_DB=${{ secrets.POSTGRES_DB }}
-            AMAZON_S3_URL=${{ secrets.AMAZON_S3_URL }}
-            AMAZON_REGION=${{ secrets.AMAZON_REGION }}
-            AMAZON_S3_ACCESS_KEY=${{ secrets.AMAZON_S3_ACCESS_KEY }}
-            AMAZON_S3_SECRET_KEY=${{ secrets.AMAZON_S3_SECRET_KEY }}
-            LINUX_DO_CLIENT_ID=${{ secrets.LINUX_DO_CLIENT_ID }}
-            LINUX_DO_CLIENT_SECRET=${{ secrets.LINUX_DO_CLIENT_SECRET }}
-            ENVEOF
-            chmod 600 .env
-
-            # 1b. Write Caddyfile
-            cat > Caddyfile <<'CADDYEOF'
-            :3000 {
-              root * /usr/share/nginx/html
-              file_server
-              try_files {path} /index.html
-
-              handle /api/* {
-                reverse_proxy api:8088
-              }
-            }
-            CADDYEOF
-
-            # 1c. Write docker-compose.prod.yml
-            cat > docker-compose.prod.yml <<'COMPOSEEOF'
-            services:
-              postgres:
-                image: postgres:16-alpine
-                environment:
-                  POSTGRES_USER: ${POSTGRES_USER}
-                  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-                  POSTGRES_DB: ${POSTGRES_DB}
-                volumes:
-                  - pgdata:/var/lib/postgresql/data
-                restart: unless-stopped
-                healthcheck:
-                  test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-                  interval: 3s
-                  retries: 10
-
-              api:
-                image: ghcr.io/eldenpdx/infinite-canvas-api:${IMAGE_TAG:-latest}
-                depends_on:
-                  postgres:
-                    condition: service_healthy
-                env_file:
-                  - .env
-                environment:
-                  - PORT=8088
-                volumes:
-                  - ./data:/app/data
-                restart: unless-stopped
-
-              web:
-                image: ghcr.io/eldenpdx/infinite-canvas:${IMAGE_TAG:-latest}
-                ports:
-                  - "80:3000"
-                depends_on:
-                  - api
-                env_file:
-                  - .env
-                volumes:
-                  - ./Caddyfile:/etc/caddy/Caddyfile:ro
-                restart: unless-stopped
-
-            volumes:
-              pgdata:
-            COMPOSEEOF
-
-            # Docker login (must match the GHCR package owner)
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u eldenpdx --password-stdin
 
-            TAG=${{ github.event.inputs.image_tag }}
+            docker pull "$CANDIDATE_API"
+            docker pull "$CANDIDATE_WEB"
 
-            # 3. Pull candidate (fail clearly if CI hasn't pushed yet)
-            for img in infinite-canvas-api infinite-canvas; do
-              if docker pull ghcr.io/eldenpdx/${img}:${TAG}; then
-                echo "✓ Pulled ghcr.io/eldenpdx/${img}:${TAG}"
-              else
-                echo "✗ Failed to pull ghcr.io/eldenpdx/${img}:${TAG}"
-                echo "  Make sure CI has run and pushed this tag first."
-                exit 1
-              fi
-            done
+            # Save rollback
+            if docker image inspect infinite-canvas-api:latest >/dev/null 2>&1; then
+              docker tag infinite-canvas-api:latest infinite-canvas-api:rollback
+              echo "Saved rollback image: infinite-canvas-api:rollback"
+            fi
+            if docker image inspect infinite-canvas:latest >/dev/null 2>&1; then
+              docker tag infinite-canvas:latest infinite-canvas:rollback
+              echo "Saved rollback image: infinite-canvas:rollback"
+            fi
 
-            # 4. Rollback tag: current latest → rollback
-            docker tag ghcr.io/eldenpdx/infinite-canvas-api:latest ghcr.io/eldenpdx/infinite-canvas-api:rollback 2>/dev/null || true
-            docker tag ghcr.io/eldenpdx/infinite-canvas:latest ghcr.io/eldenpdx/infinite-canvas:rollback 2>/dev/null || true
+            # Tag candidate as latest
+            docker tag "$CANDIDATE_API" infinite-canvas-api:latest
+            docker tag "$CANDIDATE_WEB" infinite-canvas:latest
 
-            # 5. Candidate → latest
-            docker tag ghcr.io/eldenpdx/infinite-canvas-api:${TAG} ghcr.io/eldenpdx/infinite-canvas-api:latest
-            docker tag ghcr.io/eldenpdx/infinite-canvas:${TAG} ghcr.io/eldenpdx/infinite-canvas:latest
-
-            # 6. Restart
-            export IMAGE_TAG=${TAG}
             docker compose -f docker-compose.prod.yml down
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
             docker image prune -f
 
-            # 7. Health check (max 30 tries × 2s = 60s)
+      - name: deploy — health check
+        if: inputs.site == 'deploy'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -e
             for i in $(seq 1 30); do
-              if curl -sf http://localhost/api/health >/dev/null 2>&1; then
+              if curl -sf http://127.0.0.1/api/health >/dev/null 2>&1; then
                 echo "✓ Healthy after ${i}s"
                 exit 0
               fi
+              echo "Attempt $i/30: waiting for healthy..."
               sleep 2
             done
-            echo "✗ Health check failed after 60s"
+            echo "✗ Health check timeout. Recent logs:"
+            cd /opt/infinite-canvas
+            docker compose -f docker-compose.prod.yml logs --tail=50
+            exit 1
+
+      # ═══════════════════════════════════════════════════════════════
+      # rollback
+      # ═══════════════════════════════════════════════════════════════
+
+      - name: rollback — tag rollback as latest and restart
+        if: inputs.site == 'rollback'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/infinite-canvas
+
+            for img in infinite-canvas-api infinite-canvas; do
+              if ! docker image inspect ${img}:rollback >/dev/null 2>&1; then
+                echo "✗ No rollback image found (${img}:rollback missing)"
+                exit 1
+              fi
+              docker tag ${img}:rollback ${img}:latest
+            done
+
+            docker compose -f docker-compose.prod.yml down
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+      - name: rollback — health check
+        if: inputs.site == 'rollback'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -e
+            for i in $(seq 1 30); do
+              if curl -sf http://127.0.0.1/api/health >/dev/null 2>&1; then
+                echo "✓ Rollback healthy after ${i}s"
+                exit 0
+              fi
+              echo "Attempt $i/30: waiting..."
+              sleep 2
+            done
+            echo "✗ Rollback health check timeout."
             exit 1
