@@ -4,9 +4,14 @@ import { create } from "zustand";
 import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
 
 import { nanoid } from "nanoid";
+import { message } from "antd";
+
 import { localForageStorage } from "@/lib/localforage-storage";
 import { resolveFileUrls } from "@/services/resolve-file-urls";
-import { fetchAssetLibrary, saveAssetToLibrary, deleteAssetFromLibrary } from "@/services/api/assets";
+import { saveAssetToLibrary, deleteAssetFromLibrary } from "@/services/api/assets";
+import { ApiError } from "@/services/api/request";
+import { syncClient } from "@/services/sync-client";
+import { syncScheduler } from "@/services/sync-scheduler";
 
 export type AssetKind = "text" | "image" | "video";
 export type TextAsset = AssetBase<"text"> & { data: { content: string } };
@@ -31,9 +36,9 @@ type AssetStore = {
     hydrated: boolean;
     synced: boolean;
     assets: Asset[];
-    addAsset: (asset: Omit<Asset, "id" | "createdAt" | "updatedAt">) => string;
-    updateAsset: (id: string, patch: Partial<Omit<Asset, "id" | "createdAt">>) => void;
-    removeAsset: (id: string) => void;
+    addAsset: (asset: Omit<Asset, "id" | "createdAt" | "updatedAt">) => Promise<string>;
+    updateAsset: (id: string, patch: Partial<Omit<Asset, "id" | "createdAt">>) => Promise<void>;
+    removeAsset: (id: string) => Promise<void>;
     removeAssetWithFile: (id: string, fileId: string) => Promise<void>;
     replaceAssets: (assets: Asset[]) => void;
     refreshAssetUrls: (ids: string[]) => Promise<void>;
@@ -59,33 +64,74 @@ export const useAssetStore = create<AssetStore>()(
             hydrated: false,
             synced: false,
             assets: [],
-            addAsset: (asset) => {
+            addAsset: async (asset) => {
                 const now = new Date().toISOString();
                 const id = nanoid();
                 const item = { ...asset, id, createdAt: now, updatedAt: now } as Asset;
-                set((state) => ({ assets: [item, ...state.assets] }));
-                void syncNewAssetToBackend(item);
-                return id;
+                try {
+                    const result = await saveAssetToLibrary(fromLocalAsset(item) as Parameters<typeof saveAssetToLibrary>[0]);
+                    // ponytail: 后端生成的 id 优先（id 与本地 nanoid 不同时）
+                    const finalId = result.id || id;
+                    const finalItem = { ...item, id: finalId };
+                    set((state) => ({ assets: [finalItem, ...state.assets] }));
+                    syncScheduler.markActivity();
+                    return finalId;
+                } catch {
+                    message.error("创建资产失败，请检查网络连接");
+                    throw new Error("创建资产失败");
+                }
             },
-            updateAsset: (id, patch) =>
-                set((state) => ({
-                    assets: state.assets.map((a) => (a.id === id ? ({ ...a, ...patch, updatedAt: new Date().toISOString() } as Asset) : a)),
-                })),
-            removeAsset: (id) =>
-                set((state) => ({
-                    assets: state.assets.filter((a) => a.id !== id),
-                })),
+            updateAsset: async (id, patch) => {
+                const local = get().assets.find((a) => a.id === id);
+                if (!local) return;
+                try {
+                    const body = {
+                        ...fromLocalAsset({ ...local, ...patch } as Asset),
+                        expectedUpdatedAt: local.updatedAt,
+                    };
+                    const result = await saveAssetToLibrary(body as unknown as Parameters<typeof saveAssetToLibrary>[0]);
+                    // 用 API 返回的最新记录覆盖本地（可能包含服务端调整的字段）
+                    set((state) => ({
+                        assets: state.assets.map((a) => (a.id === id ? toLocalAsset(result) : a)),
+                    }));
+                    syncScheduler.markActivity();
+                } catch (err) {
+                    // 409 冲突：服务端版本已变更，触发全量同步拉取最新
+                    if (err instanceof ApiError && err.status === 409) {
+                        await syncClient.syncDomain("assets");
+                        message.warning("资产已被其他会话修改，已刷新为最新版本");
+                        return;
+                    }
+                    message.error("更新资产失败，请检查网络连接");
+                    throw err;
+                }
+            },
+            removeAsset: async (id) => {
+                try {
+                    await deleteAssetFromLibrary(id);
+                    set((state) => ({
+                        assets: state.assets.filter((a) => a.id !== id),
+                    }));
+                    syncScheduler.markActivity();
+                } catch {
+                    message.error("删除资产失败，请检查网络连接");
+                    throw new Error("删除资产失败");
+                }
+            },
             removeAssetWithFile: async (id, fileId) => {
                 try {
                     const token = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
                     const parsed = JSON.parse(token);
                     const tokenValue = parsed?.state?.token || "";
                     await fetch(`/api/v1/files/${encodeURIComponent(fileId)}`, { method: "DELETE", headers: { Authorization: `Bearer ${tokenValue}` } });
-                    void deleteAssetFromLibrary(id).catch(() => {});
-                } catch { /* network error */ }
+                } catch { /* 文件删除失败不影响素材删除 */ }
+                try {
+                    await deleteAssetFromLibrary(id);
+                } catch { /* 素材删除失败仍走本地清理，下次同步会纠正 */ }
                 set((state) => ({
                     assets: state.assets.filter((a) => a.id !== id),
                 }));
+                syncScheduler.markActivity();
             },
             replaceAssets: (assets) => set({ assets }),
             refreshAssetUrls: async (ids) => {
@@ -121,47 +167,51 @@ export const useAssetStore = create<AssetStore>()(
             partialize: (state) => ({ assets: state.assets }) as StorageValue<AssetStore>["state"],
             onRehydrateStorage: () => (state) => {
                 useAssetStore.setState({ hydrated: true });
-                // Sync from backend after rehydration (whether or not local data existed)
-                if (state) void syncAssetsFromBackend();
+                // 水合后：拉取最新服务端数据（API 是 source of truth）
+                if (state) {
+                    syncClient
+                        .syncDomain("assets")
+                        .then(() => useAssetStore.setState({ synced: true }))
+                        .catch(() => useAssetStore.setState({ synced: true }));
+                }
             },
         },
     ),
 );
 
-// ── Backend sync ──
+// ── Sync delta 回调：后台同步的增量数据直接覆盖本地缓存 ──
+syncClient.onDelta("assets", (data) => {
+    if (!data) return;
 
-async function syncAssetsFromBackend() {
-    const token = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
-    let tokenValue = "";
-    try { tokenValue = JSON.parse(token)?.state?.token || ""; } catch {}
-    if (!tokenValue) {
-        useAssetStore.setState({ synced: true });
-        return;
-    }
-    try {
-        const result = await fetchAssetLibrary({ pageSize: 500 });
-        const remote = result.items.map(toLocalAsset);
-        const local = useAssetStore.getState().assets;
-        const merged = mergeAssets(local, remote);
-        useAssetStore.setState({ assets: merged, synced: true });
+    // 应用 updates（upsert by id，按 updatedAt 倒序）
+    if (data.updates && data.updates.length > 0) {
+        const remote = data.updates.map((item) => toLocalAsset(item));
+        const state = useAssetStore.getState();
+        const map = new Map(state.assets.map((a) => [a.id, a]));
+        for (const a of remote) map.set(a.id, a);
+        const merged = Array.from(map.values()).sort(
+            (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+        );
+        useAssetStore.setState({ assets: merged });
+        // 刷新 S3 预签名 URL
         const fileIds = merged
             .filter((a): a is Asset & { data: { fileId: string } } => (a.kind === "image" || a.kind === "video") && Boolean((a.data as { fileId?: string }).fileId))
             .map((a) => (a.data as { fileId: string }).fileId);
-        if (fileIds.length) void useAssetStore.getState().refreshAssetUrls(fileIds);
-    } catch {
-        useAssetStore.setState({ synced: true });
-    }
-}
-
-async function syncNewAssetToBackend(asset: Asset) {
-    try {
-        const result = await saveAssetToLibrary(fromLocalAsset(asset) as Parameters<typeof saveAssetToLibrary>[0]);
-        if (result.id && result.id !== asset.id) {
-            useAssetStore.getState().updateAsset(asset.id, { id: result.id } as Partial<Asset>);
+        if (fileIds.length) {
+            void useAssetStore.getState().refreshAssetUrls(fileIds);
         }
-    } catch { /* fire-and-forget */ }
-}
+    }
 
+    // 应用 deletes
+    if (data.deletes && data.deletes.length > 0) {
+        const deleteSet = new Set(data.deletes);
+        useAssetStore.setState((state) => ({
+            assets: state.assets.filter((a) => !deleteSet.has(a.id)),
+        }));
+    }
+});
+
+// ── 转换函数 ──
 function toLocalAsset(item: { id: string; type: string; title: string; coverUrl: string; tags: string[]; content?: string; url?: string; fileId?: string; width?: number; height?: number; bytes?: number; mimeType?: string; createdAt: string; updatedAt: string }): Asset {
     const base = {
         id: item.id,
@@ -197,16 +247,4 @@ function fromLocalAsset(asset: Asset): Record<string, unknown> {
         bytes: data.bytes || 0,
         mimeType: data.mimeType || "",
     };
-}
-
-function mergeAssets(local: Asset[], remote: Asset[]): Asset[] {
-    const map = new Map<string, Asset>();
-    for (const a of remote) map.set(a.id, a);
-    for (const a of local) {
-        const existing = map.get(a.id);
-        if (!existing || new Date(a.updatedAt).getTime() >= new Date(existing.updatedAt).getTime()) {
-            map.set(a.id, a);
-        }
-    }
-    return Array.from(map.values()).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 }

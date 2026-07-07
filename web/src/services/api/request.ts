@@ -2,6 +2,18 @@ import axios from "axios";
 
 export type ApiParams = Record<string, string | string[] | number | number[] | undefined>;
 
+// 可携带 HTTP 状态码与响应 data 的错误，供调用方区分 409 冲突等场景
+export class ApiError extends Error {
+    status: number;
+    data: unknown;
+    constructor(msg: string, status: number, data: unknown) {
+        super(msg);
+        this.name = "ApiError";
+        this.status = status;
+        this.data = data;
+    }
+}
+
 type ApiResponse<T> = {
     code: number;
     data: T;
@@ -86,7 +98,7 @@ async function apiRequest<T>(config: { url: string; method: "GET" | "POST" | "DE
 
     const payload = result as ApiResponse<T>;
     if (response.status < 200 || response.status >= 300 || payload.code !== 0) {
-        throw new Error(payload.msg || "请求失败");
+        throw new ApiError(payload.msg || "请求失败", response.status, payload.data);
     }
 
     return payload.data;
