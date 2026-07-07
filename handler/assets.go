@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/basketikun/infinite-canvas/model"
 	"github.com/basketikun/infinite-canvas/repository"
@@ -59,7 +60,7 @@ func DeleteAsset(w http.ResponseWriter, r *http.Request, id string) {
 		FailError(w, err)
 		return
 	}
-	OK(w, true)
+	OK(w, map[string]string{"id": id, "deletedAt": time.Now().Format(time.RFC3339)})
 }
 
 func AdminAssets(w http.ResponseWriter, r *http.Request) {

@@ -69,7 +69,12 @@ func SaveAssetWithLock(userID string, item model.Asset, expectedUpdatedAt string
 }
 
 func DeleteAsset(userID, id string) error {
-	return repository.DeleteAsset(userID, id)
+	if err := repository.DeleteAsset(userID, id); err != nil {
+		return err
+	}
+	// 记录删除日志供 sync API 返回
+	_ = repository.RecordDeletion("assets", id, userID, time.Now())
+	return nil
 }
 
 func assetCoverURL(item model.Asset) string {
