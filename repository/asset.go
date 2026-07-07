@@ -7,17 +7,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// ErrConflict 表示乐观锁冲突：expectedUpdatedAt 与当前 updated_at 不匹配。
-var ErrConflict = errors.New("record modified by another session")
-
-// ListAssets 按查询条件返回素材分页列表。
-func ListAssets(q model.Query) ([]model.Asset, int64, error) {
+// ListAssets 按查询条件返回用户素材分页列表。
+func ListAssets(userID string, q model.Query) ([]model.Asset, int64, error) {
 	db, err := DB()
 	if err != nil {
 		return nil, 0, err
 	}
 	q.Normalize()
-	tx := applyAssetFilters(db.Model(&model.Asset{}), q)
+	tx := applyAssetFilters(db.Model(&model.Asset{}).Where("user_id = ?", userID), q)
 
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {
@@ -30,14 +27,14 @@ func ListAssets(q model.Query) ([]model.Asset, int64, error) {
 }
 
 // ListAssetTags 返回当前素材查询条件下的全部标签。
-func ListAssetTags(q model.Query) ([]string, error) {
+func ListAssetTags(userID string, q model.Query) ([]string, error) {
 	db, err := DB()
 	if err != nil {
 		return nil, err
 	}
 	q.Normalize()
 	q.Tags = nil
-	tx := applyAssetFilters(db.Model(&model.Asset{}), q)
+	tx := applyAssetFilters(db.Model(&model.Asset{}).Where("user_id = ?", userID), q)
 
 	var items []model.Asset
 	if err := tx.Select("tags").Find(&items).Error; err != nil {
@@ -60,48 +57,13 @@ func SaveAsset(item model.Asset) (model.Asset, error) {
 	return item, db.Save(&item).Error
 }
 
-// SaveAssetWithLock 使用乐观锁保存素材。expectedUpdatedAt 必须匹配当前 updated_at，
-// 否则返回 ErrConflict。INSERT 时 expectedUpdatedAt 为空，无条件创建。
-func SaveAssetWithLock(item model.Asset, expectedUpdatedAt string) (model.Asset, error) {
-	db, err := DB()
-	if err != nil {
-		return item, err
-	}
-
-	saved, exists, err := findAsset(db, item.ID)
-	if err != nil {
-		return item, err
-	}
-
-	if !exists {
-		return item, db.Create(&item).Error
-	}
-
-	// UPDATE: 条件检查 updated_at 是否匹配
-	if item.CreatedAt == "" {
-		item.CreatedAt = saved.CreatedAt
-	}
-	result := db.Model(&model.Asset{}).
-		Where("id = ? AND updated_at = ?", item.ID, expectedUpdatedAt).
-		Select("title", "type", "cover_url", "tags", "category", "description", "content", "url", "updated_at", "created_at").
-		Updates(item)
-	if result.Error != nil {
-		return item, result.Error
-	}
-	if result.RowsAffected == 0 {
-		return item, ErrConflict
-	}
-	updated, _, err := findAsset(db, item.ID)
-	return updated, err
-}
-
 // DeleteAsset 删除指定素材。
-func DeleteAsset(id string) error {
+func DeleteAsset(userID, id string) error {
 	db, err := DB()
 	if err != nil {
 		return err
 	}
-	return db.Delete(&model.Asset{}, "id = ?", id).Error
+	return db.Where("id = ? AND user_id = ?", id, userID).Delete(&model.Asset{}).Error
 }
 
 // applyAssetFilters 应用素材列表的搜索条件。
