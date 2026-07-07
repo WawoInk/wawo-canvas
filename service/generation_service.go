@@ -219,15 +219,27 @@ func AdminListTasksWithUsername(q model.GenerationTaskQuery) (*AdminGenerationTa
 	return &AdminGenerationTaskListWithUser{Items: tasks, Total: total}, nil
 }
 
-// AdminDeleteTask 管理员删除单条任务（无所有权校验）。
+// AdminDeleteTask 管理员删除单条任务（无所有权校验），并记录删除日志。
 func AdminDeleteTask(taskID string) error {
-	_, err := repository.AdminDeleteGenerationTasks([]string{taskID})
-	return err
+	if _, err := repository.AdminDeleteGenerationTasks([]string{taskID}); err != nil {
+		return err
+	}
+	// admin 删除不记 userID（记空）
+	_ = repository.RecordDeletion("generation_tasks", taskID, "", time.Now())
+	return nil
 }
 
-// AdminBatchDeleteTasks 管理员批量删除任务。
+// AdminBatchDeleteTasks 管理员批量删除任务，并记录删除日志。
 func AdminBatchDeleteTasks(ids []string) (int64, error) {
-	return repository.AdminDeleteGenerationTasks(ids)
+	count, err := repository.AdminDeleteGenerationTasks(ids)
+	if err != nil {
+		return count, err
+	}
+	now := time.Now()
+	for _, id := range ids {
+		_ = repository.RecordDeletion("generation_tasks", id, "", now)
+	}
+	return count, nil
 }
 
 // AdminListTasks 管理员查看所有用户的任务列表（无用户过滤）。
@@ -276,9 +288,13 @@ func RecordUserTask(user model.AuthUser, taskType model.TaskType, source string,
 	return &task, nil
 }
 
-// DeleteUserTask 删除用户的任务（含 Payload 级联）。
+// DeleteUserTask 删除用户的任务（含 Payload 级联），并记录删除日志。
 func DeleteUserTask(taskID string, userID string) error {
-	return repository.DeleteGenerationTask(taskID, userID)
+	if err := repository.DeleteGenerationTask(taskID, userID); err != nil {
+		return err
+	}
+	_ = repository.RecordDeletion("generation_tasks", taskID, userID, time.Now())
+	return nil
 }
 
 // GetTaskPayload 根据 taskID 获取 Payload（nil-safe）。
