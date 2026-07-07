@@ -3,7 +3,9 @@ canvan.ai {
 		reverse_proxy api:8088
 	}
 
-	root * /usr/share/nginx/html
-	file_server
-	try_files {path} /index.html
+	handle {
+		root * /usr/share/nginx/html
+		file_server
+		try_files {path} /index.html
+	}
 }
