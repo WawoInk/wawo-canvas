@@ -328,38 +328,53 @@ export default function ImagePage() {
         // Sync to backend so refreshLogs can find it
         const user = useUserStore.getState().user;
         const channelMode = useConfigStore.getState().config.channelMode;
-        // In remote mode the backend proxy already creates a complete generation_tasks
-        // record via LogTaskStart → LogTaskSuccess. Only create/upsert one in local
-        // mode where the frontend calls external APIs directly.
-        if (user?.id && channelMode !== "remote") {
-            try {
-                const status = log.status === "成功" ? "success" : log.status === "失败" ? "failed" : "pending";
-                const fileIds = log.images.map((img) => img.fileId).filter(Boolean);
-                const result = await recordGenerationTask({
-                    taskType: "image",
-                    provider: "openai",
-                    model: log.model || "unknown",
-                    status,
-                    credits: 0,
-                    latencyMs: log.durationMs,
-                    upstreamTaskId: dedupeId,
-                    source: "image_workbench",
-                    requestBody: JSON.stringify({
-                        prompt: log.prompt,
-                        model: log.model,
-                        size: log.config.size,
-                        quality: log.config.quality,
-                        count: log.config.count,
-                    }),
-                    responseBody: JSON.stringify({
-                        data: log.images.map((img) => ({ url: img.dataUrl })),
-                    }),
-                    metadata: fileIds.length ? JSON.stringify({ fileIds }) : "",
-                });
-                if (result?.id && fileIds.length) {
-                    await patchGenerationTaskMetadata(result.id, JSON.stringify({ fileIds })).catch(() => {});
-                }
-            } catch { /* non-blocking */ }
+        const fileIds = log.images.map((img) => img.fileId).filter(Boolean);
+
+        if (user?.id) {
+            if (channelMode !== "remote") {
+                // Local mode: create a full task record in the backend
+                try {
+                    const status = log.status === "成功" ? "success" : log.status === "失败" ? "failed" : "pending";
+                    const result = await recordGenerationTask({
+                        taskType: "image",
+                        provider: "openai",
+                        model: log.model || "unknown",
+                        status,
+                        credits: 0,
+                        latencyMs: log.durationMs,
+                        upstreamTaskId: dedupeId,
+                        source: "image_workbench",
+                        requestBody: JSON.stringify({
+                            prompt: log.prompt,
+                            model: log.model,
+                            size: log.config.size,
+                            quality: log.config.quality,
+                            count: log.config.count,
+                        }),
+                        responseBody: JSON.stringify({
+                            data: log.images.map((img) => ({ url: img.dataUrl })),
+                        }),
+                        metadata: fileIds.length ? JSON.stringify({ fileIds }) : "",
+                    });
+                    if (result?.id && fileIds.length) {
+                        await patchGenerationTaskMetadata(result.id, JSON.stringify({ fileIds })).catch(() => {});
+                    }
+                } catch { /* non-blocking */ }
+            } else if (fileIds.length) {
+                // Remote mode: proxy already created the task, but we need to
+                // backfill S3 fileIds into its metadata so the backend DTO
+                // returns them on next refreshLogs (cross-browser/device).
+                // Fetch the latest tasks, find the proxy's record, and patch it.
+                try {
+                    const result = await fetchImageHistory(1, 5, "image_workbench");
+                    const match = result.items.find(
+                        (item) => item.model === log.model && item.createdAt <= log.time && !item.fileIds?.length
+                    );
+                    if (match?.id) {
+                        await patchGenerationTaskMetadata(match.id, JSON.stringify({ fileIds })).catch(() => {});
+                    }
+                } catch { /* non-blocking */ }
+            }
         }
         await refreshLogs();
     };

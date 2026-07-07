@@ -223,12 +223,14 @@ func extractImageURLsFromPayload(payload *model.GenerationPayload) []string {
 		return nil
 	}
 	var urls []string
-	// OpenAI 格式: data[].url
+	// OpenAI 格式: data[].url 或 data[].b64_json
 	if data, ok := body["data"].([]any); ok {
 		for _, item := range data {
 			if m, ok := item.(map[string]any); ok {
 				if url, ok := m["url"].(string); ok && url != "" {
 					urls = append(urls, url)
+				} else if b64, ok := m["b64_json"].(string); ok && b64 != "" {
+					urls = append(urls, "data:image/png;base64,"+b64)
 				}
 			}
 		}
