@@ -184,7 +184,7 @@ func isGeminiStream(path string, body []byte) bool {
 	return payload.Stream
 }
 
-// buildXvanaiUpstream 构造 xvanai 协议上游请求，统一走 /chat/completions 路径。
+// buildXvanaiUpstream 构造 xvanai 协议上游请求，透传实际请求 path（chat/completions、images/generations、contents/generations/tasks 等）。
 func buildXvanaiUpstream(channel model.ModelChannel, modelName, path string, body []byte, contentType string) upstreamRequest {
 	headers := http.Header{}
 	headers.Set("Authorization", "Bearer "+channel.APIKey)
@@ -192,7 +192,7 @@ func buildXvanaiUpstream(channel model.ModelChannel, modelName, path string, bod
 		headers.Set("Content-Type", contentType)
 	}
 	return upstreamRequest{
-		URL:     BuildModelChannelURL(channel, "/chat/completions"),
+		URL:     BuildModelChannelURL(channel, path),
 		Headers: headers,
 		Body:    body,
 	}
@@ -626,9 +626,9 @@ func ProxyVideoTaskDelete(w http.ResponseWriter, r *http.Request, path string) {
 
 	proxyCopyAIResponse(w, request, nil,
 		func(_ []byte, _ string) {
-			LogTaskCancelled(upstreamTaskID)
 			// ── 取消异步状态同步 ──
 			if genTaskID, err := getGenerationTaskByUpstreamTaskID(upstreamTaskID); err == nil && genTaskID != "" {
+				LogTaskCancelled(genTaskID)
 				CancelTaskSync(genTaskID)
 			} else if err != nil {
 				proxyAILogf("video task cancel-sync lookup failed: upstreamTask=%s err=%v", upstreamTaskID, err)
