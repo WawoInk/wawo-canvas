@@ -35,7 +35,7 @@
 
 ## 技术栈
 
-- 前端：Next.js、React、TypeScript、Tailwind CSS、Ant Design、Zustand、TanStack Query。
+- 前端：Vite、React、TypeScript、Tailwind CSS、Ant Design、Zustand、TanStack Query。
 - 少量 Next.js Route：第三方提示词内存缓存、WebDAV 可选代理。
 - 部署：Docker。
 

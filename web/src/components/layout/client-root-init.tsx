@@ -8,12 +8,14 @@ import { App } from "antd";
 import { createModelChannel, useConfigStore } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 import { syncScheduler } from "@/services/sync-scheduler";
+import { syncClient } from "@/services/sync-client";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
     const { message } = App.useApp();
     const handledConfigParams = useRef(false);
     const { pathname } = useLocation();
     const hydrateUser = useUserStore((state) => state.hydrateUser);
+    const userId = useUserStore((state) => state.user?.id);
     const loadPublicSettings = useConfigStore((state) => state.loadPublicSettings);
     const publicSettings = useConfigStore((state) => state.publicSettings);
     const updateConfig = useConfigStore((state) => state.updateConfig);
@@ -28,6 +30,15 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (!isLoginPage) void hydrateUser();
     }, [hydrateUser, isLoginPage]);
+
+    // 新浏览器/设备：token 持久化但 user.id 来自异步 hydrateUser。
+    // syncScheduler.start 和 onRehydrateStorage 在挂载时触发同步——早于 user.id 生成——导致同步无操作。
+    // 等 user id 生成后重新触发同步，确保从后端拉取素材。
+    useEffect(() => {
+        if (userId) {
+            syncClient.syncAll().catch(() => {});
+        }
+    }, [userId]);
 
     useEffect(() => {
         syncScheduler.start();

@@ -32,7 +32,7 @@
 
 ## 前端规范
 
-- 前端使用 Next.js App Router、React、TypeScript、Ant Design、Tailwind、Zustand。
+- 前端使用 Vite App Router、React、TypeScript、Ant Design、Tailwind、Zustand。
 - 编写 Ant Design 相关代码时，参考 https://ant.design/llms-full.txt 理解组件 API、示例和设计规范，并优先结合项目当前 antd 版本与既有写法。
 - API 请求统一放在 `web/src/services/api/`。
 - 全局或跨页面状态优先放在 `web/src/stores/`。
