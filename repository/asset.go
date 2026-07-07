@@ -89,7 +89,12 @@ func SaveAssetWithLock(item model.Asset, expectedUpdatedAt string) (model.Asset,
 		return item, result.Error
 	}
 	if result.RowsAffected == 0 {
-		return item, ErrConflict
+		// re-read current row so Conflict handler can return the real server version
+		updated, _, err := findAsset(db, item.ID)
+		if err != nil {
+			return item, err
+		}
+		return updated, ErrConflict
 	}
 	updated, _, err := findAsset(db, item.ID)
 	return updated, err
