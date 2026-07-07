@@ -72,6 +72,11 @@ func DeleteCanvasProject(id string, userID string) error {
 	return nil
 }
 
+// GetCanvasProject 根据 ID 和用户 ID 查询画布项目（含 projectJson，所有权校验）。
+func GetCanvasProject(id, userID string) (model.CanvasProject, error) {
+	return repository.GetCanvasProjectByIDAndUser(id, userID)
+}
+
 // ParseProjectName 从 projectJSON 中提取 project name（用于 API 展示）。
 func ParseProjectName(project model.CanvasProject) string {
 	if project.Name != "" {

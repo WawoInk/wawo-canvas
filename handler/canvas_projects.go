@@ -138,3 +138,18 @@ func DeleteCanvasProject(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	OK(w, map[string]string{"id": id, "deletedAt": time.Now().Format(time.RFC3339)})
 }
+
+// GetCanvasProject GET /api/v1/canvas/projects/:id — 返回完整画布项目（含 projectJson）。
+func GetCanvasProject(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	project, err := service.GetCanvasProject(id, user.ID)
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, project)
+}

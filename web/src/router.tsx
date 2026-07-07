@@ -1,5 +1,7 @@
 import { createBrowserRouter, Outlet } from "react-router-dom";
 
+import { ClientRootInit } from "@/components/layout/client-root-init";
+
 import UserLayout from "@/layouts/user-layout";
 import AdminLayout from "@/layouts/admin-layout";
 import HomePage from "@/pages/home";
@@ -23,37 +25,46 @@ import NotFound from "@/pages/not-found";
 export const router = createBrowserRouter([
   {
     element: (
-      <UserLayout>
+      <ClientRootInit>
         <Outlet />
-      </UserLayout>
+      </ClientRootInit>
     ),
     children: [
-      { path: "/", element: <HomePage /> },
-      { path: "/login", element: <LoginPage /> },
-      { path: "/canvas", element: <CanvasListPage /> },
-      { path: "/canvas/:id", element: <CanvasProjectPage /> },
-      { path: "/image", element: <ImagePage /> },
-      { path: "/video", element: <VideoPage /> },
-      { path: "/prompts", element: <PromptsPage /> },
-      { path: "/assets", element: <AssetsPage /> },
-      { path: "/asset-library", element: <AssetLibraryPage /> },
+      {
+        element: (
+          <UserLayout>
+            <Outlet />
+          </UserLayout>
+        ),
+        children: [
+          { path: "/", element: <HomePage /> },
+          { path: "/login", element: <LoginPage /> },
+          { path: "/canvas", element: <CanvasListPage /> },
+          { path: "/canvas/:id", element: <CanvasProjectPage /> },
+          { path: "/image", element: <ImagePage /> },
+          { path: "/video", element: <VideoPage /> },
+          { path: "/prompts", element: <PromptsPage /> },
+          { path: "/assets", element: <AssetsPage /> },
+          { path: "/asset-library", element: <AssetLibraryPage /> },
+        ],
+      },
+      {
+        element: (
+          <AdminLayout>
+            <Outlet />
+          </AdminLayout>
+        ),
+        children: [
+          { path: "/admin", element: <AdminDashboard /> },
+          { path: "/admin/users", element: <AdminUsers /> },
+          { path: "/admin/credit-logs", element: <AdminCreditLogs /> },
+          { path: "/admin/generation-tasks", element: <AdminGenerationTasks /> },
+          { path: "/admin/prompts", element: <AdminPrompts /> },
+          { path: "/admin/assets", element: <AdminAssets /> },
+          { path: "/admin/settings", element: <AdminSettings /> },
+        ],
+      },
+      { path: "*", element: <NotFound /> },
     ],
   },
-  {
-    element: (
-      <AdminLayout>
-        <Outlet />
-      </AdminLayout>
-    ),
-    children: [
-      { path: "/admin", element: <AdminDashboard /> },
-      { path: "/admin/users", element: <AdminUsers /> },
-      { path: "/admin/credit-logs", element: <AdminCreditLogs /> },
-      { path: "/admin/generation-tasks", element: <AdminGenerationTasks /> },
-      { path: "/admin/prompts", element: <AdminPrompts /> },
-      { path: "/admin/assets", element: <AdminAssets /> },
-      { path: "/admin/settings", element: <AdminSettings /> },
-    ],
-  },
-  { path: "*", element: <NotFound /> },
 ]);
