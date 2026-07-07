@@ -7,12 +7,17 @@ export async function resolveFileUrls(fileIds: string[]): Promise<Map<string, st
   let token = "";
   try { token = JSON.parse(raw)?.state?.token || ""; } catch {}
   if (!token) return new Map();
-  const authHeader = { Authorization: `Bearer ${token}` };
+
+  const uniqueIds = [...new Set(fileIds)];
   const results = await Promise.allSettled(
-    fileIds.map(async (fileId) => {
-      const resp = await fetch(`/api/v1/files/${encodeURIComponent(fileId)}`, { headers: authHeader });
-      const json = await resp.json();
-      if (json.code === 0 && json.data?.s3Key) return [fileId, json.data.s3Key] as const;
+    uniqueIds.map(async (fileId) => {
+      try {
+        const resp = await fetch(`/api/v1/files/${encodeURIComponent(fileId)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await resp.json();
+        if (json.code === 0 && json.data?.s3Key) return [fileId, json.data.s3Key] as const;
+      } catch {}
       return null;
     }),
   );
