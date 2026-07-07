@@ -124,20 +124,25 @@ export default function AssetsPage() {
             metadata: editingAsset?.metadata || { source: "manual" },
         };
 
-        if (values.kind === "text") {
-            const asset = { ...base, kind: "text" as const, data: { content: (values.content || "").trim() } };
-            editingAsset ? updateAsset(editingAsset.id, asset) : addAsset(asset);
-        } else {
-            if (!imageDraft) {
-                message.error("请选择图片文件");
-                return;
+        try {
+            if (values.kind === "text") {
+                const asset = { ...base, kind: "text" as const, data: { content: (values.content || "").trim() } };
+                if (editingAsset) await updateAsset(editingAsset.id, asset as Parameters<typeof updateAsset>[1]);
+                else await addAsset(asset);
+            } else {
+                if (!imageDraft) {
+                    message.error("请选择图片文件");
+                    return;
+                }
+                const asset = { ...base, kind: "image" as const, data: imageDraft };
+                if (editingAsset) await updateAsset(editingAsset.id, asset as Parameters<typeof updateAsset>[1]);
+                else await addAsset(asset);
             }
-            const asset = { ...base, kind: "image" as const, data: imageDraft };
-            editingAsset ? updateAsset(editingAsset.id, asset) : addAsset(asset);
+            message.success(editingAsset ? "素材已更新" : "素材已保存");
+            setIsAssetOpen(false);
+        } catch {
+            message.error(editingAsset ? "更新素材失败，请检查网络连接" : "保存素材失败，请检查网络连接");
         }
-
-        message.success(editingAsset ? "素材已更新" : "素材已保存");
-        setIsAssetOpen(false);
     };
 
     const readCoverFile = async (file?: File) => {
@@ -201,14 +206,19 @@ export default function AssetsPage() {
         if (!file) return;
         try {
             const importedAssets = await readAssetPackage(file);
-            importedAssets.forEach((asset) => {
+            let imported = 0;
+            for (const asset of importedAssets) {
                 const payload = { ...asset } as Record<string, unknown>;
                 delete payload.id;
                 delete payload.createdAt;
                 delete payload.updatedAt;
-                addAsset(payload as Parameters<typeof addAsset>[0]);
-            });
-            message.success(`已导入 ${importedAssets.length} 个素材`);
+                try {
+                    await addAsset(payload as Parameters<typeof addAsset>[0]);
+                    imported++;
+                } catch { /* 单条导入失败不中断批量 */ }
+            }
+            if (imported > 0) message.success(`已导入 ${imported} 个素材`);
+            else message.error("导入失败，请选择有效的素材压缩包");
         } catch {
             message.error("导入失败，请选择有效的素材压缩包");
         } finally {
@@ -216,16 +226,20 @@ export default function AssetsPage() {
         }
     };
 
-    const confirmDelete = () => {
+    const confirmDelete = async () => {
         if (!deletingAsset) return;
         // @ts-expect-error -- fileId only exists on image/video data, guarded below
         const fileId = deletingAsset.data?.fileId;
-        if (fileId) {
-            void removeAssetWithFile(deletingAsset.id, fileId);
-        } else {
-            removeAsset(deletingAsset.id);
+        try {
+            if (fileId) {
+                await removeAssetWithFile(deletingAsset.id, fileId);
+            } else {
+                await removeAsset(deletingAsset.id);
+            }
+            message.success("素材已删除");
+        } catch {
+            message.error("删除素材失败，请检查网络连接");
         }
-        message.success("素材已删除");
         setDeletingAsset(null);
     };
 

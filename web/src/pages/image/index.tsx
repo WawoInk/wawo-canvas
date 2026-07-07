@@ -249,30 +249,38 @@ export default function ImagePage() {
     const saveResultToAssets = async (image: GeneratedImage, index: number) => {
         // Already stored in S3 — reuse fileId directly
         if (image.fileId && image.dataUrl) {
-            addAsset({
-                kind: "image",
-                title: `生成结果 ${index + 1}`,
-                coverUrl: image.dataUrl,
-                tags: [],
-                source: "生图工作台",
-                data: { dataUrl: image.dataUrl, fileId: image.fileId, width: image.width, height: image.height, bytes: image.bytes, mimeType: image.mimeType || "image/png" },
-                metadata: { source: "image-page", prompt },
-            });
-            message.success("已加入我的素材");
+            try {
+                await addAsset({
+                    kind: "image",
+                    title: `生成结果 ${index + 1}`,
+                    coverUrl: image.dataUrl,
+                    tags: [],
+                    source: "生图工作台",
+                    data: { dataUrl: image.dataUrl, fileId: image.fileId, width: image.width, height: image.height, bytes: image.bytes, mimeType: image.mimeType || "image/png" },
+                    metadata: { source: "image-page", prompt },
+                });
+                message.success("已加入我的素材");
+            } catch {
+                message.error("保存素材失败，请检查网络连接后重试");
+            }
             return;
         }
         const blob = await (await fetch(image.dataUrl)).blob();
-        const stored = await uploadBlob(blob, "images");
-        addAsset({
-            kind: "image",
-            title: `生成结果 ${index + 1}`,
-            coverUrl: stored.url,
-            tags: [],
-            source: "生图工作台",
-            data: { dataUrl: stored.url, fileId: stored.fileId, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType },
-            metadata: { source: "image-page", prompt },
-        });
-        message.success("已加入我的素材");
+        const stored = await uploadBlob(blob, "results/images");
+        try {
+            await addAsset({
+                kind: "image",
+                title: `生成结果 ${index + 1}`,
+                coverUrl: stored.url,
+                tags: [],
+                source: "生图工作台",
+                data: { dataUrl: stored.url, fileId: stored.fileId, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType },
+                metadata: { source: "image-page", prompt },
+            });
+            message.success("已加入我的素材");
+        } catch {
+            message.error("保存素材失败，请检查网络连接后重试");
+        }
     };
 
     const insertPickedAsset = async (payload: InsertAssetPayload) => {
@@ -314,12 +322,16 @@ export default function ImagePage() {
         await refreshLogs();
     };
 
-    const saveLog = async (log: GenerationLog) => {
+    const saveLog = async (log: GenerationLog, dedupeId = ""): Promise<void> => {
         // Save to local cache first
         await logStoreForUser().setItem(log.id, serializeLog(log));
         // Sync to backend so refreshLogs can find it
         const user = useUserStore.getState().user;
-        if (user?.id) {
+        const channelMode = useConfigStore.getState().config.channelMode;
+        // In remote mode the backend proxy already creates a complete generation_tasks
+        // record via LogTaskStart → LogTaskSuccess. Only create/upsert one in local
+        // mode where the frontend calls external APIs directly.
+        if (user?.id && channelMode !== "remote") {
             try {
                 const status = log.status === "成功" ? "success" : log.status === "失败" ? "failed" : "pending";
                 const fileIds = log.images.map((img) => img.fileId).filter(Boolean);
@@ -330,7 +342,7 @@ export default function ImagePage() {
                     status,
                     credits: 0,
                     latencyMs: log.durationMs,
-                    upstreamTaskId: "",
+                    upstreamTaskId: dedupeId,
                     source: "image_workbench",
                     requestBody: JSON.stringify({
                         prompt: log.prompt,

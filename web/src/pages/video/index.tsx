@@ -260,31 +260,39 @@ export default function VideoPage() {
     const saveResultToAssets = async (video: GeneratedVideo) => {
         // Already stored in S3 with a fileId — use it directly
         if (video.fileId) {
-            addAsset({
-                kind: "video",
-                title: "生成视频",
-                coverUrl: video.url,
-                tags: [],
-                source: "视频创作台",
-                data: { url: video.url, fileId: video.fileId, width: video.width, height: video.height, bytes: video.bytes, mimeType: video.mimeType },
-                metadata: { source: "video-page", prompt },
-            });
-            message.success("已加入我的素材");
+            try {
+                await addAsset({
+                    kind: "video",
+                    title: "生成视频",
+                    coverUrl: video.url,
+                    tags: [],
+                    source: "视频创作台",
+                    data: { url: video.url, fileId: video.fileId, width: video.width, height: video.height, bytes: video.bytes, mimeType: video.mimeType },
+                    metadata: { source: "video-page", prompt },
+                });
+                message.success("已加入我的素材");
+            } catch {
+                message.error("保存素材失败，请检查网络连接后重试");
+            }
             return;
         }
         const blob = await getMediaBlob(video.storageKey!);
         if (!blob) return message.error("视频文件已丢失，请重新生成");
         const stored = await uploadBlob(blob, "videos");
-        addAsset({
-            kind: "video",
-            title: "生成视频",
-            coverUrl: stored.url,
-            tags: [],
-            source: "视频创作台",
-            data: { url: stored.url, fileId: stored.fileId, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType },
-            metadata: { source: "video-page", prompt },
-        });
-        message.success("已加入我的素材");
+        try {
+            await addAsset({
+                kind: "video",
+                title: "生成视频",
+                coverUrl: stored.url,
+                tags: [],
+                source: "视频创作台",
+                data: { url: stored.url, fileId: stored.fileId, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType },
+                metadata: { source: "video-page", prompt },
+            });
+            message.success("已加入我的素材");
+        } catch {
+            message.error("保存素材失败，请检查网络连接后重试");
+        }
     };
 
     const insertPickedAsset = async (payload: InsertAssetPayload) => {
