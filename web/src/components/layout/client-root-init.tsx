@@ -7,6 +7,7 @@ import { App } from "antd";
 
 import { createModelChannel, useConfigStore } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
+import { syncScheduler } from "@/services/sync-scheduler";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
     const { message } = App.useApp();
@@ -27,6 +28,11 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (!isLoginPage) void hydrateUser();
     }, [hydrateUser, isLoginPage]);
+
+    useEffect(() => {
+        syncScheduler.start();
+        return () => syncScheduler.stop();
+    }, []);
 
     useEffect(() => {
         if (handledConfigParams.current) return;

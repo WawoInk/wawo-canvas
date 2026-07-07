@@ -2,15 +2,19 @@ import { create } from "zustand";
 import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
 
 import { nanoid } from "nanoid";
+import { message } from "antd";
+
 import { localForageStorage } from "@/lib/localforage-storage";
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "../types";
 import {
     createCanvasProject,
     deleteCanvasProject,
-    fetchCanvasProjects,
     updateCanvasProject,
 } from "@/services/api/canvas-projects";
+import { ApiError } from "@/services/api/request";
+import { syncClient } from "@/services/sync-client";
+import { syncScheduler } from "@/services/sync-scheduler";
 import { useUserStore } from "@/stores/use-user-store";
 
 export type CanvasProject = {
@@ -60,7 +64,17 @@ function scheduleBackendSync(projectId: string) {
         if (!project) return;
         const user = useUserStore.getState().user;
         if (!user?.id) return;
-        updateCanvasProject(projectId, project).catch(() => {});
+        syncScheduler.markActivity();
+        updateCanvasProject(projectId, {
+            project,
+            expectedUpdatedAt: project.updatedAt,
+        } as unknown).catch((err) => {
+            // ponytail: 乐观锁冲突 — 触发 domain 全量同步拉取最新
+            if (err instanceof ApiError && err.status === 409) {
+                void syncClient.syncDomain("canvas");
+                message.warning("画布已被其他会话修改，已刷新为最新版本");
+            }
+        });
     }, SYNC_DEBOUNCE_MS);
 
     syncTimers.set(projectId, timer);
@@ -89,7 +103,10 @@ function fireRenameProject(id: string, title: string) {
     if (!user?.id) return;
     const project = useCanvasStore.getState().projects.find((p) => p.id === id);
     if (!project) return;
-    updateCanvasProject(id, { ...project, title }).catch(() => {});
+    updateCanvasProject(id, {
+        project: { ...project, title },
+        expectedUpdatedAt: project.updatedAt,
+    } as unknown).catch(() => {});
 }
 
 // ─── beforeunload flush ─────────────────────────────────────────────────
@@ -101,13 +118,29 @@ if (typeof window !== "undefined") {
         const token = useUserStore.getState().token;
         if (!user?.id || !token) return;
         for (const project of state.projects) {
+            // ponytail: expectedUpdatedAt 必须与 project 同级，handler 从顶层字段读取
             fetch(`/api/v1/canvas/projects/${encodeURIComponent(project.id)}`, {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${token}`,
                 },
-                body: JSON.stringify({ project }),
+                body: JSON.stringify({
+                    project: {
+                        id: project.id,
+                        title: project.title,
+                        createdAt: project.createdAt,
+                        updatedAt: project.updatedAt,
+                        nodes: project.nodes,
+                        connections: project.connections,
+                        chatSessions: project.chatSessions,
+                        activeChatId: project.activeChatId,
+                        backgroundMode: project.backgroundMode,
+                        showImageInfo: project.showImageInfo,
+                        viewport: project.viewport,
+                    },
+                    expectedUpdatedAt: project.updatedAt,
+                }),
                 keepalive: true,
             }).catch(() => {});
         }
@@ -220,54 +253,8 @@ export const useCanvasStore = create<CanvasStore>()(
             syncFromBackend: async () => {
                 const user = useUserStore.getState().user;
                 if (!user?.id) return;
-                try {
-                    const backendItems = await fetchCanvasProjects();
-                    if (!backendItems.length) return;
-                    const localProjects = get().projects;
-                    // Start with all local projects (preserves local-only ones not in backend)
-                    const projects: CanvasProject[] = [...localProjects];
-                    for (const item of backendItems) {
-                        const existsLocally = projects.some((p) => p.id === item.id);
-                        if (existsLocally) {
-                            // Keep local version (has latest in-memory edits) — already in projects array
-                            continue;
-                        } else {
-                            // New project from backend — try to load full data
-                            let fullProject: CanvasProject = {
-                                id: item.id,
-                                title: item.name,
-                                createdAt: item.createdAt,
-                                updatedAt: item.updatedAt,
-                                nodes: [],
-                                connections: [],
-                                chatSessions: [],
-                                activeChatId: null,
-                                backgroundMode: "lines",
-                                showImageInfo: false,
-                                viewport: initialViewport,
-                            };
-                            try {
-                                const resp = await fetch(
-                                    `/api/v1/canvas/projects/${encodeURIComponent(item.id)}`,
-                                    {
-                                        headers: {
-                                            Authorization: `Bearer ${useUserStore.getState().token}`,
-                                        },
-                                    },
-                                );
-                                if (resp.ok) {
-                                    const detail = await resp.json() as { data?: { projectJson?: string } };
-                                    if (detail.data?.projectJson) {
-                                        const parsed = JSON.parse(detail.data.projectJson) as Partial<CanvasProject>;
-                                        fullProject = { ...fullProject, ...parsed, id: item.id, title: parsed.title || item.name, createdAt: item.createdAt, updatedAt: item.updatedAt };
-                                    }
-                                }
-                            } catch { /* skip */ }
-                            projects.push(fullProject);
-                        }
-                    }
-                    set({ projects });
-                } catch { /* offline — no-op */ }
+                // ponytail: 服务端为 source of truth — delta 直接覆盖本地
+                await syncClient.syncDomain("canvas");
             },
 
             clearProjects: () => {
@@ -286,10 +273,64 @@ export const useCanvasStore = create<CanvasStore>()(
                 }) as StorageValue<CanvasStore>["state"],
             onRehydrateStorage: () => () => {
                 useCanvasStore.setState({ hydrated: true });
+                // ponytail: rehydrate 后立即拉一次服务端 delta
+                void syncClient.syncDomain("canvas");
             },
         },
     ),
 );
+
+// ── Sync delta 回调：服务端增量覆盖本地（server is source of truth） ──
+syncClient.onDelta("canvas", (data) => {
+    if (!data) return;
+
+    const state = useCanvasStore.getState();
+
+    if (data.updates && data.updates.length > 0) {
+        const map = new Map(state.projects.map((p) => [p.id, p]));
+        for (const item of data.updates) {
+            const existing = map.get(item.id);
+            if (existing) {
+                // ponytail: 仅当 server updatedAt 更新时才覆盖，防止覆盖本地尚未推送的编辑
+                if ((item.updatedAt || "") > (existing.updatedAt || "")) {
+                    map.set(item.id, fromServerProject(item, existing));
+                }
+            } else {
+                map.set(item.id, fromServerProject(item, null));
+            }
+        }
+        useCanvasStore.setState({ projects: Array.from(map.values()) });
+    }
+
+    if (data.deletes && data.deletes.length > 0) {
+        const deleteSet = new Set(data.deletes);
+        useCanvasStore.setState((s) => ({
+            projects: s.projects.filter((p) => !deleteSet.has(p.id)),
+        }));
+    }
+});
+
+function fromServerProject(item: { id: string; name?: string; projectJson?: string; createdAt?: string; updatedAt?: string }, local: CanvasProject | null): CanvasProject {
+    let parsed: Partial<CanvasProject> = {};
+    if (item.projectJson) {
+        try {
+            parsed = JSON.parse(item.projectJson);
+        } catch { /* malformed JSON — fall through to local/defaults */ }
+    }
+    return {
+        id: item.id,
+        title: parsed.title || item.name || local?.title || "未命名画布",
+        createdAt: item.createdAt || local?.createdAt || "",
+        updatedAt: item.updatedAt || local?.updatedAt || "",
+        nodes: parsed.nodes || local?.nodes || [],
+        connections: parsed.connections || local?.connections || [],
+        chatSessions: parsed.chatSessions || local?.chatSessions || [],
+        activeChatId: parsed.activeChatId ?? local?.activeChatId ?? null,
+        backgroundMode: parsed.backgroundMode || local?.backgroundMode || "lines",
+        showImageInfo: parsed.showImageInfo ?? local?.showImageInfo ?? false,
+        viewport: parsed.viewport || local?.viewport || { x: 0, y: 0, k: 1 },
+    };
+}
 
 // ─── Subscribe to fire backend sync on rename/delete/update ────────────
 
