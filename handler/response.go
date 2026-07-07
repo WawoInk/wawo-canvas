@@ -32,6 +32,12 @@ func FailError(w http.ResponseWriter, err error) {
 	Fail(w, "操作失败")
 }
 
+// Conflict 返回 HTTP 409，携带当前服务端版本供前端回滚。
+func Conflict(w http.ResponseWriter, msg string, current any) {
+	w.WriteHeader(http.StatusConflict)
+	writeJSON(w, response{Code: -1, Data: map[string]any{"current": current, "msg": msg}, Msg: msg})
+}
+
 func writeJSON(w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(value)

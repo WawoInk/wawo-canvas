@@ -7,6 +7,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// ErrConflict 表示乐观锁冲突：expectedUpdatedAt 与当前 updated_at 不匹配。
+var ErrConflict = errors.New("record modified by another session")
+
 // ListAssets 按查询条件返回素材分页列表。
 func ListAssets(q model.Query) ([]model.Asset, int64, error) {
 	db, err := DB()
@@ -55,6 +58,41 @@ func SaveAsset(item model.Asset) (model.Asset, error) {
 		item.CreatedAt = saved.CreatedAt
 	}
 	return item, db.Save(&item).Error
+}
+
+// SaveAssetWithLock 使用乐观锁保存素材。expectedUpdatedAt 必须匹配当前 updated_at，
+// 否则返回 ErrConflict。INSERT 时 expectedUpdatedAt 为空，无条件创建。
+func SaveAssetWithLock(item model.Asset, expectedUpdatedAt string) (model.Asset, error) {
+	db, err := DB()
+	if err != nil {
+		return item, err
+	}
+
+	saved, exists, err := findAsset(db, item.ID)
+	if err != nil {
+		return item, err
+	}
+
+	if !exists {
+		return item, db.Create(&item).Error
+	}
+
+	// UPDATE: 条件检查 updated_at 是否匹配
+	if item.CreatedAt == "" {
+		item.CreatedAt = saved.CreatedAt
+	}
+	result := db.Model(&model.Asset{}).
+		Where("id = ? AND updated_at = ?", item.ID, expectedUpdatedAt).
+		Select("title", "type", "cover_url", "tags", "category", "description", "content", "url", "updated_at", "created_at").
+		Updates(item)
+	if result.Error != nil {
+		return item, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return item, ErrConflict
+	}
+	updated, _, err := findAsset(db, item.ID)
+	return updated, err
 }
 
 // DeleteAsset 删除指定素材。

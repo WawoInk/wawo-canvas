@@ -27,6 +27,11 @@ func ListAssets(q model.Query) (model.AssetList, error) {
 }
 
 func SaveAsset(item model.Asset) (model.Asset, error) {
+	return SaveAssetWithLock(item, "")
+}
+
+// SaveAssetWithLock 保存素材。expectedUpdatedAt 用于乐观锁：更新时匹配当前版本，插入时传空。
+func SaveAssetWithLock(item model.Asset, expectedUpdatedAt string) (model.Asset, error) {
 	now := time.Now().Format(time.RFC3339)
 	if item.Type == "" {
 		item.Type = model.AssetTypeText
@@ -39,7 +44,7 @@ func SaveAsset(item model.Asset) (model.Asset, error) {
 	if item.CoverURL == "" {
 		item.CoverURL = assetCoverURL(item)
 	}
-	return repository.SaveAsset(item)
+	return repository.SaveAssetWithLock(item, expectedUpdatedAt)
 }
 
 func DeleteAsset(id string) error {
