@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # --- Go lint & test ---
+  go-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Lint (go vet)
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+  # --- Frontend lint ---
+  web-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1"
+
+      - name: Install dependencies
+        working-directory: web
+        run: bun install --frozen-lockfile
+
+      - name: Format check
+        working-directory: web
+        run: bun run format:check
+
+  # --- Build & push ARM images ---
+  build:
+    needs: [go-check, web-lint]
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      matrix:
+        include:
+          - dockerfile: Dockerfile.api
+            image: ghcr.io/eldenpdx/infinite-canvas-api
+          - dockerfile: Dockerfile
+            image: ghcr.io/eldenpdx/infinite-canvas
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ matrix.image }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.dockerfile }}-arm64
+          cache-to: type=gha,mode=max,scope=${{ matrix.dockerfile }}-arm64

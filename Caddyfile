@@ -1,0 +1,9 @@
+:3000 {
+	root * /usr/share/nginx/html
+	file_server
+	try_files {path} /index.html
+
+	handle /api/* {
+		reverse_proxy api:8088
+	}
+}

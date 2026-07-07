@@ -167,13 +167,13 @@ export const useAssetStore = create<AssetStore>()(
             partialize: (state) => ({ assets: state.assets }) as StorageValue<AssetStore>["state"],
             onRehydrateStorage: () => (state) => {
                 useAssetStore.setState({ hydrated: true });
-                // 水合后：拉取最新服务端数据（API 是 source of truth）
-                if (state) {
-                    syncClient
-                        .syncDomain("assets")
-                        .then(() => useAssetStore.setState({ synced: true }))
-                        .catch(() => useAssetStore.setState({ synced: true }));
-                }
+                // 后端 PostgreSQL 是 source of truth，IndexedDB 仅作缓存。
+                // 水合后必须从后端拉取最新数据——无论本地是否有缓存。
+                // userId 异步就绪前 syncDomain 会静默跳过，由 ClientRootInit 在 userId 变化时兜底触发。
+                syncClient
+                    .syncDomain("assets")
+                    .then(() => useAssetStore.setState({ synced: true }))
+                    .catch(() => useAssetStore.setState({ synced: true }));
             },
         },
     ),

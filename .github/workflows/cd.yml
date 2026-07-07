@@ -1,0 +1,65 @@
+name: CD (Deploy)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag (git sha or 'latest')"
+        required: true
+        default: "latest"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: appleboy/scp-action@v0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: docker-compose.prod.yml
+          target: /opt/infinite-canvas/
+
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            set -e
+            cd /opt/infinite-canvas
+
+            # Write .env from secrets
+            cat > .env <<'ENVEOF'
+            ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
+            ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            JWT_EXPIRE_HOURS=${{ secrets.JWT_EXPIRE_HOURS }}
+            PORT=8088
+            PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}
+            DATABASE_DSN=${{ secrets.DATABASE_DSN }}
+            POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+            AMAZON_S3_URL=${{ secrets.AMAZON_S3_URL }}
+            AMAZON_REGION=${{ secrets.AMAZON_REGION }}
+            AMAZON_S3_ACCESS_KEY=${{ secrets.AMAZON_S3_ACCESS_KEY }}
+            AMAZON_S3_SECRET_KEY=${{ secrets.AMAZON_S3_SECRET_KEY }}
+            LINUX_DO_CLIENT_ID=${{ secrets.LINUX_DO_CLIENT_ID }}
+            LINUX_DO_CLIENT_SECRET=${{ secrets.LINUX_DO_CLIENT_SECRET }}
+            ENVEOF
+            chmod 600 .env
+
+            # Login, pull, restart
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            export IMAGE_TAG=${{ github.event.inputs.image_tag }}
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker image prune -f
