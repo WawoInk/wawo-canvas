@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/basketikun/infinite-canvas/model"
@@ -46,7 +47,14 @@ func UpdateCanvasProject(id string, userID string, projectJSON string, expectedU
 	now := time.Now().Format(time.RFC3339)
 	version := existing.Version + 1
 	if err := repository.UpdateCanvasProjectWithLock(id, userID, projectJSON, version, expectedUpdatedAt, now); err != nil {
-		return existing, err // 透传 ErrConflict
+		// Re-read current record on conflict so handler returns the real server version
+		if errors.Is(err, repository.ErrConflict) {
+			current, readErr := repository.GetCanvasProjectByIDAndUser(id, userID)
+			if readErr == nil {
+				return current, err
+			}
+		}
+		return existing, err
 	}
 	existing.ProjectJSON = projectJSON
 	existing.Version = version

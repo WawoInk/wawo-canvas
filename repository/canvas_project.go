@@ -46,20 +46,6 @@ func CreateCanvasProject(project model.CanvasProject) error {
 	return db.Create(&project).Error
 }
 
-// UpdateCanvasProject 更新画布项目（版本递增）。保留供向后兼容；新代码请使用 UpdateCanvasProjectWithLock。
-func UpdateCanvasProject(id, userID string, projectJSON string, version int) error {
-	db, err := DB()
-	if err != nil {
-		return err
-	}
-	return db.Model(&model.CanvasProject{}).
-		Where("id = ? AND user_id = ?", id, userID).
-		Updates(map[string]any{
-			"project_json": projectJSON,
-			"version":      version,
-		}).Error
-}
-
 // UpdateCanvasProjectWithLock 使用乐观锁更新画布项目。expectedUpdatedAt 必须匹配
 // 当前 updated_at，否则返回 ErrConflict。同时递增 version 并更新 updated_at。
 func UpdateCanvasProjectWithLock(id, userID string, projectJSON string, version int, expectedUpdatedAt, newUpdatedAt string) error {
