@@ -29,14 +29,19 @@ services:
   web:
     image: infinite-canvas:latest
     ports:
-      - "80:3000"
+      - "80:80"
+      - "443:443"
     depends_on:
       - api
     env_file:
       - .env
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
     restart: unless-stopped
 
 volumes:
   pgdata:
+  caddy-data:
+  caddy-config:
