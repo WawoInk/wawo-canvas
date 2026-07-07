@@ -107,14 +107,21 @@ jobs:
               pgdata:
             COMPOSEEOF
 
-            # Docker login
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # Docker login (must match the GHCR package owner)
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u eldenpdx --password-stdin
 
             TAG=${{ github.event.inputs.image_tag }}
 
-            # 3. Pull candidate
-            docker pull ghcr.io/eldenpdx/infinite-canvas-api:${TAG}
-            docker pull ghcr.io/eldenpdx/infinite-canvas:${TAG}
+            # 3. Pull candidate (fail clearly if CI hasn't pushed yet)
+            for img in infinite-canvas-api infinite-canvas; do
+              if docker pull ghcr.io/eldenpdx/${img}:${TAG}; then
+                echo "✓ Pulled ghcr.io/eldenpdx/${img}:${TAG}"
+              else
+                echo "✗ Failed to pull ghcr.io/eldenpdx/${img}:${TAG}"
+                echo "  Make sure CI has run and pushed this tag first."
+                exit 1
+              fi
+            done
 
             # 4. Rollback tag: current latest → rollback
             docker tag ghcr.io/eldenpdx/infinite-canvas-api:latest ghcr.io/eldenpdx/infinite-canvas-api:rollback 2>/dev/null || true
