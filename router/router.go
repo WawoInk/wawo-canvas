@@ -83,6 +83,12 @@ func New() *gin.Engine {
 	v1.DELETE("/canvas/projects/:id", func(c *gin.Context) {
 		handler.DeleteCanvasProject(c.Writer, c.Request, c.Param("id"))
 	})
+	// User assets (CRUD with user scope via UserAuth)
+	v1.GET("/assets", gin.WrapF(handler.Assets))
+	v1.POST("/assets", gin.WrapF(handler.SaveAsset))
+	v1.DELETE("/assets/:id", func(c *gin.Context) {
+		handler.DeleteAsset(c.Writer, c.Request, c.Param("id"))
+	})
 	// User file upload / S3 storage
 	v1.POST("/files/upload-url", gin.WrapF(handler.CreateUploadURL))
 	v1.POST("/files/confirm", gin.WrapF(handler.ConfirmUpload))
