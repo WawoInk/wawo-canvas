@@ -24,6 +24,8 @@ type SyncResponse struct {
 
 // SyncUserDomains fetches delta updates for the requested domains since the cursor.
 // domains: comma-separated list, e.g. "assets,canvas,tasks". Empty means all.
+// Any repository error aborts the sync so the client knows to retry — an empty
+// sync returned on DB failure would silently desync the client.
 func SyncUserDomains(userID, cursor, domains string) (*SyncResponse, error) {
 	resp := &SyncResponse{
 		Assets: SyncDomain{Updates: []model.Asset{}, Deletes: []string{}},
@@ -36,50 +38,57 @@ func SyncUserDomains(userID, cursor, domains string) (*SyncResponse, error) {
 	includeCanvas := allDomains || containsDomain(domains, "canvas")
 	includeTasks := allDomains || containsDomain(domains, "tasks")
 
-	// Track the latest timestamp seen across both updates and deletes.
-	// deletedAt is a time.Time; updatedAt is an RFC3339 string — compare both
-	// against the cursor as RFC3339 strings.
 	newCursor := cursor
-	if cursor != "" {
-		newCursor = "" // reset; we recompute below only if we see anything
-	}
 
 	if includeAssets {
-		items, _ := repository.ListUpdatedAssets(userID, cursor)
-		deletes, deletedAt := fetchDeletesWithTime(userID, cursor, "assets")
+		items, err := repository.ListUpdatedAssets(userID, cursor)
+		if err != nil {
+			return nil, err
+		}
+		deletes, deletedAt, err := fetchDeletes(userID, cursor, "assets")
+		if err != nil {
+			return nil, err
+		}
 		resp.Assets = SyncDomain{Updates: items, Deletes: deletes}
-		newCursor = maxTime(newCursor, maxUpdatedAt(items), deletedAt)
+		newCursor = maxTime(newCursor, maxField(items, func(a model.Asset) string { return a.UpdatedAt }), deletedAt)
 	}
 
 	if includeCanvas {
-		items, _ := repository.ListUpdatedCanvasProjects(userID, cursor)
-		deletes, deletedAt := fetchDeletesWithTime(userID, cursor, "canvas_projects")
+		items, err := repository.ListUpdatedCanvasProjects(userID, cursor)
+		if err != nil {
+			return nil, err
+		}
+		deletes, deletedAt, err := fetchDeletes(userID, cursor, "canvas_projects")
+		if err != nil {
+			return nil, err
+		}
 		resp.Canvas = SyncDomain{Updates: items, Deletes: deletes}
-		newCursor = maxTime(newCursor, maxUpdatedAtCanvas(items), deletedAt)
+		newCursor = maxTime(newCursor, maxField(items, func(c model.CanvasProject) string { return c.UpdatedAt }), deletedAt)
 	}
 
 	if includeTasks {
-		items, _ := repository.ListUpdatedGenerationTasks(userID, cursor)
-		deletes, deletedAt := fetchDeletesWithTime(userID, cursor, "generation_tasks")
+		items, err := repository.ListUpdatedGenerationTasks(userID, cursor)
+		if err != nil {
+			return nil, err
+		}
+		deletes, deletedAt, err := fetchDeletes(userID, cursor, "generation_tasks")
+		if err != nil {
+			return nil, err
+		}
 		resp.Tasks = SyncDomain{Updates: items, Deletes: deletes}
-		newCursor = maxTime(newCursor, maxUpdatedAtTasks(items), deletedAt)
+		newCursor = maxTime(newCursor, maxField(items, func(t model.GenerationTask) string { return t.UpdatedAt }), deletedAt)
 	}
 
-	// If no data was seen anywhere, keep the old cursor so subsequent syncs
-	// don't get stuck.
-	if newCursor == "" {
-		newCursor = cursor
-	}
 	resp.Cursor = newCursor
 	return resp, nil
 }
 
-// fetchDeletesWithTime returns the deleted IDs for a table plus the latest
-// deleted_at seen (as RFC3339 string). Empty time string when no deletes.
-func fetchDeletesWithTime(userID, cursor, tableName string) ([]string, string) {
+// fetchDeletes returns the deleted IDs for a table plus the latest deleted_at
+// (as RFC3339 string). Empty time string when no deletes.
+func fetchDeletes(userID, cursor, tableName string) ([]string, string, error) {
 	records, err := repository.ListDeletedRecords(userID, cursor)
 	if err != nil {
-		return nil, ""
+		return nil, "", err
 	}
 	ids := make([]string, 0)
 	var latest string
@@ -93,7 +102,7 @@ func fetchDeletesWithTime(userID, cursor, tableName string) ([]string, string) {
 			latest = rs
 		}
 	}
-	return ids, latest
+	return ids, latest, nil
 }
 
 // containsDomain reports whether target appears in a comma-separated domains list.
@@ -117,31 +126,13 @@ func maxTime(values ...string) string {
 	return max
 }
 
-func maxUpdatedAt(items []model.Asset) string {
+// maxField returns the max of fn(item) over all items — generic over the item
+// type so the three domains share one implementation instead of three copies.
+func maxField[T any](items []T, fn func(T) string) string {
 	var max string
 	for _, i := range items {
-		if i.UpdatedAt > max {
-			max = i.UpdatedAt
-		}
-	}
-	return max
-}
-
-func maxUpdatedAtCanvas(items []model.CanvasProject) string {
-	var max string
-	for _, i := range items {
-		if i.UpdatedAt > max {
-			max = i.UpdatedAt
-		}
-	}
-	return max
-}
-
-func maxUpdatedAtTasks(items []model.GenerationTask) string {
-	var max string
-	for _, i := range items {
-		if i.UpdatedAt > max {
-			max = i.UpdatedAt
+		if v := fn(i); v > max {
+			max = v
 		}
 	}
 	return max
