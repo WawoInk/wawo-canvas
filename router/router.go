@@ -69,6 +69,8 @@ func New() *gin.Engine {
 	})
 	// User credit logs
 	v1.GET("/credit-logs", gin.WrapF(handler.UserCreditLogs))
+	// Delta sync (cursor-based)
+	v1.GET("/sync", gin.WrapF(handler.Sync))
 	// Canvas project sync
 	v1.GET("/canvas/projects", gin.WrapF(handler.ListCanvasProjects))
 	v1.POST("/canvas/projects", gin.WrapF(handler.CreateCanvasProject))
