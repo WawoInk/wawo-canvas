@@ -74,6 +74,9 @@ func New() *gin.Engine {
 	// Canvas project sync
 	v1.GET("/canvas/projects", gin.WrapF(handler.ListCanvasProjects))
 	v1.POST("/canvas/projects", gin.WrapF(handler.CreateCanvasProject))
+	v1.GET("/canvas/projects/:id", func(c *gin.Context) {
+		handler.GetCanvasProject(c.Writer, c.Request, c.Param("id"))
+	})
 	v1.PUT("/canvas/projects/:id", func(c *gin.Context) {
 		handler.UpdateCanvasProject(c.Writer, c.Request, c.Param("id"))
 	})
