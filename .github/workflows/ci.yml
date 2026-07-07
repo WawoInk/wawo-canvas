@@ -48,13 +48,6 @@ jobs:
   build:
     needs: [go-check, web-lint]
     runs-on: ubuntu-24.04-arm
-    strategy:
-      matrix:
-        include:
-          - dockerfile: Dockerfile.api
-            image: ghcr.io/eldenpdx/infinite-canvas-api
-          - dockerfile: Dockerfile
-            image: ghcr.io/eldenpdx/infinite-canvas
     steps:
       - uses: actions/checkout@v4
 
@@ -66,21 +59,35 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/metadata-action@v5
-        id: meta
+      # API: cross-compile Go binary natively on runner, then COPY into minimal image
+      - uses: actions/setup-go@v5
         with:
-          images: ${{ matrix.image }}
-          tags: |
-            type=sha,prefix=
-            type=raw,value=latest
+          go-version: "1.25"
 
-      - uses: docker/build-push-action@v6
+      - name: Cross-compile API binary
+        run: |
+          mkdir -p .docker-build
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o .docker-build/api-gateway .
+
+      - name: Build & push API image
+        uses: docker/build-push-action@v6
         with:
           context: .
-          file: ${{ matrix.dockerfile }}
+          file: Dockerfile.api
           platforms: linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.dockerfile }}-arm64
-          cache-to: type=gha,mode=max,scope=${{ matrix.dockerfile }}-arm64
+          tags: ghcr.io/eldenpdx/infinite-canvas-api:latest,ghcr.io/eldenpdx/infinite-canvas-api:${{ github.sha }}
+          cache-from: type=gha,scope=api-arm64
+          cache-to: type=gha,mode=max,scope=api-arm64
+
+      # Web: bun + caddy
+      - name: Build & push Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: ghcr.io/eldenpdx/infinite-canvas:latest,ghcr.io/eldenpdx/infinite-canvas:${{ github.sha }}
+          cache-from: type=gha,scope=web-arm64
+          cache-to: type=gha,mode=max,scope=web-arm64

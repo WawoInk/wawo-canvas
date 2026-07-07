@@ -49,7 +49,9 @@ class SyncClient {
             if (cursor) {
                 await localforage.setItem(cursorKey(userId), cursor);
             }
-        } catch { /* IndexedDB 写入失败不影响功能 */ }
+        } catch {
+            /* IndexedDB 写入失败不影响功能 */
+        }
     }
 
     /** 重置 cursor（用户切换时调用）*/
@@ -58,7 +60,9 @@ class SyncClient {
         if (!userId) return;
         try {
             await localforage.removeItem(cursorKey(userId));
-        } catch { /* ignore */ }
+        } catch {
+            /* ignore */
+        }
     }
 
     /** 全量同步所有域 */
@@ -96,7 +100,9 @@ class SyncClient {
             if (delta.cursor) {
                 await this.setCursor(delta.cursor);
             }
-        } catch { /* 网络错误，下次重试 */ }
+        } catch {
+            /* 网络错误，下次重试 */
+        }
     }
 
     private applyDelta(delta: SyncDelta): void {

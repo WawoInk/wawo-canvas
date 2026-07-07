@@ -137,7 +137,20 @@ function isVideoModelName(model: string) {
 
 function isImageModelName(model: string) {
     const value = modelOptionName(model).toLowerCase();
-    return !isVideoModelName(model) && !isAudioModelName(model) && (value.includes("seedream") || value.includes("gpt-image") || value.includes("image") || value.includes("dall-e") || value.includes("dalle") || value.includes("imagen") || value.includes("flux") || value.includes("sdxl") || value.includes("stable-diffusion") || value.includes("midjourney"));
+    return (
+        !isVideoModelName(model) &&
+        !isAudioModelName(model) &&
+        (value.includes("seedream") ||
+            value.includes("gpt-image") ||
+            value.includes("image") ||
+            value.includes("dall-e") ||
+            value.includes("dalle") ||
+            value.includes("imagen") ||
+            value.includes("flux") ||
+            value.includes("sdxl") ||
+            value.includes("stable-diffusion") ||
+            value.includes("midjourney"))
+    );
 }
 
 function isAudioModelName(model: string) {
@@ -204,7 +217,19 @@ export const useConfigStore = create<ConfigStore>()(
             loadPublicSettings: async () => {
                 try {
                     const settings = await fetchPublicSettings();
-                    const { availableModels, defaultModel, defaultImageModel, defaultVideoModel, defaultTextModel, defaultAudioModel, allowCustomChannel, imageModels: remoteImageModels, videoModels: remoteVideoModels, textModels: remoteTextModels, audioModels: remoteAudioModels } = settings.modelChannel;
+                    const {
+                        availableModels,
+                        defaultModel,
+                        defaultImageModel,
+                        defaultVideoModel,
+                        defaultTextModel,
+                        defaultAudioModel,
+                        allowCustomChannel,
+                        imageModels: remoteImageModels,
+                        videoModels: remoteVideoModels,
+                        textModels: remoteTextModels,
+                        audioModels: remoteAudioModels,
+                    } = settings.modelChannel;
                     set({ publicSettings: settings });
                     // Only auto-switch to remote when admin has disabled custom channels (forced remote)
                     if (!allowCustomChannel && availableModels.length) {
@@ -402,14 +427,7 @@ function normalizeChannels(config: AiConfig) {
                 baseUrl: config.baseUrl || defaultConfig.baseUrl,
                 apiKey: config.apiKey || "",
                 apiFormat: config.apiFormat || defaultConfig.apiFormat,
-                models: uniqueRawModels([
-                    ...(config.models || []),
-                    config.model,
-                    config.imageModel,
-                    config.videoModel,
-                    config.textModel,
-                    config.audioModel,
-                ]),
+                models: uniqueRawModels([...(config.models || []), config.model, config.imageModel, config.videoModel, config.textModel, config.audioModel]),
             }),
         );
     }

@@ -7,11 +7,7 @@ import { message } from "antd";
 import { localForageStorage } from "@/lib/localforage-storage";
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "../types";
-import {
-    createCanvasProject,
-    deleteCanvasProject,
-    updateCanvasProject,
-} from "@/services/api/canvas-projects";
+import { createCanvasProject, deleteCanvasProject, updateCanvasProject } from "@/services/api/canvas-projects";
 import { ApiError } from "@/services/api/request";
 import { syncClient } from "@/services/sync-client";
 import { syncScheduler } from "@/services/sync-scheduler";
@@ -225,11 +221,7 @@ export const useCanvasStore = create<CanvasStore>()(
 
             renameProject: (id, title) =>
                 set((state) => ({
-                    projects: state.projects.map((project) =>
-                        project.id === id
-                            ? { ...project, title: title.trim() || project.title, updatedAt: new Date().toISOString() }
-                            : project,
-                    ),
+                    projects: state.projects.map((project) => (project.id === id ? { ...project, title: title.trim() || project.title, updatedAt: new Date().toISOString() } : project)),
                 })),
             // Fire rename without debounce (infrequent operation)
             // Handled via a subscribe wrapper below
@@ -245,9 +237,7 @@ export const useCanvasStore = create<CanvasStore>()(
 
             updateProject: (id, patch) =>
                 set((state) => ({
-                    projects: state.projects.map((project) =>
-                        project.id === id ? { ...project, ...patch, updatedAt: new Date().toISOString() } : project,
-                    ),
+                    projects: state.projects.map((project) => (project.id === id ? { ...project, ...patch, updatedAt: new Date().toISOString() } : project)),
                 })),
 
             syncFromBackend: async () => {
@@ -315,7 +305,9 @@ function fromServerProject(item: { id: string; name?: string; projectJson?: stri
     if (item.projectJson) {
         try {
             parsed = JSON.parse(item.projectJson);
-        } catch { /* malformed JSON — fall through to local/defaults */ }
+        } catch {
+            /* malformed JSON — fall through to local/defaults */
+        }
     }
     return {
         id: item.id,
@@ -350,13 +342,8 @@ useCanvasStore.subscribe((state) => {
         if (!pp) continue;
 
         // Check if any data content field changed
-        const dataFields: (keyof CanvasProject)[] = [
-            "nodes", "connections", "chatSessions", "activeChatId",
-            "backgroundMode", "showImageInfo", "viewport",
-        ];
-        const hasDataChange = dataFields.some(
-            (field) => JSON.stringify(pp[field]) !== JSON.stringify(cp[field]),
-        );
+        const dataFields: (keyof CanvasProject)[] = ["nodes", "connections", "chatSessions", "activeChatId", "backgroundMode", "showImageInfo", "viewport"];
+        const hasDataChange = dataFields.some((field) => JSON.stringify(pp[field]) !== JSON.stringify(cp[field]));
         if (hasDataChange) {
             scheduleBackendSync(cp.id);
         }

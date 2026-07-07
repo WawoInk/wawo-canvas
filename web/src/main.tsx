@@ -9,9 +9,9 @@ import "./styles/globals.css";
 document.body.style.fontFamily = '"SF Pro Display","SF Pro Text","PingFang SC","Microsoft YaHei","Helvetica Neue",sans-serif';
 
 createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <AppProviders>
-      <RouterProvider router={router} />
-    </AppProviders>
-  </StrictMode>
+    <StrictMode>
+        <AppProviders>
+            <RouterProvider router={router} />
+        </AppProviders>
+    </StrictMode>,
 );

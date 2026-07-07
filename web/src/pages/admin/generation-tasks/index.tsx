@@ -94,9 +94,7 @@ export default function AdminGenerationTasksPage() {
             title: "用户名",
             dataIndex: "username",
             width: 120,
-            render: (_, item) => (
-                <Typography.Text>{item.username || "-"}</Typography.Text>
-            ),
+            render: (_, item) => <Typography.Text>{item.username || "-"}</Typography.Text>,
         },
         {
             title: "任务类型",
@@ -125,9 +123,7 @@ export default function AdminGenerationTasksPage() {
             title: "扣费",
             dataIndex: "credits",
             width: 80,
-            render: (_, item) => (
-                <Typography.Text type={item.credits > 0 ? "danger" : "secondary"}>{item.credits > 0 ? `-${item.credits}` : item.credits}</Typography.Text>
-            ),
+            render: (_, item) => <Typography.Text type={item.credits > 0 ? "danger" : "secondary"}>{item.credits > 0 ? `-${item.credits}` : item.credits}</Typography.Text>,
         },
         {
             title: "耗时",
@@ -181,14 +177,7 @@ export default function AdminGenerationTasksPage() {
                         <Row gutter={16} align="bottom">
                             <Col flex="240px">
                                 <Form.Item label="用户 ID">
-                                    <Input
-                                        value={keywordText}
-                                        placeholder="搜索用户 ID"
-                                        allowClear
-                                        prefix={<SearchOutlined />}
-                                        onPressEnter={() => searchLogs(keywordText)}
-                                        onChange={(event) => setKeywordText(event.target.value)}
-                                    />
+                                    <Input value={keywordText} placeholder="搜索用户 ID" allowClear prefix={<SearchOutlined />} onPressEnter={() => searchLogs(keywordText)} onChange={(event) => setKeywordText(event.target.value)} />
                                 </Form.Item>
                             </Col>
                             <Col flex="140px">
@@ -345,7 +334,10 @@ export default function AdminGenerationTasksPage() {
                             <div>
                                 <Typography.Text type="secondary">错误信息</Typography.Text>
                                 <br />
-                                <Typography.Text type="danger">{detail.task.errorCode ? `[${detail.task.errorCode}] ` : ""}{detail.task.errorMessage}</Typography.Text>
+                                <Typography.Text type="danger">
+                                    {detail.task.errorCode ? `[${detail.task.errorCode}] ` : ""}
+                                    {detail.task.errorMessage}
+                                </Typography.Text>
                             </div>
                         )}
                         {detail.payload && (

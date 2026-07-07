@@ -7,8 +7,7 @@ COPY VERSION CHANGELOG.md ../
 COPY web/ .
 RUN bun run build
 
-# Runtime: Caddy serving static files, proxying /api to Go backend
+# ponytail: Caddyfile mounted at runtime via compose volume, not baked in
 FROM caddy:2-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY Caddyfile /etc/caddy/Caddyfile
 EXPOSE 3000

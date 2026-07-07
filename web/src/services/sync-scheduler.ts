@@ -1,9 +1,9 @@
 // web/src/services/sync-scheduler.ts
 import { syncClient } from "./sync-client";
 
-const ACTIVE_TASK_POLL_MS = 5_000;       // C: 有活跃任务时 5s
-const DOMAIN_POLL_MS = 60_000;           // A: 数据域默认 60s
-const ACTIVITY_IDLE_MS = 120_000;         // B: 2 分钟无操作视为闲置
+const ACTIVE_TASK_POLL_MS = 5_000; // C: 有活跃任务时 5s
+const DOMAIN_POLL_MS = 60_000; // A: 数据域默认 60s
+const ACTIVITY_IDLE_MS = 120_000; // B: 2 分钟无操作视为闲置
 
 class SyncScheduler {
     private runningTaskCount = 0;

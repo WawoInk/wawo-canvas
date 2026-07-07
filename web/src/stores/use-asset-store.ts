@@ -124,10 +124,14 @@ export const useAssetStore = create<AssetStore>()(
                     const parsed = JSON.parse(token);
                     const tokenValue = parsed?.state?.token || "";
                     await fetch(`/api/v1/files/${encodeURIComponent(fileId)}`, { method: "DELETE", headers: { Authorization: `Bearer ${tokenValue}` } });
-                } catch { /* 文件删除失败不影响素材删除 */ }
+                } catch {
+                    /* 文件删除失败不影响素材删除 */
+                }
                 try {
                     await deleteAssetFromLibrary(id);
-                } catch { /* 素材删除失败仍走本地清理，下次同步会纠正 */ }
+                } catch {
+                    /* 素材删除失败仍走本地清理，下次同步会纠正 */
+                }
                 set((state) => ({
                     assets: state.assets.filter((a) => a.id !== id),
                 }));
@@ -189,14 +193,10 @@ syncClient.onDelta("assets", (data) => {
         const state = useAssetStore.getState();
         const map = new Map(state.assets.map((a) => [a.id, a]));
         for (const a of remote) map.set(a.id, a);
-        const merged = Array.from(map.values()).sort(
-            (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-        );
+        const merged = Array.from(map.values()).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
         useAssetStore.setState({ assets: merged });
         // 刷新 S3 预签名 URL
-        const fileIds = merged
-            .filter((a): a is Asset & { data: { fileId: string } } => (a.kind === "image" || a.kind === "video") && Boolean((a.data as { fileId?: string }).fileId))
-            .map((a) => (a.data as { fileId: string }).fileId);
+        const fileIds = merged.filter((a): a is Asset & { data: { fileId: string } } => (a.kind === "image" || a.kind === "video") && Boolean((a.data as { fileId?: string }).fileId)).map((a) => (a.data as { fileId: string }).fileId);
         if (fileIds.length) {
             void useAssetStore.getState().refreshAssetUrls(fileIds);
         }
@@ -212,7 +212,22 @@ syncClient.onDelta("assets", (data) => {
 });
 
 // ── 转换函数 ──
-function toLocalAsset(item: { id: string; type: string; title: string; coverUrl: string; tags: string[]; content?: string; url?: string; fileId?: string; width?: number; height?: number; bytes?: number; mimeType?: string; createdAt: string; updatedAt: string }): Asset {
+function toLocalAsset(item: {
+    id: string;
+    type: string;
+    title: string;
+    coverUrl: string;
+    tags: string[];
+    content?: string;
+    url?: string;
+    fileId?: string;
+    width?: number;
+    height?: number;
+    bytes?: number;
+    mimeType?: string;
+    createdAt: string;
+    updatedAt: string;
+}): Asset {
     const base = {
         id: item.id,
         title: item.title,
@@ -241,7 +256,7 @@ function fromLocalAsset(asset: Asset): Record<string, unknown> {
         coverUrl: asset.coverUrl || "",
         tags: asset.tags || [],
         content: asset.kind === "text" ? data.content : "",
-        fileId: (asset.kind === "image" || asset.kind === "video") ? (data.fileId || "") : "",
+        fileId: asset.kind === "image" || asset.kind === "video" ? data.fileId || "" : "",
         width: data.width || 0,
         height: data.height || 0,
         bytes: data.bytes || 0,

@@ -75,9 +75,9 @@ const LOG_STORE_KEY = "infinite-canvas:image_generation_logs";
 const RESULT_ACTION_BUTTON_CLASS = "min-w-0 px-1.5 [&_.ant-btn-icon]:shrink-0 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate";
 
 function logStoreForUser() {
-	const user = useUserStore.getState().user;
-	const userId = user?.id || "anonymous";
-	return localforage.createInstance({ name: "infinite-canvas", storeName: `image_generation_logs_${userId}` });
+    const user = useUserStore.getState().user;
+    const userId = user?.id || "anonymous";
+    return localforage.createInstance({ name: "infinite-canvas", storeName: `image_generation_logs_${userId}` });
 }
 
 // ponytail: module-level bridge between syncClient (singleton) and component (closure-scoped refreshLogs)
@@ -123,8 +123,12 @@ export default function ImagePage() {
     const configHydrated = useConfigStore((state) => state.configHydrated);
 
     useEffect(() => {
-        refreshLogsHandler = () => { void refreshLogs(); };
-        return () => { refreshLogsHandler = null; };
+        refreshLogsHandler = () => {
+            void refreshLogs();
+        };
+        return () => {
+            refreshLogsHandler = null;
+        };
     }, []);
 
     useEffect(() => {
@@ -308,11 +312,7 @@ export default function ImagePage() {
     const deleteSelectedLogs = async () => {
         const ids = [...selectedLogIds];
         const imageKeys = logs.filter((log) => selectedLogIds.includes(log.id)).flatMap((log) => log.images.map((image) => image.storageKey).filter((key): key is string => Boolean(key)));
-        await Promise.all([
-            deleteStoredImages(imageKeys),
-            ...ids.map((id) => logStoreForUser().removeItem(id)),
-            ...ids.map((id) => deleteGenerationTask(id).catch(() => {})),
-        ]);
+        await Promise.all([deleteStoredImages(imageKeys), ...ids.map((id) => logStoreForUser().removeItem(id)), ...ids.map((id) => deleteGenerationTask(id).catch(() => {}))]);
         if (previewLog && selectedLogIds.includes(previewLog.id)) {
             setPreviewLog(null);
             setResults([]);
@@ -359,7 +359,9 @@ export default function ImagePage() {
                     if (result?.id && fileIds.length) {
                         await patchGenerationTaskMetadata(result.id, JSON.stringify({ fileIds })).catch(() => {});
                     }
-                } catch { /* non-blocking */ }
+                } catch {
+                    /* non-blocking */
+                }
             } else if (fileIds.length) {
                 // Remote mode: proxy already created the task, but we need to
                 // backfill S3 fileIds into its metadata so the backend DTO
@@ -367,13 +369,13 @@ export default function ImagePage() {
                 // Fetch the latest tasks, find the proxy's record, and patch it.
                 try {
                     const result = await fetchImageHistory(1, 5, "image_workbench");
-                    const match = result.items.find(
-                        (item) => item.model === log.model && item.createdAt <= log.time && !item.fileIds?.length
-                    );
+                    const match = result.items.find((item) => item.model === log.model && item.createdAt <= log.time && !item.fileIds?.length);
                     if (match?.id) {
                         await patchGenerationTaskMetadata(match.id, JSON.stringify({ fileIds })).catch(() => {});
                     }
-                } catch { /* non-blocking */ }
+                } catch {
+                    /* non-blocking */
+                }
             }
         }
         await refreshLogs();
@@ -412,22 +414,22 @@ export default function ImagePage() {
         const isSuccess = item.status === "success";
         const images = item.fileIds?.length
             ? item.fileIds.map((fileId) => ({
-                id: fileId,
-                dataUrl: "",
-                fileId,
-                durationMs: item.durationMs,
-                width: 1024,
-                height: 1024,
-                bytes: 0,
-            }))
+                  id: fileId,
+                  dataUrl: "",
+                  fileId,
+                  durationMs: item.durationMs,
+                  width: 1024,
+                  height: 1024,
+                  bytes: 0,
+              }))
             : item.imageUrls?.map((url) => ({
-                id: nanoid(),
-                dataUrl: url,
-                durationMs: item.durationMs,
-                width: 1024,
-                height: 1024,
-                bytes: 0,
-            })) || [];
+                  id: nanoid(),
+                  dataUrl: url,
+                  durationMs: item.durationMs,
+                  width: 1024,
+                  height: 1024,
+                  bytes: 0,
+              })) || [];
         return {
             id: item.id,
             createdAt: new Date(item.createdAt).getTime(),
@@ -451,7 +453,7 @@ export default function ImagePage() {
             imageCount: images.length || 1,
             size: item.size || "",
             quality: item.quality || "",
-            status: item.status === "success" ? "成功" as const : item.status === "failed" ? "失败" as const : "生成中" as const,
+            status: item.status === "success" ? ("成功" as const) : item.status === "failed" ? ("失败" as const) : ("生成中" as const),
         };
     }
 

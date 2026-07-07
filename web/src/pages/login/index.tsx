@@ -106,7 +106,14 @@ function LoginContent() {
                             block
                             value={mode}
                             onChange={(value) => setMode(value as "login" | "register")}
-                            options={allowRegister ? [{ label: "登录", value: "login" }, { label: "注册", value: "register" }] : [{ label: "登录", value: "login" }]}
+                            options={
+                                allowRegister
+                                    ? [
+                                          { label: "登录", value: "login" },
+                                          { label: "注册", value: "register" },
+                                      ]
+                                    : [{ label: "登录", value: "login" }]
+                            }
                         />
                     </Form.Item>
                     <Form.Item name="username" label={<span className="font-medium text-stone-800 dark:text-stone-200">用户名</span>} rules={[{ required: true, message: "请输入用户名" }]}>

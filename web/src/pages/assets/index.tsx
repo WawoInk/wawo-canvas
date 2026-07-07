@@ -83,9 +83,7 @@ export default function AssetsPage() {
 
     // Refresh presigned URLs for all S3-backed assets on mount
     useEffect(() => {
-        const fileIds = assets
-            .filter((a): a is Asset & { data: ImageAsset["data"] | VideoAsset["data"] } => (a.kind === "image" || a.kind === "video") && Boolean(a.data.fileId))
-            .map((a) => a.data.fileId!);
+        const fileIds = assets.filter((a): a is Asset & { data: ImageAsset["data"] | VideoAsset["data"] } => (a.kind === "image" || a.kind === "video") && Boolean(a.data.fileId)).map((a) => a.data.fileId!);
         if (fileIds.length) void refreshAssetUrls(fileIds);
     }, []);
 
@@ -215,7 +213,9 @@ export default function AssetsPage() {
                 try {
                     await addAsset(payload as Parameters<typeof addAsset>[0]);
                     imported++;
-                } catch { /* 单条导入失败不中断批量 */ }
+                } catch {
+                    /* 单条导入失败不中断批量 */
+                }
             }
             if (imported > 0) message.success(`已导入 ${imported} 个素材`);
             else message.error("导入失败，请选择有效的素材压缩包");
@@ -306,11 +306,7 @@ export default function AssetsPage() {
                                 >
                                     导入素材
                                 </button>
-                                <button
-                                    type="button"
-                                    className="cursor-pointer text-sm font-medium text-stone-700 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:underline dark:text-stone-300"
-                                    onClick={openCreate}
-                                >
+                                <button type="button" className="cursor-pointer text-sm font-medium text-stone-700 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:underline dark:text-stone-300" onClick={openCreate}>
                                     新增素材
                                 </button>
                             </div>
@@ -467,7 +463,9 @@ function AssetCard({ asset, onOpen, onEdit, onCopy, onDownload, onDelete }: { as
     const [poster, setPoster] = useState("");
     useEffect(() => {
         if (asset.kind === "video" && asset.data.url && !poster) {
-            getVideoPoster(asset.data.url).then(setPoster).catch(() => {});
+            getVideoPoster(asset.data.url)
+                .then(setPoster)
+                .catch(() => {});
         }
         // @ts-expect-error -- asset.data.url only exists on VideoAsset; dependency is safe since kind guards usage
     }, [asset.kind, asset.data.url]);
@@ -477,7 +475,13 @@ function AssetCard({ asset, onOpen, onEdit, onCopy, onDownload, onDelete }: { as
             className="overflow-hidden"
             styles={{ body: { padding: 0 } }}
             cover={
-                <button type="button" className="block w-full text-left" onClick={() => { if (asset.kind !== "video") onOpen(); }}>
+                <button
+                    type="button"
+                    className="block w-full text-left"
+                    onClick={() => {
+                        if (asset.kind !== "video") onOpen();
+                    }}
+                >
                     {asset.kind === "video" && !videoPlaying ? (
                         <div className="relative aspect-[4/3] w-full bg-black" onClick={() => setVideoPlaying(true)}>
                             {poster ? <img src={poster} alt="" className="size-full object-cover opacity-80" /> : <div className="flex size-full items-center justify-center bg-stone-100 dark:bg-stone-900" />}

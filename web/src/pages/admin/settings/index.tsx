@@ -42,7 +42,12 @@ const emptySettings: AdminSettings = {
         },
         auth: { allowRegister: true, linuxDo: { enabled: false } },
     },
-    private: { channels: [], promptSync: { enabled: true, cron: "*/5 * * * *" }, auth: { linuxDo: { clientId: "", clientSecret: "" } }, fileSizeLimits: { image: 30 * 1024 * 1024, video: 50 * 1024 * 1024, audio: 15 * 1024 * 1024, prompt: 5 * 1024 * 1024 } },
+    private: {
+        channels: [],
+        promptSync: { enabled: true, cron: "*/5 * * * *" },
+        auth: { linuxDo: { clientId: "", clientSecret: "" } },
+        fileSizeLimits: { image: 30 * 1024 * 1024, video: 50 * 1024 * 1024, audio: 15 * 1024 * 1024, prompt: 5 * 1024 * 1024 },
+    },
 };
 const emptyChannel: AdminModelChannel = { protocol: "openai", name: "", baseUrl: "", apiKey: "", models: [], weight: 1, enabled: true, remark: "" };
 
@@ -477,7 +482,12 @@ export default function AdminSettingsPage() {
                                         </Form.Item>
                                     </Col>
                                     <Col span={24}>
-                                        <Form.Item name={["public", "modelChannel", "allowCustomChannel"]} label="允许用户自定义渠道" extra="开启后，前端可提供走后端渠道和用户自定义 baseUrl 直连两种模式。关闭后，整个平台强制使用后台渠道，用户不再能自行配置渠道与模型，生成请求统一走后端代理并消耗算力点。" valuePropName="checked">
+                                        <Form.Item
+                                            name={["public", "modelChannel", "allowCustomChannel"]}
+                                            label="允许用户自定义渠道"
+                                            extra="开启后，前端可提供走后端渠道和用户自定义 baseUrl 直连两种模式。关闭后，整个平台强制使用后台渠道，用户不再能自行配置渠道与模型，生成请求统一走后端代理并消耗算力点。"
+                                            valuePropName="checked"
+                                        >
                                             <Switch />
                                         </Form.Item>
                                     </Col>
@@ -501,14 +511,7 @@ export default function AdminSettingsPage() {
                                                     width: 220,
                                                     render: (_, item) => (
                                                         <Space.Compact className="!w-full">
-                                                            <InputNumber
-                                                                min={0}
-                                                                step={1}
-                                                                precision={0}
-                                                                className="!w-full"
-                                                                value={item.credits}
-                                                                onChange={(value) => setModelCost(form, setModelCosts, item.model, Number(value) || 0)}
-                                                            />
+                                                            <InputNumber min={0} step={1} precision={0} className="!w-full" value={item.credits} onChange={(value) => setModelCost(form, setModelCosts, item.model, Number(value) || 0)} />
                                                             <Input style={{ width: 40 }} value="点" disabled />
                                                         </Space.Compact>
                                                     ),
@@ -520,17 +523,17 @@ export default function AdminSettingsPage() {
                             </Form>
                         ) : (
                             <Suspense fallback={<Spin />}>
-                            <div style={{ overflow: "hidden", border: "1px solid var(--ant-color-border)", borderRadius: 6 }}>
-                                <CodeMirror
-                                    value={activeJsonText}
-                                    height="520px"
-                                    extensions={[json(), jsonEditorTheme]}
-                                    basicSetup={{ foldGutter: true, lineNumbers: true, highlightActiveLine: true, highlightActiveLineGutter: true }}
-                                    theme="none"
-                                    onChange={(value) => setJsonText((current) => ({ ...current, public: value }))}
-                                    style={{ fontSize: 13 }}
-                                />
-                            </div>
+                                <div style={{ overflow: "hidden", border: "1px solid var(--ant-color-border)", borderRadius: 6 }}>
+                                    <CodeMirror
+                                        value={activeJsonText}
+                                        height="520px"
+                                        extensions={[json(), jsonEditorTheme]}
+                                        basicSetup={{ foldGutter: true, lineNumbers: true, highlightActiveLine: true, highlightActiveLineGutter: true }}
+                                        theme="none"
+                                        onChange={(value) => setJsonText((current) => ({ ...current, public: value }))}
+                                        style={{ fontSize: 13 }}
+                                    />
+                                </div>
                             </Suspense>
                         )
                     ) : activeMode === "visual" ? (
@@ -665,17 +668,17 @@ export default function AdminSettingsPage() {
                         </Form>
                     ) : (
                         <Suspense fallback={<Spin />}>
-                        <div style={{ overflow: "hidden", border: "1px solid var(--ant-color-border)", borderRadius: 6 }}>
-                            <CodeMirror
-                                value={activeJsonText}
-                                height="520px"
-                                extensions={[json(), jsonEditorTheme]}
-                                basicSetup={{ foldGutter: true, lineNumbers: true, highlightActiveLine: true, highlightActiveLineGutter: true }}
-                                theme="none"
-                                onChange={(value) => setJsonText((current) => ({ ...current, private: value }))}
-                                style={{ fontSize: 13 }}
-                            />
-                        </div>
+                            <div style={{ overflow: "hidden", border: "1px solid var(--ant-color-border)", borderRadius: 6 }}>
+                                <CodeMirror
+                                    value={activeJsonText}
+                                    height="520px"
+                                    extensions={[json(), jsonEditorTheme]}
+                                    basicSetup={{ foldGutter: true, lineNumbers: true, highlightActiveLine: true, highlightActiveLineGutter: true }}
+                                    theme="none"
+                                    onChange={(value) => setJsonText((current) => ({ ...current, private: value }))}
+                                    style={{ fontSize: 13 }}
+                                />
+                            </div>
                         </Suspense>
                     )}
                 </Card>
@@ -703,7 +706,12 @@ export default function AdminSettingsPage() {
                             </Col>
                             <Col span={12}>
                                 <Form.Item name="protocol" label="协议">
-                                    <Select options={[{ label: "OpenAI", value: "openai" }, { label: "XvanAI", value: "xvanai" }]} />
+                                    <Select
+                                        options={[
+                                            { label: "OpenAI", value: "openai" },
+                                            { label: "XvanAI", value: "xvanai" },
+                                        ]}
+                                    />
                                 </Form.Item>
                             </Col>
                             <Col span={12}>
@@ -992,11 +1000,7 @@ function mbProps(value: number | null) {
 }
 
 function collectKnownModels(settings: AdminSettings) {
-    return uniqueModels([
-        ...(settings.public.modelChannel.availableModels || []),
-        ...(settings.public.modelChannel.modelCosts || []).map((item) => item.model),
-        ...settings.private.channels.flatMap((channel) => channel.models || []),
-    ]);
+    return uniqueModels([...(settings.public.modelChannel.availableModels || []), ...(settings.public.modelChannel.modelCosts || []).map((item) => item.model), ...settings.private.channels.flatMap((channel) => channel.models || [])]);
 }
 
 function buildModelSelectGroups(sourceModels: string[], existingModels: string[]): Record<ModelSelectTabKey, string[]> {

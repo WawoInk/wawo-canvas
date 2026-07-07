@@ -20,10 +20,7 @@ export type ResponseToolCall = {
     thoughtSignature?: string;
 };
 
-export type ResponseInputMessage =
-    | AiTextMessage
-    | { type: "function_call"; call_id: string; name: string; arguments: string; thoughtSignature?: string }
-    | { role: "tool"; tool_call_id: string; content: string };
+export type ResponseInputMessage = AiTextMessage | { type: "function_call"; call_id: string; name: string; arguments: string; thoughtSignature?: string } | { role: "tool"; tool_call_id: string; content: string };
 
 export type ResponseFunctionTool = {
     type: "function";
@@ -43,10 +40,7 @@ export type ToolResponseResult = {
 type ToolChoice = "auto" | "required" | { type: "function"; name: string };
 type ResponseMessageContent = AiTextMessage["content"] | string;
 type ResponseInputContent = { type: "input_text"; text: string } | { type: "input_image"; image_url: string };
-type ResponseInputItem =
-    | { role: "system" | "user" | "assistant"; content: string | ResponseInputContent[] }
-    | { type: "function_call"; call_id: string; name: string; arguments: string }
-    | { type: "function_call_output"; call_id: string; output: string };
+type ResponseInputItem = { role: "system" | "user" | "assistant"; content: string | ResponseInputContent[] } | { type: "function_call"; call_id: string; name: string; arguments: string } | { type: "function_call_output"; call_id: string; output: string };
 type ResponseApiToolDefinition = {
     type: "function";
     name: string;
@@ -54,9 +48,7 @@ type ResponseApiToolDefinition = {
     parameters: Record<string, unknown>;
     strict?: boolean;
 };
-type ResponseApiOutputItem =
-    | { type?: "message"; content?: Array<{ type?: string; text?: string }> }
-    | { type?: "function_call"; id?: string; call_id?: string; name?: string; arguments?: string };
+type ResponseApiOutputItem = { type?: "message"; content?: Array<{ type?: string; text?: string }> } | { type?: "function_call"; id?: string; call_id?: string; name?: string; arguments?: string };
 type ResponseApiPayload = {
     id?: string;
     output?: ResponseApiOutputItem[];
@@ -449,7 +441,6 @@ async function requestStreamingResponse(config: AiConfig, body: Record<string, u
     return { ...result, content: state.text || result.content };
 }
 
-
 // ── Chat Completions (shared by openai & xvanai) ─────────────────────
 
 function chatCompletionsUrl(config: AiConfig) {
@@ -465,7 +456,10 @@ function toChatMessages(messages: ResponseInputMessage[]): ChatMessage[] {
         if (message.role === "tool") {
             return { role: "tool" as const, content: message.content, tool_call_id: message.tool_call_id };
         }
-        return { role: message.role as "system" | "user" | "assistant", content: typeof message.content === "string" ? message.content : (Array.isArray(message.content) ? message.content.map((item) => (item.type === "text" ? item.text : "")).join("") : "") };
+        return {
+            role: message.role as "system" | "user" | "assistant",
+            content: typeof message.content === "string" ? message.content : Array.isArray(message.content) ? message.content.map((item) => (item.type === "text" ? item.text : "")).join("") : "",
+        };
     });
 }
 
@@ -562,12 +556,7 @@ function parseChatCompletionPayload(payload: ChatCompletionPayload): ToolRespons
 // ──────────────────────────────────────────────────────────────────────
 
 function toGeminiBody(config: AiConfig, messages: ResponseInputMessage[], extra?: Record<string, unknown>) {
-    const systemText = [
-        config.systemPrompt.trim(),
-        ...messages.flatMap((message) => (!("type" in message) && message.role === "system" ? [geminiTextContent(message.content)] : [])),
-    ]
-        .filter(Boolean)
-        .join("\n\n");
+    const systemText = [config.systemPrompt.trim(), ...messages.flatMap((message) => (!("type" in message) && message.role === "system" ? [geminiTextContent(message.content)] : []))].filter(Boolean).join("\n\n");
     const contents = toGeminiContents(messages.filter((message) => ("type" in message ? true : message.role !== "system")));
     return {
         contents,
@@ -627,10 +616,7 @@ function toGeminiToolOptions(tools: ResponseFunctionTool[], toolChoice: ToolChoi
         description: tool.function.description,
         parameters: tool.function.parameters,
     }));
-    const functionCallingConfig =
-        typeof toolChoice === "object"
-            ? { mode: "ANY", allowedFunctionNames: [toolChoice.name] }
-            : { mode: toolChoice === "required" ? "ANY" : "AUTO" };
+    const functionCallingConfig = typeof toolChoice === "object" ? { mode: "ANY", allowedFunctionNames: [toolChoice.name] } : { mode: toolChoice === "required" ? "ANY" : "AUTO" };
     return {
         tools: [{ functionDeclarations }],
         toolConfig: { functionCallingConfig },

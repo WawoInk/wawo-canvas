@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Image tag (git sha or 'latest')"
+        description: "Candidate image tag to deploy"
         required: true
         default: "latest"
 
@@ -17,15 +17,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # --- 1. Generate .env from secrets ---
+      - name: Generate .env
+        run: |
+          cat > /tmp/prod-env <<'EOF'
+          ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
+          ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_EXPIRE_HOURS=${{ secrets.JWT_EXPIRE_HOURS }}
+          PORT=8088
+          PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}
+          DATABASE_DSN=${{ secrets.DATABASE_DSN }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          AMAZON_S3_URL=${{ secrets.AMAZON_S3_URL }}
+          AMAZON_REGION=${{ secrets.AMAZON_REGION }}
+          AMAZON_S3_ACCESS_KEY=${{ secrets.AMAZON_S3_ACCESS_KEY }}
+          AMAZON_S3_SECRET_KEY=${{ secrets.AMAZON_S3_SECRET_KEY }}
+          LINUX_DO_CLIENT_ID=${{ secrets.LINUX_DO_CLIENT_ID }}
+          LINUX_DO_CLIENT_SECRET=${{ secrets.LINUX_DO_CLIENT_SECRET }}
+          EOF
+
+      # --- 2. SCP files to remote ---
       - uses: appleboy/scp-action@v0
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          source: docker-compose.prod.yml
+          source: docker-compose.prod.yml,Caddyfile,/tmp/prod-env
           target: /opt/infinite-canvas/
+          strip_components: 0
 
+      # --- 3-7. Deploy ---
       - uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -36,30 +61,40 @@ jobs:
             set -e
             cd /opt/infinite-canvas
 
-            # Write .env from secrets
-            cat > .env <<'ENVEOF'
-            ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
-            ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            JWT_EXPIRE_HOURS=${{ secrets.JWT_EXPIRE_HOURS }}
-            PORT=8088
-            PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}
-            DATABASE_DSN=${{ secrets.DATABASE_DSN }}
-            POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-            POSTGRES_DB=${{ secrets.POSTGRES_DB }}
-            AMAZON_S3_URL=${{ secrets.AMAZON_S3_URL }}
-            AMAZON_REGION=${{ secrets.AMAZON_REGION }}
-            AMAZON_S3_ACCESS_KEY=${{ secrets.AMAZON_S3_ACCESS_KEY }}
-            AMAZON_S3_SECRET_KEY=${{ secrets.AMAZON_S3_SECRET_KEY }}
-            LINUX_DO_CLIENT_ID=${{ secrets.LINUX_DO_CLIENT_ID }}
-            LINUX_DO_CLIENT_SECRET=${{ secrets.LINUX_DO_CLIENT_SECRET }}
-            ENVEOF
+            # Move .env into place
+            mv -f /tmp/prod-env .env
             chmod 600 .env
 
-            # Login, pull, restart
+            # Docker login
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            export IMAGE_TAG=${{ github.event.inputs.image_tag }}
-            docker compose -f docker-compose.prod.yml pull
+
+            TAG=${{ github.event.inputs.image_tag }}
+
+            # 3. Pull candidate
+            docker pull ghcr.io/eldenpdx/infinite-canvas-api:${TAG}
+            docker pull ghcr.io/eldenpdx/infinite-canvas:${TAG}
+
+            # 4. Rollback tag: current latest → rollback
+            docker tag ghcr.io/eldenpdx/infinite-canvas-api:latest ghcr.io/eldenpdx/infinite-canvas-api:rollback 2>/dev/null || true
+            docker tag ghcr.io/eldenpdx/infinite-canvas:latest ghcr.io/eldenpdx/infinite-canvas:rollback 2>/dev/null || true
+
+            # 5. Candidate → latest
+            docker tag ghcr.io/eldenpdx/infinite-canvas-api:${TAG} ghcr.io/eldenpdx/infinite-canvas-api:latest
+            docker tag ghcr.io/eldenpdx/infinite-canvas:${TAG} ghcr.io/eldenpdx/infinite-canvas:latest
+
+            # 6. Restart
+            export IMAGE_TAG=${TAG}
+            docker compose -f docker-compose.prod.yml down
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
             docker image prune -f
+
+            # 7. Health check (max 30 tries × 2s = 60s)
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost/api/health >/dev/null 2>&1; then
+                echo "✓ Healthy after ${i}s"
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "✗ Health check failed after 60s"
+            exit 1
