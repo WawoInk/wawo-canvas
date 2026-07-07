@@ -2,9 +2,12 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"time"
 
+	"github.com/basketikun/infinite-canvas/repository"
 	"github.com/basketikun/infinite-canvas/service"
 )
 
@@ -14,7 +17,8 @@ type createCanvasProjectRequest struct {
 }
 
 type updateCanvasProjectRequest struct {
-	Project any `json:"project"`
+	Project           any    `json:"project"`
+	ExpectedUpdatedAt string `json:"expectedUpdatedAt"`
 }
 
 // ListCanvasProjects GET /api/v1/canvas/projects
@@ -109,8 +113,12 @@ func UpdateCanvasProject(w http.ResponseWriter, r *http.Request, id string) {
 		projectJSON = string(pj)
 	}
 
-	project, err := service.UpdateCanvasProject(id, user.ID, projectJSON)
+	project, err := service.UpdateCanvasProject(id, user.ID, projectJSON, req.ExpectedUpdatedAt)
 	if err != nil {
+		if errors.Is(err, repository.ErrConflict) {
+			Conflict(w, "画布已被其他会话修改", project)
+			return
+		}
 		FailError(w, err)
 		return
 	}
@@ -128,5 +136,5 @@ func DeleteCanvasProject(w http.ResponseWriter, r *http.Request, id string) {
 		FailError(w, err)
 		return
 	}
-	OK(w, true)
+	OK(w, map[string]string{"id": id, "deletedAt": time.Now().Format(time.RFC3339)})
 }

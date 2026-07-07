@@ -37,25 +37,31 @@ func CreateCanvasProject(userID string, frontendID string, name string, projectJ
 	return project, nil
 }
 
-// UpdateCanvasProject 全量更新画布项目（版本递增）。
-func UpdateCanvasProject(id string, userID string, projectJSON string) (model.CanvasProject, error) {
+// UpdateCanvasProject 全量更新画布项目（乐观锁 + 版本递增）。expectedUpdatedAt 用于冲突检测。
+func UpdateCanvasProject(id string, userID string, projectJSON string, expectedUpdatedAt string) (model.CanvasProject, error) {
 	existing, err := repository.GetCanvasProjectByIDAndUser(id, userID)
 	if err != nil {
 		return model.CanvasProject{}, err
 	}
+	now := time.Now().Format(time.RFC3339)
 	version := existing.Version + 1
-	if err := repository.UpdateCanvasProject(id, userID, projectJSON, version); err != nil {
-		return model.CanvasProject{}, err
+	if err := repository.UpdateCanvasProjectWithLock(id, userID, projectJSON, version, expectedUpdatedAt, now); err != nil {
+		return existing, err // 透传 ErrConflict
 	}
 	existing.ProjectJSON = projectJSON
 	existing.Version = version
-	existing.UpdatedAt = time.Now().Format(time.RFC3339)
+	existing.UpdatedAt = now
 	return existing, nil
 }
 
-// DeleteCanvasProject 删除画布项目（校验所有权）。
+// DeleteCanvasProject 删除画布项目（校验所有权）并记录删除日志。
 func DeleteCanvasProject(id string, userID string) error {
-	return repository.DeleteCanvasProject(id, userID)
+	if err := repository.DeleteCanvasProject(id, userID); err != nil {
+		return err
+	}
+	// 记录删除日志供 sync API 返回
+	_ = repository.RecordDeletion("canvas_projects", id, userID, time.Now())
+	return nil
 }
 
 // ParseProjectName 从 projectJSON 中提取 project name（用于 API 展示）。
