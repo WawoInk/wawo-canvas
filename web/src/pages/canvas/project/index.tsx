@@ -3261,7 +3261,6 @@ function imageMetadata(image: UploadedImage | UploadResult): CanvasNodeMetadata 
     if ("fileId" in image) return { content: image.url, storageKey: "", fileId: image.fileId, status: "success", naturalWidth: image.width, naturalHeight: image.height, bytes: image.bytes, mimeType: image.mimeType };
     return { content: image.url, storageKey: image.storageKey, status: "success", naturalWidth: image.width, naturalHeight: image.height, bytes: image.bytes, mimeType: image.mimeType };
 }
-}
 
 function videoMetadata(video: UploadedFile): CanvasNodeMetadata {
     return { content: video.url, storageKey: video.storageKey, status: "success", naturalWidth: video.width, naturalHeight: video.height, bytes: video.bytes, mimeType: video.mimeType || "video/mp4", durationMs: video.durationMs };
@@ -3271,7 +3270,6 @@ function audioMetadata(audio: UploadedFile | UploadResult): CanvasNodeMetadata {
     // ponytail: S3-backed (UploadResult with fileId) vs IndexedDB-backed (UploadedFile with storageKey)
     if ("fileId" in audio) return { content: audio.url, storageKey: "", fileId: audio.fileId, status: "success", bytes: audio.bytes, mimeType: audio.mimeType || "audio/mpeg", durationMs: audio.durationMs };
     return { content: audio.url, storageKey: audio.storageKey, status: "success", bytes: audio.bytes, mimeType: audio.mimeType || "audio/mpeg", durationMs: audio.durationMs };
-}
 }
 
 function buildImageGenerationMetadata(type: CanvasImageGenerationType, config: AiConfig, count: number, references: ReferenceImage[]): CanvasNodeMetadata {
