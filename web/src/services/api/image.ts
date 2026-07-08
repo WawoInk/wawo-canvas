@@ -892,11 +892,19 @@ export async function pollAsyncImageTask(config: AiConfig, task: AsyncImageTask,
     const requestConfig = resolveModelRequestConfig(config, task.model);
     try {
         const response = await axios.get<{
+            code?: number;
+            msg?: string;
             status?: string;
             data?: { images?: Array<{ url?: string; b64_json?: string }> };
             error?: { code?: string; message?: string };
-        }>(aiApiUrl(requestConfig, `/tasks/${encodeURIComponent(task.id)}`), { headers: aiHeaders(requestConfig), signal: options?.signal });
+        }>(aiApiUrl(requestConfig, `/tasks/${encodeURIComponent(task.id)}`), {
+            headers: aiHeaders(requestConfig),
+            params: { model: requestConfig.model },
+            signal: options?.signal,
+        });
         const body = response.data;
+        // ponytail: backend wraps errors; unwrap before inspecting task fields
+        if (typeof body.code === "number" && body.code !== 0) return { status: "failed", error: body.msg || "任务查询失败" };
         if (body.error?.message) return { status: "failed", error: body.error.message };
         if (body.status === "succeeded") {
             const images = (body.data?.images || []).map((img) => ({ dataUrl: img.url || `data:image/png;base64,${img.b64_json || ""}` }));
