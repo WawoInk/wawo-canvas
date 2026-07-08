@@ -46,6 +46,7 @@ export default function AssetsPage() {
     const removeAsset = useAssetStore((state) => state.removeAsset);
     const removeAssetWithFile = useAssetStore((state) => state.removeAssetWithFile);
     const refreshAssetUrls = useAssetStore((state) => state.refreshAssetUrls);
+    const refreshFromServer = useAssetStore((state) => state.refreshFromServer);
     const [keyword, setKeyword] = useState("");
     const [kindFilter, setKindFilter] = useState<AssetKind | "all">("all");
     const [page, setPage] = useState(1);
@@ -86,6 +87,13 @@ export default function AssetsPage() {
         const fileIds = assets.filter((a): a is Asset & { data: ImageAsset["data"] | VideoAsset["data"] } => (a.kind === "image" || a.kind === "video") && Boolean(a.data.fileId)).map((a) => a.data.fileId!);
         if (fileIds.length) void refreshAssetUrls(fileIds);
     }, []);
+
+    // ponytail: 进入"我的素材"页面时直接从 PostgreSQL 拉取最新列表，
+    // 不依赖 sync 机制（sync 在 userId 就绪前静默跳过，导致新设备无数据）。
+    // sync 仍用于后台增量更新，本调用覆盖首次加载和跨设备场景。
+    useEffect(() => {
+        void refreshFromServer();
+    }, [refreshFromServer]);
 
     const openCreate = () => {
         setEditingAsset(null);

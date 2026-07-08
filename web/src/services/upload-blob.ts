@@ -24,39 +24,24 @@ function authHeader(): Record<string, string> {
     }
 }
 
+/** Upload a blob to S3 via backend multipart (no CORS). */
+async function uploadBlobServer(blob: Blob, fileType: FileType): Promise<UploadResult> {
+    const form = new FormData();
+    form.set("fileType", fileType);
+    form.set("file", blob, `generated-${Date.now()}.${blob.type.split("/")[1] || "png"}`);
+    const headers = { ...authHeader() };
+    const resp = await fetch("/api/v1/files", { method: "POST", body: form, headers });
+    const json = await resp.json();
+    if (json.code !== 0) throw new Error(json.msg || "上传失败");
+    const { id, s3Key, mimeType, bytes } = json.data;
+    const meta = fileType.endsWith("images") ? await readImageMeta(URL.createObjectURL(blob)) : { width: 0, height: 0 };
+    return { fileId: id, url: s3Key, width: meta.width, height: meta.height, bytes: bytes || blob.size, mimeType: mimeType || blob.type };
+}
+
 /** Upload a blob (image or video) to S3 under {fileType}/{userId}/ and return fileId + presigned URL. */
 export async function uploadBlob(blob: Blob, fileType: FileType): Promise<UploadResult> {
-    const ext = blob.type.split("/")[1] || (fileType.endsWith("images") ? "png" : "mp4");
-    const fileName = `generated-${Date.now()}.${ext}`;
-
-    // Step 1: get presigned upload URL
-    const headers = { "Content-Type": "application/json", ...authHeader() };
-    const presignResp = await fetch("/api/v1/files/upload-url", {
-        method: "POST",
-        body: JSON.stringify({ fileType, fileName, mimeType: blob.type }),
-        headers,
-    });
-    const presignJson = await presignResp.json();
-    if (presignJson.code !== 0) throw new Error(presignJson.msg || "获取上传地址失败");
-    const { uploadUrl, confirmId } = presignJson.data;
-
-    // Step 2: upload directly to S3
-    const putResp = await fetch(uploadUrl, { method: "PUT", body: blob, headers: { "Content-Type": blob.type } });
-    if (!putResp.ok) throw new Error("上传到存储失败");
-
-    // Step 3: confirm upload
-    const confirmResp = await fetch("/api/v1/files/confirm", {
-        method: "POST",
-        body: JSON.stringify({ confirmId, bytes: blob.size }),
-        headers,
-    });
-    const confirmJson = await confirmResp.json();
-    if (confirmJson.code !== 0) throw new Error(confirmJson.msg || "确认上传失败");
-
-    const url = confirmJson.data.s3Key;
-    const fileId = confirmJson.data.id;
-    const meta = fileType === "images" ? await readImageMeta(URL.createObjectURL(blob)) : { width: 0, height: 0 };
-    return { fileId, url, width: meta.width, height: meta.height, bytes: blob.size, mimeType: blob.type || (fileType === "images" ? "image/png" : "video/mp4") };
+    // ponytail: server-side upload avoids S3 CORS — browser-direct PUT to S3 needs bucket CORS config
+    return uploadBlobServer(blob, fileType);
 }
 
 /** Download a URL via the backend proxy (handles CORS-restricted sources) and upload to S3. */

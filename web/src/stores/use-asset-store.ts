@@ -7,8 +7,9 @@ import { nanoid } from "nanoid";
 import { message } from "antd";
 
 import { localForageStorage } from "@/lib/localforage-storage";
+import { useUserStore } from "@/stores/use-user-store";
 import { resolveFileUrls } from "@/services/resolve-file-urls";
-import { saveAssetToLibrary, deleteAssetFromLibrary } from "@/services/api/assets";
+import { saveAssetToLibrary, deleteAssetFromLibrary, fetchAssetLibrary } from "@/services/api/assets";
 import { ApiError } from "@/services/api/request";
 import { syncClient } from "@/services/sync-client";
 import { syncScheduler } from "@/services/sync-scheduler";
@@ -42,6 +43,7 @@ type AssetStore = {
     removeAssetWithFile: (id: string, fileId: string) => Promise<void>;
     replaceAssets: (assets: Asset[]) => void;
     refreshAssetUrls: (ids: string[]) => Promise<void>;
+    refreshFromServer: () => Promise<void>;
     cleanupImages: (opts?: unknown) => void;
 };
 
@@ -160,6 +162,19 @@ export const useAssetStore = create<AssetStore>()(
                         return asset;
                     }),
                 }));
+            },
+            refreshFromServer: async () => {
+                try {
+                    const token = useUserStore.getState().token;
+                    if (!token) return;
+                    // ponytail: 一次性拉取最多500条，远超普通用户素材量；超大库走 sync 增量补充
+                    const result = await fetchAssetLibrary({ pageSize: 500, page: 1 });
+                    const assets = (result.items || []).map(toLocalAsset);
+                    set({ assets });
+                    syncScheduler.markActivity();
+                } catch {
+                    /* 网络错误静默，已有 IndexedDB 缓存仍可用 */
+                }
             },
             cleanupImages: (_opts) => {
                 // ponytail: stub — cleanup logic was never implemented in original store.
