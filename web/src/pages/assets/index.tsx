@@ -9,6 +9,7 @@ import { LazyImage, LazyVideo } from "@/components/lazy-media";
 import { getVideoPoster } from "@/lib/video-poster";
 
 import { useCopyText } from "@/hooks/use-copy-text";
+import { useAuthReady } from "@/hooks/use-auth-ready";
 import { formatBytes, readFileAsDataUrl, readImageMeta } from "@/lib/image-utils";
 import { cn } from "@/lib/utils";
 import { useAssetStore, type Asset, type AssetKind, type ImageAsset, type VideoAsset } from "@/stores/use-asset-store";
@@ -36,6 +37,7 @@ const kindOptions = [
 export default function AssetsPage() {
     const { message } = App.useApp();
     const copyText = useCopyText();
+    const isAuthReady = useAuthReady();
     const [form] = Form.useForm<AssetFormValues>();
     const coverInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
@@ -91,9 +93,10 @@ export default function AssetsPage() {
     // ponytail: 进入"我的素材"页面时直接从 PostgreSQL 拉取最新列表，
     // 不依赖 sync 机制（sync 在 userId 就绪前静默跳过，导致新设备无数据）。
     // sync 仍用于后台增量更新，本调用覆盖首次加载和跨设备场景。
+    // Guard on isAuthReady to prevent silent skip when token isn't ready on first paint.
     useEffect(() => {
-        void refreshFromServer();
-    }, [refreshFromServer]);
+        if (isAuthReady) void refreshFromServer();
+    }, [isAuthReady, refreshFromServer]);
 
     const openCreate = () => {
         setEditingAsset(null);

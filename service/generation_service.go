@@ -16,7 +16,7 @@ import (
 // DetermineTaskType 根据 API 路径推断任务类型。
 func DetermineTaskType(path string) model.TaskType {
 	switch {
-	case strings.HasPrefix(path, "/images/"):
+	case strings.HasPrefix(path, "/images/"), strings.HasPrefix(path, "/async/images/"):
 		return model.TaskTypeImage
 	case strings.HasPrefix(path, "/videos/"), strings.HasPrefix(path, "/contents/generations/tasks"):
 		return model.TaskTypeVideo

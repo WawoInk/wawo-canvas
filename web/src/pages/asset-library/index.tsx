@@ -8,6 +8,7 @@ import axios from "axios";
 
 import { useCopyText } from "@/hooks/use-copy-text";
 import { cn } from "@/lib/utils";
+import { useAuthReady } from "@/hooks/use-auth-ready";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { fetchAssetLibrary, type AssetLibraryItem } from "@/services/api/assets";
 import { uploadImage } from "@/services/image-storage";
@@ -17,6 +18,7 @@ const PAGE_SIZE = 12;
 export default function AssetLibraryPage() {
     const { message } = App.useApp();
     const copyText = useCopyText();
+    const isAuthReady = useAuthReady();
     const [keyword, setKeyword] = useState("");
     const [selectedType, setSelectedType] = useState("");
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -27,6 +29,7 @@ export default function AssetLibraryPage() {
     const query = useQuery({
         queryKey: ["asset-library", keyword, selectedType, selectedTags, page],
         queryFn: () => fetchAssetLibrary({ keyword, type: selectedType, tag: selectedTags, page, pageSize: PAGE_SIZE }),
+        enabled: isAuthReady,
         retry: false,
     });
 

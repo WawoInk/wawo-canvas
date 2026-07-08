@@ -10,6 +10,10 @@ func AIImagesGenerations(w http.ResponseWriter, r *http.Request) {
 	service.ProxyAIRequest(w, r, "/images/generations")
 }
 
+func AIAsyncImagesGenerations(w http.ResponseWriter, r *http.Request) {
+	service.ProxyAIRequest(w, r, "/async/images/generations")
+}
+
 func AIImagesEdits(w http.ResponseWriter, r *http.Request) {
 	service.ProxyAIRequest(w, r, "/images/edits")
 }
@@ -36,4 +40,12 @@ func AIVideoContent(w http.ResponseWriter, r *http.Request, id string) {
 
 func XvanaiChatCompletions(w http.ResponseWriter, r *http.Request) {
 	service.ProxyAIRequest(w, r, "/chat/completions")
+}
+
+func AIGetTask(w http.ResponseWriter, r *http.Request, id string) {
+	service.ProxyAIGetRequest(w, r, "/tasks/"+id)
+}
+
+func AICancelTask(w http.ResponseWriter, r *http.Request, id string) {
+	service.ProxyAIRequest(w, r, "/tasks/"+id+"/cancel")
 }

@@ -33,6 +33,7 @@ func New() *gin.Engine {
 	v1 := api.Group("/v1", middleware.UserAuth)
 	v1.POST("/images/generations", gin.WrapF(handler.AIImagesGenerations))
 	v1.POST("/images/edits", gin.WrapF(handler.AIImagesEdits))
+	v1.POST("/async/images/generations", gin.WrapF(handler.AIAsyncImagesGenerations))
 	v1.POST("/chat/completions", gin.WrapF(handler.AIChatCompletions))
 	v1.POST("/audio/speech", gin.WrapF(handler.AIAudioSpeech))
 	v1.POST("/xvanai/chat/completions", gin.WrapF(handler.XvanaiChatCompletions))
@@ -43,6 +44,12 @@ func New() *gin.Engine {
 	})
 	v1.GET("/videos/:id/content", func(c *gin.Context) {
 		handler.AIVideoContent(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.GET("/tasks/:id", func(c *gin.Context) {
+		handler.AIGetTask(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.POST("/tasks/:id/cancel", func(c *gin.Context) {
+		handler.AICancelTask(c.Writer, c.Request, c.Param("id"))
 	})
 	// 视频生成标准入口（对齐 xvanai /v1/contents/generations/tasks）。旧 /videos 路由保留为遗留。
 	v1.POST("/contents/generations/tasks", gin.WrapF(handler.CreateVideoTask))

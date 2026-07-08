@@ -82,9 +82,6 @@ function logStoreForUser() {
 
 // ponytail: module-level bridge between syncClient (singleton) and component (closure-scoped refreshLogs)
 let refreshLogsHandler: (() => void) | null = null;
-syncClient.onDelta("tasks", () => {
-    if (refreshLogsHandler) refreshLogsHandler();
-});
 
 export default function ImagePage() {
     const { message } = App.useApp();
@@ -123,6 +120,10 @@ export default function ImagePage() {
     const configHydrated = useConfigStore((state) => state.configHydrated);
 
     useEffect(() => {
+        // ponytail: re-register onDelta on mount so whichever page loaded last wins
+        syncClient.onDelta("tasks", () => {
+            if (refreshLogsHandler) refreshLogsHandler();
+        });
         refreshLogsHandler = () => {
             void refreshLogs();
         };
@@ -239,7 +240,11 @@ export default function ImagePage() {
                 status: successCount ? "成功" : "失败",
                 images: logImages,
             });
-            saveLog(log);
+            try {
+                await saveLog(log);
+            } catch {
+                // ponytail: saveLog failure shouldn't block the success message
+            }
             successCount ? message.success("图片已生成") : message.error(failed?.reason instanceof Error ? failed.reason.message : "生成失败");
         } finally {
             setRunning(false);

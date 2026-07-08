@@ -127,6 +127,10 @@ export default function VideoPage() {
     }, [running, startedAt]);
 
     useEffect(() => {
+        // ponytail: re-register onDelta on mount so whichever page loaded last wins
+        syncClient.onDelta("tasks", () => {
+            if (refreshLogsHandler) refreshLogsHandler();
+        });
         refreshLogsHandler = () => {
             void refreshLogs();
         };
@@ -483,6 +487,10 @@ export default function VideoPage() {
                 }
                 if (state.status === "failed") throw new Error(state.error);
                 if (attempt === 119) throw new Error("视频生成超时，请稍后重试");
+                // ponytail: persist intermediate poll state so page reload / nav-away doesn't lose the task
+                if (attempt % 3 === 0) {
+                    logStoreForUser().setItem(log.id, serializeLog(log)).catch(() => {});
+                }
                 await delay(5000, abortController.signal);
             }
         } catch (error) {

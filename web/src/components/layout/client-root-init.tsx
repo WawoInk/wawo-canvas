@@ -7,6 +7,7 @@ import { App } from "antd";
 
 import { createModelChannel, useConfigStore } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
+import { useAssetStore } from "@/stores/use-asset-store";
 import { syncScheduler } from "@/services/sync-scheduler";
 import { syncClient } from "@/services/sync-client";
 
@@ -37,6 +38,9 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (userId) {
             syncClient.syncAll().catch(() => {});
+            // ponytail: also trigger a direct asset refresh so "my assets" gets full
+            // dataset on first auth, not just sync deltas
+            useAssetStore.getState().refreshFromServer().catch(() => {});
         }
     }, [userId]);
 
