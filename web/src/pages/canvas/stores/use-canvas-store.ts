@@ -44,6 +44,8 @@ type CanvasStore = {
     /** Fetch a single project from backend by id — used when opening a project
      *  that doesn't exist locally (e.g. fresh device, direct URL navigation). */
     fetchProjectFromBackend: (id: string) => Promise<CanvasProject | null>;
+    /** Flush debounced sync timer immediately (call on page navigation away). */
+    flushProjectSync: (id: string) => void;
 };
 
 const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
@@ -271,6 +273,29 @@ export const useCanvasStore = create<CanvasStore>()(
                 }
             },
 
+            /** Flush pending debounced sync immediately — call on page nav away. */
+            flushProjectSync: (id: string) => {
+                const timer = syncTimers.get(id);
+                if (!timer) return;
+                clearTimeout(timer);
+                syncTimers.delete(id);
+                const state = get();
+                const project = state.projects.find((p) => p.id === id);
+                if (!project) return;
+                const user = useUserStore.getState().user;
+                if (!user?.id) return;
+                updateCanvasProject(id, {
+                    project,
+                    expectedUpdatedAt: project.updatedAt,
+                } as unknown).catch((err) => {
+                    if (err instanceof ApiError && err.status === 409) {
+                        void syncClient.syncDomain("canvas");
+                        return;
+                    }
+                    console.warn("canvas: flush sync failed", err);
+                });
+            },
+
             renameProject: (id, title) =>
                 set((state) => ({
                     projects: state.projects.map((project) => (project.id === id ? { ...project, title: title.trim() || project.title, updatedAt: new Date().toISOString() } : project)),
@@ -315,6 +340,8 @@ export const useCanvasStore = create<CanvasStore>()(
                     if (result.status !== "fulfilled") continue;
                     const d = result.value;
                     const existing = map.get(d.id);
+                    // ponytail: 仅当 server updatedAt 比本地新时才覆盖，防止覆盖本地尚未推送的编辑
+                    if (existing && (d.updatedAt || "") <= (existing.updatedAt || "")) continue;
                     const parsed = safeParseProjectJson(d.projectJson);
                     map.set(d.id, {
                         id: d.id,

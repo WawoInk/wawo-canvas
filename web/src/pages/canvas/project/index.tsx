@@ -288,6 +288,8 @@ function InfiniteCanvasPage() {
     const renameProject = useCanvasStore((state) => state.renameProject);
     const deleteProjects = useCanvasStore((state) => state.deleteProjects);
     const fetchProjectFromBackend = useCanvasStore((state) => state.fetchProjectFromBackend);
+    const flushProjectSync = useCanvasStore((state) => state.flushProjectSync);
+    const syncFromBackend = useCanvasStore((state) => state.syncFromBackend);
     const currentProject = useCanvasStore((state) => state.projects.find((project) => project.id === projectId));
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const [nodes, setNodes] = useState<CanvasNodeData[]>([]);
@@ -1069,9 +1071,10 @@ function InfiniteCanvasPage() {
     }, [applyHistory]);
 
     const createAndOpenProject = useCallback(() => {
+        flushProjectSync(projectId);
         const id = createProject(`无限画布 ${useCanvasStore.getState().projects.length + 1}`);
         navigate(`/canvas/${id}`);
-    }, [createProject, navigate]);
+    }, [createProject, flushProjectSync, navigate, projectId]);
 
     const deleteCurrentProject = useCallback(() => {
         deleteProjects([projectId]);
@@ -2683,8 +2686,8 @@ function InfiniteCanvasPage() {
                     onCancelTitleEditing={() => setTitleEditing(false)}
                     canUndo={historyState.canUndo}
                     canRedo={historyState.canRedo}
-                    onHome={() => navigate("/")}
-                    onProjects={() => navigate("/canvas")}
+                    onHome={() => { flushProjectSync(projectId); navigate("/"); }}
+                    onProjects={() => { flushProjectSync(projectId); navigate("/canvas"); }}
                     onCreateProject={createAndOpenProject}
                     onDeleteProject={deleteCurrentProject}
                     onImportImage={() => handleUploadRequest()}
