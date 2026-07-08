@@ -52,6 +52,8 @@ export async function setImageBlob(storageKey: string, blob: Blob) {
 export async function imageToDataUrl(image: { url?: string; dataUrl?: string; storageKey?: string }) {
     const url = image.dataUrl || (await resolveImageUrl(image.storageKey, image.url || ""));
     if (!url || url.startsWith("data:")) return url;
+    // ponytail: return public URLs as-is — S3 presigned URLs lack CORS headers so fetch() fails cross-origin
+    if (/^https?:\/\//i.test(url)) return url;
     return blobToDataUrl(await (await fetch(url)).blob());
 }
 

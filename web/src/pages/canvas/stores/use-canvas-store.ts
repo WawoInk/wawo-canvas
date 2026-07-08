@@ -355,7 +355,7 @@ export const useCanvasStore = create<CanvasStore>()(
 
             renameProject: (id, title) =>
                 set((state) => ({
-                    projects: state.projects.map((project) => (project.id === id ? { ...project, title: title.trim() || project.title, updatedAt: new Date().toISOString() } : project)),
+                    projects: state.projects.map((project) => (project.id === id ? { ...project, title: title.trim() || project.title } : project)),
                 })),
             // Fire rename without debounce (infrequent operation)
             // Handled via a subscribe wrapper below
@@ -371,7 +371,7 @@ export const useCanvasStore = create<CanvasStore>()(
 
             updateProject: (id, patch) =>
                 set((state) => ({
-                    projects: state.projects.map((project) => (project.id === id ? { ...project, ...patch, updatedAt: new Date().toISOString() } : project)),
+                    projects: state.projects.map((project) => (project.id === id ? { ...project, ...patch } : project)),
                 })),
 
             syncFromBackend: async () => {
