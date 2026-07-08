@@ -40,7 +40,10 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
             syncClient.syncAll().catch(() => {});
             // ponytail: also trigger a direct asset refresh so "my assets" gets full
             // dataset on first auth, not just sync deltas
-            useAssetStore.getState().refreshFromServer().catch(() => {});
+            useAssetStore
+                .getState()
+                .refreshFromServer()
+                .catch(() => {});
         }
     }, [userId]);
 

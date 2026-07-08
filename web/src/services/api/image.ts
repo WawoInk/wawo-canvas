@@ -895,7 +895,7 @@ export async function pollAsyncImageTask(config: AiConfig, task: AsyncImageTask,
             code?: number;
             msg?: string;
             status?: string;
-            data?: { images?: Array<{ url?: string; b64_json?: string }> };
+            data?: { images?: Array<{ url?: string; b64_json?: string; dataUrl?: string }> };
             error?: { code?: string; message?: string };
         }>(aiApiUrl(requestConfig, `/tasks/${encodeURIComponent(task.id)}`), {
             headers: aiHeaders(requestConfig),
@@ -907,7 +907,7 @@ export async function pollAsyncImageTask(config: AiConfig, task: AsyncImageTask,
         if (typeof body.code === "number" && body.code !== 0) return { status: "failed", error: body.msg || "任务查询失败" };
         if (body.error?.message) return { status: "failed", error: body.error.message };
         if (body.status === "succeeded") {
-            const images = (body.data?.images || []).map((img) => ({ dataUrl: img.url || `data:image/png;base64,${img.b64_json || ""}` }));
+            const images = (body.data?.images || []).map((img) => ({ dataUrl: img.dataUrl || img.url || `data:image/png;base64,${img.b64_json || ""}` }));
             if (!images.length) return { status: "failed", error: "图片任务成功但没有返回图片" };
             return { status: "succeeded", images };
         }

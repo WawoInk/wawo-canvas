@@ -158,7 +158,7 @@ func UploadUserFile(ctx context.Context, userID, fileType, originalName, mimeTyp
 	id := uuid.NewString()
 	ext := strings.ToLower(filepath.Ext(originalName))
 	s3Key := fmt.Sprintf("%s/%s/%s%s", fileType, userID, id, ext)
-	url, err := S3Upload(ctx, s3Key, reader, mimeType)
+	_, err := S3Upload(ctx, s3Key, reader, mimeType)
 	if err != nil {
 		return nil, err
 	}
@@ -175,6 +175,6 @@ func UploadUserFile(ctx context.Context, userID, fileType, originalName, mimeTyp
 		_ = S3Delete(context.Background(), s3Key)
 		return nil, err
 	}
-	item.S3Key = url
+	item.S3Key, _ = S3PresignGet(context.Background(), item.S3Key, presignExpiry)
 	return &item, nil
 }

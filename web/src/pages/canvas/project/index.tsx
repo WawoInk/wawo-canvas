@@ -2483,9 +2483,19 @@ function InfiniteCanvasPage() {
 
     function delay(ms: number, signal?: AbortSignal) {
         return new Promise<void>((resolve, reject) => {
-            if (signal?.aborted) { reject(new DOMException("Aborted", "AbortError")); return; }
+            if (signal?.aborted) {
+                reject(new DOMException("Aborted", "AbortError"));
+                return;
+            }
             const timer = setTimeout(resolve, ms);
-            signal?.addEventListener("abort", () => { clearTimeout(timer); reject(new DOMException("Aborted", "AbortError")); }, { once: true });
+            signal?.addEventListener(
+                "abort",
+                () => {
+                    clearTimeout(timer);
+                    reject(new DOMException("Aborted", "AbortError"));
+                },
+                { once: true },
+            );
         });
     }
 
@@ -2506,9 +2516,21 @@ function InfiniteCanvasPage() {
                             if (n.id !== nodeId && n.id !== rootId) return n;
                             const center = { x: n.position.x + n.width / 2, y: n.position.y + n.height / 2 };
                             if (n.id === rootId && (nodeId === rootId || !root?.metadata?.primaryImageId))
-                                return { ...n, position: { x: center.x - imageSize.width / 2, y: center.y - imageSize.height / 2 }, width: imageSize.width, height: imageSize.height, metadata: { ...n.metadata, ...imageMetadata(uploaded), primaryImageId: nodeId, status: NODE_STATUS_SUCCESS } };
+                                return {
+                                    ...n,
+                                    position: { x: center.x - imageSize.width / 2, y: center.y - imageSize.height / 2 },
+                                    width: imageSize.width,
+                                    height: imageSize.height,
+                                    metadata: { ...n.metadata, ...imageMetadata(uploaded), primaryImageId: nodeId, status: NODE_STATUS_SUCCESS },
+                                };
                             if (n.id === nodeId)
-                                return { ...n, position: { x: center.x - imageSize.width / 2, y: center.y - imageSize.height / 2 }, width: imageSize.width, height: imageSize.height, metadata: { ...n.metadata, ...imageMetadata(uploaded), status: NODE_STATUS_SUCCESS } };
+                                return {
+                                    ...n,
+                                    position: { x: center.x - imageSize.width / 2, y: center.y - imageSize.height / 2 },
+                                    width: imageSize.width,
+                                    height: imageSize.height,
+                                    metadata: { ...n.metadata, ...imageMetadata(uploaded), status: NODE_STATUS_SUCCESS },
+                                };
                             return n;
                         });
                     });
@@ -2556,7 +2578,18 @@ function InfiniteCanvasPage() {
                                 width: videoSize.width,
                                 height: videoSize.height,
                                 position: { x: center.x - videoSize.width / 2, y: center.y - videoSize.height / 2 },
-                                metadata: { ...n.metadata, content: stored.url, storageKey: "", fileId: stored.fileId, status: NODE_STATUS_SUCCESS, naturalWidth: stored.width, naturalHeight: stored.height, bytes: stored.bytes, mimeType: stored.mimeType, durationMs: 0 },
+                                metadata: {
+                                    ...n.metadata,
+                                    content: stored.url,
+                                    storageKey: "",
+                                    fileId: stored.fileId,
+                                    status: NODE_STATUS_SUCCESS,
+                                    naturalWidth: stored.width,
+                                    naturalHeight: stored.height,
+                                    bytes: stored.bytes,
+                                    mimeType: stored.mimeType,
+                                    durationMs: 0,
+                                },
                             };
                         }),
                     );
@@ -3420,11 +3453,7 @@ function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | undefine
 
 function resetInterruptedGeneration(nodes: CanvasNodeData[]) {
     // ponytail: nodes with upstreamTaskId will resume polling — only reset truly lost ones
-    return nodes.map((node) =>
-        node.metadata?.status === "loading" && !node.metadata?.upstreamTaskId
-            ? { ...node, metadata: { ...node.metadata, status: "error" as const, errorDetails: "页面刷新后生成已中断，请重新生成。" } }
-            : node,
-    );
+    return nodes.map((node) => (node.metadata?.status === "loading" && !node.metadata?.upstreamTaskId ? { ...node, metadata: { ...node.metadata, status: "error" as const, errorDetails: "页面刷新后生成已中断，请重新生成。" } } : node));
 }
 
 function isGenerationCanceled(error: unknown) {
