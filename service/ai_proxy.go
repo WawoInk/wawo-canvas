@@ -531,7 +531,7 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 	// ── 生成任务日志：开始 ──
 	taskType := DetermineTaskType(path)
 	provider := DetermineProvider(channel)
-	genTaskID, _ := LogTaskStart(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers), string(model.SourceVideoWorkbench), "")
+	genTaskID, _ := LogTaskStart(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers), DetermineSource(r), "")
 	// Expose generation task ID to frontend for metadata enrichment
 	w.Header().Set("X-Generation-Task-Id", genTaskID)
 	startTime := time.Now()

@@ -286,6 +286,7 @@ function InfiniteCanvasPage() {
     const updateProject = useCanvasStore((state) => state.updateProject);
     const renameProject = useCanvasStore((state) => state.renameProject);
     const deleteProjects = useCanvasStore((state) => state.deleteProjects);
+    const syncFromBackend = useCanvasStore((state) => state.syncFromBackend);
     const currentProject = useCanvasStore((state) => state.projects.find((project) => project.id === projectId));
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const [nodes, setNodes] = useState<CanvasNodeData[]>([]);
@@ -410,6 +411,8 @@ function InfiniteCanvasPage() {
 
     useEffect(() => {
         if (!hydrated) return;
+        // ponytail: 页面挂载时主动从后端同步，确保首次加载拿到最新数据
+        void syncFromBackend();
         setProjectLoaded(false);
         const project = openProject(projectId);
         if (!project) {

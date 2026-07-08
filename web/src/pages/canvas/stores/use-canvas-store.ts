@@ -69,7 +69,9 @@ function scheduleBackendSync(projectId: string) {
             if (err instanceof ApiError && err.status === 409) {
                 void syncClient.syncDomain("canvas");
                 message.warning("画布已被其他会话修改，已刷新为最新版本");
+                return;
             }
+            console.warn("canvas: sync project failed", err);
         });
     }, SYNC_DEBOUNCE_MS);
 
@@ -81,7 +83,9 @@ function scheduleBackendSync(projectId: string) {
 function fireCreateProject(project: CanvasProject) {
     const user = useUserStore.getState().user;
     if (!user?.id) return;
-    createCanvasProject(project.title, project).catch(() => {});
+    createCanvasProject(project.title, project).catch((err) => {
+        console.warn("canvas: create project failed", err);
+    });
 }
 
 function fireDeleteProjects(ids: string[]) {
@@ -90,7 +94,9 @@ function fireDeleteProjects(ids: string[]) {
     for (const id of ids) {
         syncTimers.get(id) && clearTimeout(syncTimers.get(id));
         syncTimers.delete(id);
-        deleteCanvasProject(id).catch(() => {});
+        deleteCanvasProject(id).catch((err) => {
+            console.warn("canvas: delete project failed", err);
+        });
     }
 }
 
@@ -102,7 +108,9 @@ function fireRenameProject(id: string, title: string) {
     updateCanvasProject(id, {
         project: { ...project, title },
         expectedUpdatedAt: project.updatedAt,
-    } as unknown).catch(() => {});
+    } as unknown).catch((err) => {
+        console.warn("canvas: rename project failed", err);
+    });
 }
 
 // ─── beforeunload flush ─────────────────────────────────────────────────
