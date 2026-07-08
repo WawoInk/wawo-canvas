@@ -70,34 +70,32 @@ function scheduleBackendSync(projectId: string) {
         updateCanvasProject(projectId, {
             project,
             expectedUpdatedAt: project.updatedAt,
-        } as unknown).then((updated) => {
-            // ponytail: 同步本地 updatedAt 与后端，避免后续冲突
-            useCanvasStore.setState((s) => ({
-                projects: s.projects.map((p) =>
-                    p.id === projectId ? { ...p, updatedAt: updated.updatedAt || p.updatedAt } : p,
-                ),
-            }));
-        }).catch((err) => {
-            // ponytail: 乐观锁冲突 — 触发 domain 全量同步拉取最新
-            if (err instanceof ApiError && err.status === 409) {
-                console.warn("canvas: optimistic lock conflict, syncing from server");
-                void syncClient.syncDomain("canvas");
-                // ponytail: 409 时后端已返回当前版本 — 用服务端 updatedAt 覆盖本地，下次请求不再冲突
-                if (err.data && typeof err.data === "object") {
-                    const current = (err.data as Record<string, unknown>)?.current as Record<string, unknown> | undefined;
-                    if (current?.updatedAt) {
-                        useCanvasStore.setState((s) => ({
-                            projects: s.projects.map((p) =>
-                                p.id === current.id ? { ...p, updatedAt: current.updatedAt as string } : p,
-                            ),
-                        }));
+        } as unknown)
+            .then((updated) => {
+                // ponytail: 同步本地 updatedAt 与后端，避免后续冲突
+                useCanvasStore.setState((s) => ({
+                    projects: s.projects.map((p) => (p.id === projectId ? { ...p, updatedAt: updated.updatedAt || p.updatedAt } : p)),
+                }));
+            })
+            .catch((err) => {
+                // ponytail: 乐观锁冲突 — 触发 domain 全量同步拉取最新
+                if (err instanceof ApiError && err.status === 409) {
+                    console.warn("canvas: optimistic lock conflict, syncing from server");
+                    void syncClient.syncDomain("canvas");
+                    // ponytail: 409 时后端已返回当前版本 — 用服务端 updatedAt 覆盖本地，下次请求不再冲突
+                    if (err.data && typeof err.data === "object") {
+                        const current = (err.data as Record<string, unknown>)?.current as Record<string, unknown> | undefined;
+                        if (current?.updatedAt) {
+                            useCanvasStore.setState((s) => ({
+                                projects: s.projects.map((p) => (p.id === current.id ? { ...p, updatedAt: current.updatedAt as string } : p)),
+                            }));
+                        }
                     }
+                    message.warning("画布已被其他会话修改，已刷新为最新版本");
+                    return;
                 }
-                message.warning("画布已被其他会话修改，已刷新为最新版本");
-                return;
-            }
-            console.warn("canvas: sync project failed", err);
-        });
+                console.warn("canvas: sync project failed", err);
+            });
     }, SYNC_DEBOUNCE_MS);
 
     syncTimers.set(projectId, timer);
@@ -108,16 +106,16 @@ function scheduleBackendSync(projectId: string) {
 function fireCreateProject(project: CanvasProject) {
     const user = useUserStore.getState().user;
     if (!user?.id) return;
-    createCanvasProject(project.title, project).then((created) => {
-        // ponytail: 本地 updatedAt 必须与后端一致，否则后续 PUT 的 expectedUpdatedAt 永远不匹配
-        useCanvasStore.setState((s) => ({
-            projects: s.projects.map((p) =>
-                p.id === project.id ? { ...p, updatedAt: created.updatedAt || project.updatedAt } : p,
-            ),
-        }));
-    }).catch((err) => {
-        console.warn("canvas: create project failed", err);
-    });
+    createCanvasProject(project.title, project)
+        .then((created) => {
+            // ponytail: 本地 updatedAt 必须与后端一致，否则后续 PUT 的 expectedUpdatedAt 永远不匹配
+            useCanvasStore.setState((s) => ({
+                projects: s.projects.map((p) => (p.id === project.id ? { ...p, updatedAt: created.updatedAt || project.updatedAt } : p)),
+            }));
+        })
+        .catch((err) => {
+            console.warn("canvas: create project failed", err);
+        });
 }
 
 function fireDeleteProjects(ids: string[]) {
@@ -140,16 +138,16 @@ function fireRenameProject(id: string, title: string) {
     updateCanvasProject(id, {
         project: { ...project, title },
         expectedUpdatedAt: project.updatedAt,
-    } as unknown).then((updated) => {
-        // ponytail: 同步本地 updatedAt 与后端
-        useCanvasStore.setState((s) => ({
-            projects: s.projects.map((p) =>
-                p.id === id ? { ...p, updatedAt: updated.updatedAt || p.updatedAt } : p,
-            ),
-        }));
-    }).catch((err) => {
-        console.warn("canvas: rename project failed", err);
-    });
+    } as unknown)
+        .then((updated) => {
+            // ponytail: 同步本地 updatedAt 与后端
+            useCanvasStore.setState((s) => ({
+                projects: s.projects.map((p) => (p.id === id ? { ...p, updatedAt: updated.updatedAt || p.updatedAt } : p)),
+            }));
+        })
+        .catch((err) => {
+            console.warn("canvas: rename project failed", err);
+        });
 }
 
 // ─── beforeunload flush ─────────────────────────────────────────────────
@@ -185,20 +183,20 @@ if (typeof window !== "undefined") {
                     expectedUpdatedAt: project.updatedAt,
                 }),
                 keepalive: true,
-            }).then(async (resp) => {
-                // ponytail: sync back server's updatedAt so next session starts clean
-                if (resp.ok) {
-                    const json = await resp.json();
-                    const updated = json?.data;
-                    if (updated?.updatedAt) {
-                        useCanvasStore.setState((s) => ({
-                            projects: s.projects.map((p) =>
-                                p.id === project.id ? { ...p, updatedAt: updated.updatedAt } : p,
-                            ),
-                        }));
+            })
+                .then(async (resp) => {
+                    // ponytail: sync back server's updatedAt so next session starts clean
+                    if (resp.ok) {
+                        const json = await resp.json();
+                        const updated = json?.data;
+                        if (updated?.updatedAt) {
+                            useCanvasStore.setState((s) => ({
+                                projects: s.projects.map((p) => (p.id === project.id ? { ...p, updatedAt: updated.updatedAt } : p)),
+                            }));
+                        }
                     }
-                }
-            }).catch(() => {});
+                })
+                .catch(() => {});
         }
     });
 }
@@ -306,9 +304,7 @@ export const useCanvasStore = create<CanvasStore>()(
                         const existing = state.projects.find((p) => p.id === id);
                         if (existing) {
                             return {
-                                projects: state.projects.map((p) =>
-                                    p.id === id ? { ...p, ...project, updatedAt: detail.updatedAt || p.updatedAt } : p,
-                                ),
+                                projects: state.projects.map((p) => (p.id === id ? { ...p, ...project, updatedAt: detail.updatedAt || p.updatedAt } : p)),
                             };
                         }
                         return { projects: [...state.projects, project] };
@@ -333,30 +329,28 @@ export const useCanvasStore = create<CanvasStore>()(
                 updateCanvasProject(id, {
                     project,
                     expectedUpdatedAt: project.updatedAt,
-                } as unknown).then((updated) => {
-                    // ponytail: 同步本地 updatedAt 与后端
-                    useCanvasStore.setState((s) => ({
-                        projects: s.projects.map((p) =>
-                            p.id === id ? { ...p, updatedAt: updated.updatedAt || p.updatedAt } : p,
-                        ),
-                    }));
-                }).catch((err) => {
-                    if (err instanceof ApiError && err.status === 409) {
-                        void syncClient.syncDomain("canvas");
-                        if (err.data && typeof err.data === "object") {
-                            const current = (err.data as Record<string, unknown>)?.current as Record<string, unknown> | undefined;
-                            if (current?.updatedAt) {
-                                useCanvasStore.setState((s) => ({
-                                    projects: s.projects.map((p) =>
-                                        p.id === current.id ? { ...p, updatedAt: current.updatedAt as string } : p,
-                                    ),
-                                }));
+                } as unknown)
+                    .then((updated) => {
+                        // ponytail: 同步本地 updatedAt 与后端
+                        useCanvasStore.setState((s) => ({
+                            projects: s.projects.map((p) => (p.id === id ? { ...p, updatedAt: updated.updatedAt || p.updatedAt } : p)),
+                        }));
+                    })
+                    .catch((err) => {
+                        if (err instanceof ApiError && err.status === 409) {
+                            void syncClient.syncDomain("canvas");
+                            if (err.data && typeof err.data === "object") {
+                                const current = (err.data as Record<string, unknown>)?.current as Record<string, unknown> | undefined;
+                                if (current?.updatedAt) {
+                                    useCanvasStore.setState((s) => ({
+                                        projects: s.projects.map((p) => (p.id === current.id ? { ...p, updatedAt: current.updatedAt as string } : p)),
+                                    }));
+                                }
                             }
+                            return;
                         }
-                        return;
-                    }
-                    console.warn("canvas: flush sync failed", err);
-                });
+                        console.warn("canvas: flush sync failed", err);
+                    });
             },
 
             renameProject: (id, title) =>
@@ -384,56 +378,54 @@ export const useCanvasStore = create<CanvasStore>()(
                 const user = useUserStore.getState().user;
                 if (!user?.id) return;
                 // ponytail: 服务端为 source of truth，全量拉取项目列表并覆盖本地，
-            // 完成后标记 synced=true，IndexedDB 随 persist 自动更新。
-            const token = useUserStore.getState().token;
-            if (!token) return;
-            try {
-                const { fetchCanvasProjects, fetchCanvasProject } = await import("@/services/api/canvas-projects");
-                const serverProjects = await fetchCanvasProjects();
-                if (!serverProjects || !serverProjects.length) {
-                    set({ synced: true });
-                    return;
+                // 完成后标记 synced=true，IndexedDB 随 persist 自动更新。
+                const token = useUserStore.getState().token;
+                if (!token) return;
+                try {
+                    const { fetchCanvasProjects, fetchCanvasProject } = await import("@/services/api/canvas-projects");
+                    const serverProjects = await fetchCanvasProjects();
+                    if (!serverProjects || !serverProjects.length) {
+                        set({ synced: true });
+                        return;
+                    }
+                    // Fetch full project details in parallel for content
+                    const details = await Promise.allSettled(serverProjects.map((p) => fetchCanvasProject(p.id)));
+                    const map = new Map(get().projects.map((p) => [p.id, p]));
+                    for (const result of details) {
+                        if (result.status !== "fulfilled") continue;
+                        const d = result.value;
+                        const existing = map.get(d.id);
+                        // ponytail: 仅当 server updatedAt 比本地新时才覆盖，防止覆盖本地尚未推送的编辑
+                        if (existing && (d.updatedAt || "") <= (existing.updatedAt || "")) continue;
+                        const parsed = safeParseProjectJson(d.projectJson);
+                        map.set(d.id, {
+                            id: d.id,
+                            title: parsed.title || d.name || existing?.title || "未命名画布",
+                            createdAt: d.createdAt || existing?.createdAt || "",
+                            updatedAt: d.updatedAt || existing?.updatedAt || "",
+                            nodes: parsed.nodes || existing?.nodes || [],
+                            connections: parsed.connections || existing?.connections || [],
+                            chatSessions: parsed.chatSessions || existing?.chatSessions || [],
+                            activeChatId: parsed.activeChatId ?? existing?.activeChatId ?? null,
+                            backgroundMode: parsed.backgroundMode || existing?.backgroundMode || "lines",
+                            showImageInfo: parsed.showImageInfo ?? existing?.showImageInfo ?? false,
+                            viewport: parsed.viewport || existing?.viewport || { x: 0, y: 0, k: 1 },
+                        });
+                    }
+                    set({ projects: Array.from(map.values()), synced: true });
+                } catch (err) {
+                    console.warn("canvas: backend sync failed, falling back to local cache", err);
+                    set({ synced: true }); // mark synced so UI doesn't wait forever
+                    // ponytail: offline or network error — IndexedDB cache still serves stale data
                 }
-                // Fetch full project details in parallel for content
-                const details = await Promise.allSettled(
-                    serverProjects.map((p) => fetchCanvasProject(p.id)),
-                );
-                const map = new Map(get().projects.map((p) => [p.id, p]));
-                for (const result of details) {
-                    if (result.status !== "fulfilled") continue;
-                    const d = result.value;
-                    const existing = map.get(d.id);
-                    // ponytail: 仅当 server updatedAt 比本地新时才覆盖，防止覆盖本地尚未推送的编辑
-                    if (existing && (d.updatedAt || "") <= (existing.updatedAt || "")) continue;
-                    const parsed = safeParseProjectJson(d.projectJson);
-                    map.set(d.id, {
-                        id: d.id,
-                        title: parsed.title || d.name || existing?.title || "未命名画布",
-                        createdAt: d.createdAt || existing?.createdAt || "",
-                        updatedAt: d.updatedAt || existing?.updatedAt || "",
-                        nodes: parsed.nodes || existing?.nodes || [],
-                        connections: parsed.connections || existing?.connections || [],
-                        chatSessions: parsed.chatSessions || existing?.chatSessions || [],
-                        activeChatId: parsed.activeChatId ?? existing?.activeChatId ?? null,
-                        backgroundMode: parsed.backgroundMode || existing?.backgroundMode || "lines",
-                        showImageInfo: parsed.showImageInfo ?? existing?.showImageInfo ?? false,
-                        viewport: parsed.viewport || existing?.viewport || { x: 0, y: 0, k: 1 },
-                    });
-                }
-                set({ projects: Array.from(map.values()), synced: true });
-            } catch (err) {
-                console.warn("canvas: backend sync failed, falling back to local cache", err);
-                set({ synced: true }); // mark synced so UI doesn't wait forever
-                // ponytail: offline or network error — IndexedDB cache still serves stale data
-            }
             },
 
             clearProjects: () => {
-            // Clear all pending sync timers
-            for (const timer of syncTimers.values()) clearTimeout(timer);
-            syncTimers.clear();
-            set({ projects: [], hydrated: false, synced: false });
-        },
+                // Clear all pending sync timers
+                for (const timer of syncTimers.values()) clearTimeout(timer);
+                syncTimers.clear();
+                set({ projects: [], hydrated: false, synced: false });
+            },
         }),
         {
             name: CANVAS_STORE_KEY,
@@ -485,8 +477,11 @@ syncClient.onDelta("canvas", (data) => {
 // ponytail: shared JSON.parse for projectJson — used by both syncFromBackend and fromServerProject
 function safeParseProjectJson(json?: string): Partial<CanvasProject> {
     if (!json) return {};
-    try { return JSON.parse(json) as Partial<CanvasProject>; }
-    catch { return {}; }
+    try {
+        return JSON.parse(json) as Partial<CanvasProject>;
+    } catch {
+        return {};
+    }
 }
 
 function fromServerProject(item: { id: string; name?: string; projectJson?: string; createdAt?: string; updatedAt?: string }, local: CanvasProject | null): CanvasProject {

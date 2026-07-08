@@ -429,7 +429,9 @@ function InfiniteCanvasPage() {
                 // to read the freshly set project. Force a consistent state update.
                 restoreProject(fetched);
             });
-            return () => { cancelled = true; };
+            return () => {
+                cancelled = true;
+            };
         }
         restoreProject(project);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2686,8 +2688,14 @@ function InfiniteCanvasPage() {
                     onCancelTitleEditing={() => setTitleEditing(false)}
                     canUndo={historyState.canUndo}
                     canRedo={historyState.canRedo}
-                    onHome={() => { flushProjectSync(projectId); navigate("/"); }}
-                    onProjects={() => { flushProjectSync(projectId); navigate("/canvas"); }}
+                    onHome={() => {
+                        flushProjectSync(projectId);
+                        navigate("/");
+                    }}
+                    onProjects={() => {
+                        flushProjectSync(projectId);
+                        navigate("/canvas");
+                    }}
                     onCreateProject={createAndOpenProject}
                     onDeleteProject={deleteCurrentProject}
                     onImportImage={() => handleUploadRequest()}
