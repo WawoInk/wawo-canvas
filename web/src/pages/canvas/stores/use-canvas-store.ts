@@ -70,10 +70,29 @@ function scheduleBackendSync(projectId: string) {
         updateCanvasProject(projectId, {
             project,
             expectedUpdatedAt: project.updatedAt,
-        } as unknown).catch((err) => {
+        } as unknown).then((updated) => {
+            // ponytail: 同步本地 updatedAt 与后端，避免后续冲突
+            useCanvasStore.setState((s) => ({
+                projects: s.projects.map((p) =>
+                    p.id === projectId ? { ...p, updatedAt: updated.updatedAt || p.updatedAt } : p,
+                ),
+            }));
+        }).catch((err) => {
             // ponytail: 乐观锁冲突 — 触发 domain 全量同步拉取最新
             if (err instanceof ApiError && err.status === 409) {
+                console.warn("canvas: optimistic lock conflict, syncing from server");
                 void syncClient.syncDomain("canvas");
+                // ponytail: 409 时后端已返回当前版本 — 用服务端 updatedAt 覆盖本地，下次请求不再冲突
+                if (err.data && typeof err.data === "object") {
+                    const current = (err.data as Record<string, unknown>)?.current as Record<string, unknown> | undefined;
+                    if (current?.updatedAt) {
+                        useCanvasStore.setState((s) => ({
+                            projects: s.projects.map((p) =>
+                                p.id === current.id ? { ...p, updatedAt: current.updatedAt as string } : p,
+                            ),
+                        }));
+                    }
+                }
                 message.warning("画布已被其他会话修改，已刷新为最新版本");
                 return;
             }
@@ -89,7 +108,14 @@ function scheduleBackendSync(projectId: string) {
 function fireCreateProject(project: CanvasProject) {
     const user = useUserStore.getState().user;
     if (!user?.id) return;
-    createCanvasProject(project.title, project).catch((err) => {
+    createCanvasProject(project.title, project).then((created) => {
+        // ponytail: 本地 updatedAt 必须与后端一致，否则后续 PUT 的 expectedUpdatedAt 永远不匹配
+        useCanvasStore.setState((s) => ({
+            projects: s.projects.map((p) =>
+                p.id === project.id ? { ...p, updatedAt: created.updatedAt || project.updatedAt } : p,
+            ),
+        }));
+    }).catch((err) => {
         console.warn("canvas: create project failed", err);
     });
 }
@@ -114,7 +140,14 @@ function fireRenameProject(id: string, title: string) {
     updateCanvasProject(id, {
         project: { ...project, title },
         expectedUpdatedAt: project.updatedAt,
-    } as unknown).catch((err) => {
+    } as unknown).then((updated) => {
+        // ponytail: 同步本地 updatedAt 与后端
+        useCanvasStore.setState((s) => ({
+            projects: s.projects.map((p) =>
+                p.id === id ? { ...p, updatedAt: updated.updatedAt || p.updatedAt } : p,
+            ),
+        }));
+    }).catch((err) => {
         console.warn("canvas: rename project failed", err);
     });
 }
@@ -152,6 +185,19 @@ if (typeof window !== "undefined") {
                     expectedUpdatedAt: project.updatedAt,
                 }),
                 keepalive: true,
+            }).then(async (resp) => {
+                // ponytail: sync back server's updatedAt so next session starts clean
+                if (resp.ok) {
+                    const json = await resp.json();
+                    const updated = json?.data;
+                    if (updated?.updatedAt) {
+                        useCanvasStore.setState((s) => ({
+                            projects: s.projects.map((p) =>
+                                p.id === project.id ? { ...p, updatedAt: updated.updatedAt } : p,
+                            ),
+                        }));
+                    }
+                }
             }).catch(() => {});
         }
     });
@@ -287,9 +333,26 @@ export const useCanvasStore = create<CanvasStore>()(
                 updateCanvasProject(id, {
                     project,
                     expectedUpdatedAt: project.updatedAt,
-                } as unknown).catch((err) => {
+                } as unknown).then((updated) => {
+                    // ponytail: 同步本地 updatedAt 与后端
+                    useCanvasStore.setState((s) => ({
+                        projects: s.projects.map((p) =>
+                            p.id === id ? { ...p, updatedAt: updated.updatedAt || p.updatedAt } : p,
+                        ),
+                    }));
+                }).catch((err) => {
                     if (err instanceof ApiError && err.status === 409) {
                         void syncClient.syncDomain("canvas");
+                        if (err.data && typeof err.data === "object") {
+                            const current = (err.data as Record<string, unknown>)?.current as Record<string, unknown> | undefined;
+                            if (current?.updatedAt) {
+                                useCanvasStore.setState((s) => ({
+                                    projects: s.projects.map((p) =>
+                                        p.id === current.id ? { ...p, updatedAt: current.updatedAt as string } : p,
+                                    ),
+                                }));
+                            }
+                        }
                         return;
                     }
                     console.warn("canvas: flush sync failed", err);
