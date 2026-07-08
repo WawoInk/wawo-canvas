@@ -29,6 +29,7 @@ export type CanvasProject = {
 
 type CanvasStore = {
     hydrated: boolean;
+    synced: boolean;
     projects: CanvasProject[];
     createProject: (title?: string) => string;
     importProject: (project: Partial<CanvasProject>) => string;
@@ -40,6 +41,9 @@ type CanvasStore = {
     updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport">>) => void;
     /** Triggered after hydration to pull backend projects and replace local state. */
     syncFromBackend: () => Promise<void>;
+    /** Fetch a single project from backend by id — used when opening a project
+     *  that doesn't exist locally (e.g. fresh device, direct URL navigation). */
+    fetchProjectFromBackend: (id: string) => Promise<CanvasProject | null>;
 };
 
 const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
@@ -180,6 +184,7 @@ export const useCanvasStore = create<CanvasStore>()(
     persist(
         (set, get) => ({
             hydrated: false,
+            synced: false,
             projects: [],
 
             createProject: (title = "未命名画布") => {
@@ -227,6 +232,45 @@ export const useCanvasStore = create<CanvasStore>()(
                 return get().projects.find((item) => item.id === id) || null;
             },
 
+            /** Fetch a single project from backend by id — used when opening a project
+             *  that doesn't exist locally (e.g. fresh device, direct URL navigation). */
+            fetchProjectFromBackend: async (id: string) => {
+                const token = useUserStore.getState().token;
+                if (!token) return null;
+                try {
+                    const { fetchCanvasProject } = await import("@/services/api/canvas-projects");
+                    const detail = await fetchCanvasProject(id);
+                    const parsed = safeParseProjectJson(detail.projectJson);
+                    const project: CanvasProject = {
+                        id: detail.id,
+                        title: parsed.title || detail.name || "未命名画布",
+                        createdAt: detail.createdAt || "",
+                        updatedAt: detail.updatedAt || "",
+                        nodes: parsed.nodes || [],
+                        connections: parsed.connections || [],
+                        chatSessions: parsed.chatSessions || [],
+                        activeChatId: parsed.activeChatId ?? null,
+                        backgroundMode: parsed.backgroundMode || "lines",
+                        showImageInfo: parsed.showImageInfo ?? false,
+                        viewport: parsed.viewport || initialViewport,
+                    };
+                    set((state) => {
+                        const existing = state.projects.find((p) => p.id === id);
+                        if (existing) {
+                            return {
+                                projects: state.projects.map((p) =>
+                                    p.id === id ? { ...p, ...project, updatedAt: detail.updatedAt || p.updatedAt } : p,
+                                ),
+                            };
+                        }
+                        return { projects: [...state.projects, project] };
+                    });
+                    return project;
+                } catch {
+                    return null;
+                }
+            },
+
             renameProject: (id, title) =>
                 set((state) => ({
                     projects: state.projects.map((project) => (project.id === id ? { ...project, title: title.trim() || project.title, updatedAt: new Date().toISOString() } : project)),
@@ -251,16 +295,55 @@ export const useCanvasStore = create<CanvasStore>()(
             syncFromBackend: async () => {
                 const user = useUserStore.getState().user;
                 if (!user?.id) return;
-                // ponytail: 服务端为 source of truth — delta 直接覆盖本地
-                await syncClient.syncDomain("canvas");
+                // ponytail: 服务端为 source of truth，全量拉取项目列表并覆盖本地，
+            // 完成后标记 synced=true，IndexedDB 随 persist 自动更新。
+            const token = useUserStore.getState().token;
+            if (!token) return;
+            try {
+                const { fetchCanvasProjects, fetchCanvasProject } = await import("@/services/api/canvas-projects");
+                const serverProjects = await fetchCanvasProjects();
+                if (!serverProjects || !serverProjects.length) {
+                    set({ synced: true });
+                    return;
+                }
+                // Fetch full project details in parallel for content
+                const details = await Promise.allSettled(
+                    serverProjects.map((p) => fetchCanvasProject(p.id)),
+                );
+                const map = new Map(get().projects.map((p) => [p.id, p]));
+                for (const result of details) {
+                    if (result.status !== "fulfilled") continue;
+                    const d = result.value;
+                    const existing = map.get(d.id);
+                    const parsed = safeParseProjectJson(d.projectJson);
+                    map.set(d.id, {
+                        id: d.id,
+                        title: parsed.title || d.name || existing?.title || "未命名画布",
+                        createdAt: d.createdAt || existing?.createdAt || "",
+                        updatedAt: d.updatedAt || existing?.updatedAt || "",
+                        nodes: parsed.nodes || existing?.nodes || [],
+                        connections: parsed.connections || existing?.connections || [],
+                        chatSessions: parsed.chatSessions || existing?.chatSessions || [],
+                        activeChatId: parsed.activeChatId ?? existing?.activeChatId ?? null,
+                        backgroundMode: parsed.backgroundMode || existing?.backgroundMode || "lines",
+                        showImageInfo: parsed.showImageInfo ?? existing?.showImageInfo ?? false,
+                        viewport: parsed.viewport || existing?.viewport || { x: 0, y: 0, k: 1 },
+                    });
+                }
+                set({ projects: Array.from(map.values()), synced: true });
+            } catch (err) {
+                console.warn("canvas: backend sync failed, falling back to local cache", err);
+                set({ synced: true }); // mark synced so UI doesn't wait forever
+                // ponytail: offline or network error — IndexedDB cache still serves stale data
+            }
             },
 
             clearProjects: () => {
-                // Clear all pending sync timers
-                for (const timer of syncTimers.values()) clearTimeout(timer);
-                syncTimers.clear();
-                set({ projects: [], hydrated: false });
-            },
+            // Clear all pending sync timers
+            for (const timer of syncTimers.values()) clearTimeout(timer);
+            syncTimers.clear();
+            set({ projects: [], hydrated: false, synced: false });
+        },
         }),
         {
             name: CANVAS_STORE_KEY,
@@ -271,7 +354,8 @@ export const useCanvasStore = create<CanvasStore>()(
                 }) as StorageValue<CanvasStore>["state"],
             onRehydrateStorage: () => () => {
                 useCanvasStore.setState({ hydrated: true });
-                // ponytail: rehydrate 后立即拉一次服务端 delta
+                // ponytail: rehydrate 后通过 REST API 拉取完整数据，sync 只是增量兜底
+                void useCanvasStore.getState().syncFromBackend();
                 void syncClient.syncDomain("canvas");
             },
         },
@@ -308,15 +392,15 @@ syncClient.onDelta("canvas", (data) => {
     }
 });
 
+// ponytail: shared JSON.parse for projectJson — used by both syncFromBackend and fromServerProject
+function safeParseProjectJson(json?: string): Partial<CanvasProject> {
+    if (!json) return {};
+    try { return JSON.parse(json) as Partial<CanvasProject>; }
+    catch { return {}; }
+}
+
 function fromServerProject(item: { id: string; name?: string; projectJson?: string; createdAt?: string; updatedAt?: string }, local: CanvasProject | null): CanvasProject {
-    let parsed: Partial<CanvasProject> = {};
-    if (item.projectJson) {
-        try {
-            parsed = JSON.parse(item.projectJson);
-        } catch {
-            /* malformed JSON — fall through to local/defaults */
-        }
-    }
+    const parsed = safeParseProjectJson(item.projectJson);
     return {
         id: item.id,
         title: parsed.title || item.name || local?.title || "未命名画布",
@@ -387,7 +471,8 @@ if (typeof window !== "undefined") {
                 if (!store.hydrated) {
                     useCanvasStore.setState({ hydrated: true });
                 }
-                void store.syncFromBackend();
+                void useCanvasStore.getState().syncFromBackend();
+                void syncClient.syncDomain("canvas");
             });
         }
     });

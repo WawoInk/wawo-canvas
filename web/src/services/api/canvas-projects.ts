@@ -25,7 +25,14 @@ function authToken() {
 
 export async function fetchCanvasProjects(): Promise<CanvasProjectItem[]> {
     const token = authToken();
+    if (!token) throw new Error("未登录");
     return apiGet<CanvasProjectItem[]>("/api/v1/canvas/projects", undefined, token);
+}
+
+export async function fetchCanvasProject(id: string): Promise<CanvasProjectDetail> {
+    const token = authToken();
+    if (!token) throw new Error("未登录");
+    return apiGet<CanvasProjectDetail>(`/api/v1/canvas/projects/${encodeURIComponent(id)}`, undefined, token);
 }
 
 export async function createCanvasProject(name: string, project: unknown): Promise<CanvasProjectDetail> {

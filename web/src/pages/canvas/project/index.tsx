@@ -281,12 +281,13 @@ function InfiniteCanvasPage() {
     const addAsset = useAssetStore((state) => state.addAsset);
     const cleanupAssetImages = useAssetStore((state) => state.cleanupImages);
     const hydrated = useCanvasStore((state) => state.hydrated);
+    const synced = useCanvasStore((state) => state.synced);
     const createProject = useCanvasStore((state) => state.createProject);
     const openProject = useCanvasStore((state) => state.openProject);
     const updateProject = useCanvasStore((state) => state.updateProject);
     const renameProject = useCanvasStore((state) => state.renameProject);
     const deleteProjects = useCanvasStore((state) => state.deleteProjects);
-    const syncFromBackend = useCanvasStore((state) => state.syncFromBackend);
+    const fetchProjectFromBackend = useCanvasStore((state) => state.fetchProjectFromBackend);
     const currentProject = useCanvasStore((state) => state.projects.find((project) => project.id === projectId));
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const [nodes, setNodes] = useState<CanvasNodeData[]>([]);
@@ -410,16 +411,34 @@ function InfiniteCanvasPage() {
     );
 
     useEffect(() => {
-        if (!hydrated) return;
-        // ponytail: 页面挂载时主动从后端同步，确保首次加载拿到最新数据
-        void syncFromBackend();
+        if (!hydrated || !synced) return;
         setProjectLoaded(false);
-        const project = openProject(projectId);
+        let project = openProject(projectId);
+        // ponytail: 本地缓存中没有（新设备首次打开），从后端 REST API 拉取
+        if (!project) {
+            // ponytail: async inside useEffect — use a flag to avoid double mount
+            let cancelled = false;
+            fetchProjectFromBackend(projectId).then((fetched) => {
+                if (cancelled || !fetched) {
+                    navigate("/canvas", { replace: true });
+                    return;
+                }
+                // The store has been updated by fetchProjectFromBackend, but we need
+                // to read the freshly set project. Force a consistent state update.
+                restoreProject(fetched);
+            });
+            return () => { cancelled = true; };
+        }
+        restoreProject(project);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hydrated, synced, projectId]);
+
+    // ponytail: extracted restore function shared by both inline and backend-fetch paths
+    const restoreProject = (project: ReturnType<typeof openProject>) => {
         if (!project) {
             navigate("/canvas", { replace: true });
             return;
         }
-
         const restore = async () => {
             const restoredNodes = await hydrateCanvasImages(resetInterruptedGeneration(project.nodes));
             const restoredSessions = await hydrateAssistantImages(project.chatSessions || []);
@@ -447,16 +466,7 @@ function InfiniteCanvasPage() {
             setProjectLoaded(true);
         };
         void restore();
-    }, [hydrated, openProject, projectId, navigate]);
-
-    useEffect(() => {
-        if (!projectLoaded || !["new", "recent", "choose"].includes(searchParams.get("mode") || "")) return;
-        if (searchParams.has("agentUrl")) {
-            setAgentMode("local");
-            return;
-        }
-        openAgent("local");
-    }, [projectLoaded, searchParams]);
+    };
 
     useEffect(() => {
         if (!projectLoaded || applyingHistoryRef.current || historyPausedRef.current) return;
