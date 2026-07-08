@@ -9,7 +9,7 @@ export type UploadResult = {
     mimeType: string;
 };
 
-const fileTypeValues = ["images", "videos", "results/images", "results/videos"] as const;
+const fileTypeValues = ["images", "videos", "results/images", "results/videos", "results/audios"] as const;
 type FileType = (typeof fileTypeValues)[number];
 
 function authHeader(): Record<string, string> {
