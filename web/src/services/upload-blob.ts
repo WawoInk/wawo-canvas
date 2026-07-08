@@ -1,6 +1,6 @@
 import { readImageMeta } from "@/lib/image-utils";
 
-type UploadResult = {
+export type UploadResult = {
     fileId: string;
     url: string;
     width: number;
