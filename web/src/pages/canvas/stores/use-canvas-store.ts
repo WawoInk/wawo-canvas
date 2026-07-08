@@ -385,7 +385,7 @@ export const useCanvasStore = create<CanvasStore>()(
                     const { fetchCanvasProjects, fetchCanvasProject } = await import("@/services/api/canvas-projects");
                     const serverProjects = await fetchCanvasProjects();
                     if (!serverProjects || !serverProjects.length) {
-                        set({ synced: true });
+                        set({ projects: [], synced: true });
                         return;
                     }
                     // Fetch full project details in parallel for content
@@ -412,7 +412,9 @@ export const useCanvasStore = create<CanvasStore>()(
                             viewport: parsed.viewport || existing?.viewport || { x: 0, y: 0, k: 1 },
                         });
                     }
-                    set({ projects: Array.from(map.values()), synced: true });
+                    // ponytail: 剔除服务端已删除的项目——服务端是 source of truth
+                    const serverIds = new Set(serverProjects.map((p) => p.id));
+                    set({ projects: Array.from(map.values()).filter((p) => serverIds.has(p.id)), synced: true });
                 } catch (err) {
                     console.warn("canvas: backend sync failed, falling back to local cache", err);
                     set({ synced: true }); // mark synced so UI doesn't wait forever
