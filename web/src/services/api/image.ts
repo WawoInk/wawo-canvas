@@ -855,6 +855,70 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
     }
 }
 
+// ── Async Image Generation ──────────────────────────────────────────
+
+export type AsyncImageTask = { id: string; model: string };
+export type AsyncImageTaskState = { status: "pending" } | { status: "succeeded"; images: Array<{ dataUrl: string }> } | { status: "failed"; error: string };
+
+export async function createAsyncImageTask(config: AiConfig, prompt: string, count = 1): Promise<AsyncImageTask> {
+    const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
+    const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
+    const quality = normalizeQuality(config.quality);
+    const requestSize = resolveRequestSize(quality, config.size);
+
+    try {
+        const response = await axios.post<{ task_id?: string; status?: string; error?: { message?: string } }>(
+            aiApiUrl(requestConfig, "/async/images/generations"),
+            {
+                model: requestConfig.model,
+                prompt: withSystemPrompt(requestConfig, prompt),
+                n,
+                ...(quality ? { quality } : {}),
+                ...(requestSize ? { size: requestSize } : {}),
+                output_format: IMAGE_OUTPUT_FORMAT,
+            },
+            { headers: { ...aiHeaders(requestConfig, "application/json"), "X-Source": "canvas" } },
+        );
+        const data = response.data;
+        if (data.error?.message) throw new Error(data.error.message);
+        if (!data.task_id) throw new Error("图片异步任务创建失败，未返回 task_id");
+        return { id: data.task_id, model: requestConfig.model };
+    } catch (error) {
+        throw new Error(readAxiosError(error, "图片异步任务创建失败"));
+    }
+}
+
+export async function pollAsyncImageTask(config: AiConfig, task: AsyncImageTask, options?: RequestOptions): Promise<AsyncImageTaskState> {
+    const requestConfig = resolveModelRequestConfig(config, task.model);
+    try {
+        const response = await axios.get<{
+            status?: string;
+            data?: { images?: Array<{ url?: string; b64_json?: string }> };
+            error?: { code?: string; message?: string };
+        }>(aiApiUrl(requestConfig, `/tasks/${encodeURIComponent(task.id)}`), { headers: aiHeaders(requestConfig), signal: options?.signal });
+        const body = response.data;
+        if (body.error?.message) return { status: "failed", error: body.error.message };
+        if (body.status === "succeeded") {
+            const images = (body.data?.images || []).map((img) => ({ dataUrl: img.url || `data:image/png;base64,${img.b64_json || ""}` }));
+            if (!images.length) return { status: "failed", error: "图片任务成功但没有返回图片" };
+            return { status: "succeeded", images };
+        }
+        if (body.status === "failed" || body.status === "cancelled") return { status: "failed", error: body.error?.message || "图片生成失败" };
+        return { status: "pending" };
+    } catch (error) {
+        throw new Error(readAxiosError(error, "图片任务查询失败"));
+    }
+}
+
+export async function cancelAsyncImageTask(config: AiConfig, task: AsyncImageTask): Promise<void> {
+    const requestConfig = resolveModelRequestConfig(config, task.model);
+    try {
+        await axios.post(aiApiUrl(requestConfig, `/tasks/${encodeURIComponent(task.id)}/cancel`), null, { headers: aiHeaders(requestConfig, "application/json") });
+    } catch {
+        // ponytail: cancel is best-effort
+    }
+}
+
 export async function requestToolResponse(config: AiConfig, messages: ResponseInputMessage[], tools: ResponseFunctionTool[], toolChoice: ToolChoice = "auto", onDelta?: (text: string) => void, options?: RequestOptions): Promise<ToolResponseResult> {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.textModel);
     try {

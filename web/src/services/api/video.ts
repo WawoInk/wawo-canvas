@@ -47,7 +47,7 @@ export async function requestVideoGeneration(config: AiConfig, prompt: string, r
     throw new Error("视频生成超时，请稍后重试");
 }
 
-export async function createVideoGenerationTask(config: AiConfig, prompt: string, references: ReferenceImage[] = [], videoReferences: ReferenceVideo[] = [], audioReferences: ReferenceAudio[] = [], options?: RequestOptions): Promise<VideoGenerationTask> {
+export async function createVideoGenerationTask(config: AiConfig, prompt: string, references: ReferenceImage[] = [], videoReferences: ReferenceVideo[] = [], audioReferences: ReferenceAudio[] = [], options?: RequestOptions, source?: string): Promise<VideoGenerationTask> {
     const selectedModel = (config.model || config.videoModel).trim();
     const requestConfig = resolveModelRequestConfig(config, selectedModel);
     assertVideoConfig(requestConfig, requestConfig.model);
@@ -67,7 +67,9 @@ export async function createVideoGenerationTask(config: AiConfig, prompt: string
     };
 
     try {
-        const created = unwrapSeedanceTask((await axios.post<ApiEnvelope<SeedanceTask>>(videoTaskApiUrl(requestConfig), payload, { headers: aiHeaders(requestConfig, "application/json"), signal: options?.signal })).data);
+        const headers: Record<string, string> = { ...aiHeaders(requestConfig, "application/json") };
+        if (source) headers["X-Source"] = source;
+        const created = unwrapSeedanceTask((await axios.post<ApiEnvelope<SeedanceTask>>(videoTaskApiUrl(requestConfig), payload, { headers, signal: options?.signal })).data);
         if (!created.id) throw new Error("视频接口没有返回任务 ID");
         return { id: created.id, model: selectedModel };
     } catch (error) {

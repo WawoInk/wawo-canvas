@@ -6,9 +6,9 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { BookOpen, Bot, Home, ImageIcon, Images, List, Menu, Music2, Plus, Redo2, Settings2, Trash2, Undo2, Upload, Video } from "lucide-react";
 import { saveAs } from "file-saver";
 
-import { requestEdit, requestGeneration, requestImageQuestion } from "@/services/api/image";
+import { createAsyncImageTask, pollAsyncImageTask, cancelAsyncImageTask, requestEdit, requestImageQuestion } from "@/services/api/image";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
-import { requestVideoGeneration, storeGeneratedVideo } from "@/services/api/video";
+import { createVideoGenerationTask, pollVideoGenerationTask, cancelVideoGenerationTask, storeGeneratedVideo } from "@/services/api/video";
 import { DOCS_URL } from "@/constant/env";
 import { defaultConfig, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { resolveImageUrl, uploadImage, type UploadedImage } from "@/services/image-storage";
@@ -438,6 +438,18 @@ function InfiniteCanvasPage() {
     }, [hydrated, synced, projectId]);
 
     // ponytail: extracted restore function shared by both inline and backend-fetch paths
+    const resumePendingGenerations = (nodes: CanvasNodeData[]) => {
+        for (const node of nodes) {
+            if (node.metadata?.status !== "loading" || !node.metadata?.upstreamTaskId) continue;
+            const task = { id: node.metadata.upstreamTaskId, model: node.metadata.taskModel || effectiveConfig.imageModel || effectiveConfig.model };
+            if (node.type === CanvasNodeType.Image) {
+                void pollCanvasImageNode(node.id, task, effectiveConfig);
+            } else if (node.type === CanvasNodeType.Video) {
+                void pollCanvasVideoNode(node.id, task, effectiveConfig);
+            }
+        }
+    };
+
     const restoreProject = (project: ReturnType<typeof openProject>) => {
         if (!project) {
             navigate("/canvas", { replace: true });
@@ -468,6 +480,7 @@ function InfiniteCanvasPage() {
             };
             setHistoryState({ canUndo: false, canRedo: false });
             setProjectLoaded(true);
+            resumePendingGenerations(restoredNodes);
         };
         void restore();
     };
@@ -2190,74 +2203,30 @@ function InfiniteCanvasPage() {
                     setSelectedConnectionId(null);
                     setDialogNodeId(nodeId);
 
+                    // ── Async image generation ──
                     const controller = runController;
                     targetIds.forEach((targetId) => startGenerationRequest(targetId, nodeId, nodeId, controller));
                     if (count > 1) startGenerationRequest(rootId, nodeId, nodeId, controller);
-                    let hasSuccess = false;
-                    let hasFailure = false;
-                    await Promise.all(
+
+                    // Fire async tasks, poll in background
+                    void Promise.all(
                         targetIds.map(async (targetId) => {
                             try {
-                                const image = referenceImages.length
-                                    ? await requestEdit({ ...generationConfig, count: "1" }, effectivePrompt, referenceImages, undefined, { signal: controller.signal }).then((items) => items[0])
-                                    : await requestGeneration({ ...generationConfig, count: "1" }, effectivePrompt, { signal: controller.signal }).then((items) => items[0]);
-                                const uploaded = await uploadBlob(await (await fetch(image.dataUrl)).blob(), "results/images");
-                                const imageSize = fitNodeSize(uploaded.width, uploaded.height, imageConfig.width, imageConfig.height);
-                                setNodes((prev) => {
-                                    const root = prev.find((node) => node.id === rootId);
-                                    return prev.map((node) => {
-                                        if (node.id !== targetId && node.id !== rootId) return node;
-                                        const center = { x: node.position.x + node.width / 2, y: node.position.y + node.height / 2 };
-                                        if (node.id === rootId && (targetId === rootId || !root?.metadata?.primaryImageId))
-                                            return {
-                                                ...node,
-                                                position: { x: center.x - imageSize.width / 2, y: center.y - imageSize.height / 2 },
-                                                width: imageSize.width,
-                                                height: imageSize.height,
-                                                metadata: { ...node.metadata, ...imageMetadata(uploaded), primaryImageId: targetId },
-                                            };
-                                        if (node.id === targetId)
-                                            return {
-                                                ...node,
-                                                position: { x: center.x - imageSize.width / 2, y: center.y - imageSize.height / 2 },
-                                                width: imageSize.width,
-                                                height: imageSize.height,
-                                                metadata: { ...node.metadata, ...imageMetadata(uploaded) },
-                                            };
-                                        return node;
-                                    });
-                                });
-                                hasSuccess = true;
-                                if (isConfigNode) setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, status: NODE_STATUS_SUCCESS, errorDetails: undefined } } : node)));
-                                return true;
+                                const task = await createAsyncImageTask({ ...generationConfig, count: "1" }, effectivePrompt);
+                                setNodes((prev) => prev.map((n) => (n.id === targetId ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
+                                pollCanvasImageNode(targetId, task, generationConfig, isConfigNode ? nodeId : undefined, rootId);
                             } catch (error) {
-                                if (isGenerationCanceled(error)) return false;
+                                if (isGenerationCanceled(error)) return;
                                 const errorDetails = error instanceof Error ? error.message : "生成失败";
-                                hasFailure = true;
-                                setNodes((prev) => prev.map((node) => (node.id === targetId ? { ...node, metadata: { ...node.metadata, status: NODE_STATUS_ERROR, errorDetails } } : node)));
-                            } finally {
+                                setNodes((prev) => prev.map((n) => (n.id === targetId ? { ...n, metadata: { ...n.metadata, status: NODE_STATUS_ERROR, errorDetails } } : n)));
+                                if (isConfigNode) setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, metadata: { ...n.metadata, status: NODE_STATUS_IDLE } } : n)));
                                 finishGenerationRequest(targetId, controller);
                             }
-                            return false;
                         }),
                     );
-                    if (count > 1) finishGenerationRequest(rootId, controller);
-                    if (controller.signal.aborted) {
-                        setNodes((prev) => prev.map((node) => (node.id === nodeId && isConfigNode && node.metadata?.status === NODE_STATUS_LOADING ? { ...node, metadata: { ...node.metadata, status: NODE_STATUS_IDLE, errorDetails: undefined } } : node)));
-                        return;
-                    }
-                    if (hasFailure) message.error(hasSuccess ? "部分图片生成失败" : "全部图片生成失败");
-                    setNodes((prev) =>
-                        prev.map((node) =>
-                            node.id === nodeId && isConfigNode
-                                ? { ...node, metadata: { ...node.metadata, status: hasSuccess ? NODE_STATUS_SUCCESS : NODE_STATUS_ERROR, errorDetails: hasSuccess ? undefined : "全部图片生成失败" } }
-                                : node.id === nodeId && isEmptyImageNode
-                                  ? { ...node, metadata: { ...node.metadata, status: hasSuccess ? NODE_STATUS_SUCCESS : NODE_STATUS_ERROR, errorDetails: hasSuccess ? undefined : "全部图片生成失败" } }
-                                  : node.id === rootId && !hasSuccess
-                                    ? { ...node, metadata: { ...node.metadata, status: NODE_STATUS_ERROR, errorDetails: "全部图片生成失败" } }
-                                    : node,
-                        ),
-                    );
+                    // ponytail: return immediately — polling runs in background
+                    finishGenerationRequest(nodeId, runController);
+                    setRunningNodeId(null);
                     return;
                 }
 
@@ -2294,45 +2263,20 @@ function InfiniteCanvasPage() {
                     if (!isEmptyVideoNode) setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: nodeId, toNodeId: videoId }]);
                     const controller = startGenerationRequest(videoId, nodeId, nodeId, runController);
                     try {
-                        const videoResult = await requestVideoGeneration(generationConfig, effectivePrompt, generationContext.referenceImages, generationContext.referenceVideos, generationContext.referenceAudios, { signal: controller.signal });
-                        let stored;
-                        if (videoResult.blob) {
-                            stored = await uploadBlob(videoResult.blob, "results/videos");
-                        } else if (videoResult.url) {
-                            stored = await uploadUrlToS3(videoResult.url, "results/videos");
-                        } else {
-                            throw new Error("视频结果为空");
+                        const task = await createVideoGenerationTask(generationConfig, effectivePrompt, generationContext.referenceImages, generationContext.referenceVideos, generationContext.referenceAudios, undefined, "canvas");
+                        setNodes((prev) => prev.map((n) => (n.id === videoId ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
+                        // ponytail: fire async poll, don't block
+                        void pollCanvasVideoNode(videoId, task, generationConfig, spec);
+                    } catch (error) {
+                        if (!isGenerationCanceled(error)) {
+                            const errorDetails = error instanceof Error ? error.message : "视频任务创建失败";
+                            message.error(errorDetails);
+                            setNodes((prev) => prev.map((n) => (n.id === videoId ? { ...n, metadata: { ...n.metadata, status: NODE_STATUS_ERROR, errorDetails } } : n)));
                         }
-                        const videoSize = fitNodeSize(stored.width || spec.width, stored.height || spec.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
-                        const nextNode = {
-                            ...videoNode,
-                            width: videoSize.width,
-                            height: videoSize.height,
-                            position: { x: videoNode.position.x + videoNode.width / 2 - videoSize.width / 2, y: videoNode.position.y + videoNode.height / 2 - videoSize.height / 2 },
-                            metadata: {
-                                ...videoNode.metadata,
-                                content: stored.url,
-                                storageKey: "",
-                                fileId: stored.fileId,
-                                status: "success" as const,
-                                naturalWidth: stored.width,
-                                naturalHeight: stored.height,
-                                bytes: stored.bytes,
-                                mimeType: stored.mimeType,
-                                durationMs: 0,
-                            },
-                            prompt: effectivePrompt,
-                            model: generationConfig.model,
-                            size: generationConfig.size,
-                            seconds: generationConfig.videoSeconds,
-                            vquality: generationConfig.vquality,
-                            generateAudio: generationConfig.videoGenerateAudio,
-                            watermark: generationConfig.videoWatermark,
-                            references: generationReferenceUrls(generationContext),
-                        };
-                        setNodes((prev) => prev.map((node) => (node.id === videoId ? nextNode : node)));
                     } finally {
                         finishGenerationRequest(videoId, controller);
+                        finishGenerationRequest(nodeId, runController);
+                        setRunningNodeId(null);
                     }
                     return;
                 }
@@ -2505,42 +2449,9 @@ function InfiniteCanvasPage() {
                     return;
                 }
                 if (node.type === CanvasNodeType.Video) {
-                    const videoResult = await requestVideoGeneration(generationConfig, prompt, retryImages, context?.referenceVideos || [], context?.referenceAudios || [], { signal: controller.signal });
-                    let stored;
-                    if (videoResult.blob) {
-                        stored = await uploadBlob(videoResult.blob, "results/videos");
-                    } else if (videoResult.url) {
-                        stored = await uploadUrlToS3(videoResult.url, "results/videos");
-                    } else {
-                        throw new Error("视频结果为空");
-                    }
-                    const videoSize = fitNodeSize(stored.width || node.width, stored.height || node.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
-                    const nextNode = {
-                        ...node,
-                        width: videoSize.width,
-                        height: videoSize.height,
-                        position: { x: node.position.x + node.width / 2 - videoSize.width / 2, y: node.position.y + node.height / 2 - videoSize.height / 2 },
-                        metadata: {
-                            ...node.metadata,
-                            content: stored.url,
-                            storageKey: "",
-                            fileId: stored.fileId,
-                            status: "success" as const,
-                            naturalWidth: stored.width,
-                            naturalHeight: stored.height,
-                            bytes: stored.bytes,
-                            mimeType: stored.mimeType,
-                            durationMs: 0,
-                        },
-                        prompt,
-                        model: generationConfig.model,
-                        size: generationConfig.size,
-                        seconds: generationConfig.videoSeconds,
-                        vquality: generationConfig.vquality,
-                        generateAudio: generationConfig.videoGenerateAudio,
-                        watermark: generationConfig.videoWatermark,
-                    };
-                    setNodes((prev) => prev.map((item) => (item.id === node.id ? nextNode : item)));
+                    const task = await createVideoGenerationTask(generationConfig, prompt, retryImages, context?.referenceVideos || [], context?.referenceAudios || [], undefined, "canvas");
+                    setNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
+                    void pollCanvasVideoNode(node.id, task, generationConfig);
                     return;
                 }
                 if (node.type === CanvasNodeType.Audio) {
@@ -2550,28 +2461,11 @@ function InfiniteCanvasPage() {
                     return;
                 }
 
-                const image = useReferenceImages
-                    ? await requestEdit(generationConfig, prompt, retryImages, undefined, { signal: controller.signal }).then((items) => items[0])
-                    : await requestGeneration(generationConfig, prompt, { signal: controller.signal }).then((items) => items[0]);
-                const uploadedImage = await uploadBlob(await (await fetch(image.dataUrl)).blob(), "results/images");
-                const imageConfig = NODE_DEFAULT_SIZE[CanvasNodeType.Image];
-                const imageSize = fitNodeSize(uploadedImage.width, uploadedImage.height, imageConfig.width, imageConfig.height);
-                const generationMetadata = savedImageMetadata?.generationType
-                    ? { generationType: savedImageMetadata.generationType, model: generationConfig.model, size: generationConfig.size, quality: generationConfig.quality, count: savedImageMetadata.count || 1, references: savedImageMetadata.references }
-                    : buildImageGenerationMetadata(useReferenceImages ? "edit" : "generation", generationConfig, 1, retryImages);
-                setNodes((prev) =>
-                    prev.map((item) =>
-                        item.id === node.id
-                            ? {
-                                  ...item,
-                                  type: CanvasNodeType.Image,
-                                  width: imageSize.width,
-                                  height: imageSize.height,
-                                  metadata: { ...item.metadata, ...imageMetadata(uploadedImage), prompt, ...generationMetadata },
-                              }
-                            : item,
-                    ),
-                );
+                // ponytail: image retry — async
+                const task = await createAsyncImageTask(generationConfig, prompt);
+                setNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
+                void pollCanvasImageNode(node.id, task, generationConfig);
+                return;
             } catch (error) {
                 if (isGenerationCanceled(error)) return;
                 const errorDetails = error instanceof Error ? error.message : "生成失败";
@@ -2584,6 +2478,103 @@ function InfiniteCanvasPage() {
         },
         [effectiveConfig, finishGenerationRequest, isAiConfigReady, message, openConfigDialog, startGenerationRequest],
     );
+
+    // ── Async polling helpers ──
+
+    function delay(ms: number, signal?: AbortSignal) {
+        return new Promise<void>((resolve, reject) => {
+            if (signal?.aborted) { reject(new DOMException("Aborted", "AbortError")); return; }
+            const timer = setTimeout(resolve, ms);
+            signal?.addEventListener("abort", () => { clearTimeout(timer); reject(new DOMException("Aborted", "AbortError")); }, { once: true });
+        });
+    }
+
+    const pollCanvasImageNode = async (nodeId: string, task: { id: string; model: string }, config: AiConfig, configNodeId?: string, rootId?: string) => {
+        const controller = new AbortController();
+        startGenerationRequest(nodeId, nodeId, nodeId, controller);
+        const imageConfig = NODE_DEFAULT_SIZE[CanvasNodeType.Image];
+        try {
+            for (let attempt = 0; attempt < 120; attempt += 1) {
+                const state = await pollAsyncImageTask(config, task, { signal: controller.signal });
+                if (state.status === "succeeded") {
+                    const image = state.images[0];
+                    const uploaded = await uploadBlob(await (await fetch(image.dataUrl)).blob(), "results/images");
+                    const imageSize = fitNodeSize(uploaded.width, uploaded.height, imageConfig.width, imageConfig.height);
+                    setNodes((prev) => {
+                        const root = rootId ? prev.find((n) => n.id === rootId) : null;
+                        return prev.map((n) => {
+                            if (n.id !== nodeId && n.id !== rootId) return n;
+                            const center = { x: n.position.x + n.width / 2, y: n.position.y + n.height / 2 };
+                            if (n.id === rootId && (nodeId === rootId || !root?.metadata?.primaryImageId))
+                                return { ...n, position: { x: center.x - imageSize.width / 2, y: center.y - imageSize.height / 2 }, width: imageSize.width, height: imageSize.height, metadata: { ...n.metadata, ...imageMetadata(uploaded), primaryImageId: nodeId, status: NODE_STATUS_SUCCESS } };
+                            if (n.id === nodeId)
+                                return { ...n, position: { x: center.x - imageSize.width / 2, y: center.y - imageSize.height / 2 }, width: imageSize.width, height: imageSize.height, metadata: { ...n.metadata, ...imageMetadata(uploaded), status: NODE_STATUS_SUCCESS } };
+                            return n;
+                        });
+                    });
+                    if (configNodeId) setNodes((prev) => prev.map((n) => (n.id === configNodeId ? { ...n, metadata: { ...n.metadata, status: NODE_STATUS_SUCCESS } } : n)));
+                    return;
+                }
+                if (state.status === "failed") throw new Error(state.error);
+                await delay(5000, controller.signal);
+            }
+            throw new Error("图片生成超时，请稍后重试");
+        } catch (error) {
+            if (isGenerationCanceled(error)) return;
+            const errorDetails = error instanceof Error ? error.message : "图片生成失败";
+            message.error(errorDetails);
+            setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, metadata: { ...n.metadata, status: NODE_STATUS_ERROR, errorDetails } } : n)));
+            if (configNodeId) setNodes((prev) => prev.map((n) => (n.id === configNodeId ? { ...n, metadata: { ...n.metadata, status: NODE_STATUS_IDLE } } : n)));
+        } finally {
+            finishGenerationRequest(nodeId, controller);
+        }
+    };
+
+    const pollCanvasVideoNode = async (nodeId: string, task: { id: string; model: string }, config: AiConfig, spec?: { width: number; height: number }) => {
+        const controller = new AbortController();
+        startGenerationRequest(nodeId, nodeId, nodeId, controller);
+        try {
+            for (let attempt = 0; attempt < 120; attempt += 1) {
+                const state = await pollVideoGenerationTask(config, task, { signal: controller.signal });
+                if (state.status === "completed") {
+                    let stored;
+                    if (state.result.blob) {
+                        stored = await uploadBlob(state.result.blob, "results/videos");
+                    } else if (state.result.url) {
+                        stored = await uploadUrlToS3(state.result.url, "results/videos");
+                    } else {
+                        throw new Error("视频结果为空");
+                    }
+                    const defaultSize = spec || NODE_DEFAULT_SIZE[CanvasNodeType.Video];
+                    const videoSize = fitNodeSize(stored.width || defaultSize.width, stored.height || defaultSize.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
+                    setNodes((prev) =>
+                        prev.map((n) => {
+                            if (n.id !== nodeId) return n;
+                            const center = { x: n.position.x + n.width / 2, y: n.position.y + n.height / 2 };
+                            return {
+                                ...n,
+                                width: videoSize.width,
+                                height: videoSize.height,
+                                position: { x: center.x - videoSize.width / 2, y: center.y - videoSize.height / 2 },
+                                metadata: { ...n.metadata, content: stored.url, storageKey: "", fileId: stored.fileId, status: NODE_STATUS_SUCCESS, naturalWidth: stored.width, naturalHeight: stored.height, bytes: stored.bytes, mimeType: stored.mimeType, durationMs: 0 },
+                            };
+                        }),
+                    );
+                    return;
+                }
+                if (state.status === "failed") throw new Error(state.error);
+                await delay(5000, controller.signal);
+            }
+            throw new Error("视频生成超时，请稍后重试");
+        } catch (error) {
+            if (isGenerationCanceled(error)) return;
+            const errorDetails = error instanceof Error ? error.message : "视频生成失败";
+            message.error(errorDetails);
+            setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, metadata: { ...n.metadata, status: NODE_STATUS_ERROR, errorDetails } } : n)));
+        } finally {
+            finishGenerationRequest(nodeId, controller);
+        }
+    };
 
     const generateImageFromTextNode = useCallback(
         (node: CanvasNodeData) => {
@@ -3428,7 +3419,12 @@ function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | undefine
 }
 
 function resetInterruptedGeneration(nodes: CanvasNodeData[]) {
-    return nodes.map((node) => (node.metadata?.status === "loading" ? { ...node, metadata: { ...node.metadata, status: "error" as const, errorDetails: "页面刷新后生成已中断，请重新生成。" } } : node));
+    // ponytail: nodes with upstreamTaskId will resume polling — only reset truly lost ones
+    return nodes.map((node) =>
+        node.metadata?.status === "loading" && !node.metadata?.upstreamTaskId
+            ? { ...node, metadata: { ...node.metadata, status: "error" as const, errorDetails: "页面刷新后生成已中断，请重新生成。" } }
+            : node,
+    );
 }
 
 function isGenerationCanceled(error: unknown) {

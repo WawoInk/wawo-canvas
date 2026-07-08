@@ -57,6 +57,8 @@ export type CanvasNodeMetadata = {
     fileId?: string;
     bytes?: number;
     durationMs?: number;
+    upstreamTaskId?: string;
+    taskModel?: string;
 };
 
 export type CanvasNodeData = {
