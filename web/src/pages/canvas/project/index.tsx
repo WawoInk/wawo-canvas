@@ -1584,9 +1584,22 @@ function InfiniteCanvasPage() {
         setNodes((prev) => prev.map((node) => (node.id === nodeId ? applyNodeConfigPatch(node, patch) : node)));
     }, []);
 
-    const downloadNodeImage = useCallback((node: CanvasNodeData) => {
+    const downloadNodeImage = useCallback(async (node: CanvasNodeData) => {
         if ((node.type !== CanvasNodeType.Image && node.type !== CanvasNodeType.Video && node.type !== CanvasNodeType.Audio) || !node.metadata?.content) return;
-        saveAs(node.metadata.content, `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(node.metadata.content)}`);
+        let url = node.metadata.content;
+        // ponytail: fileId-backed content — fetch fresh presigned URL before download
+        if (node.metadata?.fileId) {
+            try {
+                const raw = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
+                const token = JSON.parse(raw)?.state?.token || "";
+                if (token) {
+                    const resp = await fetch(`/api/v1/files/${encodeURIComponent(node.metadata.fileId)}`, { headers: { Authorization: `Bearer ${token}` } });
+                    const json = await resp.json();
+                    if (json.code === 0 && json.data?.s3Key) url = json.data.s3Key;
+                }
+            } catch { /* use existing url */ }
+        }
+        saveAs(url, `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(node.metadata.content)}`);
     }, []);
 
     const saveNodeAsset = useCallback(
@@ -1600,13 +1613,27 @@ function InfiniteCanvasPage() {
             }
             if (node.type === CanvasNodeType.Video) {
                 if (!node.metadata?.content) return message.error("没有可保存的视频");
+                // ponytail: resolve fresh presigned URL before saving to asset, then save
+                // the fileId so the asset system can refresh the URL later
+                let assetUrl = node.metadata.content;
+                if (node.metadata?.fileId) {
+                    try {
+                        const raw = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
+                        const token = JSON.parse(raw)?.state?.token || "";
+                        if (token) {
+                            const resp = await fetch(`/api/v1/files/${encodeURIComponent(node.metadata.fileId)}`, { headers: { Authorization: `Bearer ${token}` } });
+                            const json = await resp.json();
+                            if (json.code === 0 && json.data?.s3Key) assetUrl = json.data.s3Key;
+                        }
+                    } catch { /* use existing */ }
+                }
                 addAsset({
                     kind: "video",
                     title: node.metadata?.prompt?.slice(0, 24) || "画布视频",
                     coverUrl: "",
                     tags: [],
                     source: "Canvas",
-                    data: { url: node.metadata.content, storageKey: node.metadata.storageKey, width: node.width, height: node.height, bytes: node.metadata.bytes || 0, mimeType: node.metadata.mimeType || "video/mp4" },
+                    data: { url: assetUrl, storageKey: node.metadata.fileId || node.metadata.storageKey || "", fileId: node.metadata.fileId, width: node.width, height: node.height, bytes: node.metadata.bytes || 0, mimeType: node.metadata.mimeType || "video/mp4" },
                     metadata: { source: "canvas", nodeId: node.id, prompt: node.metadata?.prompt },
                 });
                 message.success("已加入我的素材");
@@ -3276,6 +3303,21 @@ async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
     return Promise.all(
         nodes.map(async (node) => {
             const content = node.metadata?.content;
+            const fid = node.metadata?.fileId;
+            // ponytail: fileId-backed content needs fresh presigned URL (S3 URLs expire)
+            if (fid && !node.metadata?.storageKey) {
+                try {
+                    const raw = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
+                    const token = JSON.parse(raw)?.state?.token || "";
+                    if (token) {
+                        const resp = await fetch(`/api/v1/files/${encodeURIComponent(fid)}`, { headers: { Authorization: `Bearer ${token}` } });
+                        const json = await resp.json();
+                        if (json.code === 0 && json.data?.s3Key) {
+                            return { ...node, metadata: { ...node.metadata, content: json.data.s3Key } };
+                        }
+                    }
+                } catch { /* fall through */ }
+            }
             if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && node.metadata?.storageKey) return { ...node, metadata: { ...node.metadata, content: await resolveMediaUrl(node.metadata.storageKey, content) } };
             if (node.type !== CanvasNodeType.Image || !content) return node;
             if (node.metadata?.storageKey) return { ...node, metadata: { ...node.metadata, content: await resolveImageUrl(node.metadata.storageKey, content) } };
