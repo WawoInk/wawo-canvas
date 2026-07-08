@@ -7,6 +7,7 @@ export type UploadResult = {
     height: number;
     bytes: number;
     mimeType: string;
+    durationMs?: number;
 };
 
 const fileTypeValues = ["images", "videos", "results/images", "results/videos", "results/audios"] as const;
