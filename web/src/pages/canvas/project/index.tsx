@@ -1597,7 +1597,9 @@ function InfiniteCanvasPage() {
                     const json = await resp.json();
                     if (json.code === 0 && json.data?.s3Key) url = json.data.s3Key;
                 }
-            } catch { /* use existing url */ }
+            } catch {
+                /* use existing url */
+            }
         }
         saveAs(url, `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(node.metadata.content)}`);
     }, []);
@@ -1625,7 +1627,9 @@ function InfiniteCanvasPage() {
                             const json = await resp.json();
                             if (json.code === 0 && json.data?.s3Key) assetUrl = json.data.s3Key;
                         }
-                    } catch { /* use existing */ }
+                    } catch {
+                        /* use existing */
+                    }
                 }
                 addAsset({
                     kind: "video",
@@ -1633,7 +1637,15 @@ function InfiniteCanvasPage() {
                     coverUrl: "",
                     tags: [],
                     source: "Canvas",
-                    data: { url: assetUrl, storageKey: node.metadata.fileId || node.metadata.storageKey || "", fileId: node.metadata.fileId, width: node.width, height: node.height, bytes: node.metadata.bytes || 0, mimeType: node.metadata.mimeType || "video/mp4" },
+                    data: {
+                        url: assetUrl,
+                        storageKey: node.metadata.fileId || node.metadata.storageKey || "",
+                        fileId: node.metadata.fileId,
+                        width: node.width,
+                        height: node.height,
+                        bytes: node.metadata.bytes || 0,
+                        mimeType: node.metadata.mimeType || "video/mp4",
+                    },
                     metadata: { source: "canvas", nodeId: node.id, prompt: node.metadata?.prompt },
                 });
                 message.success("已加入我的素材");
@@ -3316,7 +3328,9 @@ async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
                             return { ...node, metadata: { ...node.metadata, content: json.data.s3Key } };
                         }
                     }
-                } catch { /* fall through */ }
+                } catch {
+                    /* fall through */
+                }
             }
             if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && node.metadata?.storageKey) return { ...node, metadata: { ...node.metadata, content: await resolveMediaUrl(node.metadata.storageKey, content) } };
             if (node.type !== CanvasNodeType.Image || !content) return node;
