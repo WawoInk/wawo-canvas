@@ -221,6 +221,13 @@ export default function ImagePage() {
                     return { ...image, dataUrl: stored.url, fileId: stored.fileId, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType };
                 }),
             );
+            // Sync results state so "add to assets" gets fileId
+            setResults((prev) =>
+                prev.map((r) => {
+                    const stored = logImages.find((img) => img.id === r.image?.id);
+                    return stored ? { ...r, image: { ...r.image!, dataUrl: stored.dataUrl, fileId: stored.fileId, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType } } : r;
+                }),
+            );
             const log = buildLog({
                 prompt: text,
                 model,
