@@ -10,9 +10,10 @@ import { getVideoPoster } from "@/lib/video-poster";
 
 import { useCopyText } from "@/hooks/use-copy-text";
 import { useAuthReady } from "@/hooks/use-auth-ready";
-import { formatBytes, readFileAsDataUrl, readImageMeta } from "@/lib/image-utils";
+import { formatBytes, readFileAsDataUrl } from "@/lib/image-utils";
 import { cn } from "@/lib/utils";
 import { useAssetStore, type Asset, type AssetKind, type ImageAsset, type VideoAsset } from "@/stores/use-asset-store";
+import { uploadBlob } from "@/services/upload-blob";
 import { exportAssets, readAssetPackage } from "./asset-transfer";
 
 type AssetFormValues = {
@@ -162,35 +163,15 @@ export default function AssetsPage() {
 
     const readImageFile = async (file?: File) => {
         if (!file || !file.type.startsWith("image/")) return;
-        const token = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
-        const parsed = JSON.parse(token);
-        const tokenValue = parsed?.state?.token || "";
-        const authHeader = { Authorization: `Bearer ${tokenValue}` };
-
-        // Step 1: get presigned upload URL
-        const body = JSON.stringify({ fileType: "images", fileName: file.name, mimeType: file.type });
-        const presignResp = await fetch("/api/v1/files/upload-url", { method: "POST", body, headers: { ...authHeader, "Content-Type": "application/json" } });
-        const presignJson = await presignResp.json();
-        if (presignJson.code !== 0) throw new Error(presignJson.msg || "获取上传地址失败");
-
-        const { uploadUrl, confirmId } = presignJson.data;
-
-        // Step 2: upload directly to S3
-        const putResp = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
-        if (!putResp.ok) throw new Error("上传到存储失败");
-
-        // Step 3: confirm upload, get presigned download URL
-        const confirmResp = await fetch("/api/v1/files/confirm", { method: "POST", body: JSON.stringify({ confirmId, bytes: file.size }), headers: { ...authHeader, "Content-Type": "application/json" } });
-        const confirmJson = await confirmResp.json();
-        if (confirmJson.code !== 0) throw new Error(confirmJson.msg || "确认上传失败");
-
-        const s3Url = confirmJson.data.s3Key;
-        const fileId = confirmJson.data.id;
-        const meta = await readImageMeta(URL.createObjectURL(file));
-        const draft = { dataUrl: s3Url, fileId, width: meta.width, height: meta.height, bytes: file.size, mimeType: file.type || meta.mimeType };
-        setImageDraft(draft);
-        if (!form.getFieldValue("coverUrl")) form.setFieldValue("coverUrl", draft.dataUrl);
-        if (!form.getFieldValue("title")) form.setFieldValue("title", file.name);
+        try {
+            // ponytail: server-side upload via POST /api/v1/files avoids S3 CORS
+            const result = await uploadBlob(file, "images");
+            setImageDraft({ dataUrl: result.url, fileId: result.fileId, width: result.width, height: result.height, bytes: result.bytes, mimeType: result.mimeType });
+            if (!form.getFieldValue("coverUrl")) form.setFieldValue("coverUrl", result.url);
+            if (!form.getFieldValue("title")) form.setFieldValue("title", file.name);
+        } catch {
+            message.error("图片上传失败，请重试");
+        }
     };
 
     const copyAssetText = async (asset: Asset) => {
