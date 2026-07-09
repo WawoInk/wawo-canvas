@@ -18,6 +18,10 @@ func AIImagesEdits(w http.ResponseWriter, r *http.Request) {
 	service.ProxyAIRequest(w, r, "/images/edits")
 }
 
+func AIAsyncImagesEdits(w http.ResponseWriter, r *http.Request) {
+	service.ProxyAIRequest(w, r, "/async/images/edits")
+}
+
 func AIChatCompletions(w http.ResponseWriter, r *http.Request) {
 	service.ProxyAIRequest(w, r, "/chat/completions")
 }

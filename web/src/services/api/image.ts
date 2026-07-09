@@ -888,6 +888,33 @@ export async function createAsyncImageTask(config: AiConfig, prompt: string, cou
     }
 }
 
+export async function createAsyncImageEditTask(config: AiConfig, prompt: string, imageUrl: string, count = 1): Promise<AsyncImageTask> {
+    const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
+    const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
+    const requestSize = resolveRequestSize(normalizeQuality(config.quality), config.size);
+
+    try {
+        const response = await axios.post<{ task_id?: string; status?: string; error?: { message?: string } }>(
+            aiApiUrl(requestConfig, "/async/images/edits"),
+            {
+                model: requestConfig.model,
+                prompt: withSystemPrompt(requestConfig, prompt),
+                image: imageUrl,
+                n,
+                ...(requestSize ? { size: requestSize } : {}),
+                output_format: IMAGE_OUTPUT_FORMAT,
+            },
+            { headers: { ...aiHeaders(requestConfig, "application/json"), "X-Source": "canvas" } },
+        );
+        const data = response.data;
+        if (data.error?.message) throw new Error(data.error.message);
+        if (!data.task_id) throw new Error("图片异步编辑任务创建失败，未返回 task_id");
+        return { id: data.task_id, model: requestConfig.model };
+    } catch (error) {
+        throw new Error(readAxiosError(error, "图片异步编辑任务创建失败"));
+    }
+}
+
 export async function pollAsyncImageTask(config: AiConfig, task: AsyncImageTask, options?: RequestOptions): Promise<AsyncImageTaskState> {
     const requestConfig = resolveModelRequestConfig(config, task.model);
     try {

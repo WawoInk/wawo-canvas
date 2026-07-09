@@ -160,7 +160,7 @@ func buildGeminiUpstream(channel model.ModelChannel, modelName, path string, bod
 // geminiActionFor 把 /api/v1/* 路径映射到 Gemini action。不支持返回 error。
 func geminiActionFor(path string) (string, error) {
 	switch path {
-	case "/chat/completions", "/images/generations", "/images/edits":
+	case "/chat/completions", "/images/generations", "/images/edits", "/async/images/generations", "/async/images/edits":
 		return "generateContent", nil
 	case "/audio/speech", "/videos":
 		return "", fmt.Errorf("Gemini 协议不支持 %s", path)

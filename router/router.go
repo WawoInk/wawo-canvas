@@ -34,6 +34,7 @@ func New() *gin.Engine {
 	v1.POST("/images/generations", gin.WrapF(handler.AIImagesGenerations))
 	v1.POST("/images/edits", gin.WrapF(handler.AIImagesEdits))
 	v1.POST("/async/images/generations", gin.WrapF(handler.AIAsyncImagesGenerations))
+	v1.POST("/async/images/edits", gin.WrapF(handler.AIAsyncImagesEdits))
 	v1.POST("/chat/completions", gin.WrapF(handler.AIChatCompletions))
 	v1.POST("/audio/speech", gin.WrapF(handler.AIAudioSpeech))
 	v1.POST("/xvanai/chat/completions", gin.WrapF(handler.XvanaiChatCompletions))

@@ -6,12 +6,12 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { BookOpen, Bot, Home, ImageIcon, Images, List, Menu, Music2, Plus, Redo2, Settings2, Trash2, Undo2, Upload, Video } from "lucide-react";
 import { saveAs } from "file-saver";
 
-import { createAsyncImageTask, pollAsyncImageTask, cancelAsyncImageTask, requestEdit, requestImageQuestion } from "@/services/api/image";
+import { createAsyncImageTask, createAsyncImageEditTask, pollAsyncImageTask, cancelAsyncImageTask, requestEdit, requestImageQuestion } from "@/services/api/image";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { createVideoGenerationTask, pollVideoGenerationTask, cancelVideoGenerationTask, storeGeneratedVideo } from "@/services/api/video";
 import { DOCS_URL } from "@/constant/env";
 import { defaultConfig, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
-import { resolveImageUrl, uploadImage, type UploadedImage } from "@/services/image-storage";
+import { resolveImageUrl, uploadImage, getImageBlob, type UploadedImage } from "@/services/image-storage";
 import { resolveMediaUrl, type UploadedFile } from "@/services/file-storage";
 import { uploadBlob, uploadUrlToS3, type UploadResult } from "@/services/upload-blob";
 import { nanoid } from "nanoid";
@@ -2212,7 +2212,11 @@ function InfiniteCanvasPage() {
                     void Promise.all(
                         targetIds.map(async (targetId) => {
                             try {
-                                const task = await createAsyncImageTask({ ...generationConfig, count: "1" }, effectivePrompt);
+                                const isEdit = generationType === "edit";
+                                const editImageUrl = isEdit && referenceImages[0] ? await resolveSourceImageUrl(sourceNode || null) : null;
+                                const task = isEdit && editImageUrl
+                                    ? await createAsyncImageEditTask({ ...generationConfig, count: "1" }, effectivePrompt, editImageUrl)
+                                    : await createAsyncImageTask({ ...generationConfig, count: "1" }, effectivePrompt);
                                 setNodes((prev) => prev.map((n) => (n.id === targetId ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
                                 pollCanvasImageNode(targetId, task, generationConfig, isConfigNode ? nodeId : undefined, rootId);
                             } catch (error) {
@@ -2461,8 +2465,12 @@ function InfiniteCanvasPage() {
                     return;
                 }
 
-                // ponytail: image retry — async
-                const task = await createAsyncImageTask(generationConfig, prompt);
+                // ponytail: image retry — async, use edit endpoint when we have reference images
+                const isRetryEdit = generationType === "edit" && retryImages.length > 0;
+                const retryEditUrl = isRetryEdit ? await resolveSourceImageUrl(sourceNode) : null;
+                const task = isRetryEdit && retryEditUrl
+                    ? await createAsyncImageEditTask(generationConfig, prompt, retryEditUrl)
+                    : await createAsyncImageTask(generationConfig, prompt);
                 setNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
                 void pollCanvasImageNode(node.id, task, generationConfig);
                 return;
@@ -3488,6 +3496,32 @@ function sourceNodeReferenceImages(node: CanvasNodeData | null) {
             storageKey: node.metadata.storageKey,
         },
     ];
+}
+
+/** Resolve an image node's content to a URL suitable for the async edit API. */
+async function resolveSourceImageUrl(node: CanvasNodeData | null): Promise<string | null> {
+    if (!node || node.type !== CanvasNodeType.Image || !node.metadata?.content) return null;
+    const { content, storageKey, fileId } = node.metadata;
+    // S3-backed: fetch a fresh presigned URL from /api/v1/files/{fileId}
+    if (fileId) {
+        try {
+            const raw = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
+            const token = JSON.parse(raw)?.state?.token || "";
+            if (token) {
+                const resp = await fetch(`/api/v1/files/${encodeURIComponent(fileId)}`, { headers: { Authorization: `Bearer ${token}` } });
+                const json = await resp.json();
+                if (json.code === 0 && json.data?.s3Key) return json.data.s3Key;
+            }
+        } catch {}
+    }
+    // IndexedDB-backed: resolve via storageKey
+    if (storageKey) {
+        const resolved = await resolveImageUrl(storageKey, "");
+        if (resolved && !resolved.startsWith("data:") && !resolved.startsWith("blob:")) return resolved;
+    }
+    // Fallback: if content is already a public URL
+    if (content && /^https?:\/\//i.test(content)) return content;
+    return null;
 }
 
 function isAudioFile(file: File) {
