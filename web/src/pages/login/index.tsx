@@ -5,6 +5,7 @@ import { App, Button, Form, Input, Segmented, Space } from "antd";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Suspense, useCallback, useEffect, useState } from "react";
 
+import { BrandLogo } from "@/components/layout/brand-logo";
 import { fetchCurrentUser } from "@/services/api/auth";
 import { useConfigStore } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
@@ -85,19 +86,12 @@ function LoginContent() {
     };
 
     return (
-        <main className="flex h-full min-h-0 items-center justify-center overflow-y-auto bg-background bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] px-6 py-10 [background-size:16px_16px] dark:bg-[radial-gradient(rgba(245,245,244,.16)_1px,transparent_1px)]">
+        <main className="flex h-full min-h-0 items-center justify-center overflow-y-auto bg-background bg-[radial-gradient(#D7E5FF_1px,transparent_1px)] px-6 py-10 [background-size:16px_16px] dark:bg-[radial-gradient(rgba(29,58,104,.22)_1px,transparent_1px)]">
             <section className="w-full max-w-[420px]">
                 <div className="mb-7 text-center">
-                    <span
-                        className="mx-auto mb-4 block size-12 bg-stone-950 dark:bg-stone-100"
-                        style={{
-                            mask: "url(/logo.svg) center / contain no-repeat",
-                            WebkitMask: "url(/logo.svg) center / contain no-repeat",
-                        }}
-                        aria-label="无限画布"
-                    />
-                    <h1 className="text-3xl font-semibold tracking-normal text-stone-950 dark:text-stone-100">账号登录</h1>
-                    <p className="mt-3 text-base leading-7 text-stone-500 dark:text-stone-400">支持账号密码和 Linux.do 登录。</p>
+                    <BrandLogo variant="full" height={40} className="mx-auto mb-4" />
+                    <h1 className="text-3xl font-semibold tracking-normal text-foreground">账号登录</h1>
+                    <p className="mt-3 text-base leading-7 text-muted-foreground">支持账号密码和 Linux.do 登录。</p>
                 </div>
 
                 <Form<LoginFormValues> layout="vertical" size="large" requiredMark={false} onFinish={submit}>
@@ -116,14 +110,14 @@ function LoginContent() {
                             }
                         />
                     </Form.Item>
-                    <Form.Item name="username" label={<span className="font-medium text-stone-800 dark:text-stone-200">用户名</span>} rules={[{ required: true, message: "请输入用户名" }]}>
+                    <Form.Item name="username" label={<span className="font-medium text-foreground">用户名</span>} rules={[{ required: true, message: "请输入用户名" }]}>
                         <Input prefix={<UserOutlined />} autoComplete="username" />
                     </Form.Item>
-                    <Form.Item name="password" label={<span className="font-medium text-stone-800 dark:text-stone-200">密码</span>} rules={[{ required: true, message: "请输入密码" }]}>
+                    <Form.Item name="password" label={<span className="font-medium text-foreground">密码</span>} rules={[{ required: true, message: "请输入密码" }]}>
                         <Input.Password prefix={<LockOutlined />} autoComplete="current-password" />
                     </Form.Item>
                     {mode === "register" ? (
-                        <Form.Item name="confirmPassword" label={<span className="font-medium text-stone-800 dark:text-stone-200">确认密码</span>} rules={[{ required: true, message: "请再次输入密码" }]}>
+                        <Form.Item name="confirmPassword" label={<span className="font-medium text-foreground">确认密码</span>} rules={[{ required: true, message: "请再次输入密码" }]}>
                             <Input.Password prefix={<LockOutlined />} autoComplete="new-password" />
                         </Form.Item>
                     ) : null}
