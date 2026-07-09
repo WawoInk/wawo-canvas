@@ -295,7 +295,7 @@
 
     .canvas-control-select.ant-select .ant-select-selector,
     .canvas-control-number.ant-input-number {
-        border-color: rgba(120, 113, 108, 0.32) !important;
+        border-color: rgba(200, 210, 230, 0.5) !important;
         box-shadow: none !important;
     }
 
@@ -389,22 +389,22 @@
 
     .canvas-control-select.ant-select-focused .ant-select-selector,
     .canvas-control-number.ant-input-number-focused {
-        border-color: #a8a29e !important;
+        border-color: #01C7FD !important;
     }
 
     .dark .canvas-control-select.ant-select .ant-select-selector,
     .dark .canvas-control-number.ant-input-number {
-        border-color: rgba(214, 211, 209, 0.2) !important;
+        border-color: rgba(29, 58, 104, 0.35) !important;
     }
 
     .dark .canvas-control-select.ant-select-focused .ant-select-selector,
     .dark .canvas-control-number.ant-input-number-focused {
-        border-color: #78716c !important;
+        border-color: #01C7FD !important;
     }
 
     .canvas-image-settings-popover .ant-popover-inner {
         border-radius: 18px;
-        box-shadow: 0 18px 54px rgba(28, 25, 23, 0.16);
+        box-shadow: 0 18px 54px rgba(10, 108, 254, 0.1);
         padding: 18px;
     }
 
