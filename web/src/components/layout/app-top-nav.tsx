@@ -1,5 +1,6 @@
 "use client";
 
+import { BrandLogo } from "@/components/layout/brand-logo";
 import { Menu } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
@@ -20,23 +21,16 @@ export function AppTopNav() {
     return (
         <>
             {!hideHeader ? (
-                <header className="sticky top-0 z-20 h-16 shrink-0 border-b border-stone-200 bg-background/90 backdrop-blur-xl dark:border-stone-800">
+                <header className="sticky top-0 z-20 h-16 shrink-0 border-b border-border bg-background/90 backdrop-blur-xl">
                     <div className="mx-auto flex h-full max-w-7xl items-stretch justify-between gap-5 px-6">
                         <div className="flex min-w-0 items-center">
-                            <Link to="/" className="flex h-full shrink-0 items-center gap-2 text-sm font-semibold leading-none tracking-tight text-stone-950 transition hover:text-stone-600 dark:text-stone-100 dark:hover:text-stone-300">
-                                <span
-                                    className="size-5 shrink-0 bg-current"
-                                    style={{
-                                        mask: "url(/logo.svg) center / contain no-repeat",
-                                        WebkitMask: "url(/logo.svg) center / contain no-repeat",
-                                    }}
-                                />
-                                <span className="text-base font-medium">无限画布</span>
+                            <Link to="/" className="flex h-full shrink-0 items-center gap-2 transition" aria-label="Canvan 首页">
+                                <BrandLogo height={22} />
                             </Link>
 
                             <button
                                 type="button"
-                                className="ml-3 inline-flex size-8 shrink-0 items-center justify-center text-stone-600 transition hover:text-stone-950 md:hidden dark:text-stone-300 dark:hover:text-white"
+                                className="ml-3 inline-flex size-8 shrink-0 items-center justify-center text-muted-foreground hover:text-primary md:hidden"
                                 onClick={() => setMobileNavOpen(true)}
                                 aria-label="打开导航菜单"
                                 title="导航菜单"
@@ -55,8 +49,8 @@ export function AppTopNav() {
                                             className={cn(
                                                 "relative flex h-16 shrink-0 items-center gap-2 text-sm leading-6 transition after:absolute after:inset-x-0 after:bottom-0 after:h-px",
                                                 active
-                                                    ? "font-medium text-stone-950 after:bg-stone-950 dark:text-stone-100 dark:after:bg-stone-100"
-                                                    : "text-stone-500 after:bg-transparent hover:text-stone-950 dark:text-stone-400 dark:hover:text-stone-100",
+                                                    ? "font-medium text-primary after:bg-primary"
+                                                    : "text-muted-foreground after:bg-transparent hover:text-primary",
                                             )}
                                         >
                                             <Icon className="size-4" />

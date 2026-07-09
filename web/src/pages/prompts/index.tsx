@@ -46,15 +46,15 @@ export default function PromptsPage() {
     };
 
     return (
-        <div className="flex h-full flex-col overflow-hidden bg-background text-stone-800 dark:text-stone-100">
+        <div className="flex h-full flex-col overflow-hidden bg-background text-muted-foreground">
             <main
                 className="min-h-0 flex-1 overflow-y-auto bg-background bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] px-6 py-8 [background-size:16px_16px] dark:bg-[radial-gradient(rgba(245,245,244,.16)_1px,transparent_1px)]"
                 onScroll={handleListScroll}
             >
                 <div className="pb-8">
                     <div className="mx-auto max-w-5xl text-center">
-                        <h1 className="text-4xl font-semibold tracking-tight text-stone-950 dark:text-stone-100">提示词中心</h1>
-                        <p className="mt-3 text-sm text-stone-500 dark:text-stone-400">共 {totalPrompts} 条提示词，按标题、标签与分类快速查找灵感。</p>
+                        <h1 className="text-4xl font-semibold tracking-tight text-foreground">提示词中心</h1>
+                        <p className="mt-3 text-sm text-muted-foreground">共 {totalPrompts} 条提示词，按标题、标签与分类快速查找灵感。</p>
                     </div>
                     {query.isLoading ? (
                         <div className="flex h-60 items-center justify-center">
@@ -64,11 +64,11 @@ export default function PromptsPage() {
                     {!query.isLoading ? (
                         <>
                             <div className="mx-auto mt-8 w-full max-w-2xl">
-                                <Input size="large" className="w-full" prefix={<Search className="size-4 text-stone-400" />} value={titleKeyword} placeholder="按标题查询" onChange={(event) => setTitleKeyword(event.target.value)} />
+                                <Input size="large" className="w-full" prefix={<Search className="size-4 text-muted-foreground" />} value={titleKeyword} placeholder="按标题查询" onChange={(event) => setTitleKeyword(event.target.value)} />
                             </div>
                             <div className="mx-auto mt-6 grid max-w-6xl gap-3 text-left">
                                 <div className="grid gap-2 sm:grid-cols-[56px_minmax(0,1fr)] sm:items-start">
-                                    <div className="pt-2 text-xs font-medium text-stone-500 dark:text-stone-400">分类</div>
+                                    <div className="pt-2 text-xs font-medium text-muted-foreground">分类</div>
                                     <div className="flex flex-wrap gap-2">
                                         {promptCategoryOptions.map((category) => (
                                             <Tag.CheckableTag key={category} checked={selectedCategory === category} className={cn("prompt-filter-tag", selectedCategory === category && "is-active")} onChange={() => setSelectedCategory(category)}>
@@ -78,7 +78,7 @@ export default function PromptsPage() {
                                     </div>
                                 </div>
                                 <div className="grid gap-2 sm:grid-cols-[56px_minmax(0,1fr)] sm:items-start">
-                                    <div className="pt-2 text-xs font-medium text-stone-500 dark:text-stone-400">标签</div>
+                                    <div className="pt-2 text-xs font-medium text-muted-foreground">标签</div>
                                     <div className="flex flex-wrap gap-2">
                                         {promptTags.map((tag) => (
                                             <Tag.CheckableTag
@@ -115,7 +115,7 @@ export default function PromptsPage() {
                             ))}
                         </div>
                         {promptItems.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有找到匹配的提示词" className="py-16" /> : null}
-                        <div className="mx-auto mt-6 max-w-7xl text-center text-xs text-stone-500 dark:text-stone-400">
+                        <div className="mx-auto mt-6 max-w-7xl text-center text-xs text-muted-foreground">
                             {query.isFetchingNextPage ? "加载中..." : query.hasNextPage ? "继续向下滚动加载更多" : promptItems.length > 0 ? "已经到底了" : null}
                         </div>
                     </div>

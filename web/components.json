@@ -5,7 +5,7 @@
     "tsx": true,
     "tailwind": {
         "config": "",
-        "css": "src/app/globals.css",
+        "css": "src/styles/globals.css",
         "baseColor": "neutral",
         "cssVariables": true,
         "prefix": ""
@@ -23,6 +23,6 @@
     "menuAccent": "subtle",
     "registries": {
         "@magicui": "https://magicui.design/r/{name}",
-        "@react-bits": "https://reactbits.dev/r/{name}"
+        "@react-bits": "https://reactbits.dev/r/{name}.json"
     }
 }
