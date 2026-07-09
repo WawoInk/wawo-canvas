@@ -211,7 +211,7 @@ export default function Aurora(props: AuroraProps) {
 export function AuroraText({
   children,
   className,
-  colorStops = ['#0A6CFE', '#0CE0FC', '#01C7FD'],
+  colorStops = ['#0A74FE', '#01C7FD', '#F5F6F8'],
 }: {
   children: ReactNode;
   className?: string;
@@ -220,9 +220,9 @@ export function AuroraText({
   return (
     <span className="relative inline-block">
       <span className="absolute inset-0 pointer-events-none">
-        <Aurora colorStops={colorStops} amplitude={0.6} blend={0.3} speed={0.5} />
+        <Aurora colorStops={colorStops} amplitude={1.0} blend={0.5} speed={1.0} />
       </span>
-      <span className={`relative z-10 ${className ?? ''}`}>{children}</span>
+      <span className={`relative z-10 mix-blend-screen ${className ?? ''}`}>{children}</span>
     </span>
   );
 }

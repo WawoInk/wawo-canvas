@@ -44,7 +44,7 @@ export default function IndexPage() {
 
                 <div className="relative flex min-h-[620px] flex-col items-center justify-center pt-10 text-center">
                     <h1 className="max-w-5xl text-balance text-5xl font-semibold tracking-normal sm:text-7xl lg:text-8xl">
-                        <AuroraText>Canvan</AuroraText>
+                        <AuroraText colorStops={["#3B8BFF", "#01C7FD", "#F5F6F8"]}>Canvan</AuroraText>
                     </h1>
                     <p className="mt-8 max-w-3xl text-balance text-lg leading-8 text-muted-foreground">
                         在
