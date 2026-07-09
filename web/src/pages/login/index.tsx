@@ -87,7 +87,7 @@ function LoginContent() {
     };
 
     return (
-        <main className="flex h-full min-h-0 items-center justify-center overflow-y-auto bg-background bg-[radial-gradient(#D7E5FF_1px,transparent_1px)] px-6 py-10 [background-size:16px_16px] dark:bg-[radial-gradient(rgba(29,58,104,.22)_1px,transparent_1px)]">
+        <main className="flex h-full min-h-0 items-center justify-center overflow-y-auto bg-background bg-[radial-gradient(#E4E7EE_1px,transparent_1px)] px-6 py-10 [background-size:16px_16px] dark:bg-[radial-gradient(rgba(255,255,255,.06)_1px,transparent_1px)]">
             <section className="relative w-full max-w-[420px]">
                 <div className="mb-7 text-center">
                     <BrandLogo variant="full" height={40} className="mx-auto mb-4" />
@@ -133,7 +133,7 @@ function LoginContent() {
                         ) : null}
                     </Space>
                 </Form>
-                <BorderBeam size={120} duration={8} colorFrom="#0A6CFE" colorTo="#01C7FD" />
+                <BorderBeam size={120} duration={8} colorFrom="#0A74FE" colorTo="#01C7FD" />
             </section>
         </main>
     );

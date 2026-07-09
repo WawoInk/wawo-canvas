@@ -37,7 +37,7 @@ export default function IndexPage() {
     }, [message]);
 
     return (
-        <main className="relative h-full overflow-y-auto bg-background bg-[radial-gradient(#D7E5FF_1px,transparent_1px)] [background-size:16px_16px] text-foreground dark:bg-[radial-gradient(rgba(29,58,104,.25)_1px,transparent_1px)]">
+        <main className="relative h-full overflow-y-auto bg-background bg-[radial-gradient(#E4E7EE_1px,transparent_1px)] [background-size:16px_16px] text-foreground dark:bg-[radial-gradient(rgba(255,255,255,.06)_1px,transparent_1px)]">
             <section className="relative mx-auto min-h-[calc(100vh-4rem)] max-w-7xl overflow-hidden px-6">
                 <div className="pointer-events-none absolute left-[15%] top-24 size-20 rounded-full border border-dashed border-primary/20" />
                 <div className="pointer-events-none absolute right-[23%] top-[48%] size-20 rounded-full border border-dashed border-primary/20" />
@@ -48,11 +48,11 @@ export default function IndexPage() {
                     </h1>
                     <p className="mt-8 max-w-3xl text-balance text-lg leading-8 text-muted-foreground">
                         在
-                        <Highlighter action="underline" color="#01C7FD">
+                        <Highlighter action="underline" color="#0A74FE">
                             Canvan
                         </Highlighter>
                         中生成、连接和重组
-                        <Highlighter action="highlight" color="#0CE0FC">
+                        <Highlighter action="highlight" color="#01C7FD">
                             图片、文字与图形
                         </Highlighter>
                         ，让创作从单次生成变成连续推演。
@@ -62,7 +62,7 @@ export default function IndexPage() {
                             <Button type="primary" size="large" href={`/${primaryTool.slug}`} icon={<ArrowRight className="size-4" />} iconPlacement="end">
                                 开始使用
                             </Button>
-                            <BorderBeam size={200} duration={6} colorFrom="#0A6CFE" colorTo="#0CE0FC" />
+                            <BorderBeam size={200} duration={6} colorFrom="#0A74FE" colorTo="#01C7FD" />
                         </div>
                         <Button size="large" href="/canvas">
                             打开画布
