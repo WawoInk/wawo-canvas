@@ -855,11 +855,7 @@ function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: Ge
     const thumbnails = (log.thumbnails || []).filter(Boolean).slice(0, 4);
 
     return (
-        <button
-            type="button"
-            className={`block w-full rounded-lg border p-2 text-left transition ${active ? "border-foreground bg-accent" : "border bg-background hover:bg-accent/50"}`}
-            onClick={onClick}
-        >
+        <button type="button" className={`block w-full rounded-lg border p-2 text-left transition ${active ? "border-foreground bg-accent" : "border bg-background hover:bg-accent/50"}`} onClick={onClick}>
             <div className="grid grid-cols-[minmax(128px,1fr)_auto] gap-2">
                 <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-2">
                     <Checkbox className="mt-0.5" checked={selected} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelectedChange(event.target.checked)} />

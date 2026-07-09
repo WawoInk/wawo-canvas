@@ -303,11 +303,7 @@ export default function AssetsPage() {
                                 </div>
                             </div>
                             <div className="flex flex-wrap gap-4">
-                                <button
-                                    type="button"
-                                    className="cursor-pointer text-sm font-medium text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:underline"
-                                    onClick={() => void exportAllAssets()}
-                                >
+                                <button type="button" className="cursor-pointer text-sm font-medium text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:underline" onClick={() => void exportAllAssets()}>
                                     导出素材
                                 </button>
                                 <button

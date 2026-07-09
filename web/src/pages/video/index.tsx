@@ -896,12 +896,7 @@ function LogPanel({
 
 function LogCard({ log, selected, active, onSelectedChange, onClick, onCancel }: { log: GenerationLog; selected: boolean; active: boolean; onSelectedChange: (checked: boolean) => void; onClick: () => void; onCancel?: (logId: string) => void }) {
     return (
-        <div
-            role="button"
-            tabIndex={0}
-            className={`block w-full rounded-lg border p-2 text-left transition ${active ? "border-foreground bg-accent" : "border bg-background hover:bg-accent/50"}`}
-            onClick={onClick}
-        >
+        <div role="button" tabIndex={0} className={`block w-full rounded-lg border p-2 text-left transition ${active ? "border-foreground bg-accent" : "border bg-background hover:bg-accent/50"}`} onClick={onClick}>
             <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
                 <Checkbox className="mt-0.5" checked={selected} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelectedChange(event.target.checked)} />
                 <div className="min-w-0">

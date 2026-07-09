@@ -24,10 +24,7 @@ export function MobileNavDrawer({ open, activeToolSlug, onClose }: MobileNavDraw
                             key={tool.slug}
                             to={`/${tool.slug}`}
                             onClick={onClose}
-                            className={cn(
-                                "flex items-center gap-3 rounded-lg px-3 py-3 text-base transition",
-                                active ? "bg-accent font-medium text-primary" : "text-muted-foreground hover:bg-accent hover:text-primary",
-                            )}
+                            className={cn("flex items-center gap-3 rounded-lg px-3 py-3 text-base transition", active ? "bg-accent font-medium text-primary" : "text-muted-foreground hover:bg-accent hover:text-primary")}
                         >
                             <Icon className="size-5" />
                             <span>{tool.label}</span>

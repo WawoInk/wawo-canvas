@@ -31,14 +31,7 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
     return (
         <article className="group flex min-h-44 cursor-pointer flex-col justify-between rounded-2xl bg-card p-5 transition hover:border-primary/30 hover:shadow-[0_8px_30px_rgba(1,199,253,0.12)]" onClick={() => !editing && open()}>
             <div className="flex items-start gap-3">
-                <input
-                    type="checkbox"
-                    checked={selected}
-                    onClick={(event) => event.stopPropagation()}
-                    onChange={(event) => toggleSelected(project.id, event.target.checked)}
-                    className="mt-1 size-4 accent-foreground"
-                    aria-label={`选择 ${project.title}`}
-                />
+                <input type="checkbox" checked={selected} onClick={(event) => event.stopPropagation()} onChange={(event) => toggleSelected(project.id, event.target.checked)} className="mt-1 size-4 accent-foreground" aria-label={`选择 ${project.title}`} />
                 {editing ? (
                     <Input className="min-w-0" value={editingTitle} onClick={(event) => event.stopPropagation()} onChange={(event) => setEditingTitle(event.target.value)} onKeyDown={(event) => event.key === "Enter" && saveTitle()} autoFocus />
                 ) : (

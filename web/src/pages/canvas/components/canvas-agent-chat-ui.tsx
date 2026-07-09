@@ -36,7 +36,7 @@ export function AgentChatMessage({
 }) {
     const isUser = item.role === "user";
     const isSystem = item.role === "system";
-    const color = item.role === "error" ? "#dc2626" : item.role === "tool" ? "#2563eb" : theme.node.text;
+    const color = item.role === "error" ? "#dc2626" : item.role === "tool" ? "#E8956A" : theme.node.text;
     if (isSystem) {
         return (
             <div className="flex justify-center text-xs">
@@ -373,7 +373,7 @@ function toolCardState(title: string, text: string, detail?: unknown) {
     if (/失败|错误/.test(raw) || lower.includes("failed") || lower.includes("error")) return { label: "执行失败", color: "#dc2626", softBorder: "rgba(220,38,38,.20)", softBg: "rgba(220,38,38,.04)", icon: <XCircle className="size-4" />, isError: true };
     if (/完成|成功/.test(raw) || lower.includes("completed") || lower.includes("succeeded"))
         return { label: tool === "canvas_apply_ops" || /画布操作/.test(title) ? "已批准执行" : "执行完成", color: "#16a34a", softBorder: "rgba(22,163,74,.20)", softBg: "rgba(22,163,74,.04)", icon: <CheckCircle2 className="size-4" />, isError: false };
-    return { label: "工具调用", color: "#2563eb", softBorder: "rgba(37,99,235,.20)", softBg: "rgba(37,99,235,.04)", icon: <Wrench className="size-4" />, isError: false };
+    return { label: "工具调用", color: "#E8956A", softBorder: "rgba(232,149,106,.20)", softBg: "rgba(232,149,106,.04)", icon: <Wrench className="size-4" />, isError: false };
 }
 
 function normalizeText(value: unknown) {

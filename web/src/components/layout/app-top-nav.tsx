@@ -25,7 +25,7 @@ export function AppTopNav() {
                     <div className="mx-auto flex h-full max-w-7xl items-stretch justify-between gap-5 px-6">
                         <div className="flex min-w-0 items-center">
                             <Link to="/" className="flex h-full shrink-0 items-center gap-2 transition" aria-label="Canvan 首页">
-                                <BrandLogo height={22} />
+                                <BrandLogo height={64} />
                             </Link>
 
                             <button
@@ -48,9 +48,7 @@ export function AppTopNav() {
                                             to={`/${tool.slug}`}
                                             className={cn(
                                                 "relative flex h-16 shrink-0 items-center gap-2 text-sm leading-6 transition after:absolute after:inset-x-0 after:bottom-0 after:h-px",
-                                                active
-                                                    ? "font-medium text-primary after:bg-primary"
-                                                    : "text-muted-foreground after:bg-transparent hover:text-primary",
+                                                active ? "font-medium text-primary after:bg-primary" : "text-muted-foreground after:bg-transparent hover:text-primary",
                                             )}
                                         >
                                             <Icon className="size-4" />
