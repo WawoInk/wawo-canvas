@@ -58,7 +58,11 @@ func CreateUploadURL(ctx context.Context, userID, fileType, fileName, mimeType s
 	}
 	id := uuid.NewString()
 	ext := strings.ToLower(filepath.Ext(fileName))
+	// ponytail: user-uploaded files → uploads/ prefix; AI results keep results/ prefix
 	s3Key := fmt.Sprintf("%s/%s/%s%s", fileType, userID, id, ext)
+	if !strings.HasPrefix(fileType, "results/") {
+		s3Key = fmt.Sprintf("uploads/%s/%s/%s%s", fileType, userID, id, ext)
+	}
 	uploadURL, err := S3PresignPut(ctx, s3Key, mimeType, presignExpiry)
 	if err != nil {
 		return nil, err
@@ -157,7 +161,11 @@ func UploadUserFile(ctx context.Context, userID, fileType, originalName, mimeTyp
 	}
 	id := uuid.NewString()
 	ext := strings.ToLower(filepath.Ext(originalName))
+	// ponytail: user-uploaded files go under uploads/ prefix; AI results keep results/ prefix
 	s3Key := fmt.Sprintf("%s/%s/%s%s", fileType, userID, id, ext)
+	if !strings.HasPrefix(fileType, "results/") {
+		s3Key = fmt.Sprintf("uploads/%s/%s/%s%s", fileType, userID, id, ext)
+	}
 	_, err := S3Upload(ctx, s3Key, reader, mimeType)
 	if err != nil {
 		return nil, err

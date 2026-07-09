@@ -173,22 +173,23 @@ export default function VideoPage() {
         if (selectedFiles.some((file) => isSupportedAudioFile(file) && file.size > SEEDANCE_REFERENCE_LIMITS.audioMaxBytes)) message.warning("已忽略超过 15MB 的参考音频");
         const nextReferences = await Promise.all(
             imageFiles.map(async (file) => {
-                const image = await uploadImage(file);
-                return { id: nanoid(), name: file.name, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey };
+                const dataUrl = URL.createObjectURL(file);
+                const image = await uploadBlob(file, "images");
+                return { id: nanoid(), name: file.name, type: image.mimeType, dataUrl, url: image.url, storageKey: image.fileId };
             }),
         );
         const nextVideoReferences = await Promise.all(
             videoFiles.map(async (file) => {
-                const video = await uploadMediaFile(file, "video-reference");
-                return { id: nanoid(), name: file.name, type: video.mimeType, url: video.url, storageKey: video.storageKey, bytes: video.bytes, width: video.width, height: video.height, durationMs: video.durationMs };
+                const video = await uploadBlob(file, "videos");
+                return { id: nanoid(), name: file.name, type: video.mimeType, url: video.url, bytes: video.bytes, width: video.width, height: video.height, durationMs: video.durationMs };
             }),
         );
         const nextAudioReferences = filterAudioReferencesByDuration(
             audioReferences,
             await Promise.all(
                 audioFiles.map(async (file) => {
-                    const audio = await uploadMediaFile(file, "audio-reference");
-                    return { id: nanoid(), name: file.name, type: audio.mimeType, url: audio.url, storageKey: audio.storageKey, durationMs: audio.durationMs };
+                    const audio = await uploadBlob(file, "audios");
+                    return { id: nanoid(), name: file.name, type: audio.mimeType, url: audio.url, durationMs: audio.durationMs };
                 }),
             ),
             message.warning,
@@ -208,8 +209,9 @@ export default function VideoPage() {
             }
             const nextReferences = await Promise.all(
                 blobs.slice(0, SEEDANCE_REFERENCE_LIMITS.images - references.length).map(async (blob, index) => {
-                    const image = await uploadImage(blob);
-                    return { id: nanoid(), name: `clipboard-${index + 1}.png`, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey };
+                    const dataUrl = URL.createObjectURL(blob);
+                    const image = await uploadBlob(blob, "images");
+                    return { id: nanoid(), name: `clipboard-${index + 1}.png`, type: image.mimeType, dataUrl, url: image.url, storageKey: image.fileId };
                 }),
             );
             setReferences((value) => [...value, ...nextReferences].slice(0, SEEDANCE_REFERENCE_LIMITS.images));
