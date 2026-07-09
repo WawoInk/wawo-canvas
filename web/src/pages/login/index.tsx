@@ -88,7 +88,7 @@ function LoginContent() {
 
     return (
         <main className="flex h-full min-h-0 items-center justify-center overflow-y-auto bg-background bg-[radial-gradient(#E4E7EE_1px,transparent_1px)] px-6 py-10 [background-size:16px_16px] dark:bg-[radial-gradient(rgba(255,255,255,.06)_1px,transparent_1px)]">
-            <section className="relative w-full max-w-[420px]">
+            <section className="relative w-full max-w-[420px] rounded-[16px] overflow-hidden">
                 <div className="mb-7 text-center">
                     <BrandLogo variant="full" height={40} className="mx-auto mb-4" />
                     <h1 className="text-3xl font-semibold tracking-normal text-foreground">账号登录</h1>

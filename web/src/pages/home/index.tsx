@@ -58,7 +58,7 @@ export default function IndexPage() {
                         ，让创作从单次生成变成连续推演。
                     </p>
                     <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-                        <div className="relative">
+                        <div className="relative rounded-[10px] overflow-hidden">
                             <Button type="primary" size="large" href={`/${primaryTool.slug}`} icon={<ArrowRight className="size-4" />} iconPlacement="end">
                                 开始使用
                             </Button>
