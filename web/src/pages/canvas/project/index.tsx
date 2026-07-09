@@ -3288,7 +3288,8 @@ function imageMetadata(image: UploadedImage | UploadResult): CanvasNodeMetadata 
 
 function videoMetadata(video: UploadedFile | UploadResult): CanvasNodeMetadata {
     // ponytail: S3-backed (UploadResult with fileId) vs IndexedDB-backed (UploadedFile with storageKey)
-    if ("fileId" in video) return { content: video.url, storageKey: "", fileId: video.fileId, status: "success", naturalWidth: video.width, naturalHeight: video.height, bytes: video.bytes, mimeType: video.mimeType || "video/mp4", durationMs: video.durationMs };
+    if ("fileId" in video)
+        return { content: video.url, storageKey: "", fileId: video.fileId, status: "success", naturalWidth: video.width, naturalHeight: video.height, bytes: video.bytes, mimeType: video.mimeType || "video/mp4", durationMs: video.durationMs };
     return { content: video.url, storageKey: video.storageKey, status: "success", naturalWidth: video.width, naturalHeight: video.height, bytes: video.bytes, mimeType: video.mimeType || "video/mp4", durationMs: video.durationMs };
 }
 
