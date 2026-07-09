@@ -7,6 +7,8 @@ import { App, Button, Image, Tag } from "antd";
 import { fetchPrompts, type Prompt } from "@/services/api/prompts";
 import { navigationTools } from "@/constant/navigation-tools";
 import { cn } from "@/lib/utils";
+import { AuroraText } from "@/components/ui/aurora-text";
+import { BorderBeam } from "@/components/ui/border-beam";
 
 function Highlighter({ action, color, children }: { action: "highlight" | "underline"; color: string; children: ReactNode }) {
     return (
@@ -41,7 +43,9 @@ export default function IndexPage() {
                 <div className="pointer-events-none absolute right-[23%] top-[48%] size-20 rounded-full border border-dashed border-primary/20" />
 
                 <div className="relative flex min-h-[620px] flex-col items-center justify-center pt-10 text-center">
-                    <h1 className="ai-title-aurora max-w-5xl text-balance text-5xl font-semibold tracking-normal sm:text-7xl lg:text-8xl">Canvan</h1>
+                    <h1 className="ai-title-aurora max-w-5xl text-balance text-5xl font-semibold tracking-normal sm:text-7xl lg:text-8xl">
+                        <AuroraText>Canvan</AuroraText>
+                    </h1>
                     <p className="mt-8 max-w-3xl text-balance text-lg leading-8 text-muted-foreground">
                         在
                         <Highlighter action="underline" color="#01C7FD">
@@ -54,9 +58,12 @@ export default function IndexPage() {
                         ，让创作从单次生成变成连续推演。
                     </p>
                     <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-                        <Button type="primary" size="large" href={`/${primaryTool.slug}`} icon={<ArrowRight className="size-4" />} iconPlacement="end">
-                            开始使用
-                        </Button>
+                        <div className="relative">
+                            <Button type="primary" size="large" href={`/${primaryTool.slug}`} icon={<ArrowRight className="size-4" />} iconPlacement="end">
+                                开始使用
+                            </Button>
+                            <BorderBeam size={200} duration={6} colorFrom="#0A6CFE" colorTo="#0CE0FC" />
+                        </div>
                         <Button size="large" href="/canvas">
                             打开画布
                         </Button>

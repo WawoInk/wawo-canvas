@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Suspense, useCallback, useEffect, useState } from "react";
 
 import { BrandLogo } from "@/components/layout/brand-logo";
+import { BorderBeam } from "@/components/ui/border-beam";
 import { fetchCurrentUser } from "@/services/api/auth";
 import { useConfigStore } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
@@ -87,7 +88,7 @@ function LoginContent() {
 
     return (
         <main className="flex h-full min-h-0 items-center justify-center overflow-y-auto bg-background bg-[radial-gradient(#D7E5FF_1px,transparent_1px)] px-6 py-10 [background-size:16px_16px] dark:bg-[radial-gradient(rgba(29,58,104,.22)_1px,transparent_1px)]">
-            <section className="w-full max-w-[420px]">
+            <section className="relative w-full max-w-[420px]">
                 <div className="mb-7 text-center">
                     <BrandLogo variant="full" height={40} className="mx-auto mb-4" />
                     <h1 className="text-3xl font-semibold tracking-normal text-foreground">账号登录</h1>
@@ -132,6 +133,7 @@ function LoginContent() {
                         ) : null}
                     </Space>
                 </Form>
+                <BorderBeam size={120} duration={8} colorFrom="#0A6CFE" colorTo="#01C7FD" />
             </section>
         </main>
     );
