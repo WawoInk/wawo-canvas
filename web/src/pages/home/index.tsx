@@ -16,7 +16,7 @@ function Highlighter({ action, color, children }: { action: "highlight" | "under
             ) : (
                 <span className="absolute inset-x-0 bottom-0 h-1 rounded-full opacity-80" style={{ backgroundColor: color }} />
             )}
-            <span className="relative font-medium text-stone-800 dark:text-stone-200">{children}</span>
+            <span className="relative font-medium text-foreground">{children}</span>
         </span>
     );
 }
@@ -35,20 +35,20 @@ export default function IndexPage() {
     }, [message]);
 
     return (
-        <main className="relative h-full overflow-y-auto bg-background bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] text-stone-950 dark:bg-[radial-gradient(rgba(245,245,244,.18)_1px,transparent_1px)] dark:text-stone-100">
+        <main className="relative h-full overflow-y-auto bg-background bg-[radial-gradient(#D7E5FF_1px,transparent_1px)] [background-size:16px_16px] text-foreground dark:bg-[radial-gradient(rgba(29,58,104,.25)_1px,transparent_1px)]">
             <section className="relative mx-auto min-h-[calc(100vh-4rem)] max-w-7xl overflow-hidden px-6">
-                <div className="pointer-events-none absolute left-[15%] top-24 size-20 rounded-full border border-dashed border-stone-200 dark:border-stone-800" />
-                <div className="pointer-events-none absolute right-[23%] top-[48%] size-20 rounded-full border border-dashed border-stone-200 dark:border-stone-800" />
+                <div className="pointer-events-none absolute left-[15%] top-24 size-20 rounded-full border border-dashed border-primary/20" />
+                <div className="pointer-events-none absolute right-[23%] top-[48%] size-20 rounded-full border border-dashed border-primary/20" />
 
                 <div className="relative flex min-h-[620px] flex-col items-center justify-center pt-10 text-center">
-                    <h1 className="ai-title-aurora max-w-5xl text-balance text-5xl font-semibold tracking-normal sm:text-7xl lg:text-8xl">无限画布</h1>
-                    <p className="mt-8 max-w-3xl text-balance text-lg leading-8 text-stone-500 dark:text-stone-400">
+                    <h1 className="ai-title-aurora max-w-5xl text-balance text-5xl font-semibold tracking-normal sm:text-7xl lg:text-8xl">Canvan</h1>
+                    <p className="mt-8 max-w-3xl text-balance text-lg leading-8 text-muted-foreground">
                         在
-                        <Highlighter action="underline" color="#FF9800">
+                        <Highlighter action="underline" color="#01C7FD">
                             无限画布
                         </Highlighter>
                         中生成、连接和重组
-                        <Highlighter action="highlight" color="#87CEFA">
+                        <Highlighter action="highlight" color="#0CE0FC">
                             图片、文字与图形
                         </Highlighter>
                         ，让创作从单次生成变成连续推演。
@@ -63,12 +63,12 @@ export default function IndexPage() {
                     </div>
                 </div>
 
-                <section className="relative mx-auto mb-20 max-w-6xl border-t border-stone-200 pt-12 dark:border-stone-800">
+                <section className="relative mx-auto mb-20 max-w-6xl border-t border-border pt-12 dark:border-border">
                     <div className="mb-8 grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-start">
                         <div />
                         <div className="max-w-2xl text-center">
-                            <h2 className="text-3xl font-semibold text-stone-950 dark:text-stone-100">沉淀每一次好结果</h2>
-                            <p className="mt-3 text-base leading-7 text-stone-500 dark:text-stone-400">收藏稳定出图的提示词、参考风格和结果图片，让下一次创作从已有经验开始。</p>
+                            <h2 className="text-3xl font-semibold text-foreground">沉淀每一次好结果</h2>
+                            <p className="mt-3 text-base leading-7 text-muted-foreground">收藏稳定出图的提示词、参考风格和结果图片，让下一次创作从已有经验开始。</p>
                         </div>
                         <Button type="link" href="/prompts" className="justify-self-center md:justify-self-end" icon={<ArrowRight className="size-4" />} iconPlacement="end">
                             查看提示词库
@@ -84,7 +84,7 @@ export default function IndexPage() {
                                     setPreviewOpen(true);
                                 }}
                                 className={cn(
-                                    "group relative cursor-pointer overflow-hidden border border-stone-200 bg-stone-100 text-left dark:border-stone-800 dark:bg-stone-900",
+                                    "group relative cursor-pointer overflow-hidden border border-border bg-card text-left dark:border-border dark:bg-surface-elevated",
                                     index === 0 && "md:col-span-2 md:row-span-2",
                                     index === 3 && "md:col-span-2",
                                 )}
