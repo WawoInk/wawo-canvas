@@ -218,7 +218,7 @@ export function AuroraText({
   colorStops?: string[];
 }) {
   return (
-    <span className="relative inline-block">
+    <span className="relative inline-block overflow-hidden rounded-[9999px]">
       <span className="absolute inset-0 pointer-events-none">
         <Aurora colorStops={colorStops} amplitude={1.0} blend={0.5} speed={1.0} />
       </span>
