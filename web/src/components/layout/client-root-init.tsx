@@ -28,9 +28,17 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
         void loadPublicSettings();
     }, [loadPublicSettings]);
 
+    // Zustand persist rehydration is async. On cold page load (e.g. after
+    // login → window.location.reload), the useEffect may fire before
+    // rehydration finishes, so get().token is still "" and hydrateUser
+    // incorrectly clears the session.  wait for rehydration first.
     useEffect(() => {
-        if (!isLoginPage) void hydrateUser();
-    }, [hydrateUser, isLoginPage]);
+        if (isLoginPage) return;
+        void Promise.resolve(useUserStore.persist.rehydrate()).then(() => {
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+            useUserStore.getState().hydrateUser();
+        });
+    }, [isLoginPage]);
 
     // 新浏览器/设备：token 持久化但 user.id 来自异步 hydrateUser。
     // syncScheduler.start 和 onRehydrateStorage 在挂载时触发同步——早于 user.id 生成——导致同步无操作。
