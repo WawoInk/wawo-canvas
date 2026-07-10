@@ -2214,9 +2214,7 @@ function InfiniteCanvasPage() {
                             try {
                                 const isEdit = generationType === "edit";
                                 const editImageUrl = isEdit && referenceImages[0] ? await resolveSourceImageUrl(sourceNode || null) : null;
-                                const task = isEdit && editImageUrl
-                                    ? await createAsyncImageEditTask({ ...generationConfig, count: "1" }, effectivePrompt, editImageUrl)
-                                    : await createAsyncImageTask({ ...generationConfig, count: "1" }, effectivePrompt);
+                                const task = isEdit && editImageUrl ? await createAsyncImageEditTask({ ...generationConfig, count: "1" }, effectivePrompt, editImageUrl) : await createAsyncImageTask({ ...generationConfig, count: "1" }, effectivePrompt);
                                 setNodes((prev) => prev.map((n) => (n.id === targetId ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
                                 pollCanvasImageNode(targetId, task, generationConfig, isConfigNode ? nodeId : undefined, rootId);
                             } catch (error) {
@@ -2468,9 +2466,7 @@ function InfiniteCanvasPage() {
                 // ponytail: image retry — async, use edit endpoint when we have reference images
                 const isRetryEdit = generationType === "edit" && retryImages.length > 0;
                 const retryEditUrl = isRetryEdit ? await resolveSourceImageUrl(sourceNode) : null;
-                const task = isRetryEdit && retryEditUrl
-                    ? await createAsyncImageEditTask(generationConfig, prompt, retryEditUrl)
-                    : await createAsyncImageTask(generationConfig, prompt);
+                const task = isRetryEdit && retryEditUrl ? await createAsyncImageEditTask(generationConfig, prompt, retryEditUrl) : await createAsyncImageTask(generationConfig, prompt);
                 setNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
                 void pollCanvasImageNode(node.id, task, generationConfig);
                 return;
