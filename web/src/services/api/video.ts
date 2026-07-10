@@ -112,7 +112,12 @@ export async function pollVideoGenerationTask(config: AiConfig, task: VideoGener
 
 export async function storeGeneratedVideo(result: VideoGenerationResult): Promise<UploadedFile> {
     if (result.blob) return uploadMediaFile(result.blob, "video");
-    if (result.url) return { url: result.url, storageKey: "", bytes: 0, mimeType: result.mimeType || "video/mp4" };
+    if (result.url) {
+        // ponytail: proxy through backend; Volces TOS presigned URLs lack CORS headers
+        const { uploadUrlToS3 } = await import("@/services/upload-blob");
+        const s3 = await uploadUrlToS3(result.url, "results/videos");
+        return { url: s3.url, storageKey: s3.fileId, bytes: s3.bytes, mimeType: s3.mimeType || result.mimeType || "video/mp4", width: s3.width, height: s3.height, durationMs: s3.durationMs };
+    }
     throw new Error("视频接口没有返回可播放的视频");
 }
 
