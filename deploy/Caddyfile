@@ -1,4 +1,4 @@
-canvan.ai {
+canvan.ai, www.canvan.ai {
 	handle /api/* {
 		reverse_proxy api:8088
 	}
