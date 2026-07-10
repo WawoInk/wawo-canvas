@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const assetPresignExpiry = 1 * time.Hour
+const assetPresignExpiry = 12 * time.Hour
 
 func ListAssets(userID string, q model.Query) (model.AssetList, error) {
 	items, total, err := repository.ListAssets(userID, q)

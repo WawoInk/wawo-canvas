@@ -24,7 +24,7 @@ var validFileTypes = map[string]bool{
 	"results/videos": true,
 }
 
-var presignExpiry = 1 * time.Hour
+var presignExpiry = 12 * time.Hour
 
 // UserFileSizeLimit 返回指定文件类型的上传大小上限（管理端可配）。
 func UserFileSizeLimit(fileType string) int64 {
