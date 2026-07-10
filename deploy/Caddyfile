@@ -1,11 +1,34 @@
-canvan.ai, www.canvan.ai {
-	handle /api/* {
-		reverse_proxy api:8088
-	}
+{
+        # 关闭自动 HTTPS（避免本地和 CDN 冲突）
+        auto_https off
+}
 
-	handle {
-		root * /usr/share/nginx/html
-		file_server
-		try_files {path} /index.html
-	}
+# =========================
+# CloudFront 回源专用入口
+# =========================
+:80 {
+
+        # 保留真实客户端信息（很重要）
+        header {
+                X-Forwarded-Proto {http.request.scheme}
+                X-Forwarded-For {http.request.header.X-Forwarded-For}
+                X-Real-IP {remote}
+        }
+
+        handle /api/* {
+                reverse_proxy api:8088 {
+
+                        # 保留 Host（避免 CloudFront / Caddy host mismatch）
+                        header_up Host {http.request.host}
+
+                        # 传递真实协议（避免后端误判 HTTPS → redirect）
+                        header_up X-Forwarded-Proto https
+                }
+        }
+
+        handle {
+                root * /usr/share/nginx/html
+                file_server
+                try_files {path} /index.html
+        }
 }
