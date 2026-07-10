@@ -1,4 +1,8 @@
-canvan.ai, www.canvan.ai {
+{
+    auto_https off
+}
+
+:80 {
 
     encode zstd gzip
 
@@ -10,11 +14,5 @@ canvan.ai, www.canvan.ai {
         root * /usr/share/nginx/html
         try_files {path} /index.html
         file_server
-    }
-
-    header {
-        X-Content-Type-Options nosniff
-        Referrer-Policy strict-origin-when-cross-origin
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
     }
 }
