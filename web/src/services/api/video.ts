@@ -1,7 +1,6 @@
 import axios from "axios";
 
-import { getMediaBlob, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
-import { imageToDataUrl } from "@/services/image-storage";
+import { getMediaBlob, uploadMediaFile, type UploadedFile, imageToDataUrl } from "@/services/blob-storage";
 import { boolConfig, buildSeedancePromptText, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedanceVideoReferenceError, SEEDANCE_REFERENCE_LIMITS } from "@/lib/seedance-video";
 import { buildApiUrl, modelOptionName, resolveModelRequestConfig, type AiConfig } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";

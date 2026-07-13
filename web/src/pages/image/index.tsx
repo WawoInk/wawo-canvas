@@ -17,7 +17,7 @@ import { useThemeStore } from "@/stores/use-theme-store";
 import { nanoid } from "nanoid";
 import { formatBytes, formatDuration, getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
 import { requestEdit, requestGeneration } from "@/services/api/image";
-import { deleteStoredImages, resolveImageUrl, uploadImage } from "@/services/image-storage";
+import { deleteStoredImages, resolveImageUrl, uploadImage } from "@/services/blob-storage";
 import { uploadBlob } from "@/services/upload-blob";
 import { resolveFileUrls } from "@/services/resolve-file-urls";
 import { patchGenerationTaskMetadata } from "@/services/api/generation-tasks";

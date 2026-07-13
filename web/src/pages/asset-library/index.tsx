@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { useAuthReady } from "@/hooks/use-auth-ready";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { fetchAssetLibrary, type AssetLibraryItem } from "@/services/api/assets";
-import { uploadImage } from "@/services/image-storage";
+import { uploadImage } from "@/services/blob-storage";
 
 const PAGE_SIZE = 12;
 

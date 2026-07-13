@@ -141,6 +141,26 @@ func UpdateGenerationPayload(taskID string, respBody string, respHeaders string)
 		}).Error
 }
 
+// UpdateGenerationPayloadRawError 更新任务负载的原始错误信息。
+func UpdateGenerationPayloadRawError(taskID string, rawError string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	return db.Model(&model.GenerationPayload{}).Where("task_id = ?", taskID).
+		Update("raw_error", rawError).Error
+}
+
+// UpdateGenerationPayloadResponseBody 更新任务负载的响应正文。
+func UpdateGenerationPayloadResponseBody(taskID string, respBody string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	return db.Model(&model.GenerationPayload{}).Where("task_id = ?", taskID).
+		Update("response_body", respBody).Error
+}
+
 // DeleteGenerationTask 删除任务及其负载（需校验所有权）。
 func DeleteGenerationTask(id, userID string) error {
 	db, err := DB()

@@ -6,8 +6,7 @@ import { App, Button } from "antd";
 import { Download, FileUp, Plus } from "lucide-react";
 
 import { readZip } from "@/lib/zip";
-import { setMediaBlob } from "@/services/file-storage";
-import { setImageBlob } from "@/services/image-storage";
+import { setMediaBlob, setImageBlob } from "@/services/blob-storage";
 import { CanvasDeleteProjectsDialog } from "./components/canvas-delete-projects-dialog";
 import { CanvasProjectCard } from "./components/canvas-project-card";
 import type { CanvasExportFile } from "./export-types";

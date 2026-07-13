@@ -5,6 +5,7 @@ import (
 
 	"github.com/basketikun/infinite-canvas/handler"
 	"github.com/basketikun/infinite-canvas/middleware"
+	"github.com/basketikun/infinite-canvas/service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -31,26 +32,32 @@ func New() *gin.Engine {
 	// Callback webhook: no UserAuth — external providers have no session.
 	api.POST("/v1/generation-tasks/callback", gin.WrapF(handler.HandleTaskCallback))
 	v1 := api.Group("/v1", middleware.UserAuth)
-	v1.POST("/images/generations", gin.WrapF(handler.AIImagesGenerations))
-	v1.POST("/images/edits", gin.WrapF(handler.AIImagesEdits))
-	v1.POST("/async/images/generations", gin.WrapF(handler.AIAsyncImagesGenerations))
-	v1.POST("/async/images/edits", gin.WrapF(handler.AIAsyncImagesEdits))
-	v1.POST("/chat/completions", gin.WrapF(handler.AIChatCompletions))
-	v1.POST("/audio/speech", gin.WrapF(handler.AIAudioSpeech))
-	v1.POST("/xvanai/chat/completions", gin.WrapF(handler.XvanaiChatCompletions))
-	v1.POST("/videos", gin.WrapF(handler.AIVideos))
+
+	// AI proxy routes — path captured via closure, no one-liner handlers needed
+	proxy := func(path string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) { service.ProxyAIRequest(w, r, path) }
+	}
+	v1.POST("/images/generations", gin.WrapF(proxy("/images/generations")))
+	v1.POST("/images/edits", gin.WrapF(proxy("/images/edits")))
+	v1.POST("/async/images/generations", gin.WrapF(proxy("/async/images/generations")))
+	v1.POST("/async/images/edits", gin.WrapF(proxy("/async/images/edits")))
+	v1.POST("/chat/completions", gin.WrapF(proxy("/chat/completions")))
+	v1.POST("/audio/speech", gin.WrapF(proxy("/audio/speech")))
+	v1.POST("/xvanai/chat/completions", gin.WrapF(proxy("/chat/completions")))
+	v1.POST("/videos", gin.WrapF(proxy("/videos")))
+
 	v1.POST("/media/references", gin.WrapF(handler.UploadReferenceMedia))
 	v1.GET("/videos/:id", func(c *gin.Context) {
-		handler.AIVideo(c.Writer, c.Request, c.Param("id"))
+		service.ProxyAIGetRequest(c.Writer, c.Request, "/videos/"+c.Param("id"))
 	})
 	v1.GET("/videos/:id/content", func(c *gin.Context) {
-		handler.AIVideoContent(c.Writer, c.Request, c.Param("id"))
+		service.ProxyAIGetRequest(c.Writer, c.Request, "/videos/"+c.Param("id")+"/content")
 	})
 	v1.GET("/tasks/:id", func(c *gin.Context) {
-		handler.AIGetTask(c.Writer, c.Request, c.Param("id"))
+		service.ProxyAIGetRequest(c.Writer, c.Request, "/tasks/"+c.Param("id"))
 	})
 	v1.POST("/tasks/:id/cancel", func(c *gin.Context) {
-		handler.AICancelTask(c.Writer, c.Request, c.Param("id"))
+		service.ProxyAIRequest(c.Writer, c.Request, "/tasks/"+c.Param("id")+"/cancel")
 	})
 	// 视频生成标准入口（对齐 xvanai /v1/contents/generations/tasks）。旧 /videos 路由保留为遗留。
 	v1.POST("/contents/generations/tasks", gin.WrapF(handler.CreateVideoTask))

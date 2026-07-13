@@ -10,7 +10,7 @@ import { modelOptionName, normalizeModelOptionValue, resolveModelChannel, select
 import { canvasThemes } from "@/lib/canvas-theme";
 import { nanoid } from "nanoid";
 import { requestToolResponse, type ResponseFunctionTool, type ResponseInputMessage, type ResponseToolCall } from "@/services/api/image";
-import { imageToDataUrl } from "@/services/image-storage";
+import { imageToDataUrl } from "@/services/blob-storage";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { useUserStore } from "@/stores/use-user-store";

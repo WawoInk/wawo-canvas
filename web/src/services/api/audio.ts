@@ -1,7 +1,7 @@
 import axios from "axios";
 
 import { audioMimeType, normalizeAudioFormatValue, normalizeAudioSpeedValue, normalizeAudioVoiceValue } from "@/lib/audio-generation";
-import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
+import { uploadMediaFile, type UploadedFile } from "@/services/blob-storage";
 import { buildApiUrl, resolveModelRequestConfig, type AiConfig } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 

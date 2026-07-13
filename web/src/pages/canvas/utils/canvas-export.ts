@@ -1,8 +1,7 @@
 import { saveAs } from "file-saver";
 
 import { createZip } from "@/lib/zip";
-import { getMediaBlob } from "@/services/file-storage";
-import { getImageBlob } from "@/services/image-storage";
+import { getMediaBlob, getImageBlob } from "@/services/blob-storage";
 import type { CanvasExportAsset, CanvasExportFile } from "../export-types";
 import type { CanvasProject } from "../stores/use-canvas-store";
 

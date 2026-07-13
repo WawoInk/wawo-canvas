@@ -11,8 +11,7 @@ import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audi
 import { createVideoGenerationTask, pollVideoGenerationTask, cancelVideoGenerationTask, storeGeneratedVideo } from "@/services/api/video";
 import { DOCS_URL } from "@/constant/env";
 import { defaultConfig, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
-import { resolveImageUrl, uploadImage, getImageBlob, type UploadedImage } from "@/services/image-storage";
-import { resolveMediaUrl, type UploadedFile } from "@/services/file-storage";
+import { resolveImageUrl, uploadImage, getImageBlob, type UploadedImage, resolveMediaUrl, type UploadedFile } from "@/services/blob-storage";
 import { uploadBlob, uploadUrlToS3, type UploadResult } from "@/services/upload-blob";
 import { nanoid } from "nanoid";
 import { getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";

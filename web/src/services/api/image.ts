@@ -5,7 +5,7 @@ import { useUserStore } from "@/stores/use-user-store";
 import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
-import { imageToDataUrl } from "@/services/image-storage";
+import { imageToDataUrl } from "@/services/blob-storage";
 import type { ReferenceImage } from "@/types/image";
 
 export type AiTextMessage = {

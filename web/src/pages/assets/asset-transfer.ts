@@ -1,8 +1,7 @@
 import { saveAs } from "file-saver";
 
 import { createZip, readZip } from "@/lib/zip";
-import { getMediaBlob, setMediaBlob } from "@/services/file-storage";
-import { getImageBlob, setImageBlob } from "@/services/image-storage";
+import { getMediaBlob, setMediaBlob, getImageBlob, setImageBlob } from "@/services/blob-storage";
 import type { Asset } from "@/stores/use-asset-store";
 
 type AssetExportFile = {

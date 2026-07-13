@@ -14,8 +14,7 @@ import { VideoSettingsPanel, normalizeVideoResolutionValue, videoSizeLabel } fro
 import { canvasThemes } from "@/lib/canvas-theme";
 import { formatBytes, formatDuration } from "@/lib/image-utils";
 import { boolConfig, normalizeSeedanceRatio, seedanceReferenceLabel, SEEDANCE_REFERENCE_LIMITS } from "@/lib/seedance-video";
-import { deleteStoredMedia, getMediaBlob, resolveMediaUrl, uploadMediaFile } from "@/services/file-storage";
-import { resolveImageUrl, uploadImage } from "@/services/image-storage";
+import { deleteStoredMedia, getMediaBlob, resolveMediaUrl, uploadMediaFile, resolveImageUrl, uploadImage } from "@/services/blob-storage";
 import { uploadBlob, uploadUrlToS3 } from "@/services/upload-blob";
 import { resolveFileUrls } from "@/services/resolve-file-urls";
 import { patchGenerationTaskMetadata } from "@/services/api/generation-tasks";
