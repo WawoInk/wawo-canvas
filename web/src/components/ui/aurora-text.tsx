@@ -208,7 +208,7 @@ export default function Aurora(props: AuroraProps) {
     return <div ref={ctnDom} className="w-full h-full" />;
 }
 
-export function AuroraText({ children, className, colorStops = ["#C26B3E", "#E8956A", "#EDE4DA"] }: { children: ReactNode; className?: string; colorStops?: string[] }) {
+export function AuroraText({ children, className, colorStops = ["#C26B3E", "#E8956A", "#F0F0F0"] }: { children: ReactNode; className?: string; colorStops?: string[] }) {
     return (
         <span className="relative inline-block overflow-hidden rounded-[9999px]">
             <span className="absolute inset-0 pointer-events-none">

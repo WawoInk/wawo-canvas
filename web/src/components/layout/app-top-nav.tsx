@@ -30,7 +30,7 @@ export function AppTopNav() {
 
                             <button
                                 type="button"
-                                className="ml-3 inline-flex size-8 shrink-0 items-center justify-center text-muted-foreground hover:text-primary md:hidden"
+                                className="ml-3 inline-flex size-8 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground md:hidden"
                                 onClick={() => setMobileNavOpen(true)}
                                 aria-label="打开导航菜单"
                                 title="导航菜单"
@@ -48,7 +48,7 @@ export function AppTopNav() {
                                             to={`/${tool.slug}`}
                                             className={cn(
                                                 "relative flex h-16 shrink-0 items-center gap-2 text-sm leading-6 transition after:absolute after:inset-x-0 after:bottom-0 after:h-px",
-                                                active ? "font-medium text-primary after:bg-primary" : "text-muted-foreground after:bg-transparent hover:text-primary",
+                                                active ? "font-medium !text-foreground after:bg-accent" : "!text-muted-foreground after:bg-transparent hover:!text-foreground",
                                             )}
                                         >
                                             <Icon className="size-4" />

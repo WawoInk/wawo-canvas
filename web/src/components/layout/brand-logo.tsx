@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { useThemeStore } from "@/stores/use-theme-store";
 
 type BrandLogoProps = {
     variant?: "full" | "mark";
@@ -7,8 +8,9 @@ type BrandLogoProps = {
 };
 
 export function BrandLogo({ variant, height = 28, className }: BrandLogoProps) {
+    const theme = useThemeStore((state) => state.theme);
     const resolved = variant ?? "full";
-    const src = resolved === "full" ? "/logo.svg" : "/logo-mark.svg";
+    const src = resolved === "full" ? `/logo-${theme === "dark" ? "dark" : "white"}-mode.svg` : "/logo-mark.svg";
 
-    return <img src={src} alt="Canvan" height={height} className={cn("shrink-0 select-none", className)} style={{ height, width: "auto", objectFit: "contain" }} draggable={false} />;
+    return <img key={theme} src={src} alt="Canvan" height={height} className={cn("shrink-0 select-none", className)} style={{ height, width: "auto", objectFit: "contain" }} draggable={false} />;
 }
