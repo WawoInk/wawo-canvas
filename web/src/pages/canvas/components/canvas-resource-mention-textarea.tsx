@@ -14,6 +14,8 @@ type MentionState = {
     query: string;
 };
 
+const TRAILING_LINE_PLACEHOLDER = "​";
+
 type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "onChange" | "value"> & {
     value: string;
     references: CanvasResourceReference[];
@@ -32,7 +34,6 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
     const overlayRef = useRef<HTMLDivElement | null>(null);
     const [mention, setMention] = useState<MentionState | null>(null);
     const [activeIndex, setActiveIndex] = useState(0);
-    const [hasSelection, setHasSelection] = useState(false);
     const candidates = useMemo(() => {
         if (!mention) return [];
         const query = mention.query.trim().toLowerCase();
@@ -83,12 +84,7 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
         overlayRef.current.scrollLeft = textareaRef.current.scrollLeft;
     };
 
-    const updateSelectionState = () => {
-        const textarea = textareaRef.current;
-        setHasSelection(Boolean(textarea && textarea.selectionStart !== textarea.selectionEnd));
-    };
-
-    const showOverlay = Boolean(activeLabels.length && !hasSelection);
+    const showOverlay = Boolean(activeLabels.length);
     const mergedStyle = {
         ...(style || {}),
         color: showOverlay ? "transparent" : style?.color,
@@ -98,7 +94,7 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
     const menu = mention && candidates.length && textareaRef.current ? <MentionMenu textarea={textareaRef.current} references={candidates} activeIndex={Math.min(activeIndex, candidates.length - 1)} theme={theme} onSelect={insertReference} /> : null;
 
     return (
-        <div className={`relative h-full w-full ${containerClassName || ""}`}>
+        <div data-canvas-no-zoom className={`relative h-full w-full ${containerClassName || ""}`}>
             {showOverlay ? (
                 <div
                     ref={overlayRef}
@@ -122,22 +118,7 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
                     const next = event.target.value;
                     onChange(next);
                     syncMention(next, event.target.selectionStart);
-                    requestAnimationFrame(() => {
-                        syncOverlayScroll();
-                        updateSelectionState();
-                    });
-                }}
-                onSelect={(event) => {
-                    updateSelectionState();
-                    props.onSelect?.(event);
-                }}
-                onKeyUp={(event) => {
-                    updateSelectionState();
-                    props.onKeyUp?.(event);
-                }}
-                onPointerUp={(event) => {
-                    updateSelectionState();
-                    props.onPointerUp?.(event);
+                    requestAnimationFrame(syncOverlayScroll);
                 }}
                 onKeyDown={(event) => {
                     if (mention && candidates.length) {
@@ -174,7 +155,6 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
                     props.onScroll?.(event);
                 }}
                 onBlur={(event) => {
-                    setHasSelection(false);
                     window.setTimeout(closeMention, 120);
                     props.onBlur?.(event);
                 }}
@@ -192,13 +172,14 @@ function MentionHighlightText({ value, labels, placeholder }: { value: string; l
         <>
             {value.split(pattern).map((part, index) =>
                 labels.includes(part) ? (
-                    <span key={`${part}-${index}`} className="rounded-md bg-[#2f80ff]/16 py-0.5 font-medium text-[#2f80ff] ring-1 ring-[#2f80ff]/24">
+                    <span key={`${part}-${index}`} className="rounded-md bg-[#2f80ff]/16 text-[#2f80ff] ring-1 ring-[#2f80ff]/24">
                         {part}
                     </span>
                 ) : (
                     <span key={`${part}-${index}`}>{part}</span>
                 ),
             )}
+            {value.endsWith("\n") ? <span aria-hidden="true">{TRAILING_LINE_PLACEHOLDER}</span> : null}
         </>
     );
 }
