@@ -91,3 +91,17 @@
 - 当前画布项目和“我的素材”主要保存在浏览器本地，不要在文档中误写成已支持云同步。
 - 当前 AI API Key 存在浏览器本地，并由前端直接请求 OpenAI 兼容接口；涉及安全说明时要写清楚。
 - Docker 静态资源路径目前仍是待办项，文档中不要过度承诺生产部署已经完全验证。
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as GitHub issues in `EldenPdx/canvan-oversea`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — `CONTEXT.md` at root + `docs/adr/`. See `docs/agents/domain.md`.
