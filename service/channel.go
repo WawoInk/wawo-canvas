@@ -34,7 +34,24 @@ func SelectModelChannel(modelName string) (model.ModelChannel, error) {
 	return channels[0], nil
 }
 
-// BuildModelChannelURL 构造渠道上游 URL（openai 协议）。
+// SelectModelChannelByName returns the enabled channel captured by a task route snapshot.
+func SelectModelChannelByName(name, modelName string) (model.ModelChannel, error) {
+	settings, err := repository.GetSettings()
+	if err != nil {
+		return model.ModelChannel{}, err
+	}
+	for _, channel := range normalizePrivateSetting(settings.Private).Channels {
+		if channel.Enabled && channel.Name == name && channel.BaseURL != "" && channel.APIKey != "" {
+			for _, item := range channel.Models {
+				if item == modelName {
+					return channel, nil
+				}
+			}
+		}
+	}
+	return model.ModelChannel{}, errors.New("任务路由渠道不可用")
+}
+
 func BuildModelChannelURL(channel model.ModelChannel, path string) string {
 	baseURL := normalizeModelChannelBaseURL(channel.BaseURL)
 	lowerBaseURL := strings.ToLower(baseURL)

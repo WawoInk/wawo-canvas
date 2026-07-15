@@ -122,6 +122,19 @@ func GetUserFile(id, userID string) (*model.UserFile, error) {
 	return &item, nil
 }
 
+// DownloadUserFile 返回用户所属文件的内容流。
+func DownloadUserFile(ctx context.Context, id, userID string) (io.ReadCloser, model.UserFile, error) {
+	item, ok, err := repository.GetUserFileByID(id, userID)
+	if err != nil {
+		return nil, model.UserFile{}, err
+	}
+	if !ok {
+		return nil, model.UserFile{}, errors.New("文件不存在")
+	}
+	body, err := S3Download(ctx, item.S3Key)
+	return body, item, err
+}
+
 // ListUserFiles 按类型分页列出用户文件（返回预签名 URL）。
 func ListUserFiles(userID, fileType string, page, pageSize int) ([]model.UserFile, int64, error) {
 	items, total, err := repository.ListUserFiles(userID, fileType, page, pageSize)

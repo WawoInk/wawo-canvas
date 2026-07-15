@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -88,6 +89,24 @@ func GetUserFileByID(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	OK(w, item)
+}
+
+// DownloadUserFile GET /api/v1/files/:id/content — 下载用户所属文件。
+func DownloadUserFile(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	body, item, err := service.DownloadUserFile(r.Context(), id, user.ID)
+	if err != nil {
+		Fail(w, err.Error())
+		return
+	}
+	defer body.Close()
+	w.Header().Set("Content-Type", item.MimeType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, item.OriginalName))
+	_, _ = io.Copy(w, body)
 }
 
 // DeleteUserFile DELETE /api/v1/files/:id — 删除文件。
@@ -180,4 +199,3 @@ func ProxyUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	OK(w, item)
 }
-

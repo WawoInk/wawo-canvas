@@ -6,6 +6,34 @@ import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 import { CanvasNodeType, type CanvasConnection, type CanvasNodeData } from "../types";
 import { getGenerationResourceNodes } from "../utils/canvas-resource-references";
 
+export type PlatformMediaReference = {
+    fileId: string;
+    sourceNodeId: string;
+    name: string;
+};
+
+export type VideoGenerationIntent = {
+    kind: "video.generate";
+    prompt: string;
+    references: {
+        images: PlatformMediaReference[];
+        videos: PlatformMediaReference[];
+        audios: PlatformMediaReference[];
+    };
+    settings: Record<string, string | number | boolean>;
+};
+
+export function buildVideoGenerationIntent(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[], prompt: string): VideoGenerationIntent {
+    const references = { images: [] as PlatformMediaReference[], videos: [] as PlatformMediaReference[], audios: [] as PlatformMediaReference[] };
+    for (const node of getGenerationResourceNodes(nodeId, nodes, connections)) {
+        if (!node.metadata?.fileId) continue;
+        const reference = { fileId: node.metadata.fileId, sourceNodeId: node.id, name: node.title || node.id };
+        if (node.type === CanvasNodeType.Image) references.images.push(reference);
+        if (node.type === CanvasNodeType.Video) references.videos.push(reference);
+        if (node.type === CanvasNodeType.Audio) references.audios.push(reference);
+    }
+    return { kind: "video.generate", prompt, references, settings: {} };
+}
 export type NodeGenerationContext = {
     prompt: string;
     referenceImages: ReferenceImage[];

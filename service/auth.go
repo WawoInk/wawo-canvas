@@ -329,6 +329,29 @@ func AdjustUserCredits(id string, credits int) (model.User, error) {
 	return user, err
 }
 
+func ConsumeUserCreditsOnce(userID, modelName string, credits int, path, taskID string) error {
+	if taskID == "" || credits <= 0 {
+		return ConsumeUserCreditsWithTask(userID, modelName, credits, path, taskID)
+	}
+	if _, found, err := repository.GetCreditLogByTaskAndType(taskID, model.CreditLogTypeAIConsume); err != nil {
+		return err
+	} else if found {
+		return nil
+	}
+	return ConsumeUserCreditsWithTask(userID, modelName, credits, path, taskID)
+}
+
+func RefundUserCreditsOnce(userID, modelName string, credits int, path, taskID string) error {
+	if taskID == "" || credits <= 0 {
+		return RefundUserCreditsWithTask(userID, modelName, credits, path, taskID)
+	}
+	if _, found, err := repository.GetCreditLogByTaskAndType(taskID, model.CreditLogTypeAIRefund); err != nil {
+		return err
+	} else if found {
+		return nil
+	}
+	return RefundUserCreditsWithTask(userID, modelName, credits, path, taskID)
+}
 func ConsumeUserCredits(userID string, modelName string, credits int, path string) error {
 	return ConsumeUserCreditsWithTask(userID, modelName, credits, path, "")
 }

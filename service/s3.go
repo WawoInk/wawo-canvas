@@ -89,6 +89,22 @@ func S3PresignGet(ctx context.Context, key string, expires time.Duration) (strin
 	return req.URL, nil
 }
 
+// S3Download 下载对象内容。
+func S3Download(ctx context.Context, key string) (io.ReadCloser, error) {
+	client, err := S3()
+	if err != nil {
+		return nil, err
+	}
+	result, err := client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s3Bucket()),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("s3 download: %w", err)
+	}
+	return result.Body, nil
+}
+
 // S3Delete 删除 S3 对象。
 func S3Delete(ctx context.Context, key string) error {
 	client, err := S3()

@@ -33,6 +33,12 @@ func New() *gin.Engine {
 	api.POST("/v1/generation-tasks/callback", gin.WrapF(handler.HandleTaskCallback))
 	v1 := api.Group("/v1", middleware.UserAuth)
 
+	v1.GET("/model-profiles", gin.WrapF(handler.ModelProfiles))
+	v1.POST("/generations", gin.WrapF(handler.CreateGeneration))
+	v1.GET("/generations/:id", func(c *gin.Context) {
+		handler.GetGeneration(c.Writer, c.Request, c.Param("id"))
+	})
+
 	// AI proxy routes — path captured via closure, no one-liner handlers needed
 	proxy := func(path string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) { service.ProxyAIRequest(w, r, path) }
@@ -110,6 +116,9 @@ func New() *gin.Engine {
 	v1.POST("/files", gin.WrapF(handler.UploadUserFileDirect))
 	v1.POST("/files/proxy-upload", gin.WrapF(handler.ProxyUpload))
 	v1.GET("/files", gin.WrapF(handler.ListUserFiles))
+	v1.GET("/files/:id/content", func(c *gin.Context) {
+		handler.DownloadUserFile(c.Writer, c.Request, c.Param("id"))
+	})
 	v1.GET("/files/:id", func(c *gin.Context) {
 		handler.GetUserFileByID(c.Writer, c.Request, c.Param("id"))
 	})

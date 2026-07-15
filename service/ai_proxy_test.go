@@ -1,12 +1,41 @@
 package service
 
 import (
+	"bytes"
+	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/basketikun/infinite-canvas/model"
 )
+
+func TestReadAIRequestMultipart(t *testing.T) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, value := range map[string]string{"model": "gpt-image-2", "prompt": "edit", "image": "https://example.com/source.png", "n": "2"} {
+		if err := writer.WriteField(key, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/async/images/edits", bytes.NewReader(body.Bytes()))
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	gotBody, gotContentType, gotModel, err := readAIRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotModel != "gpt-image-2" || gotContentType != writer.FormDataContentType() || !bytes.Equal(gotBody, body.Bytes()) {
+		t.Fatalf("multipart request changed: model=%q contentType=%q", gotModel, gotContentType)
+	}
+	if got := readAIRequestCount(gotBody, gotContentType); got != 2 {
+		t.Fatalf("count = %d, want 2", got)
+	}
+}
 
 func TestAIUpstreamErrorDetail(t *testing.T) {
 	got := proxyAIUpstreamErrorDetail([]byte(`{"error":{"code":"InvalidParameter","message":"reference video fps is invalid"}}`))

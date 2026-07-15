@@ -198,30 +198,27 @@ curl https://xvan.ai/v1/async/images/generations \
 POST /v1/async/images/edits
 ```
 
-基于已有图片进行异步编辑修改，请求体使用 JSON 格式（不支持 multipart）。
+基于已有图片进行异步编辑修改，请求体使用 `multipart/form-data` 格式。
 
 ```bash
 curl https://xvan.ai/v1/async/images/edits \
   -H "Authorization: Bearer sk-xxxxx" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-image-2",
-    "prompt": "将背景替换为星空",
-    "image": "https://example.com/original.png",
-    "size": "1024x1024",
-    "n": 1
-  }'
+  -F "model=gpt-image-2" \
+  -F "prompt=将背景替换为星空" \
+  -F "image=@original.png" \
+  -F "size=1024x1024" \
+  -F "n=1"
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `model` | string | **是** | 模型名（如 `gpt-image-2`） |
 | `prompt` | string | **是** | 编辑描述 |
-| `image` | string | **是** | 源图片 URL |
+| `image` | file | **是** | 源图片文件 |
 | `n` | uint | 否 | 生成数量 |
 | `size` | string | 否 | 图片尺寸 |
 
-> **注意：** 异步编辑仅支持 JSON 格式，`image` 字段传入图片 URL。不支持 multipart/form-data 格式。
+> **注意：** 不要手动设置 `Content-Type`，客户端需要自动附加 multipart boundary；`image` 字段必须是图片文件 part。
 
 **响应：**
 

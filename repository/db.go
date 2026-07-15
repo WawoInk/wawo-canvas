@@ -55,6 +55,27 @@ func DB() (*gorm.DB, error) {
 			&model.UserFile{},
 			&model.DeletedRecord{},
 		)
+		if dbErr == nil {
+			dbErr = db.Exec("UPDATE generation_tasks SET client_request_id = '' WHERE client_request_id <> '' AND command_hash = ''").Error
+		}
+		if dbErr == nil {
+			dbErr = db.Exec(`WITH duplicates AS (
+				SELECT id, row_number() OVER (PARTITION BY user_id, client_request_id ORDER BY created_at, id) AS position
+				FROM generation_tasks WHERE client_request_id <> ''
+			) UPDATE generation_tasks SET client_request_id = '' FROM duplicates WHERE generation_tasks.id = duplicates.id AND duplicates.position > 1`).Error
+		}
+		if dbErr == nil {
+			dbErr = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_generation_tasks_user_client_request ON generation_tasks (user_id, client_request_id) WHERE client_request_id <> ''").Error
+		}
+		if dbErr == nil {
+			dbErr = db.Exec(`WITH duplicates AS (
+				SELECT id, row_number() OVER (PARTITION BY task_id, type ORDER BY created_at, id) AS position
+				FROM credit_logs WHERE task_id <> ''
+			) UPDATE credit_logs SET task_id = '' FROM duplicates WHERE credit_logs.id = duplicates.id AND duplicates.position > 1`).Error
+		}
+		if dbErr == nil {
+			dbErr = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_logs_task_type ON credit_logs (task_id, type) WHERE task_id <> ''").Error
+		}
 	})
 	return db, dbErr
 }

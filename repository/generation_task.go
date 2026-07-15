@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"errors"
+
 	"github.com/basketikun/infinite-canvas/model"
 	"gorm.io/gorm"
 )
@@ -18,6 +20,20 @@ func CreateGenerationTask(task model.GenerationTask, payload model.GenerationPay
 		payload.TaskID = task.ID
 		return tx.Create(&payload).Error
 	})
+}
+
+// GetGenerationTaskByClientRequestID finds an existing first-party task for idempotent reuse.
+func GetGenerationTaskByClientRequestID(userID, clientRequestID string) (model.GenerationTask, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.GenerationTask{}, false, err
+	}
+	var task model.GenerationTask
+	result := db.Where("user_id = ? AND client_request_id = ?", userID, clientRequestID).First(&task)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return model.GenerationTask{}, false, nil
+	}
+	return task, result.Error == nil, result.Error
 }
 
 // UpdateGenerationTask 更新任务字段（状态、上游 ID、耗时、错误等）。

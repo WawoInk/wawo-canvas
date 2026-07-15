@@ -5,6 +5,7 @@ import { useUserStore } from "@/stores/use-user-store";
 import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
+import { buildAsyncImageEditFormData } from "@/services/api/async-image-edit-form";
 import { imageToDataUrl } from "@/services/blob-storage";
 import type { ReferenceImage } from "@/types/image";
 
@@ -888,7 +889,7 @@ export async function createAsyncImageTask(config: AiConfig, prompt: string, cou
     }
 }
 
-export async function createAsyncImageEditTask(config: AiConfig, prompt: string, imageUrl: string, count = 1): Promise<AsyncImageTask> {
+export async function createAsyncImageEditTask(config: AiConfig, prompt: string, image: File, count = 1): Promise<AsyncImageTask> {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
     const requestSize = resolveRequestSize(normalizeQuality(config.quality), config.size);
@@ -896,15 +897,15 @@ export async function createAsyncImageEditTask(config: AiConfig, prompt: string,
     try {
         const response = await axios.post<{ task_id?: string; status?: string; error?: { message?: string } }>(
             aiApiUrl(requestConfig, "/async/images/edits"),
-            {
+            buildAsyncImageEditFormData({
                 model: requestConfig.model,
                 prompt: withSystemPrompt(requestConfig, prompt),
-                image: imageUrl,
+                image,
                 n,
                 ...(requestSize ? { size: requestSize } : {}),
                 output_format: IMAGE_OUTPUT_FORMAT,
-            },
-            { headers: { ...aiHeaders(requestConfig, "application/json"), "X-Source": "canvas" } },
+            }),
+            { headers: { ...aiHeaders(requestConfig), "X-Source": "canvas" } },
         );
         const data = response.data;
         if (data.error?.message) throw new Error(data.error.message);

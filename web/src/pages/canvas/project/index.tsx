@@ -9,8 +9,9 @@ import { saveAs } from "file-saver";
 import { createAsyncImageTask, createAsyncImageEditTask, pollAsyncImageTask, cancelAsyncImageTask, requestEdit, requestImageQuestion } from "@/services/api/image";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { createVideoGenerationTask, pollVideoGenerationTask, cancelVideoGenerationTask, storeGeneratedVideo } from "@/services/api/video";
+import { buildGenerationCommand, createGeneration, waitForGeneration } from "@/services/api/generations";
 import { DOCS_URL } from "@/constant/env";
-import { defaultConfig, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
+import { defaultConfig, modelOptionName, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { resolveImageUrl, uploadImage, getImageBlob, type UploadedImage, resolveMediaUrl, type UploadedFile } from "@/services/blob-storage";
 import { uploadBlob, uploadUrlToS3, type UploadResult } from "@/services/upload-blob";
 import { nanoid } from "nanoid";
@@ -20,6 +21,7 @@ import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "../utils/canvas-image-data";
+import { findImageEditSourceNode } from "../utils/canvas-image-edit-source";
 import { fitNodeSize, nodeSizeFromRatio } from "../utils/canvas-node-size";
 import { App, Button, Dropdown, Modal } from "antd";
 import { NODE_DEFAULT_SIZE, getNodeSpec } from "../constants";
@@ -2212,8 +2214,9 @@ function InfiniteCanvasPage() {
                         targetIds.map(async (targetId) => {
                             try {
                                 const isEdit = generationType === "edit";
-                                const editImageUrl = isEdit && referenceImages[0] ? await resolveSourceImageUrl(sourceNode || null) : null;
-                                const task = isEdit && editImageUrl ? await createAsyncImageEditTask({ ...generationConfig, count: "1" }, effectivePrompt, editImageUrl) : await createAsyncImageTask({ ...generationConfig, count: "1" }, effectivePrompt);
+                                const editSourceNode = isEdit ? findImageEditSourceNode(sourceNode, referenceImages, nodesRef.current) : null;
+                                const editImage = await resolveSourceImageFile(editSourceNode);
+                                const task = isEdit && editImage ? await createAsyncImageEditTask({ ...generationConfig, count: "1" }, effectivePrompt, editImage) : await createAsyncImageTask({ ...generationConfig, count: "1" }, effectivePrompt);
                                 setNodes((prev) => prev.map((n) => (n.id === targetId ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
                                 pollCanvasImageNode(targetId, task, generationConfig, isConfigNode ? nodeId : undefined, rootId);
                             } catch (error) {
@@ -2264,10 +2267,24 @@ function InfiniteCanvasPage() {
                     if (!isEmptyVideoNode) setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: nodeId, toNodeId: videoId }]);
                     const controller = startGenerationRequest(videoId, nodeId, nodeId, runController);
                     try {
-                        const task = await createVideoGenerationTask(generationConfig, effectivePrompt, generationContext.referenceImages, generationContext.referenceVideos, generationContext.referenceAudios, undefined, "canvas");
-                        setNodes((prev) => prev.map((n) => (n.id === videoId ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
-                        // ponytail: fire async poll, don't block
-                        void pollCanvasVideoNode(videoId, task, generationConfig, spec);
+                        const useFirstParty = generationConfig.channelMode === "remote" && modelOptionName(generationConfig.model) === "seedance-1-5-pro" && !generationContext.referenceImages.length && !generationContext.referenceVideos.length && !generationContext.referenceAudios.length;
+                        if (useFirstParty) {
+                            const task = await createGeneration(
+                                buildGenerationCommand({
+                                    clientRequestId: nanoid(),
+                                    modelProfileId: "seedance-1-5-pro",
+                                    source: "canvas",
+                                    prompt: effectivePrompt,
+                                }),
+                            );
+                            setNodes((prev) => prev.map((n) => (n.id === videoId ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: generationConfig.model } } : n)));
+                            void pollFirstPartyCanvasVideoNode(videoId, task.id, spec);
+                        } else {
+                            const task = await createVideoGenerationTask(generationConfig, effectivePrompt, generationContext.referenceImages, generationContext.referenceVideos, generationContext.referenceAudios, undefined, "canvas");
+                            setNodes((prev) => prev.map((n) => (n.id === videoId ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
+                            // ponytail: fire async poll, don't block
+                            void pollCanvasVideoNode(videoId, task, generationConfig, spec);
+                        }
                     } catch (error) {
                         if (!isGenerationCanceled(error)) {
                             const errorDetails = error instanceof Error ? error.message : "视频任务创建失败";
@@ -2464,8 +2481,8 @@ function InfiniteCanvasPage() {
 
                 // ponytail: image retry — async, use edit endpoint when we have reference images
                 const isRetryEdit = generationType === "edit" && retryImages.length > 0;
-                const retryEditUrl = isRetryEdit ? await resolveSourceImageUrl(sourceNode) : null;
-                const task = isRetryEdit && retryEditUrl ? await createAsyncImageEditTask(generationConfig, prompt, retryEditUrl) : await createAsyncImageTask(generationConfig, prompt);
+                const retryEditImage = isRetryEdit ? await resolveSourceImageFile(sourceNode) : null;
+                const task = isRetryEdit && retryEditImage ? await createAsyncImageEditTask(generationConfig, prompt, retryEditImage) : await createAsyncImageTask(generationConfig, prompt);
                 setNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
                 void pollCanvasImageNode(node.id, task, generationConfig);
                 return;
@@ -2550,6 +2567,46 @@ function InfiniteCanvasPage() {
             message.error(errorDetails);
             setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, metadata: { ...n.metadata, status: NODE_STATUS_ERROR, errorDetails } } : n)));
             if (configNodeId) setNodes((prev) => prev.map((n) => (n.id === configNodeId ? { ...n, metadata: { ...n.metadata, status: NODE_STATUS_IDLE } } : n)));
+        } finally {
+            finishGenerationRequest(nodeId, controller);
+        }
+    };
+
+    const pollFirstPartyCanvasVideoNode = async (nodeId: string, taskId: string, spec?: { width: number; height: number }) => {
+        const controller = new AbortController();
+        startGenerationRequest(nodeId, nodeId, nodeId, controller);
+        try {
+            const task = await waitForGeneration(taskId, controller.signal);
+            if (!task.result?.videoUrl) throw new Error("视频结果为空");
+            const stored = await uploadUrlToS3(task.result.videoUrl, "results/videos");
+            const defaultSize = spec || NODE_DEFAULT_SIZE[CanvasNodeType.Video];
+            const videoSize = fitNodeSize(stored.width || defaultSize.width, stored.height || defaultSize.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
+            setNodes((prev) =>
+                prev.map((n) =>
+                    n.id === nodeId
+                        ? {
+                              ...n,
+                              width: videoSize.width,
+                              height: videoSize.height,
+                              metadata: {
+                                  ...n.metadata,
+                                  content: stored.url,
+                                  fileId: stored.fileId,
+                                  status: NODE_STATUS_SUCCESS,
+                                  naturalWidth: stored.width,
+                                  naturalHeight: stored.height,
+                                  bytes: stored.bytes,
+                                  mimeType: stored.mimeType,
+                              },
+                          }
+                        : n,
+                ),
+            );
+        } catch (error) {
+            if (isGenerationCanceled(error)) return;
+            const errorDetails = error instanceof Error ? error.message : "视频生成失败";
+            message.error(errorDetails);
+            setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, metadata: { ...n.metadata, status: NODE_STATUS_ERROR, errorDetails } } : n)));
         } finally {
             finishGenerationRequest(nodeId, controller);
         }
@@ -3493,30 +3550,21 @@ function sourceNodeReferenceImages(node: CanvasNodeData | null) {
     ];
 }
 
-/** Resolve an image node's content to a URL suitable for the async edit API. */
-async function resolveSourceImageUrl(node: CanvasNodeData | null): Promise<string | null> {
+/** Resolve an image node's content to a file suitable for the async edit API. */
+async function resolveSourceImageFile(node: CanvasNodeData | null): Promise<File | null> {
     if (!node || node.type !== CanvasNodeType.Image || !node.metadata?.content) return null;
-    const { content, storageKey, fileId } = node.metadata;
-    // S3-backed: fetch a fresh presigned URL from /api/v1/files/{fileId}
-    if (fileId) {
-        try {
-            const raw = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
-            const token = JSON.parse(raw)?.state?.token || "";
-            if (token) {
-                const resp = await fetch(`/api/v1/files/${encodeURIComponent(fileId)}`, { headers: { Authorization: `Bearer ${token}` } });
-                const json = await resp.json();
-                if (json.code === 0 && json.data?.s3Key) return json.data.s3Key;
-            }
-        } catch {}
+    const { content, storageKey, fileId, mimeType } = node.metadata;
+    let blob: Blob | null = storageKey ? await getImageBlob(storageKey) : null;
+    if (!blob && fileId) {
+        const raw = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
+        const token = JSON.parse(raw)?.state?.token || "";
+        if (token) {
+            const response = await fetch(`/api/v1/files/${encodeURIComponent(fileId)}/content`, { headers: { Authorization: `Bearer ${token}` } });
+            if (response.ok) blob = await response.blob();
+        }
     }
-    // IndexedDB-backed: resolve via storageKey
-    if (storageKey) {
-        const resolved = await resolveImageUrl(storageKey, "");
-        if (resolved && !resolved.startsWith("data:") && !resolved.startsWith("blob:")) return resolved;
-    }
-    // Fallback: if content is already a public URL
-    if (content && /^https?:\/\//i.test(content)) return content;
-    return null;
+    if (!blob && (content.startsWith("data:") || content.startsWith("blob:") || /^https?:\/\//i.test(content))) blob = await (await fetch(content)).blob();
+    return blob ? new File([blob], `${node.title || node.id}.${imageExtension(content)}`, { type: blob.type || mimeType || "image/png" }) : null;
 }
 
 function isAudioFile(file: File) {
