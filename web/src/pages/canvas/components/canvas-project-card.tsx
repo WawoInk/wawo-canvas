@@ -29,7 +29,7 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
     };
 
     return (
-        <article className="group flex min-h-44 cursor-pointer flex-col justify-between rounded-2xl bg-card p-5 transition hover:border-primary/30 hover:shadow-[0_8px_30px_rgba(1,199,253,0.12)]" onClick={() => !editing && open()}>
+        <article className="group flex min-h-44 cursor-pointer flex-col justify-between rounded-2xl bg-card p-5 transition hover:border-primary/30 hover:shadow-[0_8px_30px_rgba(125,211,252,0.12)]" onClick={() => !editing && open()}>
             <div className="flex items-start gap-3">
                 <input
                     type="checkbox"

@@ -155,8 +155,9 @@ export default function ImagePage() {
         const imageFiles = Array.from(files || []).filter((file) => file.type.startsWith("image/"));
         const nextReferences = await Promise.all(
             imageFiles.map(async (file) => {
-                const image = await uploadImage(file);
-                return { id: nanoid(), name: file.name, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey };
+                const dataUrl = URL.createObjectURL(file);
+                const image = await uploadBlob(file, "images");
+                return { id: nanoid(), name: file.name, type: image.mimeType, dataUrl, url: image.url, storageKey: image.fileId };
             }),
         );
         setReferences((value) => [...value, ...nextReferences]);
@@ -172,8 +173,9 @@ export default function ImagePage() {
             }
             const nextReferences = await Promise.all(
                 blobs.map(async (blob, index) => {
-                    const image = await uploadImage(blob);
-                    return { id: nanoid(), name: `clipboard-${index + 1}.png`, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey };
+                    const dataUrl = URL.createObjectURL(blob);
+                    const image = await uploadBlob(blob, "images");
+                    return { id: nanoid(), name: `clipboard-${index + 1}.png`, type: image.mimeType, dataUrl, url: image.url, storageKey: image.fileId };
                 }),
             );
             setReferences((value) => [...value, ...nextReferences]);

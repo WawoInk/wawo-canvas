@@ -1324,7 +1324,7 @@ function InfiniteCanvasPage() {
     }, [finishNodeDrag, handleGlobalMouseMove, handleGlobalMouseUp, handleGlobalPointerMove]);
 
     const createImageFileNode = useCallback(async (file: File, position: Position) => {
-        const image = await uploadImage(file);
+        const image = await uploadBlob(file, "images");
         const size = fitNodeSize(image.width, image.height);
         const id = `image-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         const newNode: CanvasNodeData = {
@@ -1344,7 +1344,7 @@ function InfiniteCanvasPage() {
     }, []);
 
     const createVideoFileNode = useCallback(async (file: File, position: Position) => {
-        const video = await uploadMediaFile(file, "video");
+        const video = await uploadBlob(file, "videos");
         const size = fitNodeSize(video.width || 1280, video.height || 720, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
         const id = `video-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         setNodes((prev) => [
@@ -1365,7 +1365,7 @@ function InfiniteCanvasPage() {
     }, []);
 
     const createAudioFileNode = useCallback(async (file: File, position: Position) => {
-        const audio = await uploadMediaFile(file, "audio");
+        const audio = await uploadBlob(file, "audios");
         const spec = NODE_DEFAULT_SIZE[CanvasNodeType.Audio];
         const id = `audio-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         setNodes((prev) => [
@@ -1937,7 +1937,7 @@ function InfiniteCanvasPage() {
 
             if (target?.nodeId) {
                 if (isAudioFile(file)) {
-                    const audio = await uploadMediaFile(file, "audio");
+                    const audio = await uploadBlob(file, "audios");
                     const spec = NODE_DEFAULT_SIZE[CanvasNodeType.Audio];
                     setNodes((prev) =>
                         prev.map((node) =>
@@ -1961,7 +1961,7 @@ function InfiniteCanvasPage() {
                     return;
                 }
                 if (file.type.startsWith("video/")) {
-                    const video = await uploadMediaFile(file, "video");
+                    const video = await uploadBlob(file, "videos");
                     const nextSize = fitNodeSize(video.width || 1280, video.height || 720, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
                     setNodes((prev) =>
                         prev.map((node) =>
@@ -1985,7 +1985,7 @@ function InfiniteCanvasPage() {
                     event.target.value = "";
                     return;
                 }
-                const image = await uploadImage(file);
+                const image = await uploadBlob(file, "images");
                 const size = fitNodeSize(image.width, image.height);
                 setNodes((prev) =>
                     prev.map((node) =>
@@ -3286,7 +3286,9 @@ function imageMetadata(image: UploadedImage | UploadResult): CanvasNodeMetadata 
     return { content: image.url, storageKey: image.storageKey, status: "success", naturalWidth: image.width, naturalHeight: image.height, bytes: image.bytes, mimeType: image.mimeType };
 }
 
-function videoMetadata(video: UploadedFile): CanvasNodeMetadata {
+function videoMetadata(video: UploadedFile | UploadResult): CanvasNodeMetadata {
+    // ponytail: S3-backed (UploadResult with fileId) vs IndexedDB-backed (UploadedFile with storageKey)
+    if ("fileId" in video) return { content: video.url, storageKey: "", fileId: video.fileId, status: "success", naturalWidth: video.width, naturalHeight: video.height, bytes: video.bytes, mimeType: video.mimeType || "video/mp4", durationMs: video.durationMs };
     return { content: video.url, storageKey: video.storageKey, status: "success", naturalWidth: video.width, naturalHeight: video.height, bytes: video.bytes, mimeType: video.mimeType || "video/mp4", durationMs: video.durationMs };
 }
 

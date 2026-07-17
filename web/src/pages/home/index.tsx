@@ -37,22 +37,22 @@ export default function IndexPage() {
     }, [message]);
 
     return (
-        <main className="relative h-full overflow-y-auto bg-background bg-[radial-gradient(#E4E7EE_1px,transparent_1px)] [background-size:16px_16px] text-foreground dark:bg-[radial-gradient(rgba(255,255,255,.06)_1px,transparent_1px)]">
+        <main className="relative h-full overflow-y-auto bg-background bg-[radial-gradient(var(--dot-grid)_1px,transparent_1px)] [background-size:16px_16px] text-foreground dark:bg-[radial-gradient(var(--dot-grid)_1px,transparent_1px)]">
             <section className="relative mx-auto min-h-[calc(100vh-4rem)] max-w-7xl overflow-hidden px-6">
                 <div className="pointer-events-none absolute left-[15%] top-24 size-20 rounded-full border border-dashed border-primary/20" />
                 <div className="pointer-events-none absolute right-[23%] top-[48%] size-20 rounded-full border border-dashed border-primary/20" />
 
                 <div className="relative flex min-h-[620px] flex-col items-center justify-center pt-10 text-center">
                     <h1 className="max-w-5xl text-balance text-5xl font-semibold tracking-normal sm:text-7xl lg:text-8xl">
-                        <AuroraText colorStops={["#3B8BFF", "#01C7FD", "#F5F6F8"]}>Canvan</AuroraText>
+                        <AuroraText colorStops={["#0369A1", "#0284C7", "#0EA5E9"]}>Canvan</AuroraText>
                     </h1>
                     <p className="mt-8 max-w-3xl text-balance text-lg leading-8 text-muted-foreground">
                         在
-                        <Highlighter action="underline" color="#0A74FE">
+                        <Highlighter action="underline" color="#7DD3FC">
                             Canvan
                         </Highlighter>
                         中生成、连接和重组
-                        <Highlighter action="highlight" color="#01C7FD">
+                        <Highlighter action="highlight" color="#BAE6FD">
                             图片、文字与图形
                         </Highlighter>
                         ，让创作从单次生成变成连续推演。
@@ -62,7 +62,7 @@ export default function IndexPage() {
                             <Button type="primary" size="large" href={`/${primaryTool.slug}`} icon={<ArrowRight className="size-4" />} iconPlacement="end">
                                 开始使用
                             </Button>
-                            <BorderBeam size={200} duration={6} colorFrom="#0A74FE" colorTo="#01C7FD" />
+                            <BorderBeam size={200} duration={6} colorFrom="#7DD3FC" colorTo="#38BDF8" />
                         </div>
                         <Button size="large" href="/canvas">
                             打开画布

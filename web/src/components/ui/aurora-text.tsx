@@ -211,14 +211,14 @@ export default function Aurora(props: AuroraProps) {
 export function AuroraText({
   children,
   className,
-  colorStops = ['#0A74FE', '#01C7FD', '#F5F6F8'],
+  colorStops = ['#0369A1', '#0284C7', '#0EA5E9'],
 }: {
   children: ReactNode;
   className?: string;
   colorStops?: string[];
 }) {
   return (
-    <span className="relative inline-block overflow-hidden rounded-[9999px]">
+    <span className="relative inline-block overflow-hidden rounded-[14px] px-4 py-3">
       <span className="absolute inset-0 pointer-events-none">
         <Aurora colorStops={colorStops} amplitude={1.0} blend={0.5} speed={1.0} />
       </span>

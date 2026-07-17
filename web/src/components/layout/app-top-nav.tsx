@@ -25,7 +25,7 @@ export function AppTopNav() {
                     <div className="mx-auto flex h-full max-w-7xl items-stretch justify-between gap-5 px-6">
                         <div className="flex min-w-0 items-center">
                             <Link to="/" className="flex h-full shrink-0 items-center gap-2 transition" aria-label="Canvan 首页">
-                                <BrandLogo height={22} />
+                                <BrandLogo height={100} />
                             </Link>
 
                             <button
