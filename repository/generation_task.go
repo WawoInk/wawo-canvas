@@ -79,6 +79,17 @@ func GetGenerationTaskByUpstreamTaskID(upstreamTaskID string) (string, error) {
 	return task.ID, nil
 }
 
+// GetGenerationTaskByUpstreamTaskIDAndUser 根据上游任务 ID 和用户 ID 查找生成任务（所有权校验）。
+func GetGenerationTaskByUpstreamTaskIDAndUser(upstreamTaskID, userID string) (model.GenerationTask, error) {
+	db, err := DB()
+	if err != nil {
+		return model.GenerationTask{}, err
+	}
+	var task model.GenerationTask
+	result := db.Where("upstream_task_id = ? AND user_id = ?", upstreamTaskID, userID).First(&task)
+	return task, result.Error
+}
+
 // ListGenerationTasks 按查询条件分页查询任务。
 func ListGenerationTasks(q model.GenerationTaskQuery) ([]model.GenerationTask, int64, error) {
 	db, err := DB()

@@ -24,7 +24,7 @@ type AssetFormValues = {
     content?: string;
 };
 
-type ImageDraft = ImageAsset["data"] | null;
+type ImageDraft = (ImageAsset["data"] | VideoAsset["data"]) | null;
 
 const kindOptions = [
     { label: "全部", value: "all" },
@@ -39,8 +39,10 @@ export default function AssetsPage() {
     const [form] = Form.useForm<AssetFormValues>();
     const coverInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
+    const videoInputRef = useRef<HTMLInputElement>(null);
     const assetInputRef = useRef<HTMLInputElement>(null);
     const assets = useAssetStore((state) => state.assets);
+    const hydrated = useAssetStore((state) => state.hydrated);
     const addAsset = useAssetStore((state) => state.addAsset);
     const updateAsset = useAssetStore((state) => state.updateAsset);
     const removeAsset = useAssetStore((state) => state.removeAsset);
@@ -81,13 +83,15 @@ export default function AssetsPage() {
         setPage((value) => Math.min(value, maxPage));
     }, [filteredAssets.length, pageSize]);
 
-    // Refresh presigned URLs for all S3-backed assets on mount
+    // Refresh presigned URLs for all S3-backed assets on mount (after IndexedDB rehydration)
     useEffect(() => {
+        if (!hydrated) return;
         const fileIds = assets
             .filter((a): a is Asset & { data: ImageAsset["data"] | VideoAsset["data"] } => (a.kind === "image" || a.kind === "video") && Boolean(a.data.fileId))
             .map((a) => a.data.fileId!);
         if (fileIds.length) void refreshAssetUrls(fileIds);
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hydrated]);
 
     const openCreate = () => {
         setEditingAsset(null);
@@ -100,7 +104,7 @@ export default function AssetsPage() {
     const openEdit = (asset: Asset) => {
         setEditingAsset(asset);
         setFormKind(asset.kind);
-        setImageDraft(asset.kind === "image" ? asset.data : null);
+        setImageDraft(asset.kind === "image" || asset.kind === "video" ? asset.data : null);
         form.setFieldsValue({
             kind: asset.kind,
             title: asset.title,
@@ -117,7 +121,7 @@ export default function AssetsPage() {
         const values = await form.validateFields();
         const base = {
             title: values.title.trim(),
-            coverUrl: values.coverUrl?.trim() || (values.kind === "image" && imageDraft ? imageDraft.dataUrl : ""),
+            coverUrl: values.coverUrl?.trim() || (values.kind !== "text" && imageDraft ? (imageDraft as Record<string, unknown>).dataUrl as string || (imageDraft as Record<string, unknown>).url as string || "" : ""),
             tags: values.tags || [],
             source: values.source?.trim(),
             note: values.note?.trim(),
@@ -126,6 +130,14 @@ export default function AssetsPage() {
 
         if (values.kind === "text") {
             const asset = { ...base, kind: "text" as const, data: { content: (values.content || "").trim() } };
+            editingAsset ? updateAsset(editingAsset.id, asset) : addAsset(asset);
+        } else if (values.kind === "video") {
+            if (!imageDraft) {
+                message.error("请上传视频文件");
+                return;
+            }
+            const vdata = imageDraft as unknown as VideoAsset["data"];
+            const asset = { ...base, kind: "video" as const, data: vdata };
             editingAsset ? updateAsset(editingAsset.id, asset) : addAsset(asset);
         } else {
             if (!imageDraft) {
@@ -179,13 +191,57 @@ export default function AssetsPage() {
         if (!form.getFieldValue("title")) form.setFieldValue("title", file.name);
     };
 
+    const readVideoFile = async (file?: File) => {
+        if (!file || !file.type.startsWith("video/")) return;
+        const token = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
+        const parsed = JSON.parse(token);
+        const tokenValue = parsed?.state?.token || "";
+        const authHeader = { Authorization: `Bearer ${tokenValue}` };
+
+        const body = JSON.stringify({ fileType: "videos", fileName: file.name, mimeType: file.type });
+        const presignResp = await fetch("/api/v1/files/upload-url", { method: "POST", body, headers: { ...authHeader, "Content-Type": "application/json" } });
+        const presignJson = await presignResp.json();
+        if (presignJson.code !== 0) throw new Error(presignJson.msg || "获取上传地址失败");
+
+        const { uploadUrl, confirmId } = presignJson.data;
+        const putResp = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+        if (!putResp.ok) throw new Error("上传到存储失败");
+
+        const confirmResp = await fetch("/api/v1/files/confirm", { method: "POST", body: JSON.stringify({ confirmId, bytes: file.size }), headers: { ...authHeader, "Content-Type": "application/json" } });
+        const confirmJson = await confirmResp.json();
+        if (confirmJson.code !== 0) throw new Error(confirmJson.msg || "确认上传失败");
+
+        const s3Url = confirmJson.data.s3Key;
+        const fileId = confirmJson.data.id;
+        const draft = { url: s3Url, fileId, width: 1280, height: 720, bytes: file.size, mimeType: file.type || "video/mp4" };
+        // ponytail: reuse imageDraft for image/video data; rename to mediaDraft if complexity grows.
+        setImageDraft(draft as unknown as ImageDraft);
+        if (!form.getFieldValue("coverUrl")) form.setFieldValue("coverUrl", s3Url);
+        if (!form.getFieldValue("title")) form.setFieldValue("title", file.name);
+    };
+
     const copyAssetText = async (asset: Asset) => {
         if (asset.kind !== "text") return;
         copyText(asset.data.content, "文本已复制");
     };
 
-    const downloadImage = (asset: Asset) => {
+    const downloadImage = async (asset: Asset) => {
         if (asset.kind !== "image" && asset.kind !== "video") return;
+        // Refresh presigned URL before download if the asset has a fileId
+        if (asset.data.fileId) {
+            await refreshAssetUrls([asset.data.fileId]);
+            const updated = useAssetStore.getState().assets.find((a) => a.id === asset.id);
+            if (updated) {
+                if (updated.kind === "video") {
+                    saveAs(updated.data.url, `${updated.title || "asset"}.${updated.data.mimeType.split("/")[1] || "mp4"}`);
+                    return;
+                }
+                if (updated.kind === "image") {
+                    saveAs(updated.data.dataUrl, `${updated.title || "asset"}.${updated.data.mimeType.split("/")[1] || "png"}`);
+                    return;
+                }
+            }
+        }
         saveAs(asset.kind === "video" ? asset.data.url : asset.data.dataUrl, `${asset.title || "asset"}.${asset.data.mimeType.split("/")[1] || "png"}`);
     };
 
@@ -337,6 +393,7 @@ export default function AssetsPage() {
                                 options={[
                                     { label: "文本", value: "text" },
                                     { label: "图片", value: "image" },
+                                    { label: "视频", value: "video" },
                                 ]}
                                 onChange={(value) => setFormKind(value)}
                             />
@@ -368,18 +425,24 @@ export default function AssetsPage() {
                                 <Input.TextArea rows={8} placeholder="保存提示词、说明文案、参考描述等文本素材" />
                             </Form.Item>
                         ) : (
-                            <Form.Item label="图片内容" required>
+                            <Form.Item label={formKind === "video" ? "视频文件" : "图片文件"} required>
                                 <div className="rounded-lg border border-dashed border-stone-300 p-4 dark:border-stone-700">
-                                    <Button icon={<Upload className="size-4" />} onClick={() => imageInputRef.current?.click()}>
-                                        选择图片文件
-                                    </Button>
+                                    {formKind === "video" ? (
+                                        <Button icon={<Upload className="size-4" />} onClick={() => videoInputRef.current?.click()}>
+                                            选择视频文件
+                                        </Button>
+                                    ) : (
+                                        <Button icon={<Upload className="size-4" />} onClick={() => imageInputRef.current?.click()}>
+                                            选择图片文件
+                                        </Button>
+                                    )}
                                     {imageDraft ? (
                                         <Typography.Text type="secondary" className="ml-3 text-xs">
-                                            {imageDraft.width}x{imageDraft.height} · {formatBytes(imageDraft.bytes)}
+                                            {`${imageDraft.width}x${imageDraft.height} · ${formatBytes(imageDraft.bytes)}`}
                                         </Typography.Text>
                                     ) : (
                                         <Typography.Text type="secondary" className="ml-3 text-xs">
-                                            未选择图片
+                                            未选择文件
                                         </Typography.Text>
                                     )}
                                 </div>
@@ -389,8 +452,8 @@ export default function AssetsPage() {
                     <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 dark:border-stone-800 dark:bg-stone-950">
                         <Typography.Text strong>预览</Typography.Text>
                         <div className="mt-3 overflow-hidden rounded-lg border border-stone-200 bg-background dark:border-stone-800">
-                            {coverUrl || imageDraft?.dataUrl ? (
-                                <LazyImage src={coverUrl || imageDraft!.dataUrl} alt="" className="aspect-[4/3] w-full" />
+                            {coverUrl || (imageDraft && ("dataUrl" in imageDraft ? imageDraft.dataUrl : imageDraft.url)) ? (
+                                <LazyImage src={coverUrl || (imageDraft && ("dataUrl" in imageDraft ? imageDraft.dataUrl : imageDraft.url)) || ""} alt="" className="aspect-[4/3] w-full" />
                             ) : (
                                 <div className="flex aspect-[4/3] items-center justify-center bg-stone-100 p-5 text-center text-sm text-stone-500 dark:bg-stone-900">{content || "暂无封面"}</div>
                             )}
@@ -430,6 +493,16 @@ export default function AssetsPage() {
                     className="hidden"
                     onChange={(event) => {
                         void readImageFile(event.target.files?.[0]);
+                        event.target.value = "";
+                    }}
+                />
+                <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={(event) => {
+                        void readVideoFile(event.target.files?.[0]);
                         event.target.value = "";
                     }}
                 />

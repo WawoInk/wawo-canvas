@@ -44,7 +44,7 @@ func New() *gin.Engine {
 	v1.GET("/videos/:id/content", func(c *gin.Context) {
 		handler.AIVideoContent(c.Writer, c.Request, c.Param("id"))
 	})
-	// 视频生成标准入口（对齐 xvanai /v1/contents/generations/tasks）。旧 /videos 路由保留为遗留。
+	// Video generation standard entry (aligns with xvanai /v1/contents/generations/tasks).
 	v1.POST("/contents/generations/tasks", gin.WrapF(handler.CreateVideoTask))
 	v1.GET("/contents/generations/tasks/:id", func(c *gin.Context) {
 		handler.GetVideoTask(c.Writer, c.Request, c.Param("id"))
@@ -72,11 +72,20 @@ func New() *gin.Engine {
 	// Canvas project sync
 	v1.GET("/canvas/projects", gin.WrapF(handler.ListCanvasProjects))
 	v1.POST("/canvas/projects", gin.WrapF(handler.CreateCanvasProject))
+	v1.GET("/canvas/projects/:id", func(c *gin.Context) {
+		handler.GetCanvasProject(c.Writer, c.Request, c.Param("id"))
+	})
 	v1.PUT("/canvas/projects/:id", func(c *gin.Context) {
 		handler.UpdateCanvasProject(c.Writer, c.Request, c.Param("id"))
 	})
 	v1.DELETE("/canvas/projects/:id", func(c *gin.Context) {
 		handler.DeleteCanvasProject(c.Writer, c.Request, c.Param("id"))
+	})
+	// User assets (CRUD with user scope via UserAuth)
+	v1.GET("/assets", gin.WrapF(handler.Assets))
+	v1.POST("/assets", gin.WrapF(handler.SaveAsset))
+	v1.DELETE("/assets/:id", func(c *gin.Context) {
+		handler.DeleteAsset(c.Writer, c.Request, c.Param("id"))
 	})
 	// User file upload / S3 storage
 	v1.POST("/files/upload-url", gin.WrapF(handler.CreateUploadURL))

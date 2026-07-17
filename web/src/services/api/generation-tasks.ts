@@ -124,6 +124,7 @@ export interface RecordGenerationTaskRequest {
     metadata?: string;
     requestBody: string;
     responseBody: string;
+    errorMessage?: string;
 }
 
 export async function recordGenerationTask(req: RecordGenerationTaskRequest): Promise<{

@@ -116,6 +116,10 @@ if (typeof window !== "undefined") {
 
 // ─── Persist storage adapter (user-scoped) ───────────────────────────
 
+// Use a stable key that does NOT depend on userId.
+// Zustand persist calls getItem during initialization BEFORE useUserStore is hydrated,
+// so userId is always null at that point. Using a user-keyed name would mean getItem
+// returns null, the store initializes as empty, and then setItem overwrites the real data.
 function userStoreKey(name: string) {
     const userId = useUserStore.getState().user?.id;
     return userId ? `${name}:${userId}` : name;
@@ -123,9 +127,18 @@ function userStoreKey(name: string) {
 
 const canvasStorage: PersistStorage<CanvasStore> = {
     getItem: async (name) => {
+        // Try user-scoped key first, fall back to shared key
         const userId = useUserStore.getState().user?.id;
-        if (!userId) return null;
-        const value = await localForageStorage.getItem(userStoreKey(name));
+        const scopedKey = userId ? `${name}:${userId}` : name;
+        let value = await localForageStorage.getItem(scopedKey);
+        // Fallback: if user is logged in but no user-scoped data exists, try shared key
+        if (!value && userId) {
+            value = await localForageStorage.getItem(name);
+            if (value) {
+                // Migrate shared data to user-scoped key
+                await localForageStorage.setItem(scopedKey, value);
+            }
+        }
         if (!value) return null;
         return JSON.parse(value) as StorageValue<CanvasStore>;
     },
@@ -227,44 +240,61 @@ export const useCanvasStore = create<CanvasStore>()(
                     // Start with all local projects (preserves local-only ones not in backend)
                     const projects: CanvasProject[] = [...localProjects];
                     for (const item of backendItems) {
-                        const existsLocally = projects.some((p) => p.id === item.id);
-                        if (existsLocally) {
-                            // Keep local version (has latest in-memory edits) — already in projects array
-                            continue;
-                        } else {
-                            // New project from backend — try to load full data
-                            let fullProject: CanvasProject = {
-                                id: item.id,
-                                title: item.name,
-                                createdAt: item.createdAt,
-                                updatedAt: item.updatedAt,
-                                nodes: [],
-                                connections: [],
-                                chatSessions: [],
-                                activeChatId: null,
-                                backgroundMode: "lines",
-                                showImageInfo: false,
-                                viewport: initialViewport,
-                            };
+                        const localIdx = projects.findIndex((p) => p.id === item.id);
+                        if (localIdx >= 0) {
+                            // Local version exists. If it has content, keep it (latest in-memory edits).
+                            // If it's an empty stub (e.g. rehydrated from a prior visit before nodes
+                            // were synced), fetch the full detail from backend so content isn't lost
+                            // across browser restarts.
+                            const local = projects[localIdx];
+                            if (local.nodes.length || local.connections.length || local.chatSessions.length) continue;
                             try {
                                 const resp = await fetch(
                                     `/api/v1/canvas/projects/${encodeURIComponent(item.id)}`,
-                                    {
-                                        headers: {
-                                            Authorization: `Bearer ${useUserStore.getState().token}`,
-                                        },
-                                    },
+                                    { headers: { Authorization: `Bearer ${useUserStore.getState().token}` } },
                                 );
                                 if (resp.ok) {
                                     const detail = await resp.json() as { data?: { projectJson?: string } };
                                     if (detail.data?.projectJson) {
                                         const parsed = JSON.parse(detail.data.projectJson) as Partial<CanvasProject>;
-                                        fullProject = { ...fullProject, ...parsed, id: item.id, title: parsed.title || item.name, createdAt: item.createdAt, updatedAt: item.updatedAt };
+                                        projects[localIdx] = { ...local, ...parsed, id: item.id, title: parsed.title || item.name, createdAt: item.createdAt, updatedAt: item.updatedAt };
                                     }
                                 }
                             } catch { /* skip */ }
-                            projects.push(fullProject);
+                            continue;
                         }
+                        // New project from backend — try to load full data
+                        let fullProject: CanvasProject = {
+                            id: item.id,
+                            title: item.name,
+                            createdAt: item.createdAt,
+                            updatedAt: item.updatedAt,
+                            nodes: [],
+                            connections: [],
+                            chatSessions: [],
+                            activeChatId: null,
+                            backgroundMode: "lines",
+                            showImageInfo: false,
+                            viewport: initialViewport,
+                        };
+                        try {
+                            const resp = await fetch(
+                                `/api/v1/canvas/projects/${encodeURIComponent(item.id)}`,
+                                {
+                                    headers: {
+                                        Authorization: `Bearer ${useUserStore.getState().token}`,
+                                    },
+                                },
+                            );
+                            if (resp.ok) {
+                                const detail = await resp.json() as { data?: { projectJson?: string } };
+                                if (detail.data?.projectJson) {
+                                    const parsed = JSON.parse(detail.data.projectJson) as Partial<CanvasProject>;
+                                    fullProject = { ...fullProject, ...parsed, id: item.id, title: parsed.title || item.name, createdAt: item.createdAt, updatedAt: item.updatedAt };
+                                }
+                            }
+                        } catch { /* skip */ }
+                        projects.push(fullProject);
                     }
                     set({ projects });
                 } catch { /* offline — no-op */ }

@@ -14,6 +14,7 @@ import { defaultConfig, type AiConfig, useConfigStore, useEffectiveConfig } from
 import { resolveImageUrl, uploadImage, type UploadedImage } from "@/services/image-storage";
 import { resolveMediaUrl, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { uploadBlob, uploadUrlToS3 } from "@/services/upload-blob";
+import { resolveFileUrls } from "@/services/resolve-file-urls";
 import { nanoid } from "nanoid";
 import { getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
 import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
@@ -1542,9 +1543,14 @@ function InfiniteCanvasPage() {
         setNodes((prev) => prev.map((node) => (node.id === nodeId ? applyNodeConfigPatch(node, patch) : node)));
     }, []);
 
-    const downloadNodeImage = useCallback((node: CanvasNodeData) => {
+    const downloadNodeImage = useCallback(async (node: CanvasNodeData) => {
         if ((node.type !== CanvasNodeType.Image && node.type !== CanvasNodeType.Video && node.type !== CanvasNodeType.Audio) || !node.metadata?.content) return;
-        saveAs(node.metadata.content, `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(node.metadata.content)}`);
+        let content = node.metadata.content;
+        if (node.metadata.fileId) {
+            const urlMap = await resolveFileUrls([node.metadata.fileId]);
+            if (urlMap.has(node.metadata.fileId)) content = urlMap.get(node.metadata.fileId)!;
+        }
+        saveAs(content, `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(content)}`);
     }, []);
 
     const saveNodeAsset = useCallback(
@@ -1558,7 +1564,12 @@ function InfiniteCanvasPage() {
             }
             if (node.type === CanvasNodeType.Video) {
                 if (!node.metadata?.content) return message.error("没有可保存的视频");
-                addAsset({ kind: "video", title: node.metadata?.prompt?.slice(0, 24) || "画布视频", coverUrl: "", tags: [], source: "Canvas", data: { url: node.metadata.content, storageKey: node.metadata.storageKey, width: node.width, height: node.height, bytes: node.metadata.bytes || 0, mimeType: node.metadata.mimeType || "video/mp4" }, metadata: { source: "canvas", nodeId: node.id, prompt: node.metadata?.prompt } });
+                let videoUrl = node.metadata.content;
+                if (node.metadata.fileId) {
+                    const urlMap = await resolveFileUrls([node.metadata.fileId]);
+                    if (urlMap.has(node.metadata.fileId)) videoUrl = urlMap.get(node.metadata.fileId)!;
+                }
+                addAsset({ kind: "video", title: node.metadata?.prompt?.slice(0, 24) || "画布视频", coverUrl: "", tags: [], source: "Canvas", data: { url: videoUrl, fileId: node.metadata.fileId, storageKey: node.metadata.storageKey, width: node.width, height: node.height, bytes: node.metadata.bytes || 0, mimeType: node.metadata.mimeType || "video/mp4" }, metadata: { source: "canvas", nodeId: node.id, prompt: node.metadata?.prompt } });
                 message.success("已加入我的素材");
                 return;
             }
@@ -1729,9 +1740,9 @@ function InfiniteCanvasPage() {
             const controller = startGenerationRequest(childId, node.id, childId);
             try {
                 const image = await requestEdit(generationConfig, prompt, [source], { id: `${node.id}-mask`, name: "mask.png", type: "image/png", dataUrl: payload.maskDataUrl }, { signal: controller.signal }).then((items) => items[0]);
-                const uploaded = await uploadImage(image.dataUrl);
+                const uploaded = await uploadGeneratedImage(image.dataUrl);
                 const size = fitNodeSize(uploaded.width, uploaded.height, node.width, node.height);
-                setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, width: size.width, height: size.height, metadata: { ...item.metadata, ...imageMetadata(uploaded), prompt, ...generationMetadata } } : item)));
+                setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, width: size.width, height: size.height, metadata: { ...item.metadata, content: uploaded.url, storageKey: "", fileId: uploaded.fileId, status: "success", naturalWidth: uploaded.width, naturalHeight: uploaded.height, bytes: uploaded.bytes, mimeType: uploaded.mimeType, prompt, ...generationMetadata } } : item)));
             } catch (error) {
                 if (isGenerationCanceled(error)) return;
                 const errorDetails = error instanceof Error ? error.message : "局部修改失败";
@@ -1807,9 +1818,9 @@ function InfiniteCanvasPage() {
                 const image = await requestEdit(generationConfig, prompt, [{ id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey }], undefined, { signal: controller.signal }).then(
                     (items) => items[0],
                 );
-                const uploaded = await uploadImage(image.dataUrl);
+                const uploaded = await uploadGeneratedImage(image.dataUrl);
                 const size = fitNodeSize(uploaded.width, uploaded.height, imageConfig.width, imageConfig.height);
-                setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, width: size.width, height: size.height, metadata: { ...item.metadata, ...imageMetadata(uploaded), prompt, ...generationMetadata } } : item)));
+                setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, width: size.width, height: size.height, metadata: { ...item.metadata, content: uploaded.url, storageKey: "", fileId: uploaded.fileId, status: "success", naturalWidth: uploaded.width, naturalHeight: uploaded.height, bytes: uploaded.bytes, mimeType: uploaded.mimeType, prompt, ...generationMetadata } } : item)));
             } catch (error) {
                 if (isGenerationCanceled(error)) return;
                 const errorDetails = error instanceof Error ? error.message : "生成失败";
@@ -2088,8 +2099,9 @@ function InfiniteCanvasPage() {
                                 const image = referenceImages.length
                                     ? await requestEdit({ ...generationConfig, count: "1" }, effectivePrompt, referenceImages, undefined, { signal: controller.signal }).then((items) => items[0])
                                     : await requestGeneration({ ...generationConfig, count: "1" }, effectivePrompt, { signal: controller.signal }).then((items) => items[0]);
-                                const uploaded = await uploadImage(image.dataUrl);
+                                const uploaded = await uploadGeneratedImage(image.dataUrl);
                                 const imageSize = fitNodeSize(uploaded.width, uploaded.height, imageConfig.width, imageConfig.height);
+                                const genMeta = { content: uploaded.url, storageKey: "", fileId: uploaded.fileId, status: "success" as const, naturalWidth: uploaded.width, naturalHeight: uploaded.height, bytes: uploaded.bytes, mimeType: uploaded.mimeType };
                                 setNodes((prev) => {
                                     const root = prev.find((node) => node.id === rootId);
                                     return prev.map((node) => {
@@ -2101,7 +2113,7 @@ function InfiniteCanvasPage() {
                                                 position: { x: center.x - imageSize.width / 2, y: center.y - imageSize.height / 2 },
                                                 width: imageSize.width,
                                                 height: imageSize.height,
-                                                metadata: { ...node.metadata, ...imageMetadata(uploaded), primaryImageId: targetId },
+                                                metadata: { ...node.metadata, ...genMeta, primaryImageId: targetId },
                                             };
                                         if (node.id === targetId)
                                             return {
@@ -2109,7 +2121,7 @@ function InfiniteCanvasPage() {
                                                 position: { x: center.x - imageSize.width / 2, y: center.y - imageSize.height / 2 },
                                                 width: imageSize.width,
                                                 height: imageSize.height,
-                                                metadata: { ...node.metadata, ...imageMetadata(uploaded) },
+                                                metadata: { ...node.metadata, ...genMeta },
                                             };
                                         return node;
                                     });
@@ -2175,6 +2187,14 @@ function InfiniteCanvasPage() {
                             stored = await uploadUrlToS3(videoResult.url, "results/videos");
                         } else {
                             throw new Error("视频结果为空");
+                        }
+                        // Resolve a fresh presigned URL so the node plays immediately
+                        // without a page refresh (uploadUrlToS3 returns a raw S3 public URL
+                        // that may require a proxy for playback).
+                        {
+                            const urlMap = await resolveFileUrls([stored.fileId]);
+                            const resolvedUrl = urlMap.get(stored.fileId);
+                            if (resolvedUrl) stored.url = resolvedUrl;
                         }
                         const videoSize = fitNodeSize(stored.width || spec.width, stored.height || spec.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
                         const nextNode = {
@@ -2359,6 +2379,14 @@ function InfiniteCanvasPage() {
                     } else {
                         throw new Error("视频结果为空");
                     }
+                    // Resolve a fresh presigned URL so the node plays immediately
+                    // without a page refresh (uploadUrlToS3 returns a raw S3 public URL
+                    // that may require a proxy for playback).
+                    {
+                        const urlMap = await resolveFileUrls([stored.fileId]);
+                        const resolvedUrl = urlMap.get(stored.fileId);
+                        if (resolvedUrl) stored.url = resolvedUrl;
+                    }
                     const videoSize = fitNodeSize(stored.width || node.width, stored.height || node.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
                     const nextNode = {
                             ...node,
@@ -2384,7 +2412,7 @@ function InfiniteCanvasPage() {
                 }
 
                 const image = useReferenceImages ? await requestEdit(generationConfig, prompt, retryImages, undefined, { signal: controller.signal }).then((items) => items[0]) : await requestGeneration(generationConfig, prompt, { signal: controller.signal }).then((items) => items[0]);
-                const uploadedImage = await uploadImage(image.dataUrl);
+                const uploadedImage = await uploadGeneratedImage(image.dataUrl);
                 const imageConfig = NODE_DEFAULT_SIZE[CanvasNodeType.Image];
                 const imageSize = fitNodeSize(uploadedImage.width, uploadedImage.height, imageConfig.width, imageConfig.height);
                 const generationMetadata = savedImageMetadata?.generationType
@@ -2398,7 +2426,7 @@ function InfiniteCanvasPage() {
                                   type: CanvasNodeType.Image,
                                   width: imageSize.width,
                                   height: imageSize.height,
-                                  metadata: { ...item.metadata, ...imageMetadata(uploadedImage), prompt, ...generationMetadata },
+                                  metadata: { ...item.metadata, content: uploadedImage.url, storageKey: "", fileId: uploadedImage.fileId, status: "success", naturalWidth: uploadedImage.width, naturalHeight: uploadedImage.height, bytes: uploadedImage.bytes, mimeType: uploadedImage.mimeType, prompt, ...generationMetadata },
                               }
                             : item,
                     ),
@@ -3079,6 +3107,18 @@ function imageMetadata(image: UploadedImage): CanvasNodeMetadata {
     return { content: image.url, storageKey: image.storageKey, status: "success", naturalWidth: image.width, naturalHeight: image.height, bytes: image.bytes, mimeType: image.mimeType };
 }
 
+// AI-generated images must persist to S3 (not just IndexedDB) so they survive
+// browser restarts. Locally-uploaded images keep using uploadImage (IndexedDB).
+// Returns metadata with a fileId-backed S3 URL; hydrateCanvasImages resolves it
+// via resolveFileUrls on reload, mirroring the video node path.
+async function uploadGeneratedImage(dataUrl: string): Promise<{ url: string; fileId: string; width: number; height: number; bytes: number; mimeType: string }> {
+    const blob = await (await fetch(dataUrl)).blob();
+    const stored = await uploadBlob(blob, "results/images");
+    // uploadBlob only extracts dimensions for fileType "images"; read them manually.
+    const meta = await readImageMeta(dataUrl);
+    return { ...stored, width: meta.width, height: meta.height };
+}
+
 function videoMetadata(video: UploadedFile): CanvasNodeMetadata {
     return { content: video.url, storageKey: video.storageKey, status: "success", naturalWidth: video.width, naturalHeight: video.height, bytes: video.bytes, mimeType: video.mimeType || "video/mp4", durationMs: video.durationMs };
 }
@@ -3133,10 +3173,20 @@ async function resolveMetadataReferences(metadata: CanvasNodeMetadata) {
 }
 
 async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
+    // Collect all fileIds for batch URL refresh (covers AI-generated images, videos, audios)
+    const fileIds = nodes
+        .filter((n) => (n.type === CanvasNodeType.Image || n.type === CanvasNodeType.Video || n.type === CanvasNodeType.Audio) && !n.metadata?.storageKey && n.metadata?.fileId)
+        .map((n) => n.metadata!.fileId!)
+        .filter(Boolean);
+    const urlMap = fileIds.length ? await resolveFileUrls([...new Set(fileIds)]) : new Map<string, string>();
+
     return Promise.all(
         nodes.map(async (node) => {
             const content = node.metadata?.content;
-            if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && node.metadata?.storageKey) return { ...node, metadata: { ...node.metadata, content: await resolveMediaUrl(node.metadata.storageKey, content) } };
+            if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && node.metadata?.storageKey)
+                return { ...node, metadata: { ...node.metadata, content: await resolveMediaUrl(node.metadata.storageKey, content) } };
+            if ((node.type === CanvasNodeType.Image || node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && node.metadata?.fileId && urlMap.has(node.metadata.fileId))
+                return { ...node, metadata: { ...node.metadata, content: urlMap.get(node.metadata.fileId)! } };
             if (node.type !== CanvasNodeType.Image || !content) return node;
             if (node.metadata?.storageKey) return { ...node, metadata: { ...node.metadata, content: await resolveImageUrl(node.metadata.storageKey, content) } };
             if (!content.startsWith("data:image/")) return node;

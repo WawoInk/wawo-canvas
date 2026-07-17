@@ -7,14 +7,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// ListAssets 按查询条件返回素材分页列表。
-func ListAssets(q model.Query) ([]model.Asset, int64, error) {
+// ListAssets 按查询条件返回用户素材分页列表。
+func ListAssets(userID string, q model.Query) ([]model.Asset, int64, error) {
 	db, err := DB()
 	if err != nil {
 		return nil, 0, err
 	}
 	q.Normalize()
-	tx := applyAssetFilters(db.Model(&model.Asset{}), q)
+	tx := applyAssetFilters(db.Model(&model.Asset{}).Where("user_id = ?", userID), q)
 
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {
@@ -27,14 +27,14 @@ func ListAssets(q model.Query) ([]model.Asset, int64, error) {
 }
 
 // ListAssetTags 返回当前素材查询条件下的全部标签。
-func ListAssetTags(q model.Query) ([]string, error) {
+func ListAssetTags(userID string, q model.Query) ([]string, error) {
 	db, err := DB()
 	if err != nil {
 		return nil, err
 	}
 	q.Normalize()
 	q.Tags = nil
-	tx := applyAssetFilters(db.Model(&model.Asset{}), q)
+	tx := applyAssetFilters(db.Model(&model.Asset{}).Where("user_id = ?", userID), q)
 
 	var items []model.Asset
 	if err := tx.Select("tags").Find(&items).Error; err != nil {
@@ -58,12 +58,12 @@ func SaveAsset(item model.Asset) (model.Asset, error) {
 }
 
 // DeleteAsset 删除指定素材。
-func DeleteAsset(id string) error {
+func DeleteAsset(userID, id string) error {
 	db, err := DB()
 	if err != nil {
 		return err
 	}
-	return db.Delete(&model.Asset{}, "id = ?", id).Error
+	return db.Where("id = ? AND user_id = ?", id, userID).Delete(&model.Asset{}).Error
 }
 
 // applyAssetFilters 应用素材列表的搜索条件。

@@ -9,7 +9,12 @@ import (
 )
 
 func Assets(w http.ResponseWriter, r *http.Request) {
-	result, err := service.ListAssets(parseQuery(r))
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	result, err := service.ListAssets(user.ID, parseQuery(r))
 	if err != nil {
 		FailError(w, err)
 		return
@@ -17,8 +22,39 @@ func Assets(w http.ResponseWriter, r *http.Request) {
 	OK(w, result)
 }
 
+func SaveAsset(w http.ResponseWriter, r *http.Request) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	var item model.Asset
+	_ = json.NewDecoder(r.Body).Decode(&item)
+	result, err := service.SaveAsset(user.ID, item)
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, result)
+}
+
+func DeleteAsset(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	if err := service.DeleteAsset(user.ID, id); err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, true)
+}
+
 func AdminAssets(w http.ResponseWriter, r *http.Request) {
-	result, err := service.ListAssets(parseQuery(r))
+	// Admin sees all assets (userID empty), using parseQuery for type/keyword filter.
+	q := parseQuery(r)
+	result, err := service.ListAssets("", q)
 	if err != nil {
 		FailError(w, err)
 		return
@@ -27,9 +63,10 @@ func AdminAssets(w http.ResponseWriter, r *http.Request) {
 }
 
 func AdminSaveAsset(w http.ResponseWriter, r *http.Request) {
+	// Admin save keeps existing model (asset type/text only, no user scope).
 	var item model.Asset
 	_ = json.NewDecoder(r.Body).Decode(&item)
-	result, err := service.SaveAsset(item)
+	result, err := service.SaveAsset("", item)
 	if err != nil {
 		FailError(w, err)
 		return
@@ -38,7 +75,7 @@ func AdminSaveAsset(w http.ResponseWriter, r *http.Request) {
 }
 
 func AdminDeleteAsset(w http.ResponseWriter, r *http.Request, id string) {
-	if err := service.DeleteAsset(id); err != nil {
+	if err := service.DeleteAsset("", id); err != nil {
 		FailError(w, err)
 		return
 	}

@@ -61,6 +61,7 @@ type GenerationLog = {
     size: string;
     quality: string;
     status: "生成中" | "成功" | "失败";
+    error?: string;
     images: GeneratedImage[];
     thumbnails: string[];
 };
@@ -187,6 +188,25 @@ export default function ImagePage() {
         const batchStartedAt = performance.now();
         setStartedAt(batchStartedAt);
 
+        // Stable dedupe key shared by the pending and final saveLog so the backend
+        // upserts one row (RecordUserTask matches by upstreamTaskId) instead of
+        // leaving a stuck "生成中" row next to the final-status row.
+        const dedupeKey = nanoid();
+
+        // Create a pending log immediately so the sidebar shows "generating" state
+        const pendingLog = buildLog({
+            prompt: text,
+            model,
+            config: { ...snapshot.config, count: String(generationCount) },
+            references: snapshot.references,
+            durationMs: 0,
+            successCount: 0,
+            failCount: 0,
+            status: "生成中",
+            images: [],
+        });
+        await saveLog(pendingLog, dedupeKey);
+
         const tasks = Array.from({ length: generationCount }, (_, index) => runGenerationSlot(index, snapshot));
 
         const result = await Promise.allSettled(tasks);
@@ -194,6 +214,7 @@ export default function ImagePage() {
         const successCount = successImages.length;
         const failCount = generationCount - successCount;
         const failed = result.find((item): item is PromiseRejectedResult => item.status === "rejected");
+        const errorMessage = failed?.reason instanceof Error ? failed.reason.message : "生成失败";
 
         try {
             const logImages = await Promise.all(
@@ -203,7 +224,7 @@ export default function ImagePage() {
                     return { ...image, dataUrl: stored.url, fileId: stored.fileId, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType };
                 }),
             );
-            const log = buildLog({
+            const finalLog = buildLog({
                 prompt: text,
                 model,
                 config: { ...snapshot.config, count: String(generationCount) },
@@ -214,15 +235,21 @@ export default function ImagePage() {
                 status: successCount ? "成功" : "失败",
                 images: logImages,
             });
-            saveLog(log);
-            successCount ? message.success("图片已生成") : message.error(failed?.reason instanceof Error ? failed.reason.message : "生成失败");
+            finalLog.error = successCount ? undefined : errorMessage;
+            void saveLog(finalLog, dedupeKey);
+            successCount ? message.success("图片已生成") : message.error(errorMessage);
         } finally {
             setRunning(false);
         }
     };
 
-    const downloadImage = (image: GeneratedImage, index: number) => {
-        saveAs(image.dataUrl, `image-${index + 1}.png`);
+    const downloadImage = async (image: GeneratedImage, index: number) => {
+        let url = image.dataUrl;
+        if (image.fileId) {
+            const urlMap = await resolveFileUrls([image.fileId]);
+            if (urlMap.has(image.fileId)) url = urlMap.get(image.fileId)!;
+        }
+        saveAs(url, `image-${index + 1}.png`);
     };
 
     const addResultToReferences = async (image: GeneratedImage, index: number) => {
@@ -232,15 +259,20 @@ export default function ImagePage() {
     };
 
     const saveResultToAssets = async (image: GeneratedImage, index: number) => {
+        let dataUrl = image.dataUrl;
+        if (image.fileId) {
+            const urlMap = await resolveFileUrls([image.fileId]);
+            if (urlMap.has(image.fileId)) dataUrl = urlMap.get(image.fileId)!;
+        }
         // Already stored in S3 — reuse fileId directly
-        if (image.fileId && image.dataUrl) {
+        if (image.fileId && dataUrl) {
             addAsset({
                 kind: "image",
                 title: `生成结果 ${index + 1}`,
                 coverUrl: image.dataUrl,
                 tags: [],
                 source: "生图工作台",
-                data: { dataUrl: image.dataUrl, fileId: image.fileId, width: image.width, height: image.height, bytes: image.bytes, mimeType: image.mimeType || "image/png" },
+                data: { dataUrl, fileId: image.fileId, width: image.width, height: image.height, bytes: image.bytes, mimeType: image.mimeType || "image/png" },
                 metadata: { source: "image-page", prompt },
             });
             message.success("已加入我的素材");
@@ -299,12 +331,16 @@ export default function ImagePage() {
         await refreshLogs();
     };
 
-    const saveLog = async (log: GenerationLog) => {
+    const saveLog = async (log: GenerationLog, dedupeId = ""): Promise<void> => {
         // Save to local cache first
         await logStoreForUser().setItem(log.id, serializeLog(log));
         // Sync to backend so refreshLogs can find it
         const user = useUserStore.getState().user;
-        if (user?.id) {
+        const channelMode = useConfigStore.getState().config.channelMode;
+        // In remote mode the backend proxy already creates a complete generation_tasks
+        // record via LogTaskStart → LogTaskSuccess. Only create/upsert one in local
+        // mode where the frontend calls external APIs directly.
+        if (user?.id && channelMode !== "remote") {
             try {
                 const status = log.status === "成功" ? "success" : log.status === "失败" ? "failed" : "pending";
                 const fileIds = log.images.map((img) => img.fileId).filter(Boolean);
@@ -315,7 +351,7 @@ export default function ImagePage() {
                     status,
                     credits: 0,
                     latencyMs: log.durationMs,
-                    upstreamTaskId: "",
+                    upstreamTaskId: dedupeId,
                     source: "image_workbench",
                     requestBody: JSON.stringify({
                         prompt: log.prompt,
@@ -328,6 +364,7 @@ export default function ImagePage() {
                         data: log.images.map((img) => ({ url: img.dataUrl })),
                     }),
                     metadata: fileIds.length ? JSON.stringify({ fileIds }) : "",
+                    errorMessage: log.status === "失败" ? log.error || "" : "",
                 });
                 if (result?.id && fileIds.length) {
                     await patchGenerationTaskMetadata(result.id, JSON.stringify({ fileIds })).catch(() => {});
@@ -368,6 +405,7 @@ export default function ImagePage() {
 
     function toGenerationLog(item: ImageHistoryItem): GenerationLog {
         const isSuccess = item.status === "success";
+        const isPending = item.status === "pending";
         const images = item.fileIds?.length
             ? item.fileIds.map((fileId) => ({
                 id: fileId,
@@ -405,7 +443,7 @@ export default function ImagePage() {
             thumbnails: images.map((img) => img.dataUrl).filter(Boolean),
             durationMs: item.durationMs,
             successCount: isSuccess ? 1 : 0,
-            failCount: isSuccess ? 0 : 1,
+            failCount: isSuccess || isPending ? 0 : 1,
             imageCount: images.length || 1,
             size: item.size || "",
             quality: item.quality || "",
@@ -818,16 +856,21 @@ function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: Ge
                     </div>
                 </div>
                 <div className="grid justify-items-end gap-2">
-                    <div className="flex gap-1">
-                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="blue">
-                            成功 {log.successCount ?? log.imageCount}
-                        </Tag>
-                        {log.failCount ? (
-                            <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="red">
-                                失败 {log.failCount}
+                    <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color={log.status === "成功" ? "blue" : log.status === "生成中" ? "processing" : "red"}>
+                        {log.status}
+                    </Tag>
+                    {log.status !== "生成中" ? (
+                        <div className="flex gap-1">
+                            <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="blue">
+                                成功 {log.successCount ?? log.imageCount}
                             </Tag>
-                        ) : null}
-                    </div>
+                            {log.failCount ? (
+                                <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="red">
+                                    失败 {log.failCount}
+                                </Tag>
+                            ) : null}
+                        </div>
+                    ) : null}
                     <div className="flex flex-wrap justify-end gap-1">
                         <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{log.imageCount} 张</Tag>
                         <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="green">
@@ -858,6 +901,10 @@ async function readStoredLogs() {
 }
 
 async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog> {
+    // Collect fileIds for URL refresh
+    const fileIds = (log.images || []).map((img) => img.fileId).filter((id): id is string => Boolean(id));
+    const urlMap = fileIds.length ? await resolveFileUrls([...new Set(fileIds)]) : new Map<string, string>();
+
     const references = await Promise.all(
         (log.references || []).map(async (item) => ({
             ...item,
@@ -867,7 +914,7 @@ async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog>
     const images = await Promise.all(
         (log.images || []).map(async (item) => ({
             ...item,
-            dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl),
+            dataUrl: item.fileId && urlMap.has(item.fileId) ? urlMap.get(item.fileId)! : await resolveImageUrl(item.storageKey, item.dataUrl),
         })),
     );
     const config = normalizeLogConfig(log);

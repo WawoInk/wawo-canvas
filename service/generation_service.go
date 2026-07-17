@@ -241,11 +241,41 @@ func AdminListTasks(q model.GenerationTaskQuery) (model.GenerationTaskList, erro
 
 // RecordUserTask 记录一个同步生成任务（如图片生成）。创建任务并立即设为成功状态，保存请求和响应。
 func RecordUserTask(user model.AuthUser, taskType model.TaskType, source string, provider string, modelName string,
-	status model.TaskStatus, credits int, latencyMs int64, upstreamTaskID string, reqBody string, respBody string) (*model.GenerationTask, error) {
+	status model.TaskStatus, credits int, latencyMs int64, upstreamTaskID string, reqBody string, respBody string, errorMessage string) (*model.GenerationTask, error) {
 
-	id := "gentask-" + uuid.NewString()
 	now := time.Now().Format(time.RFC3339)
 
+	// Upsert by (userID, upstreamTaskID): if a task with the same upstream id already
+	// exists for this user, update its status/result instead of inserting a duplicate.
+	// This is what stops a single video generation (pending → poll success/failure) from
+	// creating one row per saveLog call. When upstreamTaskID is empty (synchronous image
+	// generation), fall back to insert — the image page threads the returned id back as
+	// the dedupe key on its final saveLog.
+	if upstreamTaskID != "" {
+		if existing, err := repository.GetGenerationTaskByUpstreamTaskIDAndUser(upstreamTaskID, user.ID); err == nil {
+			updates := map[string]any{
+				"status":     status,
+				"latency_ms": latencyMs,
+				"updated_at": now,
+			}
+			if errorMessage != "" {
+				updates["error_message"] = errorMessage
+			}
+			if err := repository.UpdateGenerationTask(existing.ID, updates); err != nil {
+				return nil, err
+			}
+			if respBody != "" {
+				_ = repository.UpdateGenerationPayload(existing.ID, respBody, "")
+			}
+			existing.Status = status
+			existing.LatencyMs = latencyMs
+			existing.ErrorMessage = errorMessage
+			existing.UpdatedAt = now
+			return &existing, nil
+		}
+	}
+
+	id := "gentask-" + uuid.NewString()
 	task := model.GenerationTask{
 		ID:             id,
 		UserID:         user.ID,
@@ -257,6 +287,7 @@ func RecordUserTask(user model.AuthUser, taskType model.TaskType, source string,
 		Credits:        credits,
 		LatencyMs:      latencyMs,
 		UpstreamTaskID: upstreamTaskID,
+		ErrorMessage:   errorMessage,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
