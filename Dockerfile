@@ -5,7 +5,10 @@ COPY web/package.json web/bun.lock ./
 RUN bun install --frozen-lockfile
 COPY VERSION CHANGELOG.md ../
 COPY web/ .
-RUN bun run build
+ARG BUILD_SHA=dev
+RUN bun run build \
+    && sed -i "s#<head>#<head><meta name=\"build-version\" content=\"$BUILD_SHA\" />#" dist/index.html \
+    && printf '%s\n' "$BUILD_SHA" > dist/build-version.txt
 
 # ponytail: Caddyfile mounted at runtime via compose volume, not baked in
 FROM caddy:2-alpine

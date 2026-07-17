@@ -98,7 +98,10 @@ jobs:
           file: Dockerfile.api
           platforms: linux/arm64
           push: true
-          tags: ghcr.io/eldenpdx/infinite-canvas-api:latest,ghcr.io/eldenpdx/infinite-canvas-api:candidate-arm64
+          tags: |
+            ghcr.io/eldenpdx/infinite-canvas-api:latest
+            ghcr.io/eldenpdx/infinite-canvas-api:candidate-arm64
+            ghcr.io/eldenpdx/infinite-canvas-api:${{ github.sha }}
           cache-from: type=gha,scope=api-arm64
           cache-to: type=gha,mode=max,scope=api-arm64
 
@@ -110,6 +113,10 @@ jobs:
           file: Dockerfile
           platforms: linux/arm64
           push: true
-          tags: ghcr.io/eldenpdx/infinite-canvas:latest,ghcr.io/eldenpdx/infinite-canvas:candidate-arm64
+          tags: |
+            ghcr.io/eldenpdx/infinite-canvas:latest
+            ghcr.io/eldenpdx/infinite-canvas:candidate-arm64
+            ghcr.io/eldenpdx/infinite-canvas:${{ github.sha }}
+          build-args: BUILD_SHA=${{ github.sha }}
           cache-from: type=gha,scope=web-arm64
           cache-to: type=gha,mode=max,scope=web-arm64

@@ -15,8 +15,13 @@ permissions:
   contents: read
   packages: read
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main'
     name: Deploy (${{ inputs.site }})
     runs-on: ubuntu-latest
     steps:
@@ -27,8 +32,8 @@ jobs:
         run: |
           owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
           echo "owner=${owner}" >> "$GITHUB_OUTPUT"
-          echo "candidate-api=ghcr.io/${owner}/infinite-canvas-api:candidate-arm64" >> "$GITHUB_OUTPUT"
-          echo "candidate-web=ghcr.io/${owner}/infinite-canvas:candidate-arm64" >> "$GITHUB_OUTPUT"
+          echo "api=ghcr.io/${owner}/infinite-canvas-api:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "web=ghcr.io/${owner}/infinite-canvas:${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
       # ═══════════════════════════════════════════════════════════════
       # deploy
@@ -89,14 +94,14 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             set -e
-            CANDIDATE_API="${{ steps.ghcr.outputs.candidate-api }}"
-            CANDIDATE_WEB="${{ steps.ghcr.outputs.candidate-web }}"
+            DEPLOY_API="${{ steps.ghcr.outputs.api }}"
+            DEPLOY_WEB="${{ steps.ghcr.outputs.web }}"
             cd /opt/infinite-canvas
 
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u eldenpdx --password-stdin
 
-            docker pull "$CANDIDATE_API"
-            docker pull "$CANDIDATE_WEB"
+            docker pull "$DEPLOY_API"
+            docker pull "$DEPLOY_WEB"
 
             # Save rollback
             if docker image inspect infinite-canvas-api:latest >/dev/null 2>&1; then
@@ -108,9 +113,9 @@ jobs:
               echo "Saved rollback image: infinite-canvas:rollback"
             fi
 
-            # Tag candidate as latest
-            docker tag "$CANDIDATE_API" infinite-canvas-api:latest
-            docker tag "$CANDIDATE_WEB" infinite-canvas:latest
+            # Tag this commit as the local runtime image
+            docker tag "$DEPLOY_API" infinite-canvas-api:latest
+            docker tag "$DEPLOY_WEB" infinite-canvas:latest
 
             docker compose -f docker-compose.prod.yml down
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
@@ -125,15 +130,26 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             set -e
+            EXPECTED_VERSION="${{ github.sha }}"
+            PUBLIC_BASE_URL="${{ secrets.PUBLIC_BASE_URL }}"
             for i in $(seq 1 30); do
-              if curl -sf http://127.0.0.1/api/health >/dev/null 2>&1; then
-                echo "✓ Healthy after ${i}s"
+              local_version=$(curl --connect-timeout 3 --max-time 10 -fsS http://127.0.0.1/build-version.txt 2>/dev/null || true)
+              api_health=$(curl --connect-timeout 3 --max-time 10 -fsS http://127.0.0.1/api/health 2>/dev/null || true)
+              public_api_health=$(curl --connect-timeout 3 --max-time 10 -fsS -H 'Cache-Control: no-cache' "${PUBLIC_BASE_URL%/}/api/health" 2>/dev/null || true)
+              public_html=$(curl --connect-timeout 3 --max-time 10 -fsS -H 'Cache-Control: no-cache' "${PUBLIC_BASE_URL%/}/" 2>/dev/null || true)
+              public_version=$(curl --connect-timeout 3 --max-time 10 -fsS -H 'Cache-Control: no-cache' "${PUBLIC_BASE_URL%/}/build-version.txt" 2>/dev/null || true)
+              if [ "$local_version" = "$EXPECTED_VERSION" ] \
+                && [ "$api_health" = "ok" ] \
+                && [ "$public_api_health" = "ok" ] \
+                && [ "$public_version" = "$EXPECTED_VERSION" ] \
+                && printf '%s' "$public_html" | grep -Fq "content=\"$EXPECTED_VERSION\""; then
+                echo "✓ Frontend $EXPECTED_VERSION and API are live after ${i}s"
                 exit 0
               fi
-              echo "Attempt $i/30: waiting for healthy..."
+              echo "Attempt $i/30: local='$local_version', public='$public_version', local_api='$api_health', public_api='$public_api_health'"
               sleep 2
             done
-            echo "✗ Health check timeout. Recent logs:"
+            echo "✗ Deployed frontend version is not live. Recent logs:"
             cd /opt/infinite-canvas
             docker compose -f docker-compose.prod.yml logs --tail=50
             exit 1
