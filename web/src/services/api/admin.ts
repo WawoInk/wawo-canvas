@@ -260,8 +260,19 @@ export type AdminPublicSettings = {
     };
 };
 
+export type AdminGenerationProfileBinding = {
+    profileId: string;
+    upstreamModel?: string;
+    upstreamModels: string[];
+    channelName: string;
+    credits?: number;
+    enabled: boolean;
+    limitOverrides: { durationSecondsMax?: number };
+};
+
 export type AdminPrivateSettings = {
     channels: AdminModelChannel[];
+    generationProfiles: AdminGenerationProfileBinding[] | null;
     promptSync: {
         enabled: boolean;
         cron: string;

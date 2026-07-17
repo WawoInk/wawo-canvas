@@ -13,6 +13,28 @@ jobs:
   # --- Go lint & test ---
   go-check:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: infinite_canvas_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d infinite_canvas_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_DSN: postgres://postgres:postgres@localhost:5432/infinite_canvas_test?sslmode=disable
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: infinite_canvas_test
+      JWT_SECRET: generation-ci-test-secret
     steps:
       - uses: actions/checkout@v4
 
@@ -24,7 +46,7 @@ jobs:
         run: go vet ./...
 
       - name: Test
-        run: go test ./...
+        run: go test -p 1 ./...
 
   # --- Frontend lint ---
   web-lint:

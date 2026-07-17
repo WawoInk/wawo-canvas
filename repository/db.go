@@ -49,6 +49,7 @@ func DB() (*gorm.DB, error) {
 			&model.Asset{},
 			&model.Setting{},
 			&model.GenerationTask{},
+			&model.GenerationTaskEvent{},
 			&model.GenerationPayload{},
 			&model.CanvasProject{},
 			&model.VideoTask{},

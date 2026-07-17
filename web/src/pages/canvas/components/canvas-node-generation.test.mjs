@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildVideoGenerationIntent } from "./canvas-node-generation.ts";
+import { buildShortDramaGenerationIntent, buildVideoGenerationIntent, cleanShortDramaAssetMappings, locateGenerationError } from "./canvas-node-generation.ts";
 
 const image = {
     id: "image-1",
@@ -15,8 +15,9 @@ const image = {
 };
 const videoTarget = { id: "video-1", type: "video", title: "输出视频", metadata: {} };
 
-test("compiles Canvas media as platform file references", () => {
-    const intent = buildVideoGenerationIntent("video-1", [image, videoTarget], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], "人物走进雨夜街道");
+test("compiles Canvas media and settings as a first-party intent", () => {
+    const settings = { aspectRatio: "9:16", resolution: "1080p", durationSeconds: 10, generateAudio: false, watermark: true };
+    const intent = buildVideoGenerationIntent("video-1", [image, videoTarget], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], "人物走进雨夜街道", settings);
 
     assert.deepEqual(intent, {
         kind: "video.generate",
@@ -26,8 +27,67 @@ test("compiles Canvas media as platform file references", () => {
             videos: [],
             audios: [],
         },
-        settings: {},
+        settings,
     });
     const serialized = JSON.stringify(intent);
-    for (const providerField of ["dataUrl", "storageKey", "image_url", "content"]) assert.equal(serialized.includes(providerField), false);
+    for (const providerField of ["dataUrl", "storageKey", "image_url", "generate_audio", "ratio"]) assert.equal(serialized.includes(`"${providerField}":`), false);
+});
+
+test("compiles connected Drama assets with roles stored on each target node", () => {
+    const scene = { ...image, id: "image-2", title: "典当行", metadata: { ...image.metadata, fileId: "file-image-2" } };
+    const otherTarget = { ...videoTarget, id: "video-2", metadata: { dramaAssetRoles: { "image-1": "scene" } } };
+    const target = {
+        ...videoTarget,
+        title: "典当行退婚",
+        metadata: {
+            dramaAssetRoles: { "image-1": "character", "image-2": "scene", disconnected: "tool" },
+            dramaAssetDescriptions: { "image-1": "男主角" },
+        },
+    };
+    const connections = [
+        { id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" },
+        { id: "connection-2", fromNodeId: "image-2", toNodeId: "video-1" },
+    ];
+
+    const dramaSettings = { aspectRatio: "9:16", resolution: "1080p", durationSeconds: "auto", quality: "high" };
+    assert.deepEqual(buildShortDramaGenerationIntent("video-1", [image, scene, target, otherTarget], connections, "人物：林尘。分镜1-1：林尘在典当行擦拭柜台，神情淡然。", dramaSettings), {
+        kind: "video.short-drama",
+        title: "典当行退婚",
+        script: "人物：林尘。分镜1-1：林尘在典当行擦拭柜台，神情淡然。",
+        assets: [
+            { sourceNodeId: "image-1", role: "character", name: "人物参考", description: "男主角", reference: { fileId: "file-image-1", sourceNodeId: "image-1", name: "人物参考" } },
+            { sourceNodeId: "image-2", role: "scene", name: "典当行", reference: { fileId: "file-image-2", sourceNodeId: "image-2", name: "典当行" } },
+        ],
+        settings: dramaSettings,
+    });
+    assert.equal(otherTarget.metadata.dramaAssetRoles["image-1"], "scene");
+});
+
+test("cleans disconnected Drama asset mappings", () => {
+    const metadata = {
+        dramaAssetRoles: { "image-1": "character", disconnected: "tool" },
+        dramaAssetDescriptions: { "image-1": "男主角", disconnected: "旧道具" },
+    };
+    assert.deepEqual(cleanShortDramaAssetMappings(metadata, ["image-1"]), {
+        ...metadata,
+        dramaAssetRoles: { "image-1": "character" },
+        dramaAssetDescriptions: { "image-1": "男主角" },
+    });
+});
+
+test("locates structured generation errors without parsing provider codes", () => {
+    assert.deepEqual(locateGenerationError({ code: "INVALID_SETTING", message: "value is not allowed", retryable: false, fieldPath: "intent.settings.durationSeconds" }), {
+        fieldPath: "intent.settings.durationSeconds",
+    });
+    assert.deepEqual(locateGenerationError({ code: "MEDIA_UNSUPPORTED", message: "unsupported image format", retryable: false, fieldPath: "intent.assets.1.reference.fileId", resourceId: "image-2" }), {
+        fieldPath: "intent.assets.1.reference.fileId",
+        resourceId: "image-2",
+    });
+});
+
+test("rejects incomplete Drama intent before submission", () => {
+    const settings = { aspectRatio: "9:16", resolution: "1080p", durationSeconds: "auto", quality: "high" };
+    assert.throws(() => buildShortDramaGenerationIntent("video-1", [image, { ...videoTarget, title: "" }], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], "脚本", settings), /短剧标题/);
+    assert.throws(() => buildShortDramaGenerationIntent("video-1", [image, { ...videoTarget, title: "短剧" }], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], "", settings), /短剧脚本/);
+    assert.throws(() => buildShortDramaGenerationIntent("video-1", [image, { ...videoTarget, title: "短剧", metadata: {} }], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], "完整脚本", settings), /为图片「人物参考」选择角色/);
 });

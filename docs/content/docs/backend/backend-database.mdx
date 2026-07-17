@@ -1,0 +1,45 @@
+---
+title: 数据库结构
+description: 核心数据表和第一方生成任务事务约束
+---
+
+# 数据库结构
+
+后端使用 PostgreSQL 和 GORM。本文记录需要跨模块理解的核心表；字段以 `model/` 中的结构为准。
+
+## generation_tasks
+
+`generation_tasks` 是第一方生成、兼容生成历史和后台恢复共用的任务事实表。第一方任务使用以下生命周期：
+
+- `queued`：等待平台 worker 认领。
+- `running`：已被 worker 认领，包含供应商返回的 `queued`、`running` 和 `processing`。
+- `succeeded`、`failed`、`cancelled`：公开终态。
+- `pending`：仅供成功结果持久化期间使用的内部结算状态，不对第一方客户端公开。
+
+任务通过 `worker_lease_owner` 和 `worker_lease_expires_at` 支持认领、租约续期与重启恢复。`user_id + client_request_id` 对非空请求 ID 建立唯一约束。
+
+## generation_payloads
+
+`generation_payloads` 保存完整命令和脱敏后的上游请求、响应及原始错误。它与任务一一对应，可按保留策略清理；长期任务摘要仍保存在 `generation_tasks.metadata`。
+
+## generation_task_events
+
+`generation_task_events` 是轻量、append-only 的生命周期审计表，不是事件溯源系统；当前任务状态仍以 `generation_tasks` 为准。
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 主键，事件 ID |
+| `task_id` | 关联任务 ID，建立索引 |
+| `type` | 事件类型，建立索引 |
+| `detail` | 小型、脱敏的文本详情 |
+| `created_at` | 创建时间，建立索引 |
+
+回调、轮询、重试、超时、取消请求和终态决定可追加事件。不得写入 API Key、回调密钥、data URI 正文或签名 URL 查询参数。
+
+## 终态和退款事务
+
+生成生命周期的业务决策位于 `service/`：包括允许的来源状态、归一化错误、是否退款、退款文案以及终态事件内容。
+
+`repository/` 只执行数据库操作。最终状态写入、用户余额返还、`credit_logs` 退款流水和 `generation_task_events` 终态事件在同一 PostgreSQL 事务中完成。并发 callback、poll、cancel 或 timeout 只有一个 compare-and-set 可以提交终态。
+
+`credit_logs` 对非空 `task_id + type` 建立唯一约束，防止同一任务重复扣费或退款。

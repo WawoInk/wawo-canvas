@@ -1,3 +1,4 @@
+import type { GenerationError, ShortDramaGenerationSettings, VideoGenerationSettings } from "@/services/api/generations";
 import type { AiTextMessage } from "@/services/api/image";
 import { imageReferenceLabel } from "@/lib/image-reference-prompt";
 import { seedanceReferenceLabel } from "@/lib/seedance-video";
@@ -20,10 +21,10 @@ export type VideoGenerationIntent = {
         videos: PlatformMediaReference[];
         audios: PlatformMediaReference[];
     };
-    settings: Record<string, string | number | boolean>;
+    settings: VideoGenerationSettings;
 };
 
-export function buildVideoGenerationIntent(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[], prompt: string): VideoGenerationIntent {
+export function buildVideoGenerationIntent(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[], prompt: string, settings: VideoGenerationSettings): VideoGenerationIntent {
     const references = { images: [] as PlatformMediaReference[], videos: [] as PlatformMediaReference[], audios: [] as PlatformMediaReference[] };
     for (const node of getGenerationResourceNodes(nodeId, nodes, connections)) {
         if (!node.metadata?.fileId) continue;
@@ -32,8 +33,60 @@ export function buildVideoGenerationIntent(nodeId: string, nodes: CanvasNodeData
         if (node.type === CanvasNodeType.Video) references.videos.push(reference);
         if (node.type === CanvasNodeType.Audio) references.audios.push(reference);
     }
-    return { kind: "video.generate", prompt, references, settings: {} };
+    return { kind: "video.generate", prompt, references, settings };
 }
+export type ShortDramaAssetRole = "character" | "scene" | "tool";
+
+export type ShortDramaGenerationIntent = {
+    kind: "video.short-drama";
+    title: string;
+    script: string;
+    assets: Array<{
+        sourceNodeId: string;
+        role: ShortDramaAssetRole;
+        name: string;
+        description?: string;
+        reference: PlatformMediaReference;
+    }>;
+    settings: ShortDramaGenerationSettings;
+};
+
+export function buildShortDramaGenerationIntent(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[], script: string, settings: ShortDramaGenerationSettings): ShortDramaGenerationIntent {
+    const target = nodes.find((node) => node.id === nodeId);
+    if (!target?.title.trim()) throw new Error("请输入短剧标题");
+    if (!script.trim()) throw new Error("请输入短剧脚本");
+    const imageNodes = getGenerationResourceNodes(nodeId, nodes, connections).filter((node) => node.type === CanvasNodeType.Image);
+    if (!imageNodes.length) throw new Error("请连接至少一张短剧资产图片");
+    const assets = imageNodes.map((node) => {
+        const role = target.metadata?.dramaAssetRoles?.[node.id];
+        if (!role) throw new Error(`请为图片「${node.title || node.id}」选择角色`);
+        if (!node.metadata?.fileId) throw new Error(`图片「${node.title || node.id}」尚未上传到平台文件库`);
+        const name = node.title || node.id;
+        return {
+            sourceNodeId: node.id,
+            role,
+            name,
+            ...(target.metadata?.dramaAssetDescriptions?.[node.id] ? { description: target.metadata.dramaAssetDescriptions[node.id] } : {}),
+            reference: { fileId: node.metadata.fileId, sourceNodeId: node.id, name },
+        };
+    });
+    return { kind: "video.short-drama", title: target.title.trim(), script: script.trim(), assets, settings };
+}
+
+export function cleanShortDramaAssetMappings(metadata: CanvasNodeData["metadata"], connectedImageIDs: string[]) {
+    const connected = new Set(connectedImageIDs);
+    const dramaAssetRoles = Object.fromEntries(Object.entries(metadata?.dramaAssetRoles || {}).filter(([nodeID]) => connected.has(nodeID)));
+    const dramaAssetDescriptions = Object.fromEntries(Object.entries(metadata?.dramaAssetDescriptions || {}).filter(([nodeID]) => connected.has(nodeID)));
+    return { ...metadata, dramaAssetRoles, dramaAssetDescriptions };
+}
+
+export function locateGenerationError(error: GenerationError) {
+    return {
+        ...(error.fieldPath ? { fieldPath: error.fieldPath } : {}),
+        ...(error.resourceId ? { resourceId: error.resourceId } : {}),
+    };
+}
+
 export type NodeGenerationContext = {
     prompt: string;
     referenceImages: ReferenceImage[];

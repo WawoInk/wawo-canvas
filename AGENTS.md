@@ -98,6 +98,10 @@
 
 Issues live as GitHub issues in `EldenPdx/canvan-oversea`. See `docs/agents/issue-tracker.md`.
 
+### Triage labels
+
+The canonical triage labels are `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+
 ### Domain docs
 
 Single-context — `CONTEXT.md` at root + `docs/adr/`. See `docs/agents/domain.md`.

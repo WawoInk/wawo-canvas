@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Image } from "antd";
 import { LoaderCircle, Play } from "lucide-react";
 
@@ -8,6 +8,12 @@ import { LoaderCircle, Play } from "lucide-react";
 export function LazyImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
     const [loaded, setLoaded] = useState(false);
     const [failed, setFailed] = useState(false);
+
+    useEffect(() => {
+        setLoaded(false);
+        setFailed(false);
+    }, [src]);
+
     return (
         <div className={`relative overflow-hidden bg-stone-100 dark:bg-stone-900 ${className || ""}`}>
             {!loaded && !failed && (

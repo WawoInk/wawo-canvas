@@ -876,6 +876,8 @@ actual_credits
 - 新旧任务历史统一读取；
 - 旧记录允许新字段为空，不做从原始 requestBody 猜测意图的回填；
 - 新任务必须写入命令版本、意图和路由快照。
+- 平台 `queued` 只表示等待本地 worker；任务被认领后，供应商 `queued`、`running` 和 `processing` 均归一化为平台 `running`。
+- `pending` 仅用于成功结果持久化期间的内部结算，不属于公开第一方五态。
 
 建议新增轻量事件表：
 
@@ -883,8 +885,8 @@ actual_credits
 generation_task_events
 - id
 - task_id
-- event_type
-- payload       -- 小型、脱敏 JSON
+- type
+- detail        -- 小型、脱敏文本
 - created_at
 ```
 

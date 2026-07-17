@@ -65,19 +65,34 @@ type PublicLinuxDoAuthSetting struct {
 	Enabled bool `json:"enabled"`
 }
 
+type GenerationLimitOverrides struct {
+	DurationSecondsMax *int `json:"durationSecondsMax,omitempty"`
+}
+
+type GenerationProfileBinding struct {
+	ProfileID      string                   `json:"profileId"`
+	UpstreamModel  string                   `json:"upstreamModel,omitempty"`
+	UpstreamModels []string                 `json:"upstreamModels,omitempty"`
+	ChannelName    string                   `json:"channelName"`
+	Credits        *int                     `json:"credits,omitempty"`
+	Enabled        bool                     `json:"enabled"`
+	LimitOverrides GenerationLimitOverrides `json:"limitOverrides"`
+}
+
 // PrivateSetting 私有配置。
 type PrivateSetting struct {
-	Channels      []ModelChannel     `json:"channels"`
-	PromptSync    PromptSyncSetting  `json:"promptSync"`
-	Auth          PrivateAuthSetting `json:"auth"`
-	FileSizeLimits FileSizeLimits    `json:"fileSizeLimits"`
+	Channels           []ModelChannel             `json:"channels"`
+	GenerationProfiles []GenerationProfileBinding `json:"generationProfiles"`
+	PromptSync         PromptSyncSetting          `json:"promptSync"`
+	Auth               PrivateAuthSetting         `json:"auth"`
+	FileSizeLimits     FileSizeLimits             `json:"fileSizeLimits"`
 }
 
 // FileSizeLimits 各文件类型上传大小上限（字节）。
 type FileSizeLimits struct {
-	Image   int64 `json:"image"`
-	Video   int64 `json:"video"`
-	Audio   int64 `json:"audio"`
+	Image  int64 `json:"image"`
+	Video  int64 `json:"video"`
+	Audio  int64 `json:"audio"`
 	Prompt int64 `json:"prompt"`
 }
 

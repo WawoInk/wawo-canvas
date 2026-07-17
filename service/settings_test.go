@@ -97,6 +97,184 @@ func TestNormalizeSettingsPublishesEnabledChannelModelsAndRepairsDefaults(t *tes
 	if channel.DefaultVideoModel != "doubao-seedance-2.0-fast" {
 		t.Fatalf("default video model = %q, want seedance", channel.DefaultVideoModel)
 	}
+	if !reflect.DeepEqual(channel.VideoModels, []string{"doubao-seedance-2.0-fast"}) {
+		t.Fatalf("video models = %#v, want enabled seedance model", channel.VideoModels)
+	}
+}
+
+func TestResolveGenerationProfilesAppliesOperationalBinding(t *testing.T) {
+	credits := 7
+	maxDuration := 8
+	private := normalizePrivateSetting(model.PrivateSetting{
+		Channels: []model.ModelChannel{{Name: "seedance-route", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"upstream-seedance"}}},
+		GenerationProfiles: []model.GenerationProfileBinding{{
+			ProfileID: "seedance-1-5-pro", UpstreamModel: "upstream-seedance", ChannelName: "seedance-route", Credits: &credits, Enabled: true,
+			LimitOverrides: model.GenerationLimitOverrides{DurationSecondsMax: &maxDuration},
+		}},
+	})
+
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private)
+	if err != nil {
+		t.Fatalf("resolveGenerationProfiles: %v", err)
+	}
+	if len(profiles) != 1 {
+		t.Fatalf("profiles = %#v", profiles)
+	}
+	profile := profiles[0]
+	if profile.ID != "upstream-seedance" || profile.UpstreamModel != "upstream-seedance" || profile.ChannelName != "seedance-route" || profile.Credits == nil || *profile.Credits != 7 {
+		t.Fatalf("profile = %#v", profile)
+	}
+	if max := profile.Capabilities.Settings["durationSeconds"].Max; max == nil || *max != 8 {
+		t.Fatalf("duration max = %#v, want 8", max)
+	}
+}
+
+func TestResolveGenerationProfilesRoutesDynamicModelsThroughOneChannel(t *testing.T) {
+	private := normalizePrivateSetting(model.PrivateSetting{
+		Channels: []model.ModelChannel{{
+			Protocol: "xvanai", Name: "xvanai", BaseURL: "https://example.com", APIKey: "secret", Enabled: true,
+			Models: []string{"doubao-seedance-2-0-pro", "vidu-q3-pro"},
+		}},
+		GenerationProfiles: []model.GenerationProfileBinding{
+			{ProfileID: "seedance-1-5-pro", UpstreamModel: "doubao-seedance-2-0-pro", ChannelName: "xvanai", Enabled: true},
+			{ProfileID: "vidu-q3-drama", UpstreamModel: "vidu-q3-pro", ChannelName: "xvanai", Enabled: true},
+		},
+	})
+
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private)
+	if err != nil {
+		t.Fatalf("resolveGenerationProfiles: %v", err)
+	}
+	if len(profiles) != 2 {
+		t.Fatalf("profiles = %#v", profiles)
+	}
+	if profiles[0].AdapterKey != "seedance-contents-v1" || profiles[0].UpstreamModel != "doubao-seedance-2-0-pro" || profiles[0].ChannelName != "xvanai" {
+		t.Fatalf("seedance profile = %#v", profiles[0])
+	}
+	if profiles[1].AdapterKey != "vidu-short-drama-v1" || profiles[1].UpstreamModel != "vidu-q3-pro" || profiles[1].ChannelName != "xvanai" {
+		t.Fatalf("vidu profile = %#v", profiles[1])
+	}
+}
+
+func TestResolveGenerationProfilesExpandsOneCapabilityAcrossMultipleModels(t *testing.T) {
+	private := normalizePrivateSetting(model.PrivateSetting{
+		Channels: []model.ModelChannel{{
+			Protocol: "xvanai", Name: "xvanai", BaseURL: "https://example.com", APIKey: "secret", Enabled: true,
+			Models: []string{"seedance-2.0", "vidu-i2v", "vidu-t2v", "vidu-r2v", "vidu-headtail", "viduq3-drama"},
+		}},
+		GenerationProfiles: []model.GenerationProfileBinding{
+			{ProfileID: "seedance-1-5-pro", UpstreamModels: []string{"seedance-2.0", "vidu-i2v", "vidu-t2v", "vidu-r2v", "vidu-headtail"}, ChannelName: "xvanai", Enabled: true},
+			{ProfileID: "vidu-q3-drama", UpstreamModels: []string{"viduq3-drama"}, ChannelName: "xvanai", Enabled: true},
+		},
+	})
+
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private)
+	if err != nil {
+		t.Fatalf("resolveGenerationProfiles: %v", err)
+	}
+	if len(profiles) != 6 {
+		t.Fatalf("profiles = %#v", profiles)
+	}
+	for index, expected := range []struct {
+		id, adapter string
+	}{
+		{"seedance-2.0", "seedance-contents-v1"},
+		{"vidu-i2v", "seedance-contents-v1"},
+		{"vidu-t2v", "seedance-contents-v1"},
+		{"vidu-r2v", "seedance-contents-v1"},
+		{"vidu-headtail", "seedance-contents-v1"},
+		{"viduq3-drama", "vidu-short-drama-v1"},
+	} {
+		if profiles[index].ID != expected.id || profiles[index].DisplayName != expected.id || profiles[index].UpstreamModel != expected.id || profiles[index].AdapterKey != expected.adapter {
+			t.Fatalf("profile %d = %#v", index, profiles[index])
+		}
+	}
+}
+
+func TestNormalizePrivateSettingKeepsLegacyGenerationModel(t *testing.T) {
+	private := normalizePrivateSetting(model.PrivateSetting{GenerationProfiles: []model.GenerationProfileBinding{{UpstreamModel: " legacy-model "}}})
+	binding := private.GenerationProfiles[0]
+	if binding.UpstreamModel != "legacy-model" || !reflect.DeepEqual(binding.UpstreamModels, []string{"legacy-model"}) {
+		t.Fatalf("binding = %#v", binding)
+	}
+}
+
+func TestResolveGenerationProfilesDoesNotShareLimitOverrides(t *testing.T) {
+	maxDuration := 8
+	private := normalizePrivateSetting(model.PrivateSetting{
+		Channels: []model.ModelChannel{{Name: "video", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"limited", "default"}}},
+		GenerationProfiles: []model.GenerationProfileBinding{
+			{ProfileID: "seedance-1-5-pro", UpstreamModels: []string{"limited"}, ChannelName: "video", Enabled: true, LimitOverrides: model.GenerationLimitOverrides{DurationSecondsMax: &maxDuration}},
+			{ProfileID: "seedance-1-5-pro", UpstreamModels: []string{"default"}, ChannelName: "video", Enabled: true},
+		},
+	})
+
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private)
+	if err != nil {
+		t.Fatalf("resolveGenerationProfiles: %v", err)
+	}
+	if got := *profiles[0].Capabilities.Settings["durationSeconds"].Max; got != 8 {
+		t.Fatalf("limited max = %d, want 8", got)
+	}
+	if got := *profiles[1].Capabilities.Settings["durationSeconds"].Max; got != 15 {
+		t.Fatalf("default max = %d, want 15", got)
+	}
+}
+
+func TestResolveGenerationProfilesRejectsUnsafeOrUnroutableBindings(t *testing.T) {
+	unsafeMax := 16
+	for name, binding := range map[string]model.GenerationProfileBinding{
+		"unsafe limit":    {ProfileID: "seedance-1-5-pro", UpstreamModel: "upstream-seedance", Enabled: true, LimitOverrides: model.GenerationLimitOverrides{DurationSecondsMax: &unsafeMax}},
+		"missing channel": {ProfileID: "seedance-1-5-pro", UpstreamModel: "missing-model", Enabled: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := resolveGenerationProfiles(GenerationProfiles(), normalizePrivateSetting(model.PrivateSetting{
+				Channels:           []model.ModelChannel{{Name: "seedance-route", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"upstream-seedance"}}},
+				GenerationProfiles: []model.GenerationProfileBinding{binding},
+			}))
+			if err == nil {
+				t.Fatal("invalid binding accepted")
+			}
+		})
+	}
+}
+
+func TestResolveGenerationProfilesAllowsExplicitDisable(t *testing.T) {
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), normalizePrivateSetting(model.PrivateSetting{GenerationProfiles: []model.GenerationProfileBinding{{ProfileID: "seedance-1-5-pro", Enabled: false}}}))
+	if err != nil || len(profiles) != 0 {
+		t.Fatalf("profiles = %#v, err = %v", profiles, err)
+	}
+}
+
+func TestValidateGenerationBindingsAllowsDynamicChannelModelsWithoutExplicitProfiles(t *testing.T) {
+	settings := model.Settings{Private: model.PrivateSetting{Channels: []model.ModelChannel{{
+		Protocol: "xvanai", Name: "xvanai", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"doubao-seedance-2-0-pro", "vidu-q3-pro"},
+	}}}}
+
+	if err := ValidateGenerationBindings(settings); err != nil {
+		t.Fatalf("dynamic channel models rejected: %v", err)
+	}
+}
+
+func TestGenerationProfileForTaskUsesSnapshotAdapterAndLegacyTemplateFallback(t *testing.T) {
+	previousProfiles := generationProfiles
+	generationProfiles = func() []model.GenerationProfile { return nil }
+	defer func() { generationProfiles = previousProfiles }()
+
+	profile, ok := generationProfileForTask(model.GenerationTask{
+		Model:          "vidu-headtail",
+		ModelProfileID: "removed-binding",
+		AdapterKey:     "seedance-contents-v1",
+		UpstreamModel:  "vidu-headtail",
+	})
+	if !ok || profile.AdapterKey != "seedance-contents-v1" || profile.UpstreamModel != "vidu-headtail" {
+		t.Fatalf("profile = %#v, ok = %v", profile, ok)
+	}
+
+	legacy, ok := generationProfileForTask(model.GenerationTask{Model: "seedance-legacy", ModelProfileID: "seedance-1-5-pro"})
+	if !ok || legacy.AdapterKey != "seedance-contents-v1" || legacy.UpstreamModel != "seedance-legacy" {
+		t.Fatalf("legacy profile = %#v, ok = %v", legacy, ok)
+	}
 }
 
 func TestNormalizePrivateSettingAcceptsGeminiProtocol(t *testing.T) {

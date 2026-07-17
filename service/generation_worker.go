@@ -11,6 +11,22 @@ import (
 
 const generationWorkerLease = time.Minute
 
+func StartGenerationWorker() {
+	owner := repository.NewWorkerID()
+	go func() {
+		for {
+			task, ok, err := repository.ClaimGenerationTask(owner, time.Now().UTC(), generationWorkerLease)
+			if err != nil {
+				log.Printf("generation worker scan failed: %v", err)
+			} else if ok {
+				go processClaimedGenerationTask(context.Background(), task, owner)
+				continue
+			}
+			time.Sleep(time.Second)
+		}
+	}()
+}
+
 func processGenerationTask(ctx context.Context, taskID, owner string) bool {
 	task, ok, err := repository.ClaimGenerationTaskByID(taskID, owner, time.Now().UTC(), generationWorkerLease)
 	if err != nil {
@@ -20,16 +36,38 @@ func processGenerationTask(ctx context.Context, taskID, owner string) bool {
 	if !ok {
 		return false
 	}
-	profile, ok := findGenerationProfile(generationProfiles(), task.ModelProfileID)
-	if !ok {
-		_ = repository.UpdateGenerationTask(task.ID, map[string]any{"status": string(model.TaskStatusFailed), "error_code": "MODEL_CONFIGURATION_INVALID", "error_message": "generation profile is unavailable", "updated_at": time.Now().UTC().Format(time.RFC3339Nano)})
-		return true
-	}
-	channel, err := generationRouteChannel(task.ChannelID, task.UpstreamModel)
-	if err != nil {
-		_ = repository.UpdateGenerationTask(task.ID, map[string]any{"status": string(model.TaskStatusFailed), "error_code": "MODEL_CONFIGURATION_INVALID", "error_message": err.Error(), "updated_at": time.Now().UTC().Format(time.RFC3339Nano)})
-		return true
-	}
-	executeGeneration(ctx, task, profile, channel)
+	processClaimedGenerationTask(ctx, task, owner)
 	return true
+}
+
+func processClaimedGenerationTask(ctx context.Context, task model.GenerationTask, owner string) {
+	leaseCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		ticker := time.NewTicker(generationWorkerLease / 2)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-leaseCtx.Done():
+				return
+			case now := <-ticker.C:
+				ok, err := repository.RenewGenerationTaskLease(task.ID, owner, now.UTC(), generationWorkerLease)
+				if err != nil || !ok {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	profile, ok := generationProfileForTask(task)
+	if !ok {
+		_ = resolveGenerationTask(context.Background(), task, model.GenerationProfile{UpstreamModel: task.UpstreamModel}, ProviderTaskRef{ID: task.UpstreamTaskID, Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: "MODEL_CONFIGURATION_INVALID", Message: "generation profile is unavailable", Retryable: false}}, "worker")
+		return
+	}
+	channel, err := generationRouteChannel(task.ChannelID, profile.UpstreamModel)
+	if err != nil {
+		_ = resolveGenerationTask(context.Background(), task, profile, ProviderTaskRef{ID: task.UpstreamTaskID, Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: "MODEL_CONFIGURATION_INVALID", Message: err.Error(), Retryable: false}}, "worker")
+		return
+	}
+	executeGeneration(leaseCtx, task, profile, channel)
 }

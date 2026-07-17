@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -25,11 +26,17 @@ func Fail(w http.ResponseWriter, msg string) {
 
 func FailError(w http.ResponseWriter, err error) {
 	log.Printf("request failed: %v", err)
-	if safe, ok := err.(interface{ SafeMessage() string }); ok {
-		Fail(w, safe.SafeMessage())
+	msg := "操作失败"
+	var safe interface{ SafeMessage() string }
+	if errors.As(err, &safe) {
+		msg = safe.SafeMessage()
+	}
+	var failure interface{ FailureData() any }
+	if errors.As(err, &failure) {
+		writeJSON(w, response{Code: 1, Data: failure.FailureData(), Msg: msg})
 		return
 	}
-	Fail(w, "操作失败")
+	Fail(w, msg)
 }
 
 // Conflict 返回 HTTP 409，携带当前服务端版本供前端回滚。

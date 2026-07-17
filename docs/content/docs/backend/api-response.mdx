@@ -1,0 +1,47 @@
+---
+title: API 响应
+description: 后端统一响应信封与结构化生成错误
+---
+
+# API 响应
+
+业务接口统一返回：
+
+```json
+{
+  "code": 0,
+  "data": {},
+  "msg": "ok"
+}
+```
+
+- `code: 0` 表示成功，结果放在 `data`。
+- `code: 1` 表示业务失败。除冲突和真实路由错误外，业务失败通常仍使用 HTTP 200。
+- `msg` 是可以展示给用户的安全消息；未声明为安全的内部错误统一显示“操作失败”。
+- 乐观锁冲突使用 HTTP 409 和 `code: -1`。
+
+## 结构化生成错误
+
+第一方生成接口的可定位错误在同一信封的 `data` 中返回：
+
+```json
+{
+  "code": 1,
+  "data": {
+    "code": "INVALID_SETTING",
+    "retryable": false,
+    "fieldPath": "intent.settings.durationSeconds",
+    "resourceId": "canvas-node-id"
+  },
+  "msg": "设置值超出允许范围"
+}
+```
+
+字段说明：
+
+- `code`：稳定的平台错误码，不暴露供应商私有错误码。
+- `retryable`：客户端是否适合在不修改输入的情况下重试。
+- `fieldPath`：命令中的错误字段路径；没有具体字段时可省略。
+- `resourceId`：关联的 Canvas 节点或平台资源 ID；不适用时省略。
+
+取消、回调等操作错误至少返回稳定的 `data.code`。异步失败通过 `GET /api/v1/generations/{id}` 的任务 `error` 字段返回同一套归一化信息。

@@ -7,6 +7,7 @@ import { Play, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LazyImage } from "@/components/lazy-media";
 import { useAssetStore, type Asset } from "@/stores/use-asset-store";
+import { assetFileIdsToRefresh } from "./asset-picker";
 
 export type InsertAssetPayload =
     | { kind: "text"; content: string; title: string }
@@ -21,6 +22,14 @@ type Props = {
 };
 
 export function AssetPickerModal({ open, defaultTab: _defaultTab, onInsert, onClose }: Props) {
+    const assets = useAssetStore((state) => state.assets);
+    const refreshAssetUrls = useAssetStore((state) => state.refreshAssetUrls);
+    const fileIdsKey = useMemo(() => assetFileIdsToRefresh(open, assets).join("\0"), [open, assets]);
+
+    useEffect(() => {
+        if (fileIdsKey) void refreshAssetUrls(fileIdsKey.split("\0"));
+    }, [fileIdsKey, refreshAssetUrls]);
+
     return (
         <Modal title="选择素材" open={open} onCancel={onClose} footer={null} width={860} destroyOnHidden styles={{ body: { padding: "0 24px 24px", minHeight: 480 } }}>
             <MyAssetsTab onInsert={onInsert} />

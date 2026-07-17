@@ -24,7 +24,7 @@ export type CanvasProject = {
     viewport: ViewportTransform;
 };
 
-type CanvasStore = {
+export type CanvasStore = {
     hydrated: boolean;
     synced: boolean;
     projects: CanvasProject[];

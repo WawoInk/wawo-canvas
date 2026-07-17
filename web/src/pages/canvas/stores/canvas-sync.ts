@@ -9,7 +9,7 @@ import { ApiError } from "@/services/api/request";
 import { syncClient } from "@/services/sync-client";
 import { syncScheduler } from "@/services/sync-scheduler";
 import { useUserStore } from "@/stores/use-user-store";
-import type { CanvasProject, useCanvasStore as CanvasStoreType } from "@/pages/canvas/stores/use-canvas-store";
+import type { CanvasProject, CanvasStore as CanvasStoreType } from "@/pages/canvas/stores/use-canvas-store";
 
 const SYNC_DEBOUNCE_MS = 4000;
 const syncTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -83,7 +83,7 @@ export function flushProjectSync(projectId: string, store: { getState: () => Can
 
 // ── Fire-and-log backend operations ─────────────────────────────────────
 
-export function fireCreateProject(project: CanvasProject, store: { setState: CanvasStoreType["updateProject"] extends (_: string, __: infer P) => void ? never : never; getState: () => CanvasStoreType }) {
+export function fireCreateProject(project: CanvasProject, store: { getState: () => CanvasStoreType }) {
     const user = useUserStore.getState().user;
     if (!user?.id) return;
     createCanvasProject(project.title, project)

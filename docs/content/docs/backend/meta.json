@@ -4,6 +4,8 @@
   "defaultOpen": true,
   "pages": [
     "local-development",
+    "api-response",
+    "backend-database",
     "canvas-data-structure"
   ]
 }

@@ -1,11 +1,12 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Switch } from "antd";
 
 import { ImageSettingsTheme } from "@/components/image-settings-panel";
-import { boolConfig, isSeedanceFastModel, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedanceDurationOptions, seedancePixelLabel, seedanceRatioOptions, seedanceResolutionOptions } from "@/lib/seedance-video";
+import { boolConfig, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedanceDurationOptions, seedancePixelLabel, seedanceRatioOptions, seedanceResolutionOptions } from "@/lib/seedance-video";
 import { type CanvasTheme } from "@/lib/canvas-theme";
+import { buildShortDramaGenerationSettings, buildVideoGenerationSettings, getGenerationProfiles, type GenerationProfile, type ShortDramaGenerationSettings, type VideoGenerationSettings } from "@/services/api/generations";
 import { modelOptionName, type AiConfig } from "@/stores/use-config-store";
 
 const sizeOptions = [
@@ -19,75 +20,130 @@ const sizeOptions = [
 
 type VideoSettingsPanelProps = {
     config: AiConfig;
-    onConfigChange: (key: "vquality" | "size" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark", value: string) => void;
+    onConfigChange: (key: "quality" | "vquality" | "size" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark", value: string) => void;
     theme: CanvasTheme;
     showTitle?: boolean;
     className?: string;
+    errorFieldPath?: string;
 };
 
-export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5" }: VideoSettingsPanelProps) {
-    return <SeedanceVideoSettingsPanel config={config} onConfigChange={onConfigChange} theme={theme} showTitle={showTitle} className={className} />;
+export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", errorFieldPath }: VideoSettingsPanelProps) {
+    return <ProfileVideoSettingsPanel config={config} onConfigChange={onConfigChange} theme={theme} showTitle={showTitle} className={className} errorFieldPath={errorFieldPath} />;
 }
 
-function SeedanceVideoSettingsPanel({ config, onConfigChange, theme, showTitle, className }: VideoSettingsPanelProps) {
-    const model = modelOptionName(config.model || config.videoModel);
-    const resolution = normalizeSeedanceResolution(config.vquality, model);
-    const ratio = normalizeSeedanceRatio(config.size);
-    const duration = normalizeSeedanceDuration(config.videoSeconds);
-    const generateAudio = boolConfig(config.videoGenerateAudio, true);
-    const watermark = boolConfig(config.videoWatermark, false);
+function ProfileVideoSettingsPanel({ config, onConfigChange, theme, showTitle, className, errorFieldPath }: VideoSettingsPanelProps) {
+    const profileID = modelOptionName(config.model || config.videoModel);
+    const [profile, setProfile] = useState<GenerationProfile | null>(null);
+
+    useEffect(() => {
+        let active = true;
+        void getGenerationProfiles()
+            .then((profiles) => {
+                if (active) setProfile(profiles.find((item) => item.id === profileID) || null);
+            })
+            .catch(() => {
+                if (active) setProfile(null);
+            });
+        return () => {
+            active = false;
+        };
+    }, [profileID]);
+
+    const provided: Partial<VideoGenerationSettings> = {
+        aspectRatio: normalizeSeedanceRatio(config.size) as VideoGenerationSettings["aspectRatio"],
+        resolution: normalizeSeedanceResolution(config.vquality) as VideoGenerationSettings["resolution"],
+        durationSeconds: normalizeSeedanceDuration(config.videoSeconds),
+        generateAudio: boolConfig(config.videoGenerateAudio, true),
+        watermark: boolConfig(config.videoWatermark, false),
+    };
+    const definitions = profile?.capabilities.settings;
+    const isDrama = profile?.intents.includes("video.short-drama") === true;
+    const dramaSettings = profile && isDrama
+        ? buildShortDramaGenerationSettings(profile, {
+              aspectRatio: normalizeSeedanceRatio(config.size) as ShortDramaGenerationSettings["aspectRatio"],
+              resolution: normalizeSeedanceResolution(config.vquality) as ShortDramaGenerationSettings["resolution"],
+              durationSeconds: String(config.videoSeconds) === "-1" ? "auto" : normalizeSeedanceDuration(config.videoSeconds),
+              quality: config.quality as ShortDramaGenerationSettings["quality"],
+          })
+        : null;
+    const videoSettings = profile && !isDrama ? buildVideoGenerationSettings(profile, provided) : provided;
+    const settings = dramaSettings || videoSettings;
+    const resolutionOptions = definitions?.resolution.values?.map((value) => ({ value, label: value })) || seedanceResolutionOptions;
+    const ratioOptions = definitions?.aspectRatio.values?.map((value) => ({ value, label: seedanceRatioOptions.find((item) => item.value === value)?.label || value })) || seedanceRatioOptions;
+    const durationDefinition = definitions?.durationSeconds;
+    const durationValue = settings.durationSeconds;
+    const durationOptions = seedanceDurationOptions.filter((value) => (value === -1 ? durationDefinition?.allowAuto !== false : !durationDefinition || (value >= (durationDefinition.min ?? value) && value <= (durationDefinition.max ?? value))));
+    const settingError = (key: string) => (errorFieldPath === `intent.settings.${key}` ? { outline: "2px solid #ef4444", outlineOffset: 4, borderRadius: 12 } : undefined);
 
     return (
         <ImageSettingsTheme theme={theme}>
             <div className={className} style={{ color: theme.node.text }} onMouseDown={(event) => event.stopPropagation()}>
                 {showTitle ? <div className="text-lg font-semibold">视频设置</div> : null}
-                <SettingGroup title="分辨率" color={theme.node.muted}>
+                {config.channelMode === "local" ? <div className="rounded-xl border px-3 py-2 text-xs leading-5 opacity-70" style={{ borderColor: theme.node.stroke }}>本地直连仅提供原始视频接口兼容；Model Profile、短剧与平台文件能力需要远程模式。</div> : null}
+                <div style={settingError("resolution")}>
+                    <SettingGroup title="分辨率" color={theme.node.muted}>
                     <div className="grid grid-cols-3 gap-2.5">
-                        {seedanceResolutionOptions.map((item) => {
-                            const disabled = item.value === "1080p" && isSeedanceFastModel(model);
-                            return (
-                                <OptionPill key={item.value} selected={resolution === item.value} disabled={disabled} theme={theme} onClick={() => onConfigChange("vquality", item.value)}>
-                                    {item.label}
-                                </OptionPill>
-                            );
-                        })}
+                        {resolutionOptions.map((item) => (
+                            <OptionPill key={item.value} selected={settings.resolution === item.value} theme={theme} onClick={() => onConfigChange("vquality", item.value)}>
+                                {item.label}
+                            </OptionPill>
+                        ))}
                     </div>
-                    {isSeedanceFastModel(model) ? <div className="text-[11px] leading-4 opacity-55">fast 模型不支持 1080p，会自动使用 720p。</div> : null}
-                </SettingGroup>
-                <SettingGroup title="比例" color={theme.node.muted}>
+                    </SettingGroup>
+                </div>
+                <div style={settingError("aspectRatio")}>
+                    <SettingGroup title="比例" color={theme.node.muted}>
                     <div className="grid grid-cols-3 gap-2.5">
-                        {seedanceRatioOptions.map((item) => (
+                        {ratioOptions.map((item) => (
                             <button
                                 key={item.value}
                                 type="button"
                                 className="flex h-[68px] cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border bg-transparent px-1 text-sm transition hover:opacity-80"
-                                style={{ borderColor: ratio === item.value ? theme.node.text : theme.node.stroke, color: theme.node.text }}
+                                style={{ borderColor: settings.aspectRatio === item.value ? theme.node.text : theme.node.stroke, color: theme.node.text }}
                                 onMouseDown={(event) => event.stopPropagation()}
                                 onClick={() => onConfigChange("size", item.value)}
                             >
                                 <SizePreview width={ratioPreview(item.value).width} height={ratioPreview(item.value).height} color={theme.node.text} />
                                 <span>{item.label}</span>
-                                <span className="text-[10px] leading-none opacity-55">{item.value === "adaptive" ? "adaptive" : seedancePixelLabel(resolution, item.value)}</span>
+                                <span className="text-[10px] leading-none opacity-55">{item.value === "adaptive" ? "adaptive" : seedancePixelLabel(String(settings.resolution || "720p"), item.value)}</span>
                             </button>
                         ))}
                     </div>
-                </SettingGroup>
-                <SettingGroup title="时长" color={theme.node.muted}>
+                    </SettingGroup>
+                </div>
+                <div style={settingError("durationSeconds")}>
+                    <SettingGroup title="时长" color={theme.node.muted}>
                     <div className="grid grid-cols-4 gap-2.5">
-                        {seedanceDurationOptions.map((value) => (
-                            <OptionPill key={value} selected={duration === value} theme={theme} onClick={() => onConfigChange("videoSeconds", String(value))}>
+                        {durationOptions.map((value) => (
+                            <OptionPill key={value} selected={durationValue === (value === -1 && isDrama ? "auto" : value)} theme={theme} onClick={() => onConfigChange("videoSeconds", String(value))}>
                                 {value === -1 ? "智能" : `${value}s`}
                             </OptionPill>
                         ))}
                     </div>
-                    <NumberInput value={String(duration)} min={-1} max={15} theme={theme} onChange={(value) => onConfigChange("videoSeconds", value)} />
+                    <NumberInput value={String(durationValue === "auto" ? -1 : durationValue)} min={durationDefinition?.allowAuto ? -1 : (durationDefinition?.min ?? 4)} max={durationDefinition?.max ?? 15} theme={theme} onChange={(value) => onConfigChange("videoSeconds", value)} />
                 </SettingGroup>
-                <SettingGroup title="输出" color={theme.node.muted}>
-                    <div className="grid gap-2 rounded-xl border p-2.5" style={{ borderColor: theme.node.stroke }}>
-                        <SwitchRow label="生成声音" checked={generateAudio} theme={theme} onChange={(checked) => onConfigChange("videoGenerateAudio", String(checked))} />
-                        <SwitchRow label="添加水印" checked={watermark} theme={theme} onChange={(checked) => onConfigChange("videoWatermark", String(checked))} />
+                </div>
+                {definitions?.quality ? (
+                    <div style={settingError("quality")}>
+                        <SettingGroup title="质量" color={theme.node.muted}>
+                            <div className="grid grid-cols-2 gap-2.5">
+                                {definitions.quality.values?.map((value) => (
+                                    <OptionPill key={value} selected={dramaSettings?.quality === value} theme={theme} onClick={() => onConfigChange("quality", value)}>
+                                        {value === "high" ? "高" : "标准"}
+                                    </OptionPill>
+                                ))}
+                            </div>
+                        </SettingGroup>
                     </div>
-                </SettingGroup>
+                ) : null}
+                {definitions?.generateAudio || definitions?.watermark ? (
+                    <SettingGroup title="输出" color={theme.node.muted}>
+                        <div className="grid gap-2 rounded-xl border p-2.5" style={{ borderColor: theme.node.stroke }}>
+                            {definitions?.generateAudio ? <SwitchRow label="生成声音" checked={Boolean(videoSettings.generateAudio)} theme={theme} onChange={(checked) => onConfigChange("videoGenerateAudio", String(checked))} /> : null}
+                            {definitions?.watermark ? <SwitchRow label="添加水印" checked={Boolean(videoSettings.watermark)} theme={theme} onChange={(checked) => onConfigChange("videoWatermark", String(checked))} /> : null}
+                        </div>
+                    </SettingGroup>
+                ) : null}
             </div>
         </ImageSettingsTheme>
     );

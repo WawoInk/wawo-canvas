@@ -144,6 +144,17 @@ func GetGenerationPayloadByTaskID(taskID string) (model.GenerationPayload, error
 	return payload, result.Error
 }
 
+// UpdateGenerationPayloadRequest updates the redacted upstream request audit.
+func UpdateGenerationPayloadRequest(taskID, requestBody, requestHeaders string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	return db.Model(&model.GenerationPayload{}).Where("task_id = ?", taskID).Updates(map[string]any{
+		"request_body": requestBody, "request_headers": requestHeaders,
+	}).Error
+}
+
 // UpdateGenerationPayload 更新任务的响应负载。
 func UpdateGenerationPayload(taskID string, respBody string, respHeaders string) error {
 	db, err := DB()
@@ -184,6 +195,9 @@ func DeleteGenerationTask(id, userID string) error {
 		return err
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("task_id = ?", id).Delete(&model.GenerationTaskEvent{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("task_id = ?", id).Delete(&model.GenerationPayload{}).Error; err != nil {
 			return err
 		}
@@ -255,6 +269,9 @@ func AdminDeleteGenerationTasks(ids []string) (int64, error) {
 	}
 	var deleted int64
 	err = db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("task_id IN ?", ids).Delete(&model.GenerationTaskEvent{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("task_id IN ?", ids).Delete(&model.GenerationPayload{}).Error; err != nil {
 			return err
 		}

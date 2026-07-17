@@ -16,6 +16,8 @@
 ## 开发与数据
 
 - [本地开发](/docs/backend/local-development)
+- [API 响应](/docs/backend/api-response)
+- [数据库结构](/docs/backend/backend-database)
 - [画布数据结构](/docs/backend/canvas-data-structure)
 
 ## 商务合作

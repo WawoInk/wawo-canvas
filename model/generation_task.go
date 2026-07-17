@@ -44,10 +44,11 @@ type GenerationTask struct {
 	Credits              int        `json:"credits"`
 	LatencyMs            int64      `json:"latencyMs"`
 	UpstreamTaskID       string     `json:"upstreamTaskId" gorm:"index"`
-	CallbackToken        string     `json:"callbackToken,omitempty" gorm:"index"`
+	CallbackToken        string     `json:"-" gorm:"index"`
 	TraceID              string     `json:"traceId"`
 	ErrorCode            string     `json:"errorCode,omitempty"`
 	ErrorMessage         string     `json:"errorMessage,omitempty"`
+	ErrorRetryable       bool       `json:"errorRetryable,omitempty"`
 	Metadata             string     `json:"metadata" gorm:"type:text"`
 	ClientRequestID      string     `json:"clientRequestId,omitempty" gorm:"index"`
 	CommandHash          string     `json:"commandHash,omitempty"`
@@ -70,6 +71,7 @@ type GenerationTask struct {
 type GenerationPayload struct {
 	ID              string `json:"id" gorm:"primaryKey"`
 	TaskID          string `json:"taskId" gorm:"uniqueIndex"`
+	CommandBody     string `json:"-" gorm:"type:text"`
 	RequestHeaders  string `json:"requestHeaders" gorm:"type:text"`
 	RequestBody     string `json:"requestBody" gorm:"type:text"`
 	ResponseHeaders string `json:"responseHeaders" gorm:"type:text"`

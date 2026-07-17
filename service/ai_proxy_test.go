@@ -157,7 +157,7 @@ func TestResolveAIProxyPathStillRewritesVideosForSeedance(t *testing.T) {
 
 func TestBuildOpenAIUpstreamTasksCreateURL(t *testing.T) {
 	channel := model.ModelChannel{Protocol: "openai", BaseURL: "https://ark.cn-beijing.volces.com/api/plan/v3", APIKey: "ark-key", Models: []string{"seedance-2.0"}}
-	body := []byte(`{"model":"seedance-2.0","content":[{"type":"text","text":"a cat"}]}`)
+	body := []byte(`{"model":"seedance-2.0","content":[{"type":"text","text":"a cat"}],"x_vendor_extension":{"preserve":true,"nested":{"value":7}}}`)
 	got := resolveUpstreamRequest(channel, "seedance-2.0", "/contents/generations/tasks", body, "application/json")
 	if got.URL != "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks" {
 		t.Fatalf("tasks create URL = %q", got.URL)

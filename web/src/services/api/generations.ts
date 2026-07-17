@@ -1,71 +1,108 @@
-import axios from "axios";
+import { ApiError, apiGet, apiPost } from "./request";
 
 import { useUserStore } from "@/stores/use-user-store";
+import {
+    buildGenerationCommand,
+    buildShortDramaGenerationSettings,
+    buildVideoGenerationSettings,
+    pollGenerationTask,
+    type GenerationCommand,
+    type GenerationProfile,
+    type GenerationResult,
+    type GenerationTaskStatus,
+    type VideoGenerationSettings,
+} from "./generation-contract";
 
-export type GenerationIntent = { kind: "video.generate"; prompt: string };
-export type GenerationCommand = {
-    commandVersion: 1;
-    clientRequestId: string;
-    modelProfileId: string;
-    source: "canvas" | "image_workbench" | "video_workbench";
-    intent: GenerationIntent;
-};
+export * from "./generation-contract";
+
 export type FirstPartyGenerationTask = {
     id: string;
-    status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+    status: GenerationTaskStatus;
     modelProfileId: string;
     intentKind: string;
-    result?: { videoUrl: string };
-    errorCode?: string;
-    errorMessage?: string;
+    result?: GenerationResult;
+    error?: GenerationError;
     createdAt: string;
 };
 
-type ApiEnvelope<T> = { code: number; data: T; msg: string };
+export type GenerationError = {
+    code: string;
+    message: string;
+    retryable: boolean;
+    fieldPath?: string;
+    resourceId?: string;
+};
 
-export function buildGenerationCommand(input: { clientRequestId: string; modelProfileId: string; source: GenerationCommand["source"]; prompt: string }): GenerationCommand {
-    return {
-        commandVersion: 1,
-        clientRequestId: input.clientRequestId,
-        modelProfileId: input.modelProfileId,
-        source: input.source,
-        intent: { kind: "video.generate", prompt: input.prompt },
-    };
-}
-
-function authHeaders() {
-    const token = useUserStore.getState().token;
-    return token ? { Authorization: `Bearer ${token}` } : {};
+export async function getGenerationProfiles() {
+    return apiGet<GenerationProfile[]>("/api/v1/model-profiles", undefined, useUserStore.getState().token);
 }
 
 export async function createGeneration(command: GenerationCommand) {
-    const response = await axios.post<ApiEnvelope<FirstPartyGenerationTask>>("/api/v1/generations", command, { headers: { ...authHeaders(), "Content-Type": "application/json" } });
-    return response.data.data;
+    return apiPost<FirstPartyGenerationTask>("/api/v1/generations", command, useUserStore.getState().token);
 }
 
 export async function getGeneration(taskId: string) {
-    const response = await axios.get<ApiEnvelope<FirstPartyGenerationTask>>(`/api/v1/generations/${encodeURIComponent(taskId)}`, { headers: authHeaders() });
-    return response.data.data;
+    return apiGet<FirstPartyGenerationTask>(`/api/v1/generations/${encodeURIComponent(taskId)}`, undefined, useUserStore.getState().token);
 }
 
-export async function waitForGeneration(taskId: string, signal?: AbortSignal) {
-    for (let attempt = 0; attempt < 120; attempt += 1) {
-        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-        const task = await getGeneration(taskId);
-        if (task.status === "succeeded") return task;
-        if (task.status === "failed" || task.status === "cancelled") throw new Error(task.errorMessage || `视频生成${task.status === "cancelled" ? "已取消" : "失败"}`);
-        if (attempt === 119) throw new Error("视频生成超时，请稍后重试");
-        await new Promise<void>((resolve, reject) => {
-            const timeout = window.setTimeout(resolve, 5000);
-            signal?.addEventListener(
-                "abort",
-                () => {
-                    window.clearTimeout(timeout);
-                    reject(new DOMException("Aborted", "AbortError"));
-                },
-                { once: true },
-            );
-        });
-    }
-    throw new Error("视频生成超时，请稍后重试");
+export async function cancelGeneration(taskId: string) {
+    return apiPost<FirstPartyGenerationTask>(`/api/v1/generations/${encodeURIComponent(taskId)}/cancel`, undefined, useUserStore.getState().token);
 }
+
+export function readGenerationError(error: unknown): GenerationError | null {
+    if (!(error instanceof ApiError) || !error.data || typeof error.data !== "object") return null;
+    const data = error.data as Partial<Omit<GenerationError, "message">>;
+    if (typeof data.code !== "string" || typeof data.retryable !== "boolean") return null;
+    return {
+        code: data.code,
+        message: error.message,
+        retryable: data.retryable,
+        ...(typeof data.fieldPath === "string" ? { fieldPath: data.fieldPath } : {}),
+        ...(typeof data.resourceId === "string" ? { resourceId: data.resourceId } : {}),
+    };
+}
+
+export class GenerationTaskError extends Error {
+    constructor(public readonly generationError: GenerationError) {
+        super(generationError.message);
+        this.name = "GenerationTaskError";
+    }
+}
+
+export function generationErrorFrom(error: unknown): GenerationError | null {
+    if (error instanceof GenerationTaskError) return error.generationError;
+    return readGenerationError(error);
+}
+
+export async function waitForGeneration(taskId: string, signal?: AbortSignal, onStatus?: (task: FirstPartyGenerationTask) => void) {
+    const task = await pollGenerationTask(
+        () => {
+            if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+            return getGeneration(taskId);
+        },
+        () =>
+            new Promise<void>((resolve, reject) => {
+                const timeout = window.setTimeout(resolve, 5000);
+                signal?.addEventListener(
+                    "abort",
+                    () => {
+                        window.clearTimeout(timeout);
+                        reject(new DOMException("Aborted", "AbortError"));
+                    },
+                    { once: true },
+                );
+            }),
+        onStatus,
+    );
+    if (task.status === "succeeded") return task;
+    throw new GenerationTaskError(
+        task.error || {
+            code: task.status === "cancelled" ? "GENERATION_CANCELLED" : "GENERATION_FAILED",
+            message: `视频生成${task.status === "cancelled" ? "已取消" : "失败"}`,
+            retryable: false,
+        },
+    );
+}
+
+export { buildGenerationCommand, buildShortDramaGenerationSettings, buildVideoGenerationSettings };
+export type { GenerationCommand, GenerationProfile, VideoGenerationSettings };

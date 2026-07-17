@@ -31,12 +31,16 @@ func New() *gin.Engine {
 	})
 	// Callback webhook: no UserAuth — external providers have no session.
 	api.POST("/v1/generation-tasks/callback", gin.WrapF(handler.HandleTaskCallback))
+	api.POST("/v1/generations/callback", gin.WrapF(handler.GenerationCallback))
 	v1 := api.Group("/v1", middleware.UserAuth)
 
 	v1.GET("/model-profiles", gin.WrapF(handler.ModelProfiles))
 	v1.POST("/generations", gin.WrapF(handler.CreateGeneration))
 	v1.GET("/generations/:id", func(c *gin.Context) {
 		handler.GetGeneration(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.POST("/generations/:id/cancel", func(c *gin.Context) {
+		handler.CancelGeneration(c.Writer, c.Request, c.Param("id"))
 	})
 
 	// AI proxy routes — path captured via closure, no one-liner handlers needed

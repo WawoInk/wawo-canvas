@@ -6,7 +6,7 @@ import { App, Button, Card, Checkbox, Col, Drawer, Flex, Form, Input, InputNumbe
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { EditorView } from "@uiw/react-codemirror";
 
-import { fetchAdminSettings, fetchChannelModels, saveAdminSettings, testChannelModel, type AdminModelChannel, type AdminModelCost, type AdminSettings } from "@/services/api/admin";
+import { fetchAdminSettings, fetchChannelModels, saveAdminSettings, testChannelModel, type AdminGenerationProfileBinding, type AdminModelChannel, type AdminModelCost, type AdminSettings } from "@/services/api/admin";
 import { useUserStore } from "@/stores/use-user-store";
 
 const CodeMirror = lazy(() => import("@uiw/react-codemirror"));
@@ -44,12 +44,17 @@ const emptySettings: AdminSettings = {
     },
     private: {
         channels: [],
+        generationProfiles: null,
         promptSync: { enabled: true, cron: "*/5 * * * *" },
         auth: { linuxDo: { clientId: "", clientSecret: "" } },
         fileSizeLimits: { image: 30 * 1024 * 1024, video: 50 * 1024 * 1024, audio: 15 * 1024 * 1024, prompt: 5 * 1024 * 1024 },
     },
 };
 const emptyChannel: AdminModelChannel = { protocol: "openai", name: "", baseUrl: "", apiKey: "", models: [], weight: 1, enabled: true, remark: "" };
+const generationProfileOptions = [
+    { label: "普通视频（Seedance）", value: "seedance-1-5-pro" },
+    { label: "短剧（Vidu Drama）", value: "vidu-q3-drama" },
+];
 
 type SettingsTabKey = "public" | "private";
 type EditorMode = "visual" | "json";
@@ -85,6 +90,9 @@ export default function AdminSettingsPage() {
     const [knownModels, setKnownModels] = useState<string[]>([]);
     const publicModels = Form.useWatch(["public", "modelChannel", "availableModels"], form) || [];
     const channelModels = useMemo(() => collectChannelModels(channels), [channels]);
+    const generationProfileBindings = Form.useWatch(["private", "generationProfiles"], { form, preserve: true }) || [];
+    const channelOptions = useMemo(() => channels.filter((channel) => channel.enabled && channel.name && channel.models.length).map((channel) => ({ label: channel.name, value: channel.name })), [channels]);
+    const channelModelsByName = useMemo(() => Object.fromEntries(channels.map((channel) => [channel.name, channel.models || []])), [channels]);
     const channelTableData = useMemo(() => channels.map((channel, index) => ({ ...channel, _index: index, _rowKey: `${index}-${channel.name}-${channel.baseUrl}` })), [channels]);
     const activeMode = editorMode[activeTab];
     const activeJsonText = jsonText[activeTab];
@@ -296,6 +304,29 @@ export default function AdminSettingsPage() {
 
     function rememberKnownModels(settings: AdminSettings) {
         rememberModels(collectKnownModels(settings));
+    }
+
+    function updateGenerationProfiles(profiles: AdminGenerationProfileBinding[]) {
+        form.setFieldValue(["private", "generationProfiles"], profiles);
+    }
+
+    function addGenerationProfile() {
+        const profiles = currentGenerationProfiles(form);
+        const profileId = generationProfileOptions.find((option) => !profiles.some((profile) => profile.profileId === option.value))?.value || generationProfileOptions[0].value;
+        updateGenerationProfiles([...profiles, { profileId, upstreamModels: [], channelName: "", enabled: true, limitOverrides: {} }]);
+    }
+
+    function updateGenerationProfile(index: number, patch: Partial<AdminGenerationProfileBinding>) {
+        const profiles = currentGenerationProfiles(form);
+        if (!profiles[index]) return;
+        profiles[index] = { ...profiles[index], ...patch };
+        updateGenerationProfiles(profiles);
+    }
+
+    function removeGenerationProfile(index: number) {
+        const profiles = currentGenerationProfiles(form);
+        profiles.splice(index, 1);
+        updateGenerationProfiles(profiles);
     }
 
     const openTestDialog = (index: number) => {
@@ -653,6 +684,7 @@ export default function AdminSettingsPage() {
                                                         danger
                                                         size="small"
                                                         icon={<DeleteOutlined />}
+                                                        aria-label={`删除渠道 ${item.name || "未命名渠道"}`}
                                                         onClick={() => {
                                                             const nextChannels = [...channels];
                                                             nextChannels.splice(item._index, 1);
@@ -664,6 +696,117 @@ export default function AdminSettingsPage() {
                                         },
                                     ]}
                                 />
+                                <Card
+                                    size="small"
+                                    title="视频能力绑定"
+                                    extra={
+                                        <Button size="small" icon={<PlusOutlined />} disabled={!channelOptions.length} onClick={addGenerationProfile}>
+                                            新增绑定
+                                        </Button>
+                                    }
+                                >
+                                    <Typography.Text type="secondary" style={{ display: "block", marginBottom: generationProfileBindings.length ? 16 : 0 }}>
+                                        将渠道中的实际模型绑定到画布支持的生成能力。普通视频使用 Seedance 请求结构，短剧使用 Vidu Drama 请求结构。
+                                    </Typography.Text>
+                                    {!channelOptions.length ? (
+                                        <Typography.Text type="secondary">请先新增并启用一个包含模型的渠道。</Typography.Text>
+                                    ) : generationProfileBindings.length ? (
+                                        <Flex vertical gap={12}>
+                                            {generationProfileBindings.map((binding: AdminGenerationProfileBinding, index: number) => {
+                                                const modelOptions = (channelModelsByName[binding.channelName] || []).map((model) => ({ label: model, value: model }));
+                                                const durationRange = binding.profileId === "vidu-q3-drama" ? { min: 8, max: 12 } : { min: 4, max: 15 };
+                                                return (
+                                                    <Card key={`${binding.profileId}-${index}`} size="small" styles={{ body: { paddingBottom: 4 } }}>
+                                                        <Row gutter={12} align="middle">
+                                                            <Col xs={24} md={8} xl={5}>
+                                                                <Form.Item label="画布能力">
+                                                                    <Select
+                                                                        value={binding.profileId}
+                                                                        options={generationProfileOptions.map((option) => ({
+                                                                            ...option,
+                                                                            disabled: generationProfileBindings.some((item: AdminGenerationProfileBinding, itemIndex: number) => itemIndex !== index && item.profileId === option.value),
+                                                                        }))}
+                                                                        onChange={(profileId) => updateGenerationProfile(index, { profileId, limitOverrides: {} })}
+                                                                    />
+                                                                </Form.Item>
+                                                            </Col>
+                                                            <Col xs={24} md={8} xl={4}>
+                                                                <Form.Item label="渠道">
+                                                                    <Select
+                                                                        showSearch
+                                                                        value={binding.channelName || undefined}
+                                                                        placeholder="选择渠道"
+                                                                        options={channelOptions}
+                                                                        onChange={(channelName) => updateGenerationProfile(index, { channelName, upstreamModel: undefined, upstreamModels: [] })}
+                                                                    />
+                                                                </Form.Item>
+                                                            </Col>
+                                                            <Col xs={24} md={8} xl={6}>
+                                                                <Form.Item label="上游模型">
+                                                                    <Select
+                                                                        mode="multiple"
+                                                                        showSearch
+                                                                        value={binding.upstreamModels || (binding.upstreamModel ? [binding.upstreamModel] : [])}
+                                                                        placeholder={binding.channelName ? "选择一个或多个模型" : "请先选择渠道"}
+                                                                        disabled={!binding.channelName}
+                                                                        options={modelOptions}
+                                                                        onChange={(upstreamModels) => updateGenerationProfile(index, { upstreamModel: undefined, upstreamModels })}
+                                                                    />
+                                                                </Form.Item>
+                                                            </Col>
+                                                            <Col xs={12} md={8} xl={3}>
+                                                                <Form.Item label="每次扣点">
+                                                                    <InputNumber
+                                                                        min={0}
+                                                                        step={1}
+                                                                        precision={0}
+                                                                        className="!w-full"
+                                                                        value={binding.credits}
+                                                                        placeholder="公共定价"
+                                                                        onChange={(credits) => updateGenerationProfile(index, credits == null ? { credits: undefined } : { credits })}
+                                                                    />
+                                                                </Form.Item>
+                                                            </Col>
+                                                            <Col xs={12} md={8} xl={3}>
+                                                                <Form.Item label="最大时长">
+                                                                    <InputNumber
+                                                                        min={durationRange.min}
+                                                                        max={durationRange.max}
+                                                                        step={1}
+                                                                        precision={0}
+                                                                        className="!w-full"
+                                                                        value={binding.limitOverrides?.durationSecondsMax}
+                                                                        placeholder={`${durationRange.max}s`}
+                                                                        addonAfter="秒"
+                                                                        onChange={(durationSecondsMax) => updateGenerationProfile(index, { limitOverrides: durationSecondsMax == null ? {} : { durationSecondsMax } })}
+                                                                    />
+                                                                </Form.Item>
+                                                            </Col>
+                                                            <Col xs={12} md={4} xl={2}>
+                                                                <Form.Item label="启用">
+                                                                    <Switch checked={binding.enabled !== false} onChange={(enabled) => updateGenerationProfile(index, { enabled })} />
+                                                                </Form.Item>
+                                                            </Col>
+                                                            <Col xs={12} md={4} xl={1}>
+                                                                <Form.Item label=" ">
+                                                                    <Button
+                                                                        danger
+                                                                        type="text"
+                                                                        icon={<DeleteOutlined />}
+                                                                        aria-label={`删除${generationProfileOptions.find((option) => option.value === binding.profileId)?.label || "能力"}绑定`}
+                                                                        onClick={() => removeGenerationProfile(index)}
+                                                                    />
+                                                                </Form.Item>
+                                                            </Col>
+                                                        </Row>
+                                                    </Card>
+                                                );
+                                            })}
+                                        </Flex>
+                                    ) : (
+                                        <Typography.Text type="secondary">尚未绑定视频能力。新增绑定后，画布会使用稳定的能力名称调用所选上游模型。</Typography.Text>
+                                    )}
+                                </Card>
                             </Flex>
                         </Form>
                     ) : (
@@ -927,9 +1070,22 @@ function normalizeModelCosts(items: Partial<AdminSettings["public"]["modelChanne
     return items.filter((item) => item.model).map((item) => ({ model: item.model || "", credits: Math.max(0, Number(item.credits) || 0) }));
 }
 
+function currentGenerationProfiles(form: any) {
+    return [...((form.getFieldValue(["private", "generationProfiles"]) || []) as AdminGenerationProfileBinding[])];
+}
+
 function normalizePrivateSetting(setting: Partial<AdminSettings["private"]> = {}): AdminSettings["private"] {
     return {
         channels: (setting.channels || []).map(normalizeChannel),
+        generationProfiles:
+            setting.generationProfiles?.map((binding) => ({
+                profileId: binding.profileId || "",
+                upstreamModels: uniqueModels(binding.upstreamModels?.length ? binding.upstreamModels : binding.upstreamModel ? [binding.upstreamModel] : []),
+                channelName: binding.channelName || "",
+                ...(binding.credits == null ? {} : { credits: Math.max(0, Number(binding.credits) || 0) }),
+                enabled: binding.enabled !== false,
+                limitOverrides: binding.limitOverrides || {},
+            })) ?? null,
         promptSync: {
             enabled: setting.promptSync?.enabled !== false,
             cron: setting.promptSync?.cron || "*/5 * * * *",

@@ -21,7 +21,7 @@ func ClaimGenerationTask(owner string, now time.Time, lease time.Duration) (mode
 		WHERE id = (
 			SELECT id FROM generation_tasks
 			WHERE (status = ? AND (queue_available_at = '' OR queue_available_at::timestamptz <= ?::timestamptz))
-			   OR (status = ? AND worker_lease_expires_at <> '' AND worker_lease_expires_at::timestamptz <= ?::timestamptz)
+			   OR (status IN (?, ?) AND worker_lease_expires_at <> '' AND worker_lease_expires_at::timestamptz <= ?::timestamptz)
 			ORDER BY created_at, id
 			FOR UPDATE SKIP LOCKED
 			LIMIT 1
@@ -29,7 +29,7 @@ func ClaimGenerationTask(owner string, now time.Time, lease time.Duration) (mode
 		RETURNING *`,
 		model.TaskStatusRunning, owner, expiresText, nowText,
 		model.TaskStatusQueued, nowText,
-		model.TaskStatusRunning, nowText,
+		model.TaskStatusRunning, model.TaskStatusPending, nowText,
 	).Scan(&task)
 	if result.Error != nil {
 		return model.GenerationTask{}, false, result.Error
@@ -49,16 +49,27 @@ func ClaimGenerationTaskByID(id, owner string, now time.Time, lease time.Duratio
 	result := db.Raw(`UPDATE generation_tasks
 		SET status = ?, worker_lease_owner = ?, worker_lease_expires_at = ?, updated_at = ?
 		WHERE id = ? AND ((status = ? AND (queue_available_at = '' OR queue_available_at::timestamptz <= ?::timestamptz))
-			OR (status = ? AND worker_lease_expires_at <> '' AND worker_lease_expires_at::timestamptz <= ?::timestamptz))
+			OR (status IN (?, ?) AND worker_lease_expires_at <> '' AND worker_lease_expires_at::timestamptz <= ?::timestamptz))
 		RETURNING *`,
 		model.TaskStatusRunning, owner, expiresText, nowText, id,
 		model.TaskStatusQueued, nowText,
-		model.TaskStatusRunning, nowText,
+		model.TaskStatusRunning, model.TaskStatusPending, nowText,
 	).Scan(&task)
 	if result.Error != nil {
 		return model.GenerationTask{}, false, result.Error
 	}
 	return task, result.RowsAffected > 0, nil
+}
+
+func RenewGenerationTaskLease(id, owner string, now time.Time, lease time.Duration) (bool, error) {
+	db, err := DB()
+	if err != nil {
+		return false, err
+	}
+	result := db.Model(&model.GenerationTask{}).
+		Where("id = ? AND status IN ? AND worker_lease_owner = ?", id, []model.TaskStatus{model.TaskStatusRunning, model.TaskStatusPending}, owner).
+		Updates(map[string]any{"worker_lease_expires_at": now.Add(lease).UTC().Format(time.RFC3339Nano), "updated_at": now.UTC().Format(time.RFC3339Nano)})
+	return result.RowsAffected == 1, result.Error
 }
 
 // NewWorkerID returns a unique process-local worker identity.

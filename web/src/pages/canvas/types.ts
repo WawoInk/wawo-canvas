@@ -18,6 +18,7 @@ export enum CanvasNodeType {
 }
 
 export type CanvasNodeStatus = "idle" | "success" | "loading" | "error";
+export type CanvasGenerationTaskStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 export type CanvasGenerationMode = "text" | "image" | "video" | "audio";
 export type CanvasImageGenerationType = "generation" | "edit";
 
@@ -27,6 +28,8 @@ export type CanvasNodeMetadata = {
     prompt?: string;
     status?: CanvasNodeStatus;
     errorDetails?: string;
+    generationErrorFieldPath?: string;
+    generationErrorResourceId?: string;
     fontSize?: number;
     generationMode?: CanvasGenerationMode;
     generationType?: CanvasImageGenerationType;
@@ -58,7 +61,14 @@ export type CanvasNodeMetadata = {
     bytes?: number;
     durationMs?: number;
     upstreamTaskId?: string;
+    generationTaskId?: string;
+    generationTaskStatus?: CanvasGenerationTaskStatus;
+    generationPollingPaused?: boolean;
     taskModel?: string;
+    generationProfileId?: string;
+    generationCancellation?: boolean;
+    dramaAssetRoles?: Record<string, "character" | "scene" | "tool">;
+    dramaAssetDescriptions?: Record<string, string>;
 };
 
 export type CanvasNodeData = {

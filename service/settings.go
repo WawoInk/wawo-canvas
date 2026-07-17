@@ -25,6 +25,9 @@ func SaveSettings(settings model.Settings) (model.Settings, error) {
 	settings = normalizeSettings(settings)
 	keepPrivateAPIKeys(&settings, normalizeSettings(saved))
 	keepPrivateAuthSecrets(&settings, normalizeSettings(saved))
+	if err := ValidateGenerationBindings(settings); err != nil {
+		return model.Settings{}, err
+	}
 	result, err := repository.SaveSettings(settings, now())
 	if err == nil {
 		RefreshPromptSyncScheduler()
@@ -35,7 +38,32 @@ func SaveSettings(settings model.Settings) (model.Settings, error) {
 func normalizeSettings(settings model.Settings) model.Settings {
 	settings.Private = normalizePrivateSetting(settings.Private)
 	settings.Public = normalizePublicSettingWithChannels(settings.Public, settings.Private.Channels)
+	if settings.Private.GenerationProfiles != nil {
+		profileIDs := []string{}
+		upstreamModels := map[string]bool{}
+		for _, binding := range settings.Private.GenerationProfiles {
+			if !binding.Enabled {
+				continue
+			}
+			for _, upstreamModel := range generationBindingModels(binding) {
+				profileIDs = append(profileIDs, upstreamModel)
+				upstreamModels[upstreamModel] = true
+			}
+		}
+		settings.Public.ModelChannel.AvailableModels = replaceBoundUpstreamModels(settings.Public.ModelChannel.AvailableModels, upstreamModels, profileIDs)
+		settings.Public.ModelChannel.VideoModels = replaceBoundUpstreamModels(settings.Public.ModelChannel.VideoModels, upstreamModels, profileIDs)
+	}
 	return settings
+}
+
+func replaceBoundUpstreamModels(models []string, upstreamModels map[string]bool, profileIDs []string) []string {
+	result := []string{}
+	for _, modelName := range models {
+		if !upstreamModels[modelName] {
+			result = append(result, modelName)
+		}
+	}
+	return uniqueModelNames(append(result, profileIDs...))
 }
 
 func normalizePublicSetting(setting model.PublicSetting) model.PublicSetting {
@@ -82,6 +110,22 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 	if setting.ModelChannel.AudioModels == nil {
 		setting.ModelChannel.AudioModels = []string{}
 	}
+	for _, modelName := range setting.ModelChannel.AvailableModels {
+		switch {
+		case isImageModelName(modelName):
+			setting.ModelChannel.ImageModels = append(setting.ModelChannel.ImageModels, modelName)
+		case isVideoModelName(modelName):
+			setting.ModelChannel.VideoModels = append(setting.ModelChannel.VideoModels, modelName)
+		case isAudioModelName(modelName):
+			setting.ModelChannel.AudioModels = append(setting.ModelChannel.AudioModels, modelName)
+		case isTextModelName(modelName):
+			setting.ModelChannel.TextModels = append(setting.ModelChannel.TextModels, modelName)
+		}
+	}
+	setting.ModelChannel.ImageModels = uniqueModelNames(setting.ModelChannel.ImageModels)
+	setting.ModelChannel.VideoModels = uniqueModelNames(setting.ModelChannel.VideoModels)
+	setting.ModelChannel.TextModels = uniqueModelNames(setting.ModelChannel.TextModels)
+	setting.ModelChannel.AudioModels = uniqueModelNames(setting.ModelChannel.AudioModels)
 	setting.ModelChannel.DefaultTextModel = repairDefaultModel(setting.ModelChannel.DefaultTextModel, setting.ModelChannel.AvailableModels, isTextModelName)
 	setting.ModelChannel.DefaultImageModel = repairDefaultModel(setting.ModelChannel.DefaultImageModel, setting.ModelChannel.AvailableModels, isImageModelName)
 	setting.ModelChannel.DefaultVideoModel = repairDefaultModel(setting.ModelChannel.DefaultVideoModel, setting.ModelChannel.AvailableModels, isVideoModelName)
@@ -104,6 +148,13 @@ func ModelCost(modelName string) (int, error) {
 	return 0, nil
 }
 
+func generationBindingModels(binding model.GenerationProfileBinding) []string {
+	if len(binding.UpstreamModels) > 0 {
+		return uniqueModelNames(binding.UpstreamModels)
+	}
+	return uniqueModelNames([]string{binding.UpstreamModel})
+}
+
 func normalizePrivateSetting(setting model.PrivateSetting) model.PrivateSetting {
 	if setting.Channels == nil {
 		setting.Channels = []model.ModelChannel{}
@@ -119,6 +170,16 @@ func normalizePrivateSetting(setting model.PrivateSetting) model.PrivateSetting 
 		if setting.Channels[i].Weight <= 0 {
 			setting.Channels[i].Weight = 1
 		}
+	}
+	for i := range setting.GenerationProfiles {
+		binding := &setting.GenerationProfiles[i]
+		binding.ProfileID = strings.TrimSpace(binding.ProfileID)
+		binding.UpstreamModel = strings.TrimSpace(binding.UpstreamModel)
+		binding.UpstreamModels = uniqueModelNames(binding.UpstreamModels)
+		if len(binding.UpstreamModels) == 0 && binding.UpstreamModel != "" {
+			binding.UpstreamModels = []string{binding.UpstreamModel}
+		}
+		binding.ChannelName = strings.TrimSpace(binding.ChannelName)
 	}
 	setting.FileSizeLimits = normalizeFileSizeLimits(setting.FileSizeLimits)
 	return setting

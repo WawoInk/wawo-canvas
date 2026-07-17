@@ -9,13 +9,29 @@ import { saveAs } from "file-saver";
 import { createAsyncImageTask, createAsyncImageEditTask, pollAsyncImageTask, cancelAsyncImageTask, requestEdit, requestImageQuestion } from "@/services/api/image";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { createVideoGenerationTask, pollVideoGenerationTask, cancelVideoGenerationTask, storeGeneratedVideo } from "@/services/api/video";
-import { buildGenerationCommand, createGeneration, waitForGeneration } from "@/services/api/generations";
+import {
+    buildGenerationCommand,
+    buildShortDramaGenerationSettings,
+    buildVideoGenerationSettings,
+    cancelGeneration,
+    createGeneration,
+    generationErrorFrom,
+    generationTaskId,
+    getGenerationProfiles,
+    readGeneratedVideoFile,
+    readGenerationError,
+    resolveCanvasVideoSubmission,
+    waitForGeneration,
+    type ShortDramaGenerationSettings,
+    type VideoGenerationSettings,
+} from "@/services/api/generations";
 import { DOCS_URL } from "@/constant/env";
 import { defaultConfig, modelOptionName, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { resolveImageUrl, uploadImage, getImageBlob, type UploadedImage, resolveMediaUrl, type UploadedFile } from "@/services/blob-storage";
 import { uploadBlob, uploadUrlToS3, type UploadResult } from "@/services/upload-blob";
 import { nanoid } from "nanoid";
 import { getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
+import { boolConfig, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution } from "@/lib/seedance-video";
 import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
 import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { useAssetStore } from "@/stores/use-asset-store";
@@ -35,7 +51,17 @@ import { CanvasNodeCropDialog, type CanvasImageCropRect } from "../components/ca
 import { CanvasNodeMaskEditDialog, type CanvasImageMaskEditPayload } from "../components/canvas-node-mask-edit-dialog";
 import { CanvasNodeSplitDialog, type CanvasImageSplitParams } from "../components/canvas-node-split-dialog";
 import { CanvasNodeUpscaleDialog, type CanvasImageUpscaleParams } from "../components/canvas-node-upscale-dialog";
-import { buildNodeGenerationContext, buildNodeGenerationInputs, buildNodeResponseMessages, hydrateNodeGenerationContext, type NodeGenerationInput } from "../components/canvas-node-generation";
+import {
+    buildNodeGenerationContext,
+    buildNodeGenerationInputs,
+    buildNodeResponseMessages,
+    buildShortDramaGenerationIntent,
+    buildVideoGenerationIntent,
+    cleanShortDramaAssetMappings,
+    hydrateNodeGenerationContext,
+    locateGenerationError,
+    type NodeGenerationInput,
+} from "../components/canvas-node-generation";
 import { CanvasNodeHoverToolbar, CanvasNodeInfoModal } from "../components/canvas-node-hover-toolbar";
 import { InfiniteCanvas } from "../components/infinite-canvas";
 import { Minimap } from "../components/canvas-mini-map";
@@ -48,7 +74,7 @@ import { CanvasLocalAgentPanel } from "../components/canvas-local-agent-panel";
 import { useCanvasAgentStore } from "../stores/use-canvas-agent-store";
 import { useCanvasStore } from "../stores/use-canvas-store";
 import { applyCanvasAgentOps, type CanvasAgentOp, type CanvasAgentSnapshot } from "../utils/canvas-agent-ops";
-import { buildCanvasResourceReferences, buildNodeMentionReferences } from "../utils/canvas-resource-references";
+import { buildCanvasResourceReferences, buildNodeMentionReferences, getGenerationResourceNodes } from "../utils/canvas-resource-references";
 import type { CanvasAgentMode } from "../components/canvas-agent-chat-ui";
 import {
     CanvasNodeType,
@@ -354,6 +380,24 @@ function InfiniteCanvasPage() {
     const pendingConnectionCreateRef = useRef(pendingConnectionCreate);
     const generationRequestsRef = useRef(new Map<string, CanvasGenerationRequest>());
 
+    useEffect(() => {
+        setNodes((current) =>
+            current.map((node) => {
+                if (!node.metadata?.dramaAssetRoles && !node.metadata?.dramaAssetDescriptions) return node;
+                const connectedImageIDs = getGenerationResourceNodes(node.id, current, connections)
+                    .filter((item) => item.type === CanvasNodeType.Image)
+                    .map((item) => item.id);
+                const metadata = cleanShortDramaAssetMappings(node.metadata, connectedImageIDs);
+                if (
+                    Object.keys(metadata.dramaAssetRoles || {}).length === Object.keys(node.metadata.dramaAssetRoles || {}).length &&
+                    Object.keys(metadata.dramaAssetDescriptions || {}).length === Object.keys(node.metadata.dramaAssetDescriptions || {}).length
+                )
+                    return node;
+                return { ...node, metadata };
+            }),
+        );
+    }, [connections]);
+
     const createHistoryEntry = useCallback(
         (): CanvasHistoryEntry => ({
             nodes: nodesRef.current,
@@ -395,19 +439,48 @@ function InfiniteCanvasPage() {
             affectedNodeIds.add(request.originNodeId);
         });
         setRunningNodeId((current) => (current === runningId ? null : current));
-        if (!affectedNodeIds.size) return;
-        setNodes((prev) => prev.map((node) => (affectedNodeIds.has(node.id) && node.metadata?.status === NODE_STATUS_LOADING ? { ...node, metadata: { ...node.metadata, status: NODE_STATUS_IDLE, errorDetails: undefined } } : node)));
+        if (affectedNodeIds.size) {
+            setNodes((prev) => prev.map((node) => (affectedNodeIds.has(node.id) && node.metadata?.generationTaskId ? { ...node, metadata: { ...node.metadata, generationPollingPaused: true } } : node)));
+        }
     }, []);
 
     const confirmStopGeneration = useCallback(
         (nodeId: string) => {
             modal.confirm({
-                title: "停止生成？",
-                content: "当前生成请求会被中断，已经生成完成的内容会保留。",
+                title: "停止等待？",
+                content: "这只会停止当前页面等待，不会取消上游任务；稍后仍可恢复查询。",
                 okText: "停止",
                 cancelText: "继续生成",
                 okButtonProps: { danger: true },
                 onOk: () => stopGenerationByRunningId(nodeId),
+            });
+        },
+        [modal, stopGenerationByRunningId],
+    );
+
+    const resumeGenerationQuery = useCallback((nodeId: string) => {
+        const node = nodesRef.current.find((item) => item.id === nodeId);
+        const taskId = generationTaskId(node?.metadata);
+        if (!taskId || !node?.metadata?.generationProfileId) return;
+        setNodes((prev) => prev.map((item) => (item.id === nodeId ? { ...item, metadata: { ...item.metadata, generationPollingPaused: false } } : item)));
+        void pollFirstPartyCanvasVideoNode(nodeId, taskId);
+    }, []);
+
+    const confirmCancelGeneration = useCallback(
+        (nodeId: string) => {
+            const taskId = generationTaskId(nodesRef.current.find((node) => node.id === nodeId)?.metadata);
+            if (!taskId) return;
+            modal.confirm({
+                title: "取消生成任务？",
+                content: "取消会提交给上游；只有上游确认后任务才会变为已取消。",
+                okText: "取消任务",
+                cancelText: "继续生成",
+                okButtonProps: { danger: true },
+                onOk: async () => {
+                    await cancelGeneration(taskId);
+                    stopGenerationByRunningId(nodeId);
+                    setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, status: NODE_STATUS_ERROR, generationTaskStatus: "cancelled", errorDetails: "任务已取消" } } : node)));
+                },
             });
         },
         [modal, stopGenerationByRunningId],
@@ -441,10 +514,13 @@ function InfiniteCanvasPage() {
     // ponytail: extracted restore function shared by both inline and backend-fetch paths
     const resumePendingGenerations = (nodes: CanvasNodeData[]) => {
         for (const node of nodes) {
-            if (node.metadata?.status !== "loading" || !node.metadata?.upstreamTaskId) continue;
-            const task = { id: node.metadata.upstreamTaskId, model: node.metadata.taskModel || effectiveConfig.imageModel || effectiveConfig.model };
+            const taskId = generationTaskId(node.metadata);
+            if (node.metadata?.status !== "loading" || !taskId) continue;
+            const task = { id: taskId, model: node.metadata.taskModel || effectiveConfig.imageModel || effectiveConfig.model };
             if (node.type === CanvasNodeType.Image) {
                 void pollCanvasImageNode(node.id, task, effectiveConfig);
+            } else if (node.type === CanvasNodeType.Video && node.metadata.generationProfileId) {
+                void pollFirstPartyCanvasVideoNode(node.id, taskId);
             } else if (node.type === CanvasNodeType.Video) {
                 void pollCanvasVideoNode(node.id, task, effectiveConfig);
             }
@@ -2235,6 +2311,36 @@ function InfiniteCanvasPage() {
                 }
 
                 if (mode === "video") {
+                    const model = modelOptionName(generationConfig.model);
+                    const profile = generationConfig.channelMode === "remote" ? (await getGenerationProfiles()).find((item) => item.id === model) : undefined;
+                    const submission = resolveCanvasVideoSubmission(generationConfig.channelMode, profile);
+                    const isShortDrama = profile?.intents.includes("video.short-drama") === true;
+                    const dramaSettings =
+                        profile && isShortDrama
+                            ? buildShortDramaGenerationSettings(profile, {
+                                  aspectRatio: normalizeSeedanceRatio(generationConfig.size) as ShortDramaGenerationSettings["aspectRatio"],
+                                  resolution: normalizeSeedanceResolution(generationConfig.vquality) as ShortDramaGenerationSettings["resolution"],
+                                  durationSeconds: String(generationConfig.videoSeconds) === "-1" ? "auto" : normalizeSeedanceDuration(generationConfig.videoSeconds),
+                                  quality: generationConfig.quality as ShortDramaGenerationSettings["quality"],
+                              })
+                            : undefined;
+                    const firstPartyIntent = profile
+                        ? isShortDrama
+                            ? buildShortDramaGenerationIntent(nodeId, nodesRef.current, connectionsRef.current, effectivePrompt, dramaSettings!)
+                            : buildVideoGenerationIntent(
+                                  nodeId,
+                                  nodesRef.current,
+                                  connectionsRef.current,
+                                  effectivePrompt,
+                                  buildVideoGenerationSettings(profile, {
+                                      aspectRatio: normalizeSeedanceRatio(generationConfig.size) as VideoGenerationSettings["aspectRatio"],
+                                      resolution: normalizeSeedanceResolution(generationConfig.vquality) as VideoGenerationSettings["resolution"],
+                                      durationSeconds: normalizeSeedanceDuration(generationConfig.videoSeconds),
+                                      generateAudio: boolConfig(generationConfig.videoGenerateAudio, true),
+                                      watermark: boolConfig(generationConfig.videoWatermark, false),
+                                  }),
+                              )
+                        : undefined;
                     const spec = nodeSizeFromRatio(generationConfig.size, NODE_DEFAULT_SIZE[CanvasNodeType.Video].width, NODE_DEFAULT_SIZE[CanvasNodeType.Video].height) || NODE_DEFAULT_SIZE[CanvasNodeType.Video];
                     const isEmptyVideoNode = sourceNode?.type === CanvasNodeType.Video && !sourceNode.metadata?.content;
                     const videoId = isEmptyVideoNode ? nodeId : nanoid();
@@ -2242,13 +2348,22 @@ function InfiniteCanvasPage() {
                     const videoNode: CanvasNodeData = {
                         id: videoId,
                         type: CanvasNodeType.Video,
-                        title: effectivePrompt.slice(0, 32) || "Generated Video",
+                        title: isEmptyVideoNode ? sourceNode.title : effectivePrompt.slice(0, 32) || "Generated Video",
                         position: isEmptyVideoNode ? sourceNode.position : { x: parent.x + (sourceNode?.width || spec.width) + 96, y: parent.y },
                         width: isEmptyVideoNode ? sourceNode.width : spec.width,
                         height: isEmptyVideoNode ? sourceNode.height : spec.height,
                         metadata: {
+                            ...(isEmptyVideoNode
+                                ? {
+                                      dramaAssetRoles: sourceNode.metadata?.dramaAssetRoles,
+                                      dramaAssetDescriptions: sourceNode.metadata?.dramaAssetDescriptions,
+                                  }
+                                : {}),
                             prompt: effectivePrompt,
                             status: NODE_STATUS_LOADING,
+                            errorDetails: undefined,
+                            generationErrorFieldPath: undefined,
+                            generationErrorResourceId: undefined,
                             model: generationConfig.model,
                             size: generationConfig.size,
                             seconds: generationConfig.videoSeconds,
@@ -2267,17 +2382,32 @@ function InfiniteCanvasPage() {
                     if (!isEmptyVideoNode) setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: nodeId, toNodeId: videoId }]);
                     const controller = startGenerationRequest(videoId, nodeId, nodeId, runController);
                     try {
-                        const useFirstParty = generationConfig.channelMode === "remote" && modelOptionName(generationConfig.model) === "seedance-1-5-pro" && !generationContext.referenceImages.length && !generationContext.referenceVideos.length && !generationContext.referenceAudios.length;
-                        if (useFirstParty) {
+                        if (submission === "first-party" && profile && firstPartyIntent) {
                             const task = await createGeneration(
                                 buildGenerationCommand({
                                     clientRequestId: nanoid(),
-                                    modelProfileId: "seedance-1-5-pro",
+                                    modelProfileId: profile.id,
                                     source: "canvas",
-                                    prompt: effectivePrompt,
+                                    intent: firstPartyIntent,
                                 }),
                             );
-                            setNodes((prev) => prev.map((n) => (n.id === videoId ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: generationConfig.model } } : n)));
+                            setNodes((prev) =>
+                                prev.map((n) =>
+                                    n.id === videoId
+                                        ? {
+                                              ...n,
+                                              metadata: {
+                                                  ...n.metadata,
+                                                  generationTaskId: task.id,
+                                                  generationTaskStatus: task.status,
+                                                  taskModel: generationConfig.model,
+                                                  generationProfileId: profile.id,
+                                                  generationCancellation: profile.capabilities.cancellation,
+                                              },
+                                          }
+                                        : n,
+                                ),
+                            );
                             void pollFirstPartyCanvasVideoNode(videoId, task.id, spec);
                         } else {
                             const task = await createVideoGenerationTask(generationConfig, effectivePrompt, generationContext.referenceImages, generationContext.referenceVideos, generationContext.referenceAudios, undefined, "canvas");
@@ -2287,9 +2417,26 @@ function InfiniteCanvasPage() {
                         }
                     } catch (error) {
                         if (!isGenerationCanceled(error)) {
-                            const errorDetails = error instanceof Error ? error.message : "视频任务创建失败";
+                            const generationError = readGenerationError(error);
+                            const errorDetails = generationError?.message || (error instanceof Error ? error.message : "视频任务创建失败");
+                            const location = generationError ? locateGenerationError(generationError) : {};
                             message.error(errorDetails);
-                            setNodes((prev) => prev.map((n) => (n.id === videoId ? { ...n, metadata: { ...n.metadata, status: NODE_STATUS_ERROR, errorDetails } } : n)));
+                            setNodes((prev) =>
+                                prev.map((n) =>
+                                    n.id === videoId
+                                        ? {
+                                              ...n,
+                                              metadata: {
+                                                  ...n.metadata,
+                                                  status: NODE_STATUS_ERROR,
+                                                  errorDetails,
+                                                  generationErrorFieldPath: location.fieldPath,
+                                                  generationErrorResourceId: location.resourceId,
+                                              },
+                                          }
+                                        : n,
+                                ),
+                            );
                         }
                     } finally {
                         finishGenerationRequest(videoId, controller);
@@ -2467,9 +2614,61 @@ function InfiniteCanvasPage() {
                     return;
                 }
                 if (node.type === CanvasNodeType.Video) {
-                    const task = await createVideoGenerationTask(generationConfig, prompt, retryImages, context?.referenceVideos || [], context?.referenceAudios || [], undefined, "canvas");
-                    setNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
-                    void pollCanvasVideoNode(node.id, task, generationConfig);
+                    const model = modelOptionName(generationConfig.model);
+                    const profile = generationConfig.channelMode === "remote" ? (await getGenerationProfiles()).find((item) => item.id === model) : undefined;
+                    const submission = resolveCanvasVideoSubmission(generationConfig.channelMode, profile);
+                    if (submission === "first-party" && profile) {
+                        const isShortDrama = profile.intents.includes("video.short-drama");
+                        const intent = isShortDrama
+                            ? buildShortDramaGenerationIntent(
+                                  node.id,
+                                  nodesRef.current,
+                                  connectionsRef.current,
+                                  prompt,
+                                  buildShortDramaGenerationSettings(profile, {
+                                      aspectRatio: normalizeSeedanceRatio(generationConfig.size) as ShortDramaGenerationSettings["aspectRatio"],
+                                      resolution: normalizeSeedanceResolution(generationConfig.vquality) as ShortDramaGenerationSettings["resolution"],
+                                      durationSeconds: String(generationConfig.videoSeconds) === "-1" ? "auto" : normalizeSeedanceDuration(generationConfig.videoSeconds),
+                                      quality: generationConfig.quality as ShortDramaGenerationSettings["quality"],
+                                  }),
+                              )
+                            : buildVideoGenerationIntent(
+                                  node.id,
+                                  nodesRef.current,
+                                  connectionsRef.current,
+                                  prompt,
+                                  buildVideoGenerationSettings(profile, {
+                                      aspectRatio: normalizeSeedanceRatio(generationConfig.size) as VideoGenerationSettings["aspectRatio"],
+                                      resolution: normalizeSeedanceResolution(generationConfig.vquality) as VideoGenerationSettings["resolution"],
+                                      durationSeconds: normalizeSeedanceDuration(generationConfig.videoSeconds),
+                                      generateAudio: boolConfig(generationConfig.videoGenerateAudio, true),
+                                      watermark: boolConfig(generationConfig.videoWatermark, false),
+                                  }),
+                              );
+                        const task = await createGeneration(buildGenerationCommand({ clientRequestId: nanoid(), modelProfileId: profile.id, source: "canvas", intent }));
+                        setNodes((prev) =>
+                            prev.map((n) =>
+                                n.id === node.id
+                                    ? {
+                                          ...n,
+                                          metadata: {
+                                              ...n.metadata,
+                                              generationTaskId: task.id,
+                                              generationTaskStatus: task.status,
+                                              taskModel: generationConfig.model,
+                                              generationProfileId: profile.id,
+                                              generationCancellation: profile.capabilities.cancellation,
+                                          },
+                                      }
+                                    : n,
+                            ),
+                        );
+                        void pollFirstPartyCanvasVideoNode(node.id, task.id);
+                    } else {
+                        const task = await createVideoGenerationTask(generationConfig, prompt, retryImages, context?.referenceVideos || [], context?.referenceAudios || [], undefined, "canvas");
+                        setNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
+                        void pollCanvasVideoNode(node.id, task, generationConfig);
+                    }
                     return;
                 }
                 if (node.type === CanvasNodeType.Audio) {
@@ -2576,11 +2775,18 @@ function InfiniteCanvasPage() {
         const controller = new AbortController();
         startGenerationRequest(nodeId, nodeId, nodeId, controller);
         try {
-            const task = await waitForGeneration(taskId, controller.signal);
-            if (!task.result?.videoUrl) throw new Error("视频结果为空");
-            const stored = await uploadUrlToS3(task.result.videoUrl, "results/videos");
+            const task = await waitForGeneration(taskId, controller.signal, (current) => {
+                setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, generationTaskId: taskId, generationTaskStatus: current.status, generationPollingPaused: false, status: NODE_STATUS_LOADING } } : node)));
+            });
+            const file = readGeneratedVideoFile(task.result);
+            if (!file) throw new Error("视频结果为空");
+            const raw = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
+            const token = JSON.parse(raw)?.state?.token || "";
+            const response = await fetch(`/api/v1/files/${encodeURIComponent(file.fileId)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+            const body = await response.json();
+            if (body.code !== 0 || !body.data?.s3Key) throw new Error(body.msg || "视频文件不可用");
             const defaultSize = spec || NODE_DEFAULT_SIZE[CanvasNodeType.Video];
-            const videoSize = fitNodeSize(stored.width || defaultSize.width, stored.height || defaultSize.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
+            const videoSize = fitNodeSize(file.width || defaultSize.width, file.height || defaultSize.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
             setNodes((prev) =>
                 prev.map((n) =>
                     n.id === nodeId
@@ -2590,13 +2796,15 @@ function InfiniteCanvasPage() {
                               height: videoSize.height,
                               metadata: {
                                   ...n.metadata,
-                                  content: stored.url,
-                                  fileId: stored.fileId,
+                                  content: body.data.s3Key,
+                                  fileId: file.fileId,
                                   status: NODE_STATUS_SUCCESS,
-                                  naturalWidth: stored.width,
-                                  naturalHeight: stored.height,
-                                  bytes: stored.bytes,
-                                  mimeType: stored.mimeType,
+                                  naturalWidth: file.width,
+                                  naturalHeight: file.height,
+                                  bytes: file.bytes,
+                                  mimeType: file.mimeType,
+                                  durationMs: file.durationMs,
+                                  generationTaskStatus: "succeeded",
                               },
                           }
                         : n,
@@ -2604,9 +2812,27 @@ function InfiniteCanvasPage() {
             );
         } catch (error) {
             if (isGenerationCanceled(error)) return;
-            const errorDetails = error instanceof Error ? error.message : "视频生成失败";
+            const generationError = generationErrorFrom(error);
+            const errorDetails = generationError?.message || (error instanceof Error ? error.message : "视频生成失败");
+            const location = generationError ? locateGenerationError(generationError) : {};
             message.error(errorDetails);
-            setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, metadata: { ...n.metadata, status: NODE_STATUS_ERROR, errorDetails } } : n)));
+            setNodes((prev) =>
+                prev.map((n) =>
+                    n.id === nodeId
+                        ? {
+                              ...n,
+                              metadata: {
+                                  ...n.metadata,
+                                  status: NODE_STATUS_ERROR,
+                                  generationTaskStatus: generationError?.code === "GENERATION_CANCELLED" ? "cancelled" : "failed",
+                                  errorDetails,
+                                  generationErrorFieldPath: location.fieldPath,
+                                  generationErrorResourceId: location.resourceId,
+                              },
+                          }
+                        : n,
+                ),
+            );
         } finally {
             finishGenerationRequest(nodeId, controller);
         }
@@ -2911,12 +3137,15 @@ function InfiniteCanvasPage() {
                                 ) : (
                                     <CanvasNodePromptPanel
                                         node={panelNode}
-                                        isRunning={runningNodeId === panelNode.id}
+                                        isRunning={runningNodeId === panelNode.id || (panelNode.metadata?.status === NODE_STATUS_LOADING && !panelNode.metadata.generationPollingPaused)}
+                                        canResume={Boolean(panelNode.metadata?.generationPollingPaused && generationTaskId(panelNode.metadata))}
                                         mentionReferences={mentionReferencesByNodeId.get(panelNode.id) || []}
                                         onPromptChange={handleNodePromptChange}
                                         onConfigChange={handleConfigNodeChange}
                                         onGenerate={handleGenerateNode}
                                         onStop={confirmStopGeneration}
+                                        onResume={resumeGenerationQuery}
+                                        onCancel={panelNode.metadata?.generationCancellation ? confirmCancelGeneration : undefined}
                                         onImageSettingsOpenChange={(open) => {
                                             setNodeImageSettingsOpen(open);
                                             if (open) setToolbarNodeId(null);
@@ -3515,8 +3744,8 @@ function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | undefine
 }
 
 function resetInterruptedGeneration(nodes: CanvasNodeData[]) {
-    // ponytail: nodes with upstreamTaskId will resume polling — only reset truly lost ones
-    return nodes.map((node) => (node.metadata?.status === "loading" && !node.metadata?.upstreamTaskId ? { ...node, metadata: { ...node.metadata, status: "error" as const, errorDetails: "页面刷新后生成已中断，请重新生成。" } } : node));
+    // ponytail: first-party task IDs moved fields; old projects still resume from upstreamTaskId
+    return nodes.map((node) => (node.metadata?.status === "loading" && !generationTaskId(node.metadata) ? { ...node, metadata: { ...node.metadata, status: "error" as const, errorDetails: "页面刷新后生成已中断，请重新生成。" } } : node));
 }
 
 function isGenerationCanceled(error: unknown) {
