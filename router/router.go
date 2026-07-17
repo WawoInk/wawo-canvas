@@ -69,7 +69,7 @@ func New() *gin.Engine {
 	v1.POST("/tasks/:id/cancel", func(c *gin.Context) {
 		service.ProxyAIRequest(c.Writer, c.Request, "/tasks/"+c.Param("id")+"/cancel")
 	})
-	// 视频生成标准入口（对齐 xvanai /v1/contents/generations/tasks）。旧 /videos 路由保留为遗留。
+	// Video generation standard entry (aligns with xvanai /v1/contents/generations/tasks).
 	v1.POST("/contents/generations/tasks", gin.WrapF(handler.CreateVideoTask))
 	v1.GET("/contents/generations/tasks/:id", func(c *gin.Context) {
 		handler.GetVideoTask(c.Writer, c.Request, c.Param("id"))

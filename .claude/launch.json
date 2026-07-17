@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev"],
       "autoPort": true,
       "cwd": "/Users/eldenpdx/git-project/infinite-canvas/web"
+    },
+    {
+      "name": "go-backend",
+      "runtimeExecutable": "go",
+      "runtimeArgs": ["run", "."],
+      "port": 8080,
+      "cwd": "/Users/eldenpdx/git-project/infinite-canvas"
     }
   ]
 }

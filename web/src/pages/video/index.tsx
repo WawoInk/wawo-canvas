@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, LoaderCircle, Music2, Plus, SlidersHorizontal, Sparkles, Trash2, Upload, VideoIcon } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, LoaderCircle, Music2, Play, Plus, SlidersHorizontal, Sparkles, Trash2, Upload, VideoIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { App, Button, Checkbox, Drawer, Empty, Input, Modal, Tag, Typography } from "antd";
 import localforage from "localforage";
@@ -8,16 +8,18 @@ import { nanoid } from "nanoid";
 import { saveAs } from "file-saver";
 
 import { AssetPickerModal, type InsertAssetPayload } from "@/pages/canvas/components/asset-picker-modal";
+import { LazyVideo } from "@/components/lazy-media";
 import { ModelPicker } from "@/components/model-picker";
 import { PromptSelectDialog } from "@/components/prompts/prompt-select-dialog";
 import { VideoSettingsPanel, normalizeVideoResolutionValue, videoSizeLabel } from "@/components/video-settings-panel";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { formatBytes, formatDuration } from "@/lib/image-utils";
+import { getVideoPoster } from "@/lib/video-poster";
 import { boolConfig, normalizeSeedanceRatio, seedanceReferenceLabel, SEEDANCE_REFERENCE_LIMITS } from "@/lib/seedance-video";
 import { deleteStoredMedia, getMediaBlob, resolveMediaUrl, uploadMediaFile, resolveImageUrl, uploadImage } from "@/services/blob-storage";
 import { uploadBlob, uploadUrlToS3 } from "@/services/upload-blob";
 import { resolveFileUrls } from "@/services/resolve-file-urls";
-import { patchGenerationTaskMetadata } from "@/services/api/generation-tasks";
+import { patchGenerationTaskMetadata, recordGenerationTask } from "@/services/api/generation-tasks";
 import { cancelVideoGenerationTask, createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, type VideoGenerationTask } from "@/services/api/video";
 import { fetchVideoHistory, deleteGenerationTask, type VideoHistoryItem } from "@/services/api/generation-tasks";
 import { syncClient } from "@/services/sync-client";
@@ -274,21 +276,30 @@ export default function VideoPage() {
         void generate();
     };
 
-    const downloadVideo = (video: GeneratedVideo) => {
-        saveAs(video.url, "video.mp4");
+    const downloadVideo = async (video: GeneratedVideo) => {
+        let url = video.url;
+        if (video.fileId) {
+            const urlMap = await resolveFileUrls([video.fileId]);
+            if (urlMap.has(video.fileId)) url = urlMap.get(video.fileId)!;
+        }
+        saveAs(url, "video.mp4");
     };
 
     const saveResultToAssets = async (video: GeneratedVideo) => {
-        // Already stored in S3 with a fileId — use it directly
+        let url = video.url;
         if (video.fileId) {
+            const urlMap = await resolveFileUrls([video.fileId]);
+            if (urlMap.has(video.fileId)) url = urlMap.get(video.fileId)!;
+        }
+        if (video.fileId && url) {
             try {
                 await addAsset({
                     kind: "video",
                     title: "生成视频",
-                    coverUrl: video.url,
+                    coverUrl: url,
                     tags: [],
                     source: "视频创作台",
-                    data: { url: video.url, fileId: video.fileId, width: video.width, height: video.height, bytes: video.bytes, mimeType: video.mimeType },
+                    data: { url, fileId: video.fileId, width: video.width, height: video.height, bytes: video.bytes, mimeType: video.mimeType },
                     metadata: { source: "video-page", prompt },
                 });
                 message.success("已加入我的素材");
@@ -361,6 +372,46 @@ export default function VideoPage() {
 
     const saveLog = async (log: GenerationLog) => {
         await logStoreForUser().setItem(log.id, serializeLog(log));
+        // Sync to backend so refreshLogs can find it
+        const user = useUserStore.getState().user;
+        const channelMode = useConfigStore.getState().config.channelMode;
+        // In remote mode the backend proxy already creates a complete generation_tasks
+        // record via LogTaskStart → LogTaskCreated → SyncTaskStatus. Only create/upsert
+        // one in local mode where the frontend calls external APIs directly.
+        if (user?.id && channelMode !== "remote") {
+            try {
+                const status = log.status === "成功" ? "success" : log.status === "失败" ? "failed" : "pending";
+                const result = await recordGenerationTask({
+                    taskType: "video",
+                    provider: "seedance",
+                    model: log.model || "unknown",
+                    status,
+                    credits: 0,
+                    latencyMs: log.durationMs,
+                    upstreamTaskId: log.task?.id || "",
+                    source: "video_workbench",
+                    requestBody: JSON.stringify({
+                        prompt: log.prompt,
+                        model: log.model,
+                        size: log.config.size,
+                        vquality: log.config.vquality,
+                        videoSeconds: log.config.videoSeconds,
+                        genAudio: log.config.videoGenerateAudio,
+                        watermark: log.config.videoWatermark,
+                    }),
+                    responseBody: JSON.stringify({
+                        videoUrl: log.video?.url || "",
+                    }),
+                    metadata: log.video?.fileId ? JSON.stringify({ fileIds: [log.video.fileId] }) : "",
+                    errorMessage: log.status === "失败" ? log.error || "" : "",
+                });
+                // If this is a new record (first saveLog call), update local log id to backend id
+                if (result?.id && log.status === "生成中" && !log.task?.id) {
+                    // Store the backend-assigned id so toGenerationLog can match this log later
+                    // We keep the local nanoid for now; refreshLogs will add the backend version
+                }
+            } catch { /* non-blocking */ }
+        }
         // Sync video task result metadata (fileIds) to backend for presigned URL refresh
         const videos = [log.video].filter(Boolean);
         const fileIds = videos.map((v) => v?.fileId).filter((id): id is string => Boolean(id));
@@ -481,8 +532,18 @@ export default function VideoPage() {
                         bytes: stored.bytes,
                         mimeType: stored.mimeType,
                     };
+                    // Resolve a fresh presigned URL so the result plays immediately
+                    // without a page refresh (uploadUrlToS3 returns a raw S3 public URL
+                    // that may require a proxy for playback).
+                    {
+                        const urlMap = await resolveFileUrls([stored.fileId]);
+                        const resolvedUrl = urlMap.get(stored.fileId);
+                        if (resolvedUrl) nextVideo.url = resolvedUrl;
+                    }
                     setResults([{ id: nextVideo.id, status: "success", video: nextVideo }]);
-                    await saveLog({ ...log, status: "成功", durationMs: nextVideo.durationMs, video: nextVideo, error: undefined });
+                    const completedLog = { ...log, status: "成功" as const, durationMs: nextVideo.durationMs, video: nextVideo, error: undefined };
+                    await saveLog(completedLog);
+                    setLogs((prev) => prev.map((l) => (l.id === log.id ? completedLog : l)));
                     message.success("视频已生成");
                     return;
                 }
@@ -500,7 +561,9 @@ export default function VideoPage() {
             const aborted = abortController.signal.aborted || (error instanceof DOMException && error.name === "AbortError");
             const errorMessage = aborted ? "已取消" : error instanceof Error ? error.message : "生成失败";
             setResults([{ id: log.id, status: "failed", error: errorMessage }]);
-            await saveLog({ ...log, status: "失败", durationMs: Date.now() - log.createdAt, error: errorMessage });
+            const failedLog = { ...log, status: "失败" as const, durationMs: Date.now() - log.createdAt, error: errorMessage };
+            await saveLog(failedLog);
+            setLogs((prev) => prev.map((l) => (l.id === log.id ? failedLog : l)));
             if (!aborted) message.error(errorMessage);
         } finally {
             activeLogIdsRef.current.delete(log.id);
@@ -785,9 +848,15 @@ function GenerationSettings({ config, model, updateConfig, openConfigDialog }: {
 }
 
 function ResultVideoCard({ video, onDownload, onSaveAsset }: { video: GeneratedVideo; onDownload: (video: GeneratedVideo) => void; onSaveAsset: (video: GeneratedVideo) => void }) {
+    const [poster, setPoster] = useState("");
+    useEffect(() => {
+        if (video.url) {
+            getVideoPoster(video.url).then(setPoster).catch(() => {});
+        }
+    }, [video.url]);
     return (
         <div className="overflow-hidden rounded-lg border bg-background">
-            <video src={video.url} controls className="aspect-video w-full bg-black object-contain" />
+            <LazyVideo src={video.url} poster={poster} className="aspect-video w-full object-contain" />
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t px-3 py-2.5">
                 <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
                     <span>
@@ -946,7 +1015,14 @@ async function readStoredLogs() {
 }
 
 async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog> {
-    const video = log.video?.storageKey ? { ...log.video, url: await resolveMediaUrl(log.video.storageKey, log.video.url) } : log.video;
+    // Refresh presigned URLs for S3-backed videos
+    let video = log.video;
+    if (log.video?.fileId) {
+        const urlMap = await resolveFileUrls([log.video.fileId]);
+        video = { ...log.video, url: urlMap.get(log.video.fileId) || log.video.url };
+    } else if (log.video?.storageKey) {
+        video = { ...log.video, url: await resolveMediaUrl(log.video.storageKey, log.video.url) };
+    }
     const videoReferences = await Promise.all(
         (log.videoReferences || []).map(async (item) => ({
             ...item,

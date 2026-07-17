@@ -112,11 +112,12 @@ func RecordGenerationTask(w http.ResponseWriter, r *http.Request) {
 		Metadata       string `json:"metadata"`
 		RequestBody    string `json:"requestBody"`
 		ResponseBody   string `json:"responseBody"`
+		ErrorMessage   string `json:"errorMessage"`
 	}
 	json.NewDecoder(r.Body).Decode(&payload)
 
 	task, err := service.RecordUserTask(user, model.TaskType(payload.TaskType), payload.Source, payload.Provider, payload.Model,
-		model.TaskStatus(payload.Status), payload.Credits, payload.LatencyMs, payload.UpstreamTaskID, payload.RequestBody, payload.ResponseBody)
+		model.TaskStatus(payload.Status), payload.Credits, payload.LatencyMs, payload.UpstreamTaskID, payload.RequestBody, payload.ResponseBody, payload.ErrorMessage)
 	if err != nil {
 		FailError(w, err)
 		return
