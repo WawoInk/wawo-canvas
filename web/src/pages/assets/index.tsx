@@ -190,31 +190,22 @@ export default function AssetsPage() {
 
     const readVideoFile = async (file?: File) => {
         if (!file || !file.type.startsWith("video/")) return;
-        const token = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
-        const parsed = JSON.parse(token);
-        const tokenValue = parsed?.state?.token || "";
-        const authHeader = { Authorization: `Bearer ${tokenValue}` };
-
-        const body = JSON.stringify({ fileType: "videos", fileName: file.name, mimeType: file.type });
-        const presignResp = await fetch("/api/v1/files/upload-url", { method: "POST", body, headers: { ...authHeader, "Content-Type": "application/json" } });
-        const presignJson = await presignResp.json();
-        if (presignJson.code !== 0) throw new Error(presignJson.msg || "获取上传地址失败");
-
-        const { uploadUrl, confirmId } = presignJson.data;
-        const putResp = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
-        if (!putResp.ok) throw new Error("上传到存储失败");
-
-        const confirmResp = await fetch("/api/v1/files/confirm", { method: "POST", body: JSON.stringify({ confirmId, bytes: file.size }), headers: { ...authHeader, "Content-Type": "application/json" } });
-        const confirmJson = await confirmResp.json();
-        if (confirmJson.code !== 0) throw new Error(confirmJson.msg || "确认上传失败");
-
-        const s3Url = confirmJson.data.s3Key;
-        const fileId = confirmJson.data.id;
-        const draft = { url: s3Url, fileId, width: 1280, height: 720, bytes: file.size, mimeType: file.type || "video/mp4" };
-        // ponytail: reuse imageDraft for image/video data; rename to mediaDraft if complexity grows.
-        setImageDraft(draft as unknown as ImageDraft);
-        if (!form.getFieldValue("coverUrl")) form.setFieldValue("coverUrl", s3Url);
-        if (!form.getFieldValue("title")) form.setFieldValue("title", file.name);
+        try {
+            const result = await uploadBlob(file, "videos");
+            const draft: VideoAsset["data"] = {
+                url: result.url,
+                fileId: result.fileId,
+                width: result.width || 1280,
+                height: result.height || 720,
+                bytes: result.bytes,
+                mimeType: result.mimeType || file.type || "video/mp4",
+            };
+            setImageDraft(draft);
+            if (!form.getFieldValue("coverUrl")) form.setFieldValue("coverUrl", result.url);
+            if (!form.getFieldValue("title")) form.setFieldValue("title", file.name);
+        } catch {
+            message.error("视频上传失败，请重试");
+        }
     };
 
     const copyAssetText = async (asset: Asset) => {
