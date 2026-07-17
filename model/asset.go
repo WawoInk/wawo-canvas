@@ -19,8 +19,8 @@ type Asset struct {
 	Category    string    `json:"category"`
 	Description string    `json:"description"`
 	Content     string    `json:"content,omitempty"`
-	URL         string    `json:"url,omitempty"`     // computed: presigned download URL populated on read
-	FileID      string    `json:"fileId,omitempty"`  // references user_files.id for image/video assets
+	URL         string    `json:"url,omitempty"`    // computed: presigned download URL populated on read
+	FileID      string    `json:"fileId,omitempty"` // references user_files.id for image/video assets
 	Width       int       `json:"width,omitempty"`
 	Height      int       `json:"height,omitempty"`
 	Bytes       int64     `json:"bytes,omitempty"`

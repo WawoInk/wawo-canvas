@@ -9,22 +9,7 @@ import { saveAs } from "file-saver";
 import { createAsyncImageTask, createAsyncImageEditTask, pollAsyncImageTask, cancelAsyncImageTask, requestEdit, requestImageQuestion } from "@/services/api/image";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { createVideoGenerationTask, pollVideoGenerationTask, cancelVideoGenerationTask, storeGeneratedVideo } from "@/services/api/video";
-import {
-    buildGenerationCommand,
-    buildShortDramaGenerationSettings,
-    buildVideoGenerationSettings,
-    cancelGeneration,
-    createGeneration,
-    generationErrorFrom,
-    generationTaskId,
-    getGenerationProfiles,
-    readGeneratedVideoFile,
-    readGenerationError,
-    resolveCanvasVideoSubmission,
-    waitForGeneration,
-    type ShortDramaGenerationSettings,
-    type VideoGenerationSettings,
-} from "@/services/api/generations";
+import { cancelGeneration, createGeneration, generationErrorFrom, generationTaskId, getGenerationProfiles, readGeneratedVideoFile, readGenerationError, resolveCanvasVideoSubmission, waitForGeneration } from "@/services/api/generations";
 import { DOCS_URL } from "@/constant/env";
 import { defaultConfig, modelOptionName, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { resolveImageUrl, uploadImage, getImageBlob, type UploadedImage, resolveMediaUrl, type UploadedFile } from "@/services/blob-storage";
@@ -44,6 +29,7 @@ import { NODE_DEFAULT_SIZE, getNodeSpec } from "../constants";
 import { ActiveConnectionPath, ConnectionPath } from "../components/canvas-connections";
 import { CanvasConfigComposer } from "../components/canvas-config-composer";
 import { CanvasConfigNodePanel } from "../components/canvas-config-node-panel";
+import { buildNodeConfig } from "../components/canvas-node-config";
 import { CANVAS_AGENT_PANEL_MOTION_MS, CanvasAssistantPanel } from "../components/canvas-assistant-panel";
 import { CanvasNodeContextMenu } from "../components/canvas-context-menu";
 import { CanvasNodeAngleDialog, type CanvasImageAngleParams } from "../components/canvas-node-angle-dialog";
@@ -55,11 +41,10 @@ import {
     buildNodeGenerationContext,
     buildNodeGenerationInputs,
     buildNodeResponseMessages,
-    buildShortDramaGenerationIntent,
-    buildVideoGenerationIntent,
     cleanShortDramaAssetMappings,
     hydrateNodeGenerationContext,
     locateGenerationError,
+    prepareFirstPartyCanvasVideoRun,
     type NodeGenerationInput,
 } from "../components/canvas-node-generation";
 import { CanvasNodeHoverToolbar, CanvasNodeInfoModal } from "../components/canvas-node-hover-toolbar";
@@ -1869,7 +1854,7 @@ function InfiniteCanvasPage() {
     const maskEditImageNode = useCallback(
         async (node: CanvasNodeData, payload: CanvasImageMaskEditPayload) => {
             if (!node.metadata?.content) return;
-            const generationConfig = { ...buildGenerationConfig(effectiveConfig, node, "image"), count: "1", size: node.metadata?.size || "auto" };
+            const generationConfig = { ...buildNodeConfig(effectiveConfig, defaultConfig, node, "image"), count: "1", size: node.metadata?.size || "auto" };
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
                 return;
@@ -1944,7 +1929,7 @@ function InfiniteCanvasPage() {
     const generateAngleNode = useCallback(
         async (node: CanvasNodeData, params: CanvasImageAngleParams) => {
             if (!node.metadata?.content) return;
-            const generationConfig = { ...buildGenerationConfig(effectiveConfig, node, "image"), count: "1" };
+            const generationConfig = { ...buildNodeConfig(effectiveConfig, defaultConfig, node, "image"), count: "1" };
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
                 return;
@@ -2155,7 +2140,7 @@ function InfiniteCanvasPage() {
     const handleGenerateNode = useCallback(
         async (nodeId: string, mode: CanvasNodeGenerationMode, prompt: string) => {
             const sourceNode = nodesRef.current.find((node) => node.id === nodeId);
-            const generationConfig = buildGenerationConfig(effectiveConfig, sourceNode, mode);
+            const generationConfig = buildNodeConfig(effectiveConfig, defaultConfig, sourceNode, mode);
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
                 return;
@@ -2311,36 +2296,9 @@ function InfiniteCanvasPage() {
                 }
 
                 if (mode === "video") {
-                    const model = modelOptionName(generationConfig.model);
-                    const profile = generationConfig.channelMode === "remote" ? (await getGenerationProfiles()).find((item) => item.id === model) : undefined;
+                    const profiles = generationConfig.channelMode === "remote" ? await getGenerationProfiles() : [];
+                    const profile = generationConfig.channelMode === "remote" ? profiles.find((item) => item.id === generationConfig.model) : undefined;
                     const submission = resolveCanvasVideoSubmission(generationConfig.channelMode, profile);
-                    const isShortDrama = profile?.intents.includes("video.short-drama") === true;
-                    const dramaSettings =
-                        profile && isShortDrama
-                            ? buildShortDramaGenerationSettings(profile, {
-                                  aspectRatio: normalizeSeedanceRatio(generationConfig.size) as ShortDramaGenerationSettings["aspectRatio"],
-                                  resolution: normalizeSeedanceResolution(generationConfig.vquality) as ShortDramaGenerationSettings["resolution"],
-                                  durationSeconds: String(generationConfig.videoSeconds) === "-1" ? "auto" : normalizeSeedanceDuration(generationConfig.videoSeconds),
-                                  quality: generationConfig.quality as ShortDramaGenerationSettings["quality"],
-                              })
-                            : undefined;
-                    const firstPartyIntent = profile
-                        ? isShortDrama
-                            ? buildShortDramaGenerationIntent(nodeId, nodesRef.current, connectionsRef.current, effectivePrompt, dramaSettings!)
-                            : buildVideoGenerationIntent(
-                                  nodeId,
-                                  nodesRef.current,
-                                  connectionsRef.current,
-                                  effectivePrompt,
-                                  buildVideoGenerationSettings(profile, {
-                                      aspectRatio: normalizeSeedanceRatio(generationConfig.size) as VideoGenerationSettings["aspectRatio"],
-                                      resolution: normalizeSeedanceResolution(generationConfig.vquality) as VideoGenerationSettings["resolution"],
-                                      durationSeconds: normalizeSeedanceDuration(generationConfig.videoSeconds),
-                                      generateAudio: boolConfig(generationConfig.videoGenerateAudio, true),
-                                      watermark: boolConfig(generationConfig.videoWatermark, false),
-                                  }),
-                              )
-                        : undefined;
                     const spec = nodeSizeFromRatio(generationConfig.size, NODE_DEFAULT_SIZE[CanvasNodeType.Video].width, NODE_DEFAULT_SIZE[CanvasNodeType.Video].height) || NODE_DEFAULT_SIZE[CanvasNodeType.Video];
                     const isEmptyVideoNode = sourceNode?.type === CanvasNodeType.Video && !sourceNode.metadata?.content;
                     const videoId = isEmptyVideoNode ? nodeId : nanoid();
@@ -2382,15 +2340,11 @@ function InfiniteCanvasPage() {
                     if (!isEmptyVideoNode) setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: nodeId, toNodeId: videoId }]);
                     const controller = startGenerationRequest(videoId, nodeId, nodeId, runController);
                     try {
-                        if (submission === "first-party" && profile && firstPartyIntent) {
-                            const task = await createGeneration(
-                                buildGenerationCommand({
-                                    clientRequestId: nanoid(),
-                                    modelProfileId: profile.id,
-                                    source: "canvas",
-                                    intent: firstPartyIntent,
-                                }),
-                            );
+                        if (submission === "first-party" && profile) {
+                            const clientRequestId = nanoid();
+                            const run = prepareFirstPartyCanvasVideoRun({ nodeId, nodes: nodesRef.current, connections: connectionsRef.current, prompt: effectivePrompt, config: generationConfig, profile, clientRequestId });
+                            setNodes((prev) => prev.map((n) => (n.id === videoId ? { ...n, metadata: { ...n.metadata, ...run.metadata } } : n)));
+                            const task = await createGeneration(run.command);
                             setNodes((prev) =>
                                 prev.map((n) =>
                                     n.id === videoId
@@ -2401,8 +2355,7 @@ function InfiniteCanvasPage() {
                                                   generationTaskId: task.id,
                                                   generationTaskStatus: task.status,
                                                   taskModel: generationConfig.model,
-                                                  generationProfileId: profile.id,
-                                                  generationCancellation: profile.capabilities.cancellation,
+                                                  ...run.metadata,
                                               },
                                           }
                                         : n,
@@ -2570,7 +2523,7 @@ function InfiniteCanvasPage() {
                           size: savedImageMetadata.size || effectiveConfig.size,
                           count: "1",
                       }
-                    : { ...buildGenerationConfig(effectiveConfig, sourceNode, node.type === CanvasNodeType.Text ? "text" : node.type === CanvasNodeType.Video ? "video" : node.type === CanvasNodeType.Audio ? "audio" : "image"), count: "1" };
+                    : { ...buildNodeConfig(effectiveConfig, defaultConfig, sourceNode, node.type === CanvasNodeType.Text ? "text" : node.type === CanvasNodeType.Video ? "video" : node.type === CanvasNodeType.Audio ? "audio" : "image"), count: "1" };
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
                 return;
@@ -2614,38 +2567,14 @@ function InfiniteCanvasPage() {
                     return;
                 }
                 if (node.type === CanvasNodeType.Video) {
-                    const model = modelOptionName(generationConfig.model);
-                    const profile = generationConfig.channelMode === "remote" ? (await getGenerationProfiles()).find((item) => item.id === model) : undefined;
+                    const profiles = generationConfig.channelMode === "remote" ? await getGenerationProfiles() : [];
+                    const profile = generationConfig.channelMode === "remote" ? profiles.find((item) => item.id === generationConfig.model) : undefined;
                     const submission = resolveCanvasVideoSubmission(generationConfig.channelMode, profile);
                     if (submission === "first-party" && profile) {
-                        const isShortDrama = profile.intents.includes("video.short-drama");
-                        const intent = isShortDrama
-                            ? buildShortDramaGenerationIntent(
-                                  node.id,
-                                  nodesRef.current,
-                                  connectionsRef.current,
-                                  prompt,
-                                  buildShortDramaGenerationSettings(profile, {
-                                      aspectRatio: normalizeSeedanceRatio(generationConfig.size) as ShortDramaGenerationSettings["aspectRatio"],
-                                      resolution: normalizeSeedanceResolution(generationConfig.vquality) as ShortDramaGenerationSettings["resolution"],
-                                      durationSeconds: String(generationConfig.videoSeconds) === "-1" ? "auto" : normalizeSeedanceDuration(generationConfig.videoSeconds),
-                                      quality: generationConfig.quality as ShortDramaGenerationSettings["quality"],
-                                  }),
-                              )
-                            : buildVideoGenerationIntent(
-                                  node.id,
-                                  nodesRef.current,
-                                  connectionsRef.current,
-                                  prompt,
-                                  buildVideoGenerationSettings(profile, {
-                                      aspectRatio: normalizeSeedanceRatio(generationConfig.size) as VideoGenerationSettings["aspectRatio"],
-                                      resolution: normalizeSeedanceResolution(generationConfig.vquality) as VideoGenerationSettings["resolution"],
-                                      durationSeconds: normalizeSeedanceDuration(generationConfig.videoSeconds),
-                                      generateAudio: boolConfig(generationConfig.videoGenerateAudio, true),
-                                      watermark: boolConfig(generationConfig.videoWatermark, false),
-                                  }),
-                              );
-                        const task = await createGeneration(buildGenerationCommand({ clientRequestId: nanoid(), modelProfileId: profile.id, source: "canvas", intent }));
+                        const clientRequestId = nanoid();
+                        const run = prepareFirstPartyCanvasVideoRun({ nodeId: node.id, nodes: nodesRef.current, connections: connectionsRef.current, prompt, config: generationConfig, profile, clientRequestId });
+                        setNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, metadata: { ...n.metadata, ...run.metadata } } : n)));
+                        const task = await createGeneration(run.command);
                         setNodes((prev) =>
                             prev.map((n) =>
                                 n.id === node.id
@@ -2656,8 +2585,7 @@ function InfiniteCanvasPage() {
                                               generationTaskId: task.id,
                                               generationTaskStatus: task.status,
                                               taskModel: generationConfig.model,
-                                              generationProfileId: profile.id,
-                                              generationCancellation: profile.capabilities.cancellation,
+                                              ...run.metadata,
                                           },
                                       }
                                     : n,
@@ -3721,25 +3649,6 @@ function getInputSummary(inputs: NodeGenerationInput[]) {
         imageCount: inputs.filter((input) => input.type === "image").length,
         videoCount: inputs.filter((input) => input.type === "video").length,
         audioCount: inputs.filter((input) => input.type === "audio").length,
-    };
-}
-
-function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | undefined, mode: CanvasNodeGenerationMode): AiConfig {
-    const defaultModel = mode === "image" ? config.imageModel : mode === "video" ? config.videoModel : mode === "audio" ? config.audioModel : config.textModel;
-    return {
-        ...config,
-        model: node?.metadata?.model || defaultModel || (mode === "audio" ? defaultConfig.audioModel : config.model || defaultConfig.model),
-        quality: node?.metadata?.quality || config.quality || defaultConfig.quality,
-        size: node?.metadata?.size || config.size || defaultConfig.size,
-        videoSeconds: node?.metadata?.seconds || config.videoSeconds || defaultConfig.videoSeconds,
-        vquality: node?.metadata?.vquality || config.vquality || defaultConfig.vquality,
-        videoGenerateAudio: node?.metadata?.generateAudio || config.videoGenerateAudio || defaultConfig.videoGenerateAudio,
-        videoWatermark: node?.metadata?.watermark || config.videoWatermark || defaultConfig.videoWatermark,
-        audioVoice: node?.metadata?.audioVoice || config.audioVoice || defaultConfig.audioVoice,
-        audioFormat: node?.metadata?.audioFormat || config.audioFormat || defaultConfig.audioFormat,
-        audioSpeed: node?.metadata?.audioSpeed || config.audioSpeed || defaultConfig.audioSpeed,
-        audioInstructions: node?.metadata?.audioInstructions || config.audioInstructions || defaultConfig.audioInstructions,
-        count: String(node?.metadata?.count || (mode === "image" ? config.canvasImageCount || config.count : config.count) || defaultConfig.count),
     };
 }
 

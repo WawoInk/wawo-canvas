@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { cn } from "@/lib/utils";
 import { modelOptionLabel, modelOptionName, selectableModelsByCapability, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
 
+export type ModelPickerOption = { value: string; label: string; disabled?: boolean };
+
 type ModelPickerProps = {
     config: AiConfig;
     value?: string;
@@ -17,14 +19,20 @@ type ModelPickerProps = {
     placeholder?: string;
     onMissingConfig?: () => void;
     disabled?: boolean;
+    options?: ModelPickerOption[];
 };
 
-export function ModelPicker({ config, value, onChange, capability, className, fullWidth = false, placeholder = "选择模型", onMissingConfig, disabled = false }: ModelPickerProps) {
+export function ModelPicker({ config, value, onChange, capability, className, fullWidth = false, placeholder = "选择模型", onMissingConfig, disabled = false, options: explicitOptions }: ModelPickerProps) {
     const pickerId = useId();
     const [open, setOpen] = useState(false);
-    const options = useMemo(
-        () => Array.from(new Set([...(config.channelMode === "local" && !capability ? [value] : []), ...selectableModelsByCapability(config, capability)].filter((model): model is string => Boolean(model)))),
-        [capability, config, value],
+    const options = useMemo<ModelPickerOption[]>(
+        () =>
+            explicitOptions ||
+            Array.from(new Set([...(config.channelMode === "local" && !capability ? [value] : []), ...selectableModelsByCapability(config, capability)].filter((model): model is string => Boolean(model)))).map((model) => ({
+                value: model,
+                label: modelOptionLabel(config, model),
+            })),
+        [capability, config, explicitOptions, value],
     );
     const current = value || "";
 
@@ -58,10 +66,10 @@ export function ModelPicker({ config, value, onChange, capability, className, fu
                 )}
                 onMouseDown={(event) => event.stopPropagation()}
                 onPointerDown={(event) => event.stopPropagation()}
-                title={current ? modelOptionLabel(config, current) : placeholder}
+                title={current ? options.find((option) => option.value === current)?.label || modelOptionLabel(config, current) : placeholder}
             >
                 <ModelIcon model={current} />
-                <span className="canvas-model-picker-text min-w-0 flex-1 truncate text-left">{current ? modelOptionLabel(config, current) : placeholder}</span>
+                <span className="canvas-model-picker-text min-w-0 flex-1 truncate text-left">{current ? options.find((option) => option.value === current)?.label || modelOptionLabel(config, current) : placeholder}</span>
             </SelectTrigger>
             <SelectContent
                 data-canvas-no-zoom
@@ -74,9 +82,12 @@ export function ModelPicker({ config, value, onChange, capability, className, fu
                 onMouseDown={(event) => event.stopPropagation()}
             >
                 {options.length ? (
-                    options.map((model) => (
-                        <SelectItem key={model} value={model} textValue={modelOptionLabel(config, model)}>
-                            <ModelLabel config={config} model={model} />
+                    options.map((option) => (
+                        <SelectItem key={option.value} value={option.value} disabled={option.disabled} textValue={option.label}>
+                            <span className="flex min-w-0 items-center gap-2">
+                                <ModelIcon model={option.value} />
+                                <span className="truncate">{option.label}</span>
+                            </span>
                         </SelectItem>
                     ))
                 ) : (

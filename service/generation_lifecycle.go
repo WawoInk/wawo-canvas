@@ -146,13 +146,64 @@ func resolveGenerationTask(ctx context.Context, task model.GenerationTask, profi
 	if err != nil || isTerminalGenerationStatus(stored.Status) {
 		return err
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if ref.Status == model.TaskStatusSucceeded && strings.TrimSpace(ref.VideoURL) == "" {
 		ref.Status = model.TaskStatusFailed
 		ref.Error = &model.GenerationError{Code: "UPSTREAM_REJECTED", Message: "上游未返回视频结果", Retryable: false}
 	}
-	updates := map[string]any{"status": string(ref.Status), "updated_at": now}
+	if ref.Status == model.TaskStatusSucceeded {
+		resultJSON, materialized, materializeErr := materializeFirstPartyGenerationResult(ctx, task, ref)
+		if materializeErr != nil || !materialized {
+			return materializeErr
+		}
+		return arbitrateGenerationTerminal(task, profile.UpstreamModel, ref, source, resultJSON, true)
+	}
+	return arbitrateGenerationTerminal(task, profile.UpstreamModel, ref, source, "", true)
+}
+
+func materializeFirstPartyGenerationResult(ctx context.Context, task model.GenerationTask, ref ProviderTaskRef) (string, bool, error) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	claimed, err := repository.TransitionGenerationTask(task.ID, []model.TaskStatus{model.TaskStatusQueued, model.TaskStatusRunning}, map[string]any{"status": string(model.TaskStatusPending), "updated_at": now})
+	if err != nil || !claimed {
+		return "", false, err
+	}
+	file, err := generationPersistVideo(ctx, task.UserID, strings.TrimSpace(ref.VideoURL))
+	if err != nil {
+		_ = repository.UpdateGenerationPayloadRawError(task.ID, sanitizeGenerationAuditJSON(fmt.Sprintf("%q", err.Error())))
+		_, releaseErr := repository.TransitionGenerationTask(task.ID, []model.TaskStatus{model.TaskStatusPending}, map[string]any{
+			"status": string(model.TaskStatusRunning), "error_code": "RESULT_PERSIST_FAILED", "error_message": "生成结果暂时无法保存，请稍后重试", "error_retryable": true, "updated_at": now,
+		})
+		return "", false, releaseErr
+	}
+	if file == nil || strings.TrimSpace(file.ID) == "" {
+		ref.Status = model.TaskStatusFailed
+		ref.Error = &model.GenerationError{Code: "RESULT_FILE_MISSING", Message: "生成结果文件保存失败", Retryable: false}
+		return "", true, arbitrateGenerationTerminalFrom(task, task.UpstreamModel, ref, "materialize", "", true, []model.TaskStatus{model.TaskStatusPending})
+	}
+	result := model.FirstPartyGenerationResult{Kind: "video", File: model.GeneratedFile{FileID: file.ID, MimeType: file.MimeType, Bytes: file.Bytes}}
+	if model.GenerationIntentKind(task.IntentKind) == model.IntentVideoShortDrama {
+		result.Kind = "short-drama"
+		for _, shot := range ref.Shots {
+			result.Shots = append(result.Shots, model.GenerationShot{Index: shot.Index, DurationSeconds: shot.DurationSeconds, Status: shot.Status})
+		}
+	}
+	body, err := json.Marshal(result)
+	return string(body), true, err
+}
+
+func arbitrateGenerationTerminal(task model.GenerationTask, modelName string, ref ProviderTaskRef, source, resultJSON string, refund bool) error {
 	from := []model.TaskStatus{model.TaskStatusQueued, model.TaskStatusRunning}
+	if ref.Status == model.TaskStatusSucceeded {
+		from = []model.TaskStatus{model.TaskStatusPending}
+	}
+	return arbitrateGenerationTerminalFrom(task, modelName, ref, source, resultJSON, refund, from)
+}
+
+func arbitrateGenerationTerminalFrom(task model.GenerationTask, modelName string, ref ProviderTaskRef, source, resultJSON string, refund bool, from []model.TaskStatus) error {
+	if ref.Status == model.TaskStatusSuccess {
+		ref.Status = model.TaskStatusSucceeded
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	updates := map[string]any{"status": string(ref.Status), "updated_at": now}
 	var creditLog *model.CreditLog
 	if ref.Status == model.TaskStatusFailed {
 		normalized := ref.Error
@@ -160,35 +211,18 @@ func resolveGenerationTask(ctx context.Context, task model.GenerationTask, profi
 			normalized = &model.GenerationError{Code: "UPSTREAM_REJECTED", Message: "上游拒绝了生成请求", Retryable: false}
 		}
 		updates["error_code"], updates["error_message"], updates["error_retryable"] = normalized.Code, normalized.Message, normalized.Retryable
-		creditLog = generationRefundLog(task, profile.UpstreamModel, now)
+		if refund {
+			creditLog = generationRefundLog(task, modelName, now)
+		}
 	} else if ref.Status == model.TaskStatusCancelled {
-		creditLog = generationRefundLog(task, profile.UpstreamModel, now)
+		if refund {
+			creditLog = generationRefundLog(task, modelName, now)
+		}
 	} else if ref.Status == model.TaskStatusSucceeded {
-		claimed, claimErr := repository.TransitionGenerationTask(task.ID, from, map[string]any{"status": string(model.TaskStatusPending), "updated_at": now})
-		if claimErr != nil || !claimed {
-			return claimErr
-		}
-		file, persistErr := generationPersistVideo(ctx, task.UserID, strings.TrimSpace(ref.VideoURL))
-		if persistErr != nil {
-			_ = repository.UpdateGenerationPayloadRawError(task.ID, sanitizeGenerationAuditJSON(fmt.Sprintf("%q", persistErr.Error())))
-			_, releaseErr := repository.TransitionGenerationTask(task.ID, []model.TaskStatus{model.TaskStatusPending}, map[string]any{
-				"status": string(model.TaskStatusRunning), "error_code": "RESULT_PERSIST_FAILED", "error_message": "生成结果暂时无法保存，请稍后重试", "error_retryable": true, "updated_at": now,
-			})
-			return releaseErr
-		}
-		result := model.FirstPartyGenerationResult{Kind: "video", File: model.GeneratedFile{FileID: file.ID, MimeType: file.MimeType, Bytes: file.Bytes}}
-		if model.GenerationIntentKind(task.IntentKind) == model.IntentVideoShortDrama {
-			result.Kind = "short-drama"
-			for _, shot := range ref.Shots {
-				result.Shots = append(result.Shots, model.GenerationShot{Index: shot.Index, DurationSeconds: shot.DurationSeconds, Status: shot.Status})
-			}
-		}
-		body, _ := json.Marshal(result)
-		updates["result_json"], updates["error_code"], updates["error_message"], updates["error_retryable"] = string(body), "", "", false
-		from = []model.TaskStatus{model.TaskStatusPending}
+		updates["result_json"], updates["error_code"], updates["error_message"], updates["error_retryable"] = resultJSON, "", "", false
 	}
 	event := generationEvent(task.ID, "terminal", source+":"+string(ref.Status), now)
-	_, _, err = repository.TransitionGenerationTaskTerminal(task.ID, from, updates, creditLog, event)
+	_, _, err := repository.TransitionGenerationTaskTerminal(task.ID, from, updates, creditLog, event)
 	return err
 }
 

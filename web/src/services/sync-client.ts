@@ -5,6 +5,7 @@ import { useUserStore } from "@/stores/use-user-store";
 export type Domain = "assets" | "canvas" | "tasks";
 
 type SyncDomainData = {
+    cursor?: string;
     updates: any[];
     deletes: string[];
 };
@@ -17,16 +18,21 @@ type SyncDelta = {
 };
 
 const SYNC_CURSOR_KEY = "infinite-canvas:sync_cursor";
+const CANVAS_CURSOR_KEY = "infinite-canvas:canvas_cursor";
 
 function cursorKey(userId: string): string {
     return `${SYNC_CURSOR_KEY}:${userId}`;
 }
 
+function canvasCursorKey(userId: string): string {
+    return `${CANVAS_CURSOR_KEY}:${userId}`;
+}
+
 class SyncClient {
-    private applyCallbacks: Map<Domain, (data: SyncDomainData) => void> = new Map();
+    private applyCallbacks: Map<Domain, (data: SyncDomainData) => boolean | void> = new Map();
 
     /** 注册各数据域的 delta 应用回调 */
-    onDelta(domain: Domain, callback: (data: SyncDomainData) => void): void {
+    onDelta(domain: Domain, callback: (data: SyncDomainData) => boolean | void): void {
         this.applyCallbacks.set(domain, callback);
     }
 
@@ -54,12 +60,32 @@ class SyncClient {
         }
     }
 
+    async getCanvasCursor(): Promise<string> {
+        const userId = useUserStore.getState().user?.id;
+        if (!userId) return "";
+        try {
+            return (await localforage.getItem<string>(canvasCursorKey(userId))) || "";
+        } catch {
+            return "";
+        }
+    }
+
+    private async setCanvasCursor(cursor: string): Promise<void> {
+        const userId = useUserStore.getState().user?.id;
+        if (!userId) return;
+        try {
+            await localforage.setItem(canvasCursorKey(userId), cursor);
+        } catch {
+            /* IndexedDB 写入失败不影响功能 */
+        }
+    }
+
     /** 重置 cursor（用户切换时调用）*/
     async resetCursor(): Promise<void> {
         const userId = useUserStore.getState().user?.id;
         if (!userId) return;
         try {
-            await localforage.removeItem(cursorKey(userId));
+            await Promise.all([localforage.removeItem(cursorKey(userId)), localforage.removeItem(canvasCursorKey(userId))]);
         } catch {
             /* ignore */
         }
@@ -80,9 +106,10 @@ class SyncClient {
         const token = useUserStore.getState().token;
         if (!userId || !token) return;
 
-        const cursor = await this.getCursor();
+        const [cursor, canvasCursor] = await Promise.all([this.getCursor(), this.getCanvasCursor()]);
         const params = new URLSearchParams();
         if (cursor) params.set("cursor", cursor);
+        if (canvasCursor) params.set("canvasCursor", canvasCursor);
         params.set("domains", domains);
 
         try {
@@ -94,23 +121,27 @@ class SyncClient {
             if (json.code !== 0) return;
 
             const delta = json.data as SyncDelta;
-            this.applyDelta(delta);
+            const accepted = this.applyDelta(delta);
 
-            // 持久化新 cursor
             if (delta.cursor) {
                 await this.setCursor(delta.cursor);
+            }
+            if (accepted.canvas && delta.canvas?.cursor !== undefined) {
+                await this.setCanvasCursor(delta.canvas.cursor);
             }
         } catch {
             /* 网络错误，下次重试 */
         }
     }
 
-    private applyDelta(delta: SyncDelta): void {
+    private applyDelta(delta: SyncDelta): Record<Domain, boolean> {
+        const accepted = { assets: true, canvas: true, tasks: true };
         for (const domain of ["assets", "canvas", "tasks"] as Domain[]) {
             const callback = this.applyCallbacks.get(domain);
             if (!callback) continue;
-            callback(delta[domain]);
+            accepted[domain] = callback(delta[domain]) !== false;
         }
+        return accepted;
     }
 }
 

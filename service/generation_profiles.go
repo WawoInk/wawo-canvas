@@ -173,15 +173,17 @@ func normalizeGenerationSettings(profile model.GenerationProfile, provided model
 }
 
 func ValidateGenerationBindings(settings model.Settings) error {
-	_, err := resolveGenerationProfiles(GenerationProfiles(), normalizePrivateSetting(settings.Private))
+	_, err := resolveGenerationProfiles(GenerationProfiles(), normalizePrivateSetting(settings.Private), settings.Public)
 	return err
 }
 
-func resolveGenerationProfiles(templates []model.GenerationProfile, private model.PrivateSetting) ([]model.GenerationProfile, error) {
+func resolveGenerationProfiles(templates []model.GenerationProfile, private model.PrivateSetting, public model.PublicSetting) ([]model.GenerationProfile, error) {
 	if private.GenerationProfiles == nil {
 		profiles := []model.GenerationProfile{}
 		for _, profile := range templates {
 			if len(modelChannelsForModel(private.Channels, profile.UpstreamModel)) > 0 {
+				profile.Credits = publicModelCost(public, profile.UpstreamModel)
+				profile.HasCredits = true
 				profiles = append(profiles, profile)
 			}
 		}
@@ -199,47 +201,57 @@ func resolveGenerationProfiles(templates []model.GenerationProfile, private mode
 			return nil, safeMessageError{message: fmt.Sprintf("unknown generation profile %q", binding.ProfileID)}
 		}
 		models := generationBindingModels(binding)
-		if len(models) == 0 || (binding.Credits != nil && *binding.Credits < 0) {
-			return nil, safeMessageError{message: fmt.Sprintf("invalid generation profile binding %q", binding.ProfileID)}
+		if len(binding.UpstreamModels) > 1 || len(models) != 1 || binding.ID == "" || (binding.Credits != nil && *binding.Credits < 0) {
+			return nil, safeMessageError{message: fmt.Sprintf("invalid generation profile binding %q", binding.ID)}
 		}
-		for _, upstreamModel := range models {
-			profile := template
-			profile.Capabilities.Settings = maps.Clone(template.Capabilities.Settings)
-			profile.UpstreamModel = upstreamModel
-			profile.ChannelName = strings.TrimSpace(binding.ChannelName)
-			profile.ID = upstreamModel
-			profile.DisplayName = upstreamModel
-			if seen[profile.ID] {
-				return nil, safeMessageError{message: fmt.Sprintf("duplicate generation model binding %q", profile.ID)}
-			}
-			seen[profile.ID] = true
-			if binding.Credits != nil {
-				profile.Credits = intPtr(*binding.Credits)
-			}
-			channels := modelChannelsForModel(private.Channels, profile.UpstreamModel)
-			if binding.ChannelName != "" {
-				channels = channels[:0]
-				for _, channel := range modelChannelsForModel(private.Channels, profile.UpstreamModel) {
-					if channel.Name == binding.ChannelName {
-						channels = append(channels, channel)
-					}
+		upstreamModel := models[0]
+		profile := template
+		profile.Capabilities.Settings = maps.Clone(template.Capabilities.Settings)
+		profile.UpstreamModel = upstreamModel
+		profile.ChannelName = strings.TrimSpace(binding.ChannelName)
+		profile.ID = binding.ID
+		profile.DisplayName = binding.ID
+		if seen[profile.ID] {
+			return nil, safeMessageError{message: fmt.Sprintf("duplicate generation profile binding %q", profile.ID)}
+		}
+		seen[profile.ID] = true
+		profile.Credits = publicModelCost(public, upstreamModel)
+		profile.HasCredits = true
+		if binding.Credits != nil {
+			profile.Credits = *binding.Credits
+		}
+		channels := modelChannelsForModel(private.Channels, profile.UpstreamModel)
+		if binding.ChannelName != "" {
+			channels = channels[:0]
+			for _, channel := range modelChannelsForModel(private.Channels, profile.UpstreamModel) {
+				if channel.Name == binding.ChannelName {
+					channels = append(channels, channel)
 				}
 			}
-			if len(channels) == 0 {
-				return nil, safeMessageError{message: fmt.Sprintf("generation profile %q model %q has no enabled channel binding", binding.ProfileID, upstreamModel)}
-			}
-			if max := binding.LimitOverrides.DurationSecondsMax; max != nil {
-				definition := profile.Capabilities.Settings["durationSeconds"]
-				if definition.Min == nil || definition.Max == nil || *max < *definition.Min || *max > *definition.Max {
-					return nil, safeMessageError{message: fmt.Sprintf("generation profile %q has an unsafe duration limit override", binding.ProfileID)}
-				}
-				definition.Max = intPtr(*max)
-				profile.Capabilities.Settings["durationSeconds"] = definition
-			}
-			profiles = append(profiles, profile)
 		}
+		if len(channels) == 0 {
+			return nil, safeMessageError{message: fmt.Sprintf("generation profile %q model %q has no enabled channel binding", binding.ID, upstreamModel)}
+		}
+		if max := binding.LimitOverrides.DurationSecondsMax; max != nil {
+			definition := profile.Capabilities.Settings["durationSeconds"]
+			if definition.Min == nil || definition.Max == nil || *max < *definition.Min || *max > *definition.Max {
+				return nil, safeMessageError{message: fmt.Sprintf("generation profile %q has an unsafe duration limit override", binding.ID)}
+			}
+			definition.Max = intPtr(*max)
+			profile.Capabilities.Settings["durationSeconds"] = definition
+		}
+		profiles = append(profiles, profile)
 	}
 	return profiles, nil
+}
+
+func publicModelCost(public model.PublicSetting, modelName string) int {
+	for _, cost := range normalizePublicSetting(public).ModelChannel.ModelCosts {
+		if cost.Model == modelName {
+			return cost.Credits
+		}
+	}
+	return 0
 }
 
 func AvailableGenerationProfiles() ([]model.GenerationProfile, error) {
@@ -247,7 +259,7 @@ func AvailableGenerationProfiles() ([]model.GenerationProfile, error) {
 	if err != nil {
 		return nil, err
 	}
-	return resolveGenerationProfiles(GenerationProfiles(), normalizePrivateSetting(settings.Private))
+	return resolveGenerationProfiles(GenerationProfiles(), normalizePrivateSetting(settings.Private), settings.Public)
 }
 
 func ValidateStoredGenerationBindings() error {

@@ -33,8 +33,18 @@ export type GenerationError = {
     resourceId?: string;
 };
 
-export async function getGenerationProfiles() {
-    return apiGet<GenerationProfile[]>("/api/v1/model-profiles", undefined, useUserStore.getState().token);
+let profileCatalog: { token: string; promise: Promise<GenerationProfile[]> } | null = null;
+
+export function getGenerationProfiles() {
+    const token = useUserStore.getState().token || "";
+    if (!profileCatalog || profileCatalog.token !== token) {
+        profileCatalog = { token, promise: apiGet<GenerationProfile[]>("/api/v1/model-profiles", undefined, token) };
+    }
+    return profileCatalog.promise;
+}
+
+export function findGenerationProfile(profiles: GenerationProfile[], id?: string) {
+    return profiles.find((profile) => profile.id === id);
 }
 
 export async function createGeneration(command: GenerationCommand) {

@@ -90,9 +90,7 @@ export default function AssetsPage() {
     // Refresh presigned URLs for all S3-backed assets on mount (after IndexedDB rehydration)
     useEffect(() => {
         if (!hydrated) return;
-        const fileIds = assets
-            .filter((a): a is Asset & { data: ImageAsset["data"] | VideoAsset["data"] } => (a.kind === "image" || a.kind === "video") && Boolean(a.data.fileId))
-            .map((a) => a.data.fileId!);
+        const fileIds = assets.filter((a): a is Asset & { data: ImageAsset["data"] | VideoAsset["data"] } => (a.kind === "image" || a.kind === "video") && Boolean(a.data.fileId)).map((a) => a.data.fileId!);
         if (fileIds.length) void refreshAssetUrls(fileIds);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [hydrated]);
@@ -133,7 +131,7 @@ export default function AssetsPage() {
         const values = await form.validateFields();
         const base = {
             title: values.title.trim(),
-            coverUrl: values.coverUrl?.trim() || (values.kind !== "text" && imageDraft ? (imageDraft as Record<string, unknown>).dataUrl as string || (imageDraft as Record<string, unknown>).url as string || "" : ""),
+            coverUrl: values.coverUrl?.trim() || (values.kind !== "text" && imageDraft ? ((imageDraft as Record<string, unknown>).dataUrl as string) || ((imageDraft as Record<string, unknown>).url as string) || "" : ""),
             tags: values.tags || [],
             source: values.source?.trim(),
             note: values.note?.trim(),

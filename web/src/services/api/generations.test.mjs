@@ -146,6 +146,8 @@ test("reads only normalized platform video results", () => {
         fileId: "file-2",
         mimeType: "video/mp4",
     });
+    assert.equal(readGeneratedVideoFile({ kind: "video", file: { fileId: "", mimeType: "video/mp4" } }), null);
+    assert.equal(readGeneratedVideoFile({ kind: "video", file: { fileId: "   ", mimeType: "video/mp4" } }), null);
     assert.equal(readGeneratedVideoFile({ videoUrl: "https://provider.example/signed.mp4" }), null);
     assert.equal(readGeneratedVideoFile({ content: { video_url: "https://provider.example/raw.mp4" } }), null);
 });

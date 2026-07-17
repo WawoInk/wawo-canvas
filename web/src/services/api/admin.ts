@@ -261,9 +261,10 @@ export type AdminPublicSettings = {
 };
 
 export type AdminGenerationProfileBinding = {
+    id: string;
     profileId: string;
-    upstreamModel?: string;
-    upstreamModels: string[];
+    upstreamModel: string;
+    upstreamModels?: string[];
     channelName: string;
     credits?: number;
     enabled: boolean;

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/basketikun/infinite-canvas/model"
+	"github.com/basketikun/infinite-canvas/repository"
 )
 
 // ProxyAIRequest 处理 POST 类 AI 代理请求：选渠道、扣算力点、转发上游、失败返还。
@@ -528,19 +529,16 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 		}
 	}
 
-	// ── 生成任务日志：开始 ──
+	// ── 兼容任务：记录与预扣必须同一事务 ──
 	taskType := DetermineTaskType(path)
 	provider := DetermineProvider(channel)
-	genTaskID, _ := LogTaskStart(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers), DetermineSource(r), "")
-	// Expose generation task ID to frontend for metadata enrichment
-	w.Header().Set("X-Generation-Task-Id", genTaskID)
-	startTime := time.Now()
-
-	if err := ConsumeUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
-		LogTaskFailure(genTaskID, "INSUFFICIENT_CREDITS", err.Error(), "", time.Since(startTime).Milliseconds(), credits)
+	genTaskID, err := StartCompatibilityTask(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers), DetermineSource(r), credits, path)
+	if err != nil {
 		proxyFailError(w, err)
 		return
 	}
+	w.Header().Set("X-Generation-Task-Id", genTaskID)
+	startTime := time.Now()
 	proxyCopyAIResponse(w, request,
 		func() {
 			if err := RefundUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
@@ -551,16 +549,29 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 			latencyMs := time.Since(startTime).Milliseconds()
 			upstreamTaskID := ExtractUpstreamTaskID(respBody)
 			proxyAILogf("video task created: genTaskID=%s upstreamTaskID=%s latency=%dms", genTaskID, upstreamTaskID, latencyMs)
-			// Async task — created but still running; poll to completion
+			profile, durable := compatibilityProfileForModel(modelName)
+			if upstreamTaskID == "" {
+				if err := RefundUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
+					proxyAILogf("video task missing-id refund failed: task=%s err=%v", genTaskID, err)
+				}
+				LogTaskFailure(genTaskID, "UPSTREAM_REJECTED", "上游返回了无效任务", "upstream task id is missing", latencyMs, credits)
+				return
+			}
+			if durable {
+				if err := repository.QueueAcceptedCompatibilityTask(genTaskID, upstreamTaskID, channel.Name, profile.AdapterKey, profile.ID, profile.Version, modelName, string(respBody), respHeaders, latencyMs, time.Now().UTC()); err != nil {
+					proxyAILogf("video task queue durable observation failed: task=%s err=%v", genTaskID, err)
+					if refundErr := RefundUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); refundErr != nil {
+						proxyAILogf("video task queue refund failed: task=%s err=%v", genTaskID, refundErr)
+					}
+					LogTaskFailure(genTaskID, "TASK_QUEUE_FAILED", err.Error(), err.Error(), latencyMs, credits)
+				}
+				return
+			}
 			LogTaskCreated(genTaskID, upstreamTaskID, latencyMs, credits)
-			// ── 视频任务所有权映射 ──
 			if upstreamTaskID != "" {
 				if err := SaveVideoTask(user.ID, upstreamTaskID, modelName); err != nil {
 					proxyAILogf("video task save ownership failed: user=%s task=%s err=%v", user.ID, upstreamTaskID, err)
 				}
-			}
-			// ── 启动异步状态同步 ──
-			if upstreamTaskID != "" {
 				syncCfg := DefaultTaskSyncConfig()
 				syncCfg.GenTaskID = genTaskID
 				syncCfg.UpstreamTaskID = upstreamTaskID
@@ -626,12 +637,15 @@ func ProxyVideoTaskDelete(w http.ResponseWriter, r *http.Request, path string) {
 
 	proxyCopyAIResponse(w, request, nil,
 		func(_ []byte, _ string) {
-			// ── 取消异步状态同步 ──
-			if genTaskID, err := getGenerationTaskByUpstreamTaskID(upstreamTaskID); err == nil && genTaskID != "" {
-				LogTaskCancelled(genTaskID)
+			if task, err := repository.GetGenerationTaskByUpstreamTaskIDAndUser(upstreamTaskID, user.ID); err == nil {
+				ref := ProviderTaskRef{ID: upstreamTaskID, Status: model.TaskStatusCancelled}
+				if err := arbitrateGenerationTerminalFrom(task, task.Model, ref, "compatibility-cancel", "", false, []model.TaskStatus{model.TaskStatusQueued, model.TaskStatusRunning}); err != nil {
+					proxyAILogf("video task cancel arbitration failed: upstreamTask=%s err=%v", upstreamTaskID, err)
+				}
+				CancelTaskSync(task.ID)
+			} else if genTaskID, legacyErr := getGenerationTaskByUpstreamTaskID(upstreamTaskID); legacyErr == nil && genTaskID != "" {
+				OnTaskCompleted(genTaskID, model.TaskStatusCancelled, TaskResult{})
 				CancelTaskSync(genTaskID)
-			} else if err != nil {
-				proxyAILogf("video task cancel-sync lookup failed: upstreamTask=%s err=%v", upstreamTaskID, err)
 			}
 		},
 		nil,
@@ -647,5 +661,8 @@ func SaveVideoTask(userID, taskID, modelName string) error {
 
 // GetVideoTaskByTaskIDAndUser 校验用户是否拥有该视频任务。
 func GetVideoTaskByTaskIDAndUser(taskID, userID string) (*model.VideoTask, error) {
+	if task, err := repository.GetGenerationTaskByUpstreamTaskIDAndUser(taskID, userID); err == nil {
+		return &model.VideoTask{UserID: task.UserID, TaskID: task.UpstreamTaskID, Model: task.Model, CreatedAt: task.CreatedAt}, nil
+	}
 	return getVideoTaskByTaskIDAndUser(taskID, userID)
 }

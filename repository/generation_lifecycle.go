@@ -2,11 +2,37 @@ package repository
 
 import (
 	"errors"
+	"time"
 
 	"github.com/basketikun/infinite-canvas/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+func QueueAcceptedCompatibilityTask(id, upstreamTaskID, channelName, adapterKey, profileID string, profileVersion int, upstreamModel, responseBody, responseHeaders string, latencyMs int64, now time.Time) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	stamp := now.UTC().Format(time.RFC3339Nano)
+	return db.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&model.GenerationTask{}).Where("id = ? AND status = ? AND command_version = 0", id, model.TaskStatusRunning).Updates(map[string]any{
+			"upstream_task_id": upstreamTaskID, "channel_id": channelName, "adapter_key": adapterKey, "model_profile_id": profileID,
+			"profile_version": profileVersion, "upstream_model": upstreamModel, "latency_ms": latencyMs,
+			"status": string(model.TaskStatusQueued), "queue_available_at": stamp, "updated_at": stamp,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return errors.New("compatibility task is not claimable")
+		}
+		if err := tx.Model(&model.GenerationPayload{}).Where("task_id = ?", id).Updates(map[string]any{"response_body": responseBody, "response_headers": responseHeaders}).Error; err != nil {
+			return err
+		}
+		return tx.Create(&model.GenerationTaskEvent{ID: "genevent-" + id + "-accepted", TaskID: id, Type: "accepted", Detail: upstreamTaskID, CreatedAt: stamp}).Error
+	})
+}
 
 func SaveGenerationTaskEvent(event model.GenerationTaskEvent) error {
 	db, err := DB()
@@ -50,6 +76,8 @@ func TransitionGenerationTaskTerminal(id string, from []model.TaskStatus, update
 		if !generationStatusAllowed(task.Status, from) {
 			return nil
 		}
+		updates["worker_lease_owner"] = ""
+		updates["worker_lease_expires_at"] = ""
 		result := tx.Model(&model.GenerationTask{}).Where("id = ? AND status = ?", id, task.Status).Updates(updates)
 		if result.Error != nil || result.RowsAffected == 0 {
 			return result.Error

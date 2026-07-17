@@ -410,7 +410,9 @@ export default function VideoPage() {
                     // Store the backend-assigned id so toGenerationLog can match this log later
                     // We keep the local nanoid for now; refreshLogs will add the backend version
                 }
-            } catch { /* non-blocking */ }
+            } catch {
+                /* non-blocking */
+            }
         }
         // Sync video task result metadata (fileIds) to backend for presigned URL refresh
         const videos = [log.video].filter(Boolean);
@@ -851,7 +853,9 @@ function ResultVideoCard({ video, onDownload, onSaveAsset }: { video: GeneratedV
     const [poster, setPoster] = useState("");
     useEffect(() => {
         if (video.url) {
-            getVideoPoster(video.url).then(setPoster).catch(() => {});
+            getVideoPoster(video.url)
+                .then(setPoster)
+                .catch(() => {});
         }
     }, [video.url]);
     return (

@@ -4,15 +4,16 @@ import { useEffect, useState } from "react";
 import { ArrowUp, LoaderCircle, Square } from "lucide-react";
 import { Button } from "antd";
 
-import { ModelPicker } from "@/components/model-picker";
-import { getGenerationProfiles, type GenerationProfile, type ShortDramaAssetRole } from "@/services/api/generations";
-import { defaultConfig, modelOptionName, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
+import { ModelPicker, type ModelPickerOption } from "@/components/model-picker";
+import { findGenerationProfile, getGenerationProfiles, type GenerationProfile, type ShortDramaAssetRole } from "@/services/api/generations";
+import { defaultConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { CreditSymbol, requestCreditCost } from "@/constant/credits";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
 import { CanvasPromptLibrary } from "./canvas-prompt-library";
-import { CanvasAudioSettingsPopover, type CanvasAudioSettingKey } from "./canvas-audio-settings-popover";
+import { CanvasAudioSettingsPopover } from "./canvas-audio-settings-popover";
+import { audioConfigPatch, buildNodeConfig, videoConfigPatch } from "./canvas-node-config";
 import { CanvasResourceMentionTextarea } from "./canvas-resource-mention-textarea";
 import { CanvasVideoSettingsPopover } from "./canvas-video-settings-popover";
 import { CanvasNodeType, type CanvasGenerationMode, type CanvasNodeData } from "../types";
@@ -40,23 +41,30 @@ export function CanvasNodePromptPanel({ node, isRunning, canResume = false, onPr
     const publicSettings = useConfigStore((state) => state.publicSettings);
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const mode = defaultMode(node.type);
-    const config = buildNodeConfig(globalConfig, node, mode);
+    const config = buildNodeConfig(globalConfig, defaultConfig, node, mode);
     const hasTextContent = node.type === CanvasNodeType.Text && Boolean(node.metadata?.content?.trim());
     const hasImageContent = node.type === CanvasNodeType.Image && Boolean(node.metadata?.content);
     const isEditingExistingContent = hasTextContent || hasImageContent;
     const [prompt, setPrompt] = useState(isEditingExistingContent ? "" : node.metadata?.prompt || "");
-    const [profile, setProfile] = useState<GenerationProfile | null>(null);
-    const credits = requestCreditCost({ channelMode: config.channelMode, model: config.model, count: mode === "image" ? config.count : 1, modelCosts: publicSettings?.modelChannel.modelCosts });
+    const [profiles, setProfiles] = useState<GenerationProfile[]>([]);
+    const profile = findGenerationProfile(profiles, config.model || config.videoModel);
+    const unresolvedVideoProfile = mode === "video" && config.channelMode === "remote" && Boolean(config.model) && !profile;
+    const profileOptions: ModelPickerOption[] = profiles.map((item) => ({ value: item.id, label: item.displayName }));
+    if (unresolvedVideoProfile) profileOptions.unshift({ value: config.model, label: `旧模型：${config.model}（请重新选择）`, disabled: true });
+    const credits =
+        mode === "video" && config.channelMode === "remote"
+            ? profile?.credits || 0
+            : requestCreditCost({ channelMode: config.channelMode, model: config.model, count: mode === "image" ? config.count : 1, modelCosts: publicSettings?.modelChannel.modelCosts });
 
     useEffect(() => {
         if (mode !== "video") return;
         let active = true;
         void getGenerationProfiles()
-            .then((profiles) => {
-                if (active) setProfile(profiles.find((item) => item.id === modelOptionName(config.model || config.videoModel)) || null);
+            .then((items) => {
+                if (active) setProfiles(items);
             })
             .catch(() => {
-                if (active) setProfile(null);
+                if (active) setProfiles([]);
             });
         return () => {
             active = false;
@@ -148,7 +156,14 @@ export function CanvasNodePromptPanel({ node, isRunning, canResume = false, onPr
                         </>
                     ) : mode === "video" ? (
                         <>
-                            <ModelPicker config={config} value={config.model} onChange={(model) => onConfigChange(node.id, { model })} capability="video" onMissingConfig={() => openConfigDialog(true)} />
+                            <ModelPicker
+                                config={config}
+                                value={config.model}
+                                options={config.channelMode === "remote" ? profileOptions : undefined}
+                                onChange={(model) => onConfigChange(node.id, { model })}
+                                capability="video"
+                                onMissingConfig={() => openConfigDialog(true)}
+                            />
                             <CanvasVideoSettingsPopover
                                 config={config}
                                 buttonClassName="!h-10 !max-w-[170px] !justify-start !rounded-full !px-3"
@@ -179,7 +194,7 @@ export function CanvasNodePromptPanel({ node, isRunning, canResume = false, onPr
                     type="primary"
                     className="!h-10 !min-w-16 shrink-0 !rounded-full !px-3"
                     danger={isRunning}
-                    disabled={canResume || (!isRunning && !prompt.trim())}
+                    disabled={canResume || unresolvedVideoProfile || (!isRunning && !prompt.trim())}
                     onClick={() => (isRunning ? onStop(node.id) : submit())}
                     aria-label={isRunning ? "停止等待" : "生成"}
                 >
@@ -210,25 +225,6 @@ function defaultMode(type: CanvasNodeData["type"]): CanvasNodeGenerationMode {
     return type === CanvasNodeType.Text ? "text" : type === CanvasNodeType.Video ? "video" : type === CanvasNodeType.Audio ? "audio" : "image";
 }
 
-function buildNodeConfig(globalConfig: AiConfig, node: CanvasNodeData, mode: CanvasNodeGenerationMode): AiConfig {
-    const defaultModel = mode === "image" ? globalConfig.imageModel : mode === "video" ? globalConfig.videoModel : mode === "audio" ? globalConfig.audioModel : globalConfig.textModel;
-    return {
-        ...globalConfig,
-        model: node.metadata?.model || defaultModel || (mode === "audio" ? defaultConfig.audioModel : globalConfig.model || defaultConfig.model),
-        quality: node.metadata?.quality || globalConfig.quality || defaultConfig.quality,
-        size: node.metadata?.size || globalConfig.size || defaultConfig.size,
-        videoSeconds: node.metadata?.seconds || globalConfig.videoSeconds || defaultConfig.videoSeconds,
-        vquality: node.metadata?.vquality || globalConfig.vquality || defaultConfig.vquality,
-        videoGenerateAudio: node.metadata?.generateAudio || globalConfig.videoGenerateAudio || defaultConfig.videoGenerateAudio,
-        videoWatermark: node.metadata?.watermark || globalConfig.videoWatermark || defaultConfig.videoWatermark,
-        audioVoice: node.metadata?.audioVoice || globalConfig.audioVoice || defaultConfig.audioVoice,
-        audioFormat: node.metadata?.audioFormat || globalConfig.audioFormat || defaultConfig.audioFormat,
-        audioSpeed: node.metadata?.audioSpeed || globalConfig.audioSpeed || defaultConfig.audioSpeed,
-        audioInstructions: node.metadata?.audioInstructions || globalConfig.audioInstructions || defaultConfig.audioInstructions,
-        count: String(node.metadata?.count || (mode === "image" ? globalConfig.canvasImageCount || globalConfig.count : globalConfig.count) || defaultConfig.count),
-    };
-}
-
 function promptPlaceholder(mode: CanvasNodeGenerationMode, hasImageContent: boolean, hasTextContent: boolean) {
     if (mode === "video") return "描述要生成的视频内容";
     if (mode === "audio") return "描述要生成的音频内容";
@@ -240,18 +236,4 @@ function roleLabel(role: ShortDramaAssetRole) {
     if (role === "character") return "角色";
     if (role === "scene") return "场景";
     return "道具";
-}
-
-function videoConfigPatch(key: keyof AiConfig, value: string) {
-    if (key === "videoSeconds") return { seconds: value };
-    if (key === "videoGenerateAudio") return { generateAudio: value };
-    if (key === "videoWatermark") return { watermark: value };
-    return { [key]: value };
-}
-
-function audioConfigPatch(key: CanvasAudioSettingKey, value: string) {
-    if (key === "audioVoice") return { audioVoice: value };
-    if (key === "audioFormat") return { audioFormat: value };
-    if (key === "audioSpeed") return { audioSpeed: value };
-    return { audioInstructions: value };
 }

@@ -129,6 +129,32 @@ func TestSucceededWithoutVideoURLFailsAndSettlesOnce(t *testing.T) {
 	}
 }
 
+func TestSucceededWithMissingPersistedFileIDFailsAndSettlesOnce(t *testing.T) {
+	profile := lifecycleProfile("missing-file-id", []string{"poll"}, false)
+	restore := useLifecycleTestAdapter(profile, lifecycleFakeAdapter{})
+	defer restore()
+	previousPersist := generationPersistVideo
+	defer func() { generationPersistVideo = previousPersist }()
+	generationPersistVideo = func(context.Context, string, string) (*model.UserFile, error) {
+		return &model.UserFile{MimeType: "video/mp4"}, nil
+	}
+	task := createLifecycleTask(t, profile, model.TaskStatusRunning, "provider-missing-file-id", 2)
+
+	ref := ProviderTaskRef{ID: task.UpstreamTaskID, Status: model.TaskStatusSucceeded, VideoURL: "https://example.com/video.mp4"}
+	if err := resolveGenerationTask(context.Background(), task, profile, ref, "poll"); err != nil {
+		t.Fatalf("resolve generation: %v", err)
+	}
+
+	stored, err := repository.GetGenerationTaskByID(task.ID)
+	if err != nil || stored.Status != model.TaskStatusFailed || stored.ErrorCode != "RESULT_FILE_MISSING" || stored.ResultJSON != "" || stored.WorkerLeaseOwner != "" || stored.WorkerLeaseExpiresAt != "" {
+		t.Fatalf("stored=%#v err=%v", stored, err)
+	}
+	user, ok, err := repository.GetUserByID(task.UserID)
+	if err != nil || !ok || user.Credits != task.Credits {
+		t.Fatalf("user=%#v ok=%v err=%v", user, ok, err)
+	}
+}
+
 func TestGenerationProgressCannotReopenSettlementOrTerminalTask(t *testing.T) {
 	profile := lifecycleProfile("progress-guard", []string{"poll"}, false)
 	restore := useLifecycleTestAdapter(profile, lifecycleFakeAdapter{})

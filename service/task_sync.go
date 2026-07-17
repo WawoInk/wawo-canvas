@@ -54,7 +54,7 @@ func DefaultTaskSyncConfig() TaskSyncConfig {
 }
 
 var (
-	taskSyncCancels    sync.Map         // genTaskID -> context.CancelFunc
+	taskSyncCancels    sync.Map // genTaskID -> context.CancelFunc
 	upstreamHTTPClient = &http.Client{Timeout: 30 * time.Second}
 )
 
@@ -208,24 +208,23 @@ func mapArkStatusToModel(status string) model.TaskStatus {
 	}
 }
 
-// OnTaskCompleted 统一终态回写。
+// OnTaskCompleted routes legacy observations through the shared terminal arbiter.
 func OnTaskCompleted(genTaskID string, status model.TaskStatus, result TaskResult) {
-	now := time.Now().Format(time.RFC3339)
-	updates := map[string]any{
-		"status":     string(status),
-		"updated_at": now,
+	task, err := repository.GetGenerationTaskByID(genTaskID)
+	if err != nil {
+		log.Printf("task_sync: load failed: genTask=%s err=%v", genTaskID, err)
+		return
 	}
-	if result.ErrorCode != "" {
-		updates["error_code"] = result.ErrorCode
-		updates["error_message"] = result.ErrorMessage
-	}
-	if err := repository.UpdateGenerationTask(genTaskID, updates); err != nil {
-		log.Printf("task_sync: update failed: genTask=%s err=%v", genTaskID, err)
-	}
-
 	if result.ResponseBody != "" {
 		if err := repository.UpdateGenerationPayload(genTaskID, result.ResponseBody, result.ResponseHeaders); err != nil {
 			log.Printf("task_sync: update payload failed: genTask=%s err=%v", genTaskID, err)
 		}
+	}
+	ref := ProviderTaskRef{ID: task.UpstreamTaskID, Status: status}
+	if result.ErrorCode != "" {
+		ref.Error = &model.GenerationError{Code: result.ErrorCode, Message: result.ErrorMessage, Retryable: false}
+	}
+	if err := arbitrateGenerationTerminalFrom(task, task.Model, ref, "legacy", "", false, []model.TaskStatus{model.TaskStatusRunning}); err != nil {
+		log.Printf("task_sync: terminal arbitration failed: genTask=%s err=%v", genTaskID, err)
 	}
 }

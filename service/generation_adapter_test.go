@@ -121,7 +121,7 @@ func TestCreateGenerationUsesOperationalBindingRouteAndPrice(t *testing.T) {
 		generationDispatch = previousDispatch
 	}()
 	credits := 0
-	profile := model.GenerationProfile{ID: "stable-seedance", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "vendor-seedance", ChannelName: "bound-channel", Credits: &credits, Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}
+	profile := model.GenerationProfile{ID: "stable-seedance", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "vendor-seedance", ChannelName: "bound-channel", Credits: credits, HasCredits: true, Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}
 	generationProfiles = func() []model.GenerationProfile { return []model.GenerationProfile{profile} }
 	generationChannel = func(string) (model.ModelChannel, error) { return model.ModelChannel{}, errors.New("random route used") }
 	generationCost = func(string) (int, error) { return 0, errors.New("legacy price used") }

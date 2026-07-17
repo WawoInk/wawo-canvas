@@ -47,7 +47,7 @@ func TestGenerationHTTPSeam(t *testing.T) {
 	})
 	channelName := settings.Private.Channels[len(settings.Private.Channels)-1].Name
 	settings.Private.GenerationProfiles = []model.GenerationProfileBinding{{
-		ProfileID: "seedance-1-5-pro", UpstreamModel: "seedance-1-5-pro", ChannelName: channelName, Credits: &zero, Enabled: true,
+		ID: "seedance-1-5-pro", ProfileID: "seedance-1-5-pro", UpstreamModel: "seedance-1-5-pro", ChannelName: channelName, Credits: &zero, Enabled: true,
 	}}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := repository.SaveSettings(settings, now); err != nil {

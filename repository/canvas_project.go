@@ -1,7 +1,10 @@
 package repository
 
 import (
+	"time"
+
 	"github.com/basketikun/infinite-canvas/model"
+	"gorm.io/gorm"
 )
 
 // ListCanvasProjects 查询用户的所有画布项目。
@@ -38,26 +41,26 @@ func GetCanvasProjectByIDAndUser(id, userID string) (model.CanvasProject, error)
 }
 
 // CreateCanvasProject 创建画布项目。
-func CreateCanvasProject(project model.CanvasProject) error {
+func CreateCanvasProject(project *model.CanvasProject) error {
 	db, err := DB()
 	if err != nil {
 		return err
 	}
-	return db.Create(&project).Error
+	return db.Create(project).Error
 }
 
-// UpdateCanvasProjectWithLock 使用乐观锁更新画布项目。expectedUpdatedAt 必须匹配
-// 当前 updated_at，否则返回 ErrConflict。同时递增 version 并更新 updated_at。
-func UpdateCanvasProjectWithLock(id, userID string, projectJSON string, version int, expectedUpdatedAt, newUpdatedAt string) error {
+// UpdateCanvasProjectWithLock 使用 revision 乐观锁更新画布项目。
+func UpdateCanvasProjectWithLock(id, userID, projectJSON string, expectedRevision uint64, newUpdatedAt string) error {
 	db, err := DB()
 	if err != nil {
 		return err
 	}
 	result := db.Model(&model.CanvasProject{}).
-		Where("id = ? AND user_id = ? AND updated_at = ?", id, userID, expectedUpdatedAt).
+		Where("id = ? AND user_id = ? AND revision = ?", id, userID, expectedRevision).
 		Updates(map[string]any{
 			"project_json": projectJSON,
-			"version":      version,
+			"version":      gorm.Expr("version + 1"),
+			"revision":     gorm.Expr("nextval('canvas_revision_seq')"),
 			"updated_at":   newUpdatedAt,
 		})
 	if result.Error != nil {
@@ -69,11 +72,24 @@ func UpdateCanvasProjectWithLock(id, userID string, projectJSON string, version 
 	return nil
 }
 
-// DeleteCanvasProject 删除画布项目（需校验所有权）。
-func DeleteCanvasProject(id, userID string) error {
+// DeleteCanvasProject deletes a canvas and records its tombstone atomically.
+func DeleteCanvasProject(id, userID string, deletedAt time.Time) error {
 	db, err := DB()
 	if err != nil {
 		return err
 	}
-	return db.Where("id = ? AND user_id = ?", id, userID).Delete(&model.CanvasProject{}).Error
+	return db.Transaction(func(tx *gorm.DB) error {
+		var revision uint64
+		if err := tx.Raw("SELECT nextval('canvas_revision_seq')").Scan(&revision).Error; err != nil {
+			return err
+		}
+		result := tx.Where("id = ? AND user_id = ?", id, userID).Delete(&model.CanvasProject{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return tx.Create(&model.DeletedRecord{TableName: "canvas_projects", RecordID: id, UserID: userID, Revision: revision, DeletedAt: deletedAt}).Error
+	})
 }

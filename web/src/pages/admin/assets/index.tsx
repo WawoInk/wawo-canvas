@@ -254,7 +254,15 @@ export default function AdminAssetsPage() {
                 {detailAsset ? (
                     <Flex vertical gap={14}>
                         <Flex gap={14} align="start">
-                            <Image src={detailAsset.coverUrl || detailAsset.url || "/logo-white-mode.svg"} alt={detailAsset.title} width={116} height={84} style={{ objectFit: "cover", borderRadius: 8 }} preview={{ mask: "放大" }} fallback="/logo-white-mode.svg" />
+                            <Image
+                                src={detailAsset.coverUrl || detailAsset.url || "/logo-white-mode.svg"}
+                                alt={detailAsset.title}
+                                width={116}
+                                height={84}
+                                style={{ objectFit: "cover", borderRadius: 8 }}
+                                preview={{ mask: "放大" }}
+                                fallback="/logo-white-mode.svg"
+                            />
                             <Flex vertical gap={8} style={{ minWidth: 0 }}>
                                 <Typography.Title level={5} style={{ margin: 0 }}>
                                     {detailAsset.title}

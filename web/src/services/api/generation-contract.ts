@@ -47,6 +47,7 @@ export type GenerationProfile = {
     id: string;
     version: number;
     displayName: string;
+    credits: number;
     adapterKey: string;
     intents: string[];
     capabilities: {
@@ -67,7 +68,7 @@ export type GenerationResult = { kind: "video"; file: GeneratedFile } | { kind: 
 export function readGeneratedVideoFile(result: unknown): GeneratedFile | null {
     if (!result || typeof result !== "object") return null;
     const value = result as Partial<GenerationResult>;
-    if ((value.kind !== "video" && value.kind !== "short-drama") || !value.file || typeof value.file.fileId !== "string" || typeof value.file.mimeType !== "string") return null;
+    if ((value.kind !== "video" && value.kind !== "short-drama") || !value.file || typeof value.file.fileId !== "string" || !value.file.fileId.trim() || typeof value.file.mimeType !== "string" || !value.file.mimeType.trim()) return null;
     return value.file;
 }
 

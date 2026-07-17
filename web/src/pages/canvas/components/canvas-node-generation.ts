@@ -1,7 +1,10 @@
-import type { GenerationError, ShortDramaGenerationSettings, VideoGenerationSettings } from "@/services/api/generations";
+import type { GenerationCommand, GenerationError, GenerationProfile, ShortDramaGenerationSettings, VideoGenerationSettings } from "@/services/api/generations";
+import { buildGenerationCommand, buildShortDramaGenerationSettings, buildVideoGenerationSettings } from "@/services/api/generations";
 import type { AiTextMessage } from "@/services/api/image";
 import { imageReferenceLabel } from "@/lib/image-reference-prompt";
-import { seedanceReferenceLabel } from "@/lib/seedance-video";
+import { seedanceReferenceLabel, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution } from "@/lib/seedance-video";
+import { boolConfig } from "@/lib/seedance-video";
+import type { AiConfig } from "@/stores/use-config-store";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 import { CanvasNodeType, type CanvasConnection, type CanvasNodeData } from "../types";
@@ -27,7 +30,7 @@ export type VideoGenerationIntent = {
 export function buildVideoGenerationIntent(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[], prompt: string, settings: VideoGenerationSettings): VideoGenerationIntent {
     const references = { images: [] as PlatformMediaReference[], videos: [] as PlatformMediaReference[], audios: [] as PlatformMediaReference[] };
     for (const node of getGenerationResourceNodes(nodeId, nodes, connections)) {
-        if (!node.metadata?.fileId) continue;
+        if (!node.metadata?.fileId) throw new Error(`素材「${node.title || node.id}」尚未上传到平台文件库`);
         const reference = { fileId: node.metadata.fileId, sourceNodeId: node.id, name: node.title || node.id };
         if (node.type === CanvasNodeType.Image) references.images.push(reference);
         if (node.type === CanvasNodeType.Video) references.videos.push(reference);
@@ -35,6 +38,50 @@ export function buildVideoGenerationIntent(nodeId: string, nodes: CanvasNodeData
     }
     return { kind: "video.generate", prompt, references, settings };
 }
+export type FirstPartyCanvasVideoRun = {
+    command: GenerationCommand;
+    metadata: {
+        generationClientRequestId: string;
+        generationProfileId: string;
+        generationCancellation: boolean;
+    };
+};
+
+export function prepareFirstPartyCanvasVideoRun(input: { nodeId: string; nodes: CanvasNodeData[]; connections: CanvasConnection[]; prompt: string; config: AiConfig; profile: GenerationProfile; clientRequestId: string }): FirstPartyCanvasVideoRun {
+    const { profile, config } = input;
+    const isShortDrama = profile.intents.includes("video.short-drama");
+    const intent = isShortDrama
+        ? buildShortDramaGenerationIntent(
+              input.nodeId,
+              input.nodes,
+              input.connections,
+              input.prompt,
+              buildShortDramaGenerationSettings(profile, {
+                  aspectRatio: normalizeSeedanceRatio(config.size) as ShortDramaGenerationSettings["aspectRatio"],
+                  resolution: normalizeSeedanceResolution(config.vquality) as ShortDramaGenerationSettings["resolution"],
+                  durationSeconds: String(config.videoSeconds) === "-1" ? "auto" : normalizeSeedanceDuration(config.videoSeconds),
+                  quality: config.quality as ShortDramaGenerationSettings["quality"],
+              }),
+          )
+        : buildVideoGenerationIntent(
+              input.nodeId,
+              input.nodes,
+              input.connections,
+              input.prompt,
+              buildVideoGenerationSettings(profile, {
+                  aspectRatio: normalizeSeedanceRatio(config.size) as VideoGenerationSettings["aspectRatio"],
+                  resolution: normalizeSeedanceResolution(config.vquality) as VideoGenerationSettings["resolution"],
+                  durationSeconds: normalizeSeedanceDuration(config.videoSeconds),
+                  generateAudio: boolConfig(config.videoGenerateAudio, true),
+                  watermark: boolConfig(config.videoWatermark, false),
+              }),
+          );
+    return {
+        command: buildGenerationCommand({ clientRequestId: input.clientRequestId, modelProfileId: profile.id, source: "canvas", intent }),
+        metadata: { generationClientRequestId: input.clientRequestId, generationProfileId: profile.id, generationCancellation: profile.capabilities.cancellation },
+    };
+}
+
 export type ShortDramaAssetRole = "character" | "scene" | "tool";
 
 export type ShortDramaGenerationIntent = {

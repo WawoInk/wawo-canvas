@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 // SyncDomain represents a single domain's delta sync response.
 type SyncDomain struct {
+	Cursor  string   `json:"cursor,omitempty"`
 	Updates any      `json:"updates"`
 	Deletes []string `json:"deletes"`
 }
@@ -26,7 +28,7 @@ type SyncResponse struct {
 // domains: comma-separated list, e.g. "assets,canvas,tasks". Empty means all.
 // Any repository error aborts the sync so the client knows to retry — an empty
 // sync returned on DB failure would silently desync the client.
-func SyncUserDomains(userID, cursor, domains string) (*SyncResponse, error) {
+func SyncUserDomains(userID, cursor, canvasCursor, domains string) (*SyncResponse, error) {
 	resp := &SyncResponse{
 		Assets: SyncDomain{Updates: []model.Asset{}, Deletes: []string{}},
 		Canvas: SyncDomain{Updates: []model.CanvasProject{}, Deletes: []string{}},
@@ -54,16 +56,25 @@ func SyncUserDomains(userID, cursor, domains string) (*SyncResponse, error) {
 	}
 
 	if includeCanvas {
-		items, err := repository.ListUpdatedCanvasProjects(userID, cursor)
+		revision, err := strconv.ParseUint(canvasCursor, 10, 64)
+		if canvasCursor != "" && err != nil {
+			return nil, err
+		}
+		facts, err := repository.ListCanvasSyncFacts(userID, revision)
 		if err != nil {
 			return nil, err
 		}
-		deletes, deletedAt, err := fetchDeletes(userID, cursor, "canvas_projects")
-		if err != nil {
-			return nil, err
+		items := make([]model.CanvasProject, 0, len(facts))
+		deletes := make([]string, 0, len(facts))
+		for _, fact := range facts {
+			if fact.Project != nil {
+				items = append(items, *fact.Project)
+			} else {
+				deletes = append(deletes, fact.DeleteID)
+			}
+			revision = fact.Revision
 		}
-		resp.Canvas = SyncDomain{Updates: items, Deletes: deletes}
-		newCursor = maxTime(newCursor, maxField(items, func(c model.CanvasProject) string { return c.UpdatedAt }), deletedAt)
+		resp.Canvas = SyncDomain{Cursor: strconv.FormatUint(revision, 10), Updates: items, Deletes: deletes}
 	}
 
 	if includeTasks {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildShortDramaGenerationIntent, buildVideoGenerationIntent, cleanShortDramaAssetMappings, locateGenerationError } from "./canvas-node-generation.ts";
+import { buildShortDramaGenerationIntent, buildVideoGenerationIntent, cleanShortDramaAssetMappings, locateGenerationError, prepareFirstPartyCanvasVideoRun } from "./canvas-node-generation.ts";
 
 const image = {
     id: "image-1",
@@ -31,6 +31,34 @@ test("compiles Canvas media and settings as a first-party intent", () => {
     });
     const serialized = JSON.stringify(intent);
     for (const providerField of ["dataUrl", "storageKey", "image_url", "generate_audio", "ratio"]) assert.equal(serialized.includes(`"${providerField}":`), false);
+});
+
+test("rejects connected first-party media without a platform file", () => {
+    const settings = { aspectRatio: "9:16", resolution: "1080p", durationSeconds: 10, generateAudio: false, watermark: true };
+    const localOnly = { ...image, metadata: { ...image.metadata, fileId: undefined } };
+    assert.throws(() => buildVideoGenerationIntent("video-1", [localOnly, videoTarget], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], "prompt", settings), /尚未上传到平台文件库/);
+});
+
+test("prepares a durable first-party Canvas video run", () => {
+    const profile = {
+        id: "stable-profile",
+        intents: ["video.generate"],
+        capabilities: {
+            cancellation: false,
+            settings: {
+                aspectRatio: { type: "enum", values: ["9:16"], default: "9:16" },
+                resolution: { type: "enum", values: ["1080p"], default: "1080p" },
+                durationSeconds: { type: "duration", min: 4, max: 12, default: 10 },
+                generateAudio: { type: "boolean", default: true },
+                watermark: { type: "boolean", default: false },
+            },
+        },
+    };
+    const config = { model: profile.id, size: "9:16", vquality: "1080p", videoSeconds: "10", videoGenerateAudio: "true", videoWatermark: "false", quality: "high" };
+    const run = prepareFirstPartyCanvasVideoRun({ nodeId: "video-1", nodes: [image, videoTarget], connections: [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], prompt: "prompt", config, profile, clientRequestId: "request-stable" });
+    assert.equal(run.command.clientRequestId, "request-stable");
+    assert.equal(run.command.modelProfileId, "stable-profile");
+    assert.deepEqual(run.metadata, { generationClientRequestId: "request-stable", generationProfileId: "stable-profile", generationCancellation: false });
 });
 
 test("compiles connected Drama assets with roles stored on each target node", () => {

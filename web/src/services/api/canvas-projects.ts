@@ -15,6 +15,7 @@ export interface CanvasProjectDetail {
     name: string;
     projectJson: string;
     version: number;
+    revision: number;
     createdAt: string;
     updatedAt: string;
 }
@@ -40,11 +41,12 @@ export async function createCanvasProject(name: string, project: unknown): Promi
     return apiPost<CanvasProjectDetail>("/api/v1/canvas/projects", { name, project }, token);
 }
 
-/**
- * Update a canvas project. `body` is sent verbatim as the PUT body and may include
- * `{ project, expectedUpdatedAt }` for the optimistic-lock update path.
- */
-export async function updateCanvasProject(id: string, body: unknown): Promise<CanvasProjectDetail> {
+export type UpdateCanvasProjectRequest = {
+    project: unknown;
+    expectedRevision: number;
+};
+
+export async function updateCanvasProject(id: string, body: UpdateCanvasProjectRequest): Promise<CanvasProjectDetail> {
     const token = authToken();
     return apiPut<CanvasProjectDetail>(`/api/v1/canvas/projects/${encodeURIComponent(id)}`, body, token);
 }
