@@ -67,7 +67,7 @@ jobs:
           JWT_SECRET=${{ secrets.JWT_SECRET }}
           JWT_EXPIRE_HOURS=${{ secrets.JWT_EXPIRE_HOURS }}
           PORT=8088
-          PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}
+          PUBLIC_BASE_URL=${{ vars.PUBLIC_BASE_URL || secrets.PUBLIC_BASE_URL || 'https://canvan.ai' }}
           DATABASE_DSN=${{ secrets.DATABASE_DSN }}
           POSTGRES_USER=${{ secrets.POSTGRES_USER }}
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
@@ -131,13 +131,19 @@ jobs:
           script: |
             set -e
             EXPECTED_VERSION="${{ github.sha }}"
-            PUBLIC_BASE_URL="${{ secrets.PUBLIC_BASE_URL }}"
+            PUBLIC_BASE_URL="${{ vars.PUBLIC_BASE_URL || secrets.PUBLIC_BASE_URL || 'https://canvan.ai' }}"
+            case "$PUBLIC_BASE_URL" in
+              http://*|https://*) ;;
+              *) PUBLIC_BASE_URL="https://$PUBLIC_BASE_URL" ;;
+            esac
+            PUBLIC_BASE_URL="${PUBLIC_BASE_URL%/}"
+            echo "Checking public deployment at $PUBLIC_BASE_URL"
             for i in $(seq 1 30); do
               local_version=$(curl --connect-timeout 3 --max-time 10 -fsS http://127.0.0.1/build-version.txt 2>/dev/null || true)
               api_health=$(curl --connect-timeout 3 --max-time 10 -fsS http://127.0.0.1/api/health 2>/dev/null || true)
-              public_api_health=$(curl --connect-timeout 3 --max-time 10 -fsS -H 'Cache-Control: no-cache' "${PUBLIC_BASE_URL%/}/api/health" 2>/dev/null || true)
-              public_html=$(curl --connect-timeout 3 --max-time 10 -fsS -H 'Cache-Control: no-cache' "${PUBLIC_BASE_URL%/}/" 2>/dev/null || true)
-              public_version=$(curl --connect-timeout 3 --max-time 10 -fsS -H 'Cache-Control: no-cache' "${PUBLIC_BASE_URL%/}/build-version.txt" 2>/dev/null || true)
+              public_api_health=$(curl -L --connect-timeout 3 --max-time 10 -fsS -H 'Cache-Control: no-cache' "$PUBLIC_BASE_URL/api/health" 2>/dev/null || true)
+              public_html=$(curl -L --connect-timeout 3 --max-time 10 -fsS -H 'Cache-Control: no-cache' "$PUBLIC_BASE_URL/" 2>/dev/null || true)
+              public_version=$(curl -L --connect-timeout 3 --max-time 10 -fsS -H 'Cache-Control: no-cache' "$PUBLIC_BASE_URL/build-version.txt" 2>/dev/null || true)
               if [ "$local_version" = "$EXPECTED_VERSION" ] \
                 && [ "$api_health" = "ok" ] \
                 && [ "$public_api_health" = "ok" ] \
