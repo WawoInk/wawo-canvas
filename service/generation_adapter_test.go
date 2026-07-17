@@ -472,10 +472,12 @@ func TestCreateGenerationRejectsIdempotentCommandConflict(t *testing.T) {
 	previousProfiles := generationProfiles
 	previousChannel := generationChannel
 	previousRouteChannel := generationRouteChannel
+	previousDispatch := generationDispatch
 	defer func() {
 		generationProfiles = previousProfiles
 		generationChannel = previousChannel
 		generationRouteChannel = previousRouteChannel
+		generationDispatch = previousDispatch
 	}()
 	generationProfiles = func() []model.GenerationProfile {
 		return []model.GenerationProfile{{ID: "seedance-conflict", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "seedance-conflict", Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}}
@@ -483,6 +485,7 @@ func TestCreateGenerationRejectsIdempotentCommandConflict(t *testing.T) {
 	generationChannel = func(string) (model.ModelChannel, error) {
 		return model.ModelChannel{Name: "test", Protocol: "openai", BaseURL: "http://127.0.0.1:1", APIKey: "secret", Enabled: true}, nil
 	}
+	generationDispatch = func(context.Context, string) {}
 	key := uuid.NewString()
 	user := model.AuthUser{ID: "user-conflict-" + key}
 	first := model.GenerationCommand{CommandVersion: 1, ClientRequestID: "request-conflict-" + key, ModelProfileID: "seedance-conflict", Source: string(model.SourceCanvas), Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "first"}}
