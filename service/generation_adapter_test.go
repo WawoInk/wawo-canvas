@@ -107,24 +107,33 @@ func TestCreateGenerationAppliesProfileSettingsToSeedance(t *testing.T) {
 	}
 }
 
-func TestCreateGenerationUsesOperationalBindingRouteAndPrice(t *testing.T) {
+func TestCreateGenerationUsesOperationalBindingRouteAndPublicPrice(t *testing.T) {
 	previousProfiles := generationProfiles
 	previousChannel := generationChannel
 	previousRouteChannel := generationRouteChannel
 	previousCost := generationCost
 	previousDispatch := generationDispatch
+	previousSettings, err := repository.GetSettings()
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
 	defer func() {
 		generationProfiles = previousProfiles
 		generationChannel = previousChannel
 		generationRouteChannel = previousRouteChannel
 		generationCost = previousCost
 		generationDispatch = previousDispatch
+		_, _ = repository.SaveSettings(previousSettings, time.Now().UTC().Format(time.RFC3339Nano))
 	}()
-	credits := 0
-	profile := model.GenerationProfile{ID: "stable-seedance", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "vendor-seedance", ChannelName: "bound-channel", Credits: credits, HasCredits: true, Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}
+	profile := model.GenerationProfile{ID: "stable-seedance", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "vendor-seedance", ChannelName: "bound-channel", Credits: 99, Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}
 	generationProfiles = func() []model.GenerationProfile { return []model.GenerationProfile{profile} }
 	generationChannel = func(string) (model.ModelChannel, error) { return model.ModelChannel{}, errors.New("random route used") }
-	generationCost = func(string) (int, error) { return 0, errors.New("legacy price used") }
+	generationCost = ModelCost
+	settings := previousSettings
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: "vendor-seedance", Credits: 3})
+	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatalf("save settings: %v", err)
+	}
 	generationDispatch = func(context.Context, string) {}
 	var gotName, gotModel string
 	generationRouteChannel = func(name, modelName string) (model.ModelChannel, error) {
@@ -132,7 +141,13 @@ func TestCreateGenerationUsesOperationalBindingRouteAndPrice(t *testing.T) {
 		return model.ModelChannel{Name: name, Protocol: "openai", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{modelName}}, nil
 	}
 
-	task, err := CreateGeneration(context.Background(), model.AuthUser{ID: "user-binding-" + uuid.NewString()}, model.GenerationCommand{
+	key := uuid.NewString()
+	userID := "user-binding-" + key
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := repository.SaveUser(model.User{ID: userID, Username: "binding-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: 10, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatalf("save user: %v", err)
+	}
+	task, err := CreateGeneration(context.Background(), model.AuthUser{ID: userID}, model.GenerationCommand{
 		CommandVersion: 1, ClientRequestID: "request-binding-" + uuid.NewString(), ModelProfileID: "stable-seedance", Source: string(model.SourceCanvas),
 		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "bound"},
 	})
@@ -141,6 +156,14 @@ func TestCreateGenerationUsesOperationalBindingRouteAndPrice(t *testing.T) {
 	}
 	if gotName != "bound-channel" || gotModel != "vendor-seedance" || task.ModelProfileID != "stable-seedance" {
 		t.Fatalf("route = %q/%q, task = %#v", gotName, gotModel, task)
+	}
+	stored, err := repository.GetGenerationTaskByID(task.ID)
+	if err != nil || stored.Credits != 3 {
+		t.Fatalf("stored task = %#v, err = %v", stored, err)
+	}
+	user, ok, err := repository.GetUserByID(userID)
+	if err != nil || !ok || user.Credits != 7 {
+		t.Fatalf("user = %#v, ok = %v, err = %v", user, ok, err)
 	}
 }
 

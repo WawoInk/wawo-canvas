@@ -89,7 +89,9 @@ export default function AdminSettingsPage() {
     const [modelCosts, setModelCosts] = useState<AdminModelCost[]>([]);
     const [knownModels, setKnownModels] = useState<string[]>([]);
     const publicModels = Form.useWatch(["public", "modelChannel", "availableModels"], form) || [];
-    const channelModels = useMemo(() => collectChannelModels(channels), [channels]);
+    const effectiveChannels = useMemo(() => (editorMode.private === "json" ? parseTabJson("private", jsonText.private)?.channels || channels : channels), [channels, editorMode.private, jsonText.private]);
+    const channelModels = useMemo(() => collectChannelModels(effectiveChannels), [effectiveChannels]);
+    const pricedModels = useMemo(() => uniqueModels([...channelModels, ...publicModels, ...modelCosts.map((item) => item.model)]), [channelModels, publicModels, modelCosts]);
     const generationProfileBindings = Form.useWatch(["private", "generationProfiles"], { form, preserve: true }) || [];
     const channelOptions = useMemo(() => channels.filter((channel) => channel.enabled && channel.name && channel.models.length).map((channel) => ({ label: channel.name, value: channel.name })), [channels]);
     const channelModelsByName = useMemo(() => Object.fromEntries(channels.map((channel) => [channel.name, channel.models || []])), [channels]);
@@ -377,7 +379,8 @@ export default function AdminSettingsPage() {
 
     async function persistChannels(nextChannels: AdminModelChannel[]) {
         if (!token) return;
-        const values = normalizeSettings(form.getFieldsValue(true) as AdminSettings);
+        const values = await collectSettings(form, editorMode, jsonText, message);
+        if (!values) return;
         const nextChannelModels = collectChannelModels(nextChannels);
         const nextSettings = normalizeSettings({
             ...values,
@@ -390,10 +393,6 @@ export default function AdminSettingsPage() {
         setModelCosts(merged.public.modelChannel.modelCosts);
         rememberKnownModels(merged);
         form.setFieldsValue(merged);
-        setJsonText({
-            public: JSON.stringify(merged.public, null, 2),
-            private: JSON.stringify(merged.private, null, 2),
-        });
         message.success("已保存");
     }
 
@@ -529,11 +528,12 @@ export default function AdminSettingsPage() {
                                     </Col>
                                     <Col span={24}>
                                         <Typography.Title level={5}>模型算力点</Typography.Title>
+                                        <Typography.Paragraph type="secondary">实际扣费按渠道中的上游模型名匹配；视频能力绑定 ID 仅用于画布选择。</Typography.Paragraph>
                                         <Table
                                             rowKey="model"
                                             pagination={false}
                                             size="small"
-                                            dataSource={publicModels.map((model) => ({ model, credits: modelCostCredits(modelCosts, model) }))}
+                                            dataSource={pricedModels.map((model) => ({ model, credits: modelCostCredits(modelCosts, model) }))}
                                             columns={[
                                                 { title: "模型", dataIndex: "model" },
                                                 {
@@ -751,20 +751,7 @@ export default function AdminSettingsPage() {
                                                                     />
                                                                 </Form.Item>
                                                             </Col>
-                                                            <Col xs={12} md={8} xl={3}>
-                                                                <Form.Item label="每次扣点">
-                                                                    <InputNumber
-                                                                        min={0}
-                                                                        step={1}
-                                                                        precision={0}
-                                                                        className="!w-full"
-                                                                        value={binding.credits}
-                                                                        placeholder="公共定价"
-                                                                        onChange={(credits) => updateGenerationProfile(index, credits == null ? { credits: undefined } : { credits })}
-                                                                    />
-                                                                </Form.Item>
-                                                            </Col>
-                                                            <Col xs={12} md={8} xl={3}>
+                                                            <Col xs={12} md={8} xl={4}>
                                                                 <Form.Item label="最大时长">
                                                                     <InputNumber
                                                                         min={durationRange.min}

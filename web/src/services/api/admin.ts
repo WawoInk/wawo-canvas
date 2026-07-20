@@ -266,6 +266,7 @@ export type AdminGenerationProfileBinding = {
     upstreamModel: string;
     upstreamModels?: string[];
     channelName: string;
+    /** @deprecated Retained only for rollback-compatible settings round trips. */
     credits?: number;
     enabled: boolean;
     limitOverrides: { durationSecondsMax?: number };

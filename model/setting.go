@@ -70,12 +70,13 @@ type GenerationLimitOverrides struct {
 }
 
 type GenerationProfileBinding struct {
-	ID             string                   `json:"id"`
-	ProfileID      string                   `json:"profileId"`
-	UpstreamModel  string                   `json:"upstreamModel"`
-	UpstreamModels []string                 `json:"upstreamModels,omitempty"`
-	ChannelName    string                   `json:"channelName"`
-	Credits        *int                     `json:"credits,omitempty"`
+	ID             string   `json:"id"`
+	ProfileID      string   `json:"profileId"`
+	UpstreamModel  string   `json:"upstreamModel"`
+	UpstreamModels []string `json:"upstreamModels,omitempty"`
+	ChannelName    string   `json:"channelName"`
+	// LegacyCredits is retained for rollback compatibility; current billing uses public modelCosts.
+	LegacyCredits  *int                     `json:"credits,omitempty"`
 	Enabled        bool                     `json:"enabled"`
 	LimitOverrides GenerationLimitOverrides `json:"limitOverrides"`
 }

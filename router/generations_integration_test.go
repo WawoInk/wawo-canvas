@@ -39,15 +39,15 @@ func TestGenerationHTTPSeam(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	zero := 0
 	settings := previousSettings
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: "seedance-1-5-pro", Credits: 0})
 	settings.Private.Channels = append(settings.Private.Channels, model.ModelChannel{
 		Protocol: "openai", Name: "generation-http-" + uuid.NewString(), BaseURL: upstream.URL, APIKey: "test-secret",
 		Models: []string{"seedance-1-5-pro"}, Weight: 1, Enabled: true,
 	})
 	channelName := settings.Private.Channels[len(settings.Private.Channels)-1].Name
 	settings.Private.GenerationProfiles = []model.GenerationProfileBinding{{
-		ID: "seedance-1-5-pro", ProfileID: "seedance-1-5-pro", UpstreamModel: "seedance-1-5-pro", ChannelName: channelName, Credits: &zero, Enabled: true,
+		ID: "seedance-1-5-pro", ProfileID: "seedance-1-5-pro", UpstreamModel: "seedance-1-5-pro", ChannelName: channelName, Enabled: true,
 	}}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := repository.SaveSettings(settings, now); err != nil {

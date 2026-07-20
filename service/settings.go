@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/basketikun/infinite-canvas/model"
@@ -23,8 +24,11 @@ func SaveSettings(settings model.Settings) (model.Settings, error) {
 		return model.Settings{}, err
 	}
 	settings = normalizeSettings(settings)
-	keepPrivateAPIKeys(&settings, normalizeSettings(saved))
-	keepPrivateAuthSecrets(&settings, normalizeSettings(saved))
+	saved = normalizeSettings(saved)
+	keepPrivateAPIKeys(&settings, saved)
+	keepPrivateAuthSecrets(&settings, saved)
+	keepLegacyGenerationCredits(&settings, saved)
+	migrateLegacyGenerationCosts(&settings)
 	if err := ValidateGenerationBindings(settings); err != nil {
 		return model.Settings{}, err
 	}
@@ -38,6 +42,7 @@ func SaveSettings(settings model.Settings) (model.Settings, error) {
 func normalizeSettings(settings model.Settings) model.Settings {
 	settings.Private = normalizePrivateSetting(settings.Private)
 	settings.Public = normalizePublicSettingWithChannels(settings.Public, settings.Private.Channels)
+	migrateLegacyGenerationCosts(&settings)
 	if settings.Private.GenerationProfiles != nil {
 		bindingIDsByUpstreamModel := map[string][]string{}
 		for _, binding := range settings.Private.GenerationProfiles {
@@ -50,6 +55,31 @@ func normalizeSettings(settings model.Settings) model.Settings {
 		settings.Public.ModelChannel.VideoModels = replaceBoundUpstreamModels(settings.Public.ModelChannel.VideoModels, bindingIDsByUpstreamModel)
 	}
 	return settings
+}
+
+func migrateLegacyGenerationCosts(settings *model.Settings) {
+	configured := map[string]bool{}
+	for _, cost := range settings.Public.ModelChannel.ModelCosts {
+		configured[cost.Model] = true
+	}
+	legacy := map[string]int{}
+	conflicts := map[string]bool{}
+	for _, binding := range settings.Private.GenerationProfiles {
+		if binding.LegacyCredits == nil || binding.UpstreamModel == "" || configured[binding.UpstreamModel] {
+			continue
+		}
+		credits := max(0, *binding.LegacyCredits)
+		if existing, ok := legacy[binding.UpstreamModel]; ok && existing != credits {
+			conflicts[binding.UpstreamModel] = true
+			continue
+		}
+		legacy[binding.UpstreamModel] = credits
+	}
+	for modelName, credits := range legacy {
+		if !conflicts[modelName] {
+			settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: modelName, Credits: credits})
+		}
+	}
 }
 
 func replaceBoundUpstreamModels(models []string, bindingIDsByUpstreamModel map[string][]string) []string {
@@ -140,11 +170,23 @@ func ModelCost(modelName string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	settings = normalizeSettings(settings)
 	modelName = strings.TrimSpace(modelName)
-	for _, item := range normalizePublicSetting(settings.Public).ModelChannel.ModelCosts {
+	for _, item := range settings.Public.ModelChannel.ModelCosts {
 		if item.Model == modelName {
 			return item.Credits, nil
 		}
+	}
+	legacyCost := -1
+	for _, binding := range settings.Private.GenerationProfiles {
+		if binding.UpstreamModel != modelName || binding.LegacyCredits == nil {
+			continue
+		}
+		credits := max(0, *binding.LegacyCredits)
+		if legacyCost >= 0 && legacyCost != credits {
+			return 0, fmt.Errorf("模型 %s 存在冲突的历史扣费，请在公开配置中设置统一算力点", modelName)
+		}
+		legacyCost = credits
 	}
 	return 0, nil
 }
@@ -229,6 +271,19 @@ func keepPrivateAPIKeys(settings *model.Settings, saved model.Settings) {
 func keepPrivateAuthSecrets(settings *model.Settings, saved model.Settings) {
 	if strings.TrimSpace(settings.Private.Auth.LinuxDo.ClientSecret) == "" {
 		settings.Private.Auth.LinuxDo.ClientSecret = saved.Private.Auth.LinuxDo.ClientSecret
+	}
+}
+
+func keepLegacyGenerationCredits(settings *model.Settings, saved model.Settings) {
+	legacy := map[string]*int{}
+	for _, binding := range saved.Private.GenerationProfiles {
+		legacy[binding.ID] = binding.LegacyCredits
+	}
+	for i := range settings.Private.GenerationProfiles {
+		binding := &settings.Private.GenerationProfiles[i]
+		if binding.LegacyCredits == nil {
+			binding.LegacyCredits = legacy[binding.ID]
+		}
 	}
 }
 
