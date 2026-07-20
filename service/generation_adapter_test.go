@@ -367,10 +367,18 @@ func TestCreateGenerationRunsMediaSeedanceTask(t *testing.T) {
 			t.Fatalf("upstream body leaked %q: %s", forbidden, body)
 		}
 	}
-	for index, mediaType := range []string{"text", "image_url", "video_url", "audio_url"} {
+	for index, media := range []struct {
+		mediaType string
+		role      string
+	}{
+		{"text", ""},
+		{"image_url", "reference_image"},
+		{"video_url", "reference_video"},
+		{"audio_url", "reference_audio"},
+	} {
 		item := content[index].(map[string]any)
-		if item["type"] != mediaType {
-			t.Fatalf("content[%d] = %#v", index, item)
+		if item["type"] != media.mediaType || media.role != "" && item["role"] != media.role {
+			t.Fatalf("content[%d] = %#v, want type=%q role=%q", index, item, media.mediaType, media.role)
 		}
 	}
 }

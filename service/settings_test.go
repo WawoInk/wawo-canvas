@@ -102,6 +102,44 @@ func TestNormalizeSettingsPublishesEnabledChannelModelsAndRepairsDefaults(t *tes
 	}
 }
 
+func TestNormalizeSettingsPreservesExplicitCapabilityModels(t *testing.T) {
+	settings := normalizeSettings(model.Settings{
+		Public: model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{
+			TextModels:  []string{"gpt-5.5"},
+			ImageModels: []string{"gpt-image-1"},
+			VideoModels: []string{"public-video-1"},
+			AudioModels: []string{"gpt-audio-1"},
+		}},
+		Private: model.PrivateSetting{
+			Channels: []model.ModelChannel{{Enabled: true, Models: []string{
+				"gpt-5.5", "gpt-5.6", "gpt-image-1", "gpt-image-2",
+				"seedance-1", "seedance-2", "gpt-audio-1", "gpt-audio-2",
+			}}},
+			GenerationProfiles: []model.GenerationProfileBinding{
+				{ID: "public-video-1", UpstreamModel: "seedance-1", Enabled: true},
+				{ID: "public-video-2", UpstreamModel: "seedance-2", Enabled: true},
+			},
+		},
+	})
+
+	channel := settings.Public.ModelChannel
+	for name, test := range map[string]struct {
+		got  []string
+		want []string
+	}{
+		"text":  {channel.TextModels, []string{"gpt-5.5"}},
+		"image": {channel.ImageModels, []string{"gpt-image-1"}},
+		"video": {channel.VideoModels, []string{"public-video-1"}},
+		"audio": {channel.AudioModels, []string{"gpt-audio-1"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if !reflect.DeepEqual(test.got, test.want) {
+				t.Fatalf("models = %#v, want %#v", test.got, test.want)
+			}
+		})
+	}
+}
+
 func TestResolveGenerationProfilesAppliesOperationalBinding(t *testing.T) {
 	credits := 7
 	maxDuration := 8

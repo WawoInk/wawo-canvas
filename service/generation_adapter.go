@@ -72,13 +72,13 @@ func NewSeedanceContentsV1Adapter(client *http.Client) SeedanceContentsV1Adapter
 func (a SeedanceContentsV1Adapter) Create(ctx context.Context, req AdapterCreateRequest) (ProviderTaskRef, error) {
 	content := []map[string]any{{"type": "text", "text": req.Intent.Prompt}}
 	for _, item := range req.References.Images {
-		content = append(content, map[string]any{"type": "image_url", "image_url": map[string]string{"url": item}})
+		content = append(content, map[string]any{"type": "image_url", "image_url": map[string]string{"url": item}, "role": "reference_image"})
 	}
 	for _, item := range req.References.Videos {
-		content = append(content, map[string]any{"type": "video_url", "video_url": map[string]string{"url": item}})
+		content = append(content, map[string]any{"type": "video_url", "video_url": map[string]string{"url": item}, "role": "reference_video"})
 	}
 	for _, item := range req.References.Audios {
-		content = append(content, map[string]any{"type": "audio_url", "audio_url": map[string]string{"url": item}})
+		content = append(content, map[string]any{"type": "audio_url", "audio_url": map[string]string{"url": item}, "role": "reference_audio"})
 	}
 	payload := map[string]any{
 		"model":          req.Profile.UpstreamModel,

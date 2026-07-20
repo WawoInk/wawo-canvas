@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useRef } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { App } from "antd";
 
 import { createModelChannel, useConfigStore } from "@/stores/use-config-store";
@@ -10,9 +10,12 @@ import { useUserStore } from "@/stores/use-user-store";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { syncScheduler } from "@/services/sync-scheduler";
 import { syncClient } from "@/services/sync-client";
+import { fetchCurrentUser } from "@/services/api/auth";
+import { revalidateSession, startSessionMonitor } from "@/services/session-monitor";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
     const { message } = App.useApp();
+    const navigate = useNavigate();
     const handledConfigParams = useRef(false);
     const { pathname } = useLocation();
     const hydrateUser = useUserStore((state) => state.hydrateUser);
@@ -57,8 +60,19 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         syncScheduler.start();
-        return () => syncScheduler.stop();
-    }, []);
+        const stopSessionMonitor = startSessionMonitor(() => {
+            const { token, clearSession } = useUserStore.getState();
+            return revalidateSession(token, fetchCurrentUser, () => {
+                if (useUserStore.getState().token !== token) return;
+                clearSession();
+                navigate("/login", { replace: true });
+            });
+        });
+        return () => {
+            syncScheduler.stop();
+            stopSessionMonitor();
+        };
+    }, [navigate]);
 
     useEffect(() => {
         if (handledConfigParams.current) return;

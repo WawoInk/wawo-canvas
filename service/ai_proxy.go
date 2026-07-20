@@ -48,7 +48,7 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		proxyFail(w, "AI 接口请求失败")
 		return
 	}
-	request, err := http.NewRequest(http.MethodPost, resolved.URL, bytes.NewReader(body))
+	request, err := http.NewRequest(http.MethodPost, resolved.URL, bytes.NewReader(resolved.Body))
 	if err != nil {
 		proxyAILogf("AI proxy build request failed: url=%s err=%v", resolved.URL, err)
 		proxyFail(w, "AI 接口请求失败")
@@ -64,7 +64,7 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 	taskType := DetermineTaskType(path)
 	provider := DetermineProvider(channel)
 	source := DetermineSource(r)
-	genTaskID, _ := LogTaskStart(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers), source, "")
+	genTaskID, _ := LogTaskStart(user, taskType, provider, modelName, requestAuditBody(body, contentType), SerializeHeaders(resolved.Headers), source, "")
 	// Expose generation task ID to frontend for metadata enrichment
 	w.Header().Set("X-Generation-Task-Id", genTaskID)
 	startTime := time.Now()
@@ -201,6 +201,9 @@ func buildXvanaiUpstream(channel model.ModelChannel, modelName, path string, bod
 
 func buildOpenAIUpstream(channel model.ModelChannel, modelName, path string, body []byte, contentType string) upstreamRequest {
 	path = resolveAIProxyPath(channel.BaseURL, modelName, path)
+	if isArkSeedanceVideo(channel.BaseURL, modelName) && strings.HasPrefix(path, "/contents/generations/tasks") {
+		body = addSeedanceMediaRoles(body)
+	}
 	headers := http.Header{}
 	headers.Set("Authorization", "Bearer "+channel.APIKey)
 	if contentType != "" {
@@ -211,6 +214,37 @@ func buildOpenAIUpstream(channel model.ModelChannel, modelName, path string, bod
 		Headers: headers,
 		Body:    body,
 	}
+}
+
+func addSeedanceMediaRoles(body []byte) []byte {
+	var payload map[string]any
+	if json.Unmarshal(body, &payload) != nil {
+		return body
+	}
+	content, ok := payload["content"].([]any)
+	if !ok {
+		return body
+	}
+	roles := map[string]string{"image_url": "reference_image", "video_url": "reference_video", "audio_url": "reference_audio"}
+	changed := false
+	for _, value := range content {
+		item, ok := value.(map[string]any)
+		if !ok || item["role"] != nil {
+			continue
+		}
+		if role := roles[fmt.Sprint(item["type"])]; role != "" {
+			item["role"] = role
+			changed = true
+		}
+	}
+	if !changed {
+		return body
+	}
+	result, err := json.Marshal(payload)
+	if err != nil {
+		return body
+	}
+	return result
 }
 
 func resolveAIProxyPath(baseURL string, modelName string, path string) string {
@@ -329,6 +363,35 @@ func readAIRequest(r *http.Request) ([]byte, string, string, error) {
 		return nil, "", "", errMissingModel
 	}
 	return body, contentType, modelName, nil
+}
+
+func requestAuditBody(body []byte, contentType string) []byte {
+	if !strings.HasPrefix(contentType, "multipart/form-data") {
+		return body
+	}
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return nil
+	}
+	form, err := multipart.NewReader(bytes.NewReader(body), params["boundary"]).ReadForm(32 << 20)
+	if err != nil {
+		return nil
+	}
+	defer form.RemoveAll()
+	values := make(map[string]string, len(form.Value))
+	for key, items := range form.Value {
+		if len(items) > 0 {
+			values[key] = items[0]
+		}
+	}
+	files := make([]map[string]any, 0)
+	for field, items := range form.File {
+		for _, item := range items {
+			files = append(files, map[string]any{"field": field, "filename": item.Filename, "bytes": item.Size})
+		}
+	}
+	audit, _ := json.Marshal(map[string]any{"fields": values, "files": files})
+	return audit
 }
 
 func readMultipartModel(body []byte, contentType string) string {
@@ -517,7 +580,7 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 		proxyFail(w, "AI 接口请求失败")
 		return
 	}
-	request, err := http.NewRequest(http.MethodPost, resolved.URL, bytes.NewReader(body))
+	request, err := http.NewRequest(http.MethodPost, resolved.URL, bytes.NewReader(resolved.Body))
 	if err != nil {
 		proxyAILogf("video task build request failed: url=%s err=%v", resolved.URL, err)
 		proxyFail(w, "AI 接口请求失败")

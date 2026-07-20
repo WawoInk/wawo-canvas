@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/basketikun/infinite-canvas/model"
+	"github.com/basketikun/infinite-canvas/repository"
 )
 
 func TestReadAIRequestMultipart(t *testing.T) {
@@ -34,6 +36,72 @@ func TestReadAIRequestMultipart(t *testing.T) {
 	}
 	if got := readAIRequestCount(gotBody, gotContentType); got != 2 {
 		t.Fatalf("count = %d, want 2", got)
+	}
+}
+
+func TestMultipartRequestAuditOmitsFileBytes(t *testing.T) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("model", "gpt-image-2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteField("prompt", "change the sky"); err != nil {
+		t.Fatal(err)
+	}
+	file, err := writer.CreateFormFile("image", "source.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write([]byte{'P', 'N', 'G', 0, 0xff}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	audit := requestAuditBody(body.Bytes(), writer.FormDataContentType())
+	if !json.Valid(audit) {
+		t.Fatalf("audit is not JSON: %q", audit)
+	}
+	if bytes.Contains(audit, []byte{0}) || bytes.Contains(audit, []byte{0xff}) {
+		t.Fatalf("audit contains image bytes: %q", audit)
+	}
+	got := string(audit)
+	for _, want := range []string{`"model":"gpt-image-2"`, `"prompt":"change the sky"`, `"field":"image"`, `"filename":"source.png"`, `"bytes":5`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("audit missing %s: %s", want, got)
+		}
+	}
+}
+
+func TestMultipartRequestAuditCanBeLogged(t *testing.T) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("model", "gpt-image-2"); err != nil {
+		t.Fatal(err)
+	}
+	file, err := writer.CreateFormFile("image", "source.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write(bytes.Repeat([]byte{0xff}, 1024)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	userID := "multipart-log-user"
+	id, err := LogTaskStart(model.AuthUser{ID: userID}, model.TaskTypeImage, "openai", "gpt-image-2", requestAuditBody(body.Bytes(), writer.FormDataContentType()), "{}", string(model.SourceCanvas), "")
+	if err != nil {
+		t.Fatalf("LogTaskStart: %v", err)
+	}
+	task, err := repository.GetGenerationTaskByIDAndUser(id, userID)
+	if err != nil {
+		t.Fatalf("GetGenerationTaskByIDAndUser: %v", err)
+	}
+	if task.TaskType != model.TaskTypeImage || task.Source != string(model.SourceCanvas) {
+		t.Fatalf("logged task = type %q source %q", task.TaskType, task.Source)
 	}
 }
 
@@ -90,6 +158,22 @@ func TestBuildOpenAIUpstreamStillBearer(t *testing.T) {
 	}
 	if got.Headers.Get("Authorization") != "Bearer sk-x" {
 		t.Fatalf("openai Bearer = %q", got.Headers.Get("Authorization"))
+	}
+}
+
+func TestBuildArkSeedanceUpstreamAddsMediaRoles(t *testing.T) {
+	body := []byte(`{"model":"seedance-2.0","content":[{"type":"text","text":"test"},{"type":"image_url","image_url":{"url":"https://example.com/image.png"}},{"type":"video_url","video_url":{"url":"https://example.com/video.mp4"}},{"type":"audio_url","audio_url":{"url":"https://example.com/audio.mp3"}}]}`)
+	got := resolveUpstreamRequest(model.ModelChannel{Protocol: "openai", BaseURL: "https://ark.cn-beijing.volces.com/api/plan/v3", APIKey: "secret"}, "seedance-2.0", "/contents/generations/tasks", body, "application/json")
+	var payload struct {
+		Content []map[string]any `json:"content"`
+	}
+	if err := json.Unmarshal(got.Body, &payload); err != nil {
+		t.Fatalf("decode upstream body: %v", err)
+	}
+	for index, role := range []string{"", "reference_image", "reference_video", "reference_audio"} {
+		if payload.Content[index]["role"] != role && role != "" {
+			t.Fatalf("content[%d].role = %#v, want %q; body=%s", index, payload.Content[index]["role"], role, got.Body)
+		}
 	}
 }
 

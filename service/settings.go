@@ -39,29 +39,29 @@ func normalizeSettings(settings model.Settings) model.Settings {
 	settings.Private = normalizePrivateSetting(settings.Private)
 	settings.Public = normalizePublicSettingWithChannels(settings.Public, settings.Private.Channels)
 	if settings.Private.GenerationProfiles != nil {
-		bindingIDs := []string{}
-		upstreamModels := map[string]bool{}
+		bindingIDsByUpstreamModel := map[string][]string{}
 		for _, binding := range settings.Private.GenerationProfiles {
 			if !binding.Enabled || binding.ID == "" || binding.UpstreamModel == "" {
 				continue
 			}
-			bindingIDs = append(bindingIDs, binding.ID)
-			upstreamModels[binding.UpstreamModel] = true
+			bindingIDsByUpstreamModel[binding.UpstreamModel] = append(bindingIDsByUpstreamModel[binding.UpstreamModel], binding.ID)
 		}
-		settings.Public.ModelChannel.AvailableModels = replaceBoundUpstreamModels(settings.Public.ModelChannel.AvailableModels, upstreamModels, bindingIDs)
-		settings.Public.ModelChannel.VideoModels = replaceBoundUpstreamModels(settings.Public.ModelChannel.VideoModels, upstreamModels, bindingIDs)
+		settings.Public.ModelChannel.AvailableModels = replaceBoundUpstreamModels(settings.Public.ModelChannel.AvailableModels, bindingIDsByUpstreamModel)
+		settings.Public.ModelChannel.VideoModels = replaceBoundUpstreamModels(settings.Public.ModelChannel.VideoModels, bindingIDsByUpstreamModel)
 	}
 	return settings
 }
 
-func replaceBoundUpstreamModels(models []string, upstreamModels map[string]bool, profileIDs []string) []string {
+func replaceBoundUpstreamModels(models []string, bindingIDsByUpstreamModel map[string][]string) []string {
 	result := []string{}
 	for _, modelName := range models {
-		if !upstreamModels[modelName] {
-			result = append(result, modelName)
+		if bindingIDs := bindingIDsByUpstreamModel[modelName]; len(bindingIDs) > 0 {
+			result = append(result, bindingIDs...)
+			continue
 		}
+		result = append(result, modelName)
 	}
-	return uniqueModelNames(append(result, profileIDs...))
+	return uniqueModelNames(result)
 }
 
 func normalizePublicSetting(setting model.PublicSetting) model.PublicSetting {
@@ -95,28 +95,31 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 	} else {
 		setting.ModelChannel.AvailableModels = uniqueModelNames(setting.ModelChannel.AvailableModels)
 	}
-	// nil → empty for new per-capability list fields (backward compatible)
-	if setting.ModelChannel.ImageModels == nil {
+	inferImageModels := setting.ModelChannel.ImageModels == nil
+	inferVideoModels := setting.ModelChannel.VideoModels == nil
+	inferTextModels := setting.ModelChannel.TextModels == nil
+	inferAudioModels := setting.ModelChannel.AudioModels == nil
+	if inferImageModels {
 		setting.ModelChannel.ImageModels = []string{}
 	}
-	if setting.ModelChannel.VideoModels == nil {
+	if inferVideoModels {
 		setting.ModelChannel.VideoModels = []string{}
 	}
-	if setting.ModelChannel.TextModels == nil {
+	if inferTextModels {
 		setting.ModelChannel.TextModels = []string{}
 	}
-	if setting.ModelChannel.AudioModels == nil {
+	if inferAudioModels {
 		setting.ModelChannel.AudioModels = []string{}
 	}
 	for _, modelName := range setting.ModelChannel.AvailableModels {
 		switch {
-		case isImageModelName(modelName):
+		case inferImageModels && isImageModelName(modelName):
 			setting.ModelChannel.ImageModels = append(setting.ModelChannel.ImageModels, modelName)
-		case isVideoModelName(modelName):
+		case inferVideoModels && isVideoModelName(modelName):
 			setting.ModelChannel.VideoModels = append(setting.ModelChannel.VideoModels, modelName)
-		case isAudioModelName(modelName):
+		case inferAudioModels && isAudioModelName(modelName):
 			setting.ModelChannel.AudioModels = append(setting.ModelChannel.AudioModels, modelName)
-		case isTextModelName(modelName):
+		case inferTextModels && isTextModelName(modelName):
 			setting.ModelChannel.TextModels = append(setting.ModelChannel.TextModels, modelName)
 		}
 	}
