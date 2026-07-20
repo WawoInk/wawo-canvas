@@ -54,11 +54,25 @@ test("prepares a durable first-party Canvas video run", () => {
             },
         },
     };
-    const config = { model: profile.id, size: "9:16", vquality: "1080p", videoSeconds: "10", videoGenerateAudio: "true", videoWatermark: "false", quality: "high" };
+    const config = { model: profile.id, size: "9:16", vquality: "1080p", videoSeconds: "10", videoGenerateAudio: "true", videoWatermark: "false", videoNegativePrompt: "  低质量，模糊  ", quality: "high" };
     const run = prepareFirstPartyCanvasVideoRun({ nodeId: "video-1", nodes: [image, videoTarget], connections: [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], prompt: "prompt", config, profile, clientRequestId: "request-stable" });
     assert.equal(run.command.clientRequestId, "request-stable");
     assert.equal(run.command.modelProfileId, "stable-profile");
+    assert.equal(run.command.intent.negativePrompt, "低质量，模糊");
+    const serialized = JSON.stringify(run.command);
+    for (const providerField of ["negative_prompt", "extra_params", "metadata"]) assert.equal(serialized.includes(`"${providerField}"`), false);
     assert.deepEqual(run.metadata, { generationClientRequestId: "request-stable", generationProfileId: "stable-profile", generationCancellation: false });
+
+    const emptyRun = prepareFirstPartyCanvasVideoRun({
+        nodeId: "video-1",
+        nodes: [image, videoTarget],
+        connections: [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }],
+        prompt: "prompt",
+        config: { ...config, videoNegativePrompt: "   " },
+        profile,
+        clientRequestId: "request-empty",
+    });
+    assert.equal("negativePrompt" in emptyRun.command.intent, false);
 });
 
 test("compiles connected Drama assets with roles stored on each target node", () => {

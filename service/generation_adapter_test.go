@@ -309,6 +309,37 @@ func TestCreateGenerationRejectsInvalidProfileSettingsBeforeRouting(t *testing.T
 	}
 }
 
+func TestCreateGenerationValidatesNegativePromptBeforeRouting(t *testing.T) {
+	previousProfiles := generationProfiles
+	previousChannel := generationChannel
+	defer func() {
+		generationProfiles = previousProfiles
+		generationChannel = previousChannel
+	}()
+	generationProfiles = func() []model.GenerationProfile {
+		return []model.GenerationProfile{{ID: "seedance-negative-prompt", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "seedance-negative-prompt", Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}}
+	}
+	routeErr := errors.New("route reached")
+	generationChannel = func(string) (model.ModelChannel, error) { return model.ModelChannel{}, routeErr }
+
+	_, err := CreateGeneration(context.Background(), model.AuthUser{ID: "user-negative-prompt"}, model.GenerationCommand{
+		CommandVersion: 1, ClientRequestID: "request-negative-500-" + uuid.NewString(), ModelProfileID: "seedance-negative-prompt", Source: string(model.SourceCanvas),
+		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "valid", NegativePrompt: " 差" + strings.Repeat("差", 499) + " "},
+	})
+	if !errors.Is(err, routeErr) {
+		t.Fatalf("500-rune negative prompt error = %v, want route reached", err)
+	}
+
+	_, err = CreateGeneration(context.Background(), model.AuthUser{ID: "user-negative-prompt"}, model.GenerationCommand{
+		CommandVersion: 1, ClientRequestID: "request-negative-501-" + uuid.NewString(), ModelProfileID: "seedance-negative-prompt", Source: string(model.SourceCanvas),
+		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "valid", NegativePrompt: strings.Repeat("差", 501)},
+	})
+	var validationErr GenerationValidationError
+	if !errors.As(err, &validationErr) || validationErr.FieldPath != "intent.negativePrompt" {
+		t.Fatalf("501-rune negative prompt error = %#v", err)
+	}
+}
+
 func TestCreateGenerationRunsMediaSeedanceTask(t *testing.T) {
 	var gotBody map[string]any
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -383,6 +414,9 @@ func TestCreateGenerationRunsMediaSeedanceTask(t *testing.T) {
 	content, ok := gotBody["content"].([]any)
 	if !ok || len(content) != 4 {
 		t.Fatalf("content = %#v", gotBody["content"])
+	}
+	if _, exists := gotBody["metadata"]; exists {
+		t.Fatalf("empty negative prompt added metadata: %#v", gotBody["metadata"])
 	}
 	body, _ := json.Marshal(gotBody)
 	for _, forbidden := range []string{"fileId", "sourceNodeId", "node-images", "node-videos", "node-audios"} {
@@ -807,7 +841,7 @@ func TestSeedanceAdapterCreatesPromptOnlyTask(t *testing.T) {
 			UpstreamModel: "seedance-1-5-pro",
 		},
 		Channel: model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"},
-		Intent:  model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "人物走进雨夜街道"},
+		Intent:  model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "人物走进雨夜街道", NegativePrompt: "低质量，模糊"},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -830,6 +864,9 @@ func TestSeedanceAdapterCreatesPromptOnlyTask(t *testing.T) {
 		"duration":       float64(-1),
 		"generate_audio": true,
 		"watermark":      false,
+		"metadata": map[string]any{
+			"extra_params": map[string]any{"negative_prompt": "低质量，模糊"},
+		},
 	}
 	if !jsonEqual(gotBody, want) {
 		t.Fatalf("body = %#v, want %#v", gotBody, want)

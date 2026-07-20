@@ -105,11 +105,12 @@ type ShortDramaAsset struct {
 
 // GenerationIntent is a discriminated first-party generation intent.
 type GenerationIntent struct {
-	Kind       GenerationIntentKind `json:"kind"`
-	Prompt     string               `json:"prompt,omitempty"`
-	References GenerationReferences `json:"references,omitempty"`
-	Title      string               `json:"title,omitempty"`
-	Script     string               `json:"script,omitempty"`
-	Assets     []ShortDramaAsset    `json:"assets,omitempty"`
-	Settings   ScalarSettings       `json:"settings,omitempty"`
+	Kind           GenerationIntentKind `json:"kind"`
+	Prompt         string               `json:"prompt,omitempty"`
+	NegativePrompt string               `json:"negativePrompt,omitempty"`
+	References     GenerationReferences `json:"references,omitempty"`
+	Title          string               `json:"title,omitempty"`
+	Script         string               `json:"script,omitempty"`
+	Assets         []ShortDramaAsset    `json:"assets,omitempty"`
+	Settings       ScalarSettings       `json:"settings,omitempty"`
 }
