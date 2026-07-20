@@ -6,12 +6,20 @@ import { revalidateSession, startSessionMonitor } from "../src/services/session-
 test("clears an expired session without logging out on a network failure", async () => {
     let clears = 0;
 
-    await revalidateSession("expired", async () => ({ role: "guest" }), () => {
-        clears += 1;
-    });
-    await revalidateSession("offline", async () => Promise.reject(new Error("offline")), () => {
-        clears += 1;
-    });
+    await revalidateSession(
+        "expired",
+        async () => ({ role: "guest" }),
+        () => {
+            clears += 1;
+        },
+    );
+    await revalidateSession(
+        "offline",
+        async () => Promise.reject(new Error("offline")),
+        () => {
+            clears += 1;
+        },
+    );
 
     assert.equal(clears, 1);
 });
