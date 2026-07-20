@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -141,17 +142,17 @@ func TestNormalizeSettingsPreservesExplicitCapabilityModels(t *testing.T) {
 }
 
 func TestResolveGenerationProfilesAppliesOperationalBinding(t *testing.T) {
-	credits := 7
 	maxDuration := 8
 	private := normalizePrivateSetting(model.PrivateSetting{
 		Channels: []model.ModelChannel{{Name: "seedance-route", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"upstream-seedance"}}},
 		GenerationProfiles: []model.GenerationProfileBinding{{
-			ID: "stable-seedance", ProfileID: "seedance-1-5-pro", UpstreamModel: "upstream-seedance", ChannelName: "seedance-route", Credits: &credits, Enabled: true,
+			ID: "stable-seedance", ProfileID: "seedance-1-5-pro", UpstreamModel: "upstream-seedance", ChannelName: "seedance-route", Enabled: true,
 			LimitOverrides: model.GenerationLimitOverrides{DurationSecondsMax: &maxDuration},
 		}},
 	})
+	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "upstream-seedance", Credits: 7}}}}
 
-	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, model.PublicSetting{})
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, public)
 	if err != nil {
 		t.Fatalf("resolveGenerationProfiles: %v", err)
 	}
@@ -207,22 +208,72 @@ func TestResolveGenerationProfilesRejectsMultiModelBinding(t *testing.T) {
 	}
 }
 
-func TestResolveGenerationProfilesPublishesEffectiveBillingCredits(t *testing.T) {
+func TestResolveGenerationProfilesPublishesPublicModelCosts(t *testing.T) {
 	private := normalizePrivateSetting(model.PrivateSetting{
-		Channels: []model.ModelChannel{{Name: "video", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"priced", "override"}}},
+		Channels: []model.ModelChannel{{Name: "video", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"priced", "second-priced"}}},
 		GenerationProfiles: []model.GenerationProfileBinding{
-			{ID: "public-price", ProfileID: "seedance-1-5-pro", UpstreamModel: "priced", ChannelName: "video", Enabled: true},
-			{ID: "binding-price", ProfileID: "seedance-1-5-pro", UpstreamModel: "override", ChannelName: "video", Credits: intPtr(9), Enabled: true},
+			{ID: "first-price", ProfileID: "seedance-1-5-pro", UpstreamModel: "priced", ChannelName: "video", Enabled: true},
+			{ID: "second-price", ProfileID: "seedance-1-5-pro", UpstreamModel: "second-priced", ChannelName: "video", Enabled: true},
 		},
 	})
-	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "priced", Credits: 4}, {Model: "override", Credits: 5}}}}
+	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "priced", Credits: 4}, {Model: "second-priced", Credits: 5}}}}
 
 	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, public)
 	if err != nil {
 		t.Fatalf("resolveGenerationProfiles: %v", err)
 	}
-	if profiles[0].Credits != 4 || profiles[1].Credits != 9 {
-		t.Fatalf("credits = %d/%d, want 4/9", profiles[0].Credits, profiles[1].Credits)
+	if profiles[0].Credits != 4 || profiles[1].Credits != 5 {
+		t.Fatalf("credits = %d/%d, want 4/5", profiles[0].Credits, profiles[1].Credits)
+	}
+}
+
+func TestGenerationProfileBindingMigratesLegacyCredits(t *testing.T) {
+	var private model.PrivateSetting
+	if err := json.Unmarshal([]byte(`{"generationProfiles":[{"id":"stable","profileId":"seedance-1-5-pro","upstreamModel":"vendor-seedance","credits":99,"enabled":true}]}`), &private); err != nil {
+		t.Fatalf("unmarshal legacy setting: %v", err)
+	}
+	settings := normalizeSettings(model.Settings{Private: private})
+	if len(settings.Public.ModelChannel.ModelCosts) != 1 || settings.Public.ModelChannel.ModelCosts[0] != (model.ModelCost{Model: "vendor-seedance", Credits: 99}) {
+		t.Fatalf("model costs = %#v", settings.Public.ModelChannel.ModelCosts)
+	}
+	encoded, err := json.Marshal(settings.Private)
+	if err != nil {
+		t.Fatalf("marshal setting: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"credits":99`) {
+		t.Fatalf("legacy credits lost: %s", encoded)
+	}
+}
+
+func TestPublicModelCostOverridesLegacyCredits(t *testing.T) {
+	legacyCredits := 99
+	settings := normalizeSettings(model.Settings{
+		Public:  model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "vendor-seedance", Credits: 5}}}},
+		Private: model.PrivateSetting{GenerationProfiles: []model.GenerationProfileBinding{{UpstreamModel: "vendor-seedance", LegacyCredits: &legacyCredits}}},
+	})
+	if len(settings.Public.ModelChannel.ModelCosts) != 1 || settings.Public.ModelChannel.ModelCosts[0].Credits != 5 {
+		t.Fatalf("model costs = %#v", settings.Public.ModelChannel.ModelCosts)
+	}
+}
+
+func TestConflictingLegacyCreditsRequirePublicCost(t *testing.T) {
+	zero, paid := 0, 99
+	settings := normalizeSettings(model.Settings{Private: model.PrivateSetting{GenerationProfiles: []model.GenerationProfileBinding{
+		{ID: "free", UpstreamModel: "vendor-seedance", LegacyCredits: &zero},
+		{ID: "paid", UpstreamModel: "vendor-seedance", LegacyCredits: &paid},
+	}}})
+	if len(settings.Public.ModelChannel.ModelCosts) != 0 {
+		t.Fatalf("conflicting legacy costs migrated: %#v", settings.Public.ModelChannel.ModelCosts)
+	}
+}
+
+func TestKeepLegacyGenerationCredits(t *testing.T) {
+	credits := 9
+	settings := model.Settings{Private: model.PrivateSetting{GenerationProfiles: []model.GenerationProfileBinding{{ID: "stable", UpstreamModel: "new-seedance"}}}}
+	saved := model.Settings{Private: model.PrivateSetting{GenerationProfiles: []model.GenerationProfileBinding{{ID: "stable", UpstreamModel: "vendor-seedance", LegacyCredits: &credits}}}}
+	keepLegacyGenerationCredits(&settings, saved)
+	if got := settings.Private.GenerationProfiles[0].LegacyCredits; got == nil || *got != 9 {
+		t.Fatalf("legacy credits = %#v", got)
 	}
 }
 

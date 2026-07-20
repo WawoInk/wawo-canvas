@@ -183,7 +183,6 @@ func resolveGenerationProfiles(templates []model.GenerationProfile, private mode
 		for _, profile := range templates {
 			if len(modelChannelsForModel(private.Channels, profile.UpstreamModel)) > 0 {
 				profile.Credits = publicModelCost(public, profile.UpstreamModel)
-				profile.HasCredits = true
 				profiles = append(profiles, profile)
 			}
 		}
@@ -201,7 +200,7 @@ func resolveGenerationProfiles(templates []model.GenerationProfile, private mode
 			return nil, safeMessageError{message: fmt.Sprintf("unknown generation profile %q", binding.ProfileID)}
 		}
 		models := generationBindingModels(binding)
-		if len(binding.UpstreamModels) > 1 || len(models) != 1 || binding.ID == "" || (binding.Credits != nil && *binding.Credits < 0) {
+		if len(binding.UpstreamModels) > 1 || len(models) != 1 || binding.ID == "" {
 			return nil, safeMessageError{message: fmt.Sprintf("invalid generation profile binding %q", binding.ID)}
 		}
 		upstreamModel := models[0]
@@ -216,10 +215,6 @@ func resolveGenerationProfiles(templates []model.GenerationProfile, private mode
 		}
 		seen[profile.ID] = true
 		profile.Credits = publicModelCost(public, upstreamModel)
-		profile.HasCredits = true
-		if binding.Credits != nil {
-			profile.Credits = *binding.Credits
-		}
 		channels := modelChannelsForModel(private.Channels, profile.UpstreamModel)
 		if binding.ChannelName != "" {
 			channels = channels[:0]
@@ -259,7 +254,8 @@ func AvailableGenerationProfiles() ([]model.GenerationProfile, error) {
 	if err != nil {
 		return nil, err
 	}
-	return resolveGenerationProfiles(GenerationProfiles(), normalizePrivateSetting(settings.Private), settings.Public)
+	settings = normalizeSettings(settings)
+	return resolveGenerationProfiles(GenerationProfiles(), settings.Private, settings.Public)
 }
 
 func ValidateStoredGenerationBindings() error {
