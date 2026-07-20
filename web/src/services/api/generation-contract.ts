@@ -89,7 +89,7 @@ export type ShortDramaGenerationSettings = {
     quality: "standard" | "high";
 };
 export type GenerationIntent =
-    | { kind: "video.generate"; prompt: string; references: GenerationReferences; settings?: VideoGenerationSettings }
+    | { kind: "video.generate"; prompt: string; negativePrompt?: string; references: GenerationReferences; settings?: VideoGenerationSettings }
     | { kind: "video.short-drama"; title: string; script: string; assets: ShortDramaAsset[]; settings?: ShortDramaGenerationSettings };
 export type GenerationCommand = {
     commandVersion: 1;

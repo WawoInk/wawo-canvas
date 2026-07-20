@@ -2328,6 +2328,7 @@ function InfiniteCanvasPage() {
                             vquality: generationConfig.vquality,
                             generateAudio: generationConfig.videoGenerateAudio,
                             watermark: generationConfig.videoWatermark,
+                            negativePrompt: generationConfig.videoNegativePrompt,
                             references: generationReferenceUrls(generationContext),
                         },
                     };

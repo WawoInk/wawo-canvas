@@ -19,6 +19,7 @@ export type PlatformMediaReference = {
 export type VideoGenerationIntent = {
     kind: "video.generate";
     prompt: string;
+    negativePrompt?: string;
     references: {
         images: PlatformMediaReference[];
         videos: PlatformMediaReference[];
@@ -27,7 +28,7 @@ export type VideoGenerationIntent = {
     settings: VideoGenerationSettings;
 };
 
-export function buildVideoGenerationIntent(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[], prompt: string, settings: VideoGenerationSettings): VideoGenerationIntent {
+export function buildVideoGenerationIntent(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[], prompt: string, settings: VideoGenerationSettings, negativePrompt = ""): VideoGenerationIntent {
     const references = { images: [] as PlatformMediaReference[], videos: [] as PlatformMediaReference[], audios: [] as PlatformMediaReference[] };
     for (const node of getGenerationResourceNodes(nodeId, nodes, connections)) {
         if (!node.metadata?.fileId) throw new Error(`素材「${node.title || node.id}」尚未上传到平台文件库`);
@@ -36,7 +37,8 @@ export function buildVideoGenerationIntent(nodeId: string, nodes: CanvasNodeData
         if (node.type === CanvasNodeType.Video) references.videos.push(reference);
         if (node.type === CanvasNodeType.Audio) references.audios.push(reference);
     }
-    return { kind: "video.generate", prompt, references, settings };
+    const trimmedNegativePrompt = negativePrompt.trim();
+    return { kind: "video.generate", prompt, ...(trimmedNegativePrompt ? { negativePrompt: trimmedNegativePrompt } : {}), references, settings };
 }
 export type FirstPartyCanvasVideoRun = {
     command: GenerationCommand;
@@ -75,6 +77,7 @@ export function prepareFirstPartyCanvasVideoRun(input: { nodeId: string; nodes: 
                   generateAudio: boolConfig(config.videoGenerateAudio, true),
                   watermark: boolConfig(config.videoWatermark, false),
               }),
+              config.videoNegativePrompt,
           );
     return {
         command: buildGenerationCommand({ clientRequestId: input.clientRequestId, modelProfileId: profile.id, source: "canvas", intent }),

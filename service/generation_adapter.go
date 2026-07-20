@@ -89,6 +89,9 @@ func (a SeedanceContentsV1Adapter) Create(ctx context.Context, req AdapterCreate
 		"generate_audio": generationSetting(req, "generateAudio", true),
 		"watermark":      generationSetting(req, "watermark", false),
 	}
+	if req.Intent.NegativePrompt != "" {
+		payload["metadata"] = map[string]any{"extra_params": map[string]any{"negative_prompt": req.Intent.NegativePrompt}}
+	}
 	if req.CallbackURL != "" {
 		payload["callback_url"] = req.CallbackURL
 	}

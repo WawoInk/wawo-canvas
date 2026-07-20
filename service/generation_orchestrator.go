@@ -72,7 +72,7 @@ func CreateGeneration(ctx context.Context, user model.AuthUser, command model.Ge
 	if !profileSupportsIntent(profile, command.Intent.Kind) {
 		return model.FirstPartyGenerationTask{}, invalidCommand("intent.kind", "当前模型不支持该生成类型", "")
 	}
-	if err := validateGenerationIntent(profile, command.Intent); err != nil {
+	if err := validateGenerationIntent(profile, &command.Intent); err != nil {
 		return model.FirstPartyGenerationTask{}, err
 	}
 	settings, err := normalizeGenerationSettings(profile, command.Intent.Settings)
@@ -189,10 +189,14 @@ func generationCommandSummary(command model.GenerationCommand) model.GenerationC
 	}
 }
 
-func validateGenerationIntent(profile model.GenerationProfile, intent model.GenerationIntent) error {
+func validateGenerationIntent(profile model.GenerationProfile, intent *model.GenerationIntent) error {
 	if intent.Kind == model.IntentVideoGenerate {
 		if strings.TrimSpace(intent.Prompt) == "" {
 			return invalidCommand("intent.prompt", "请输入视频提示词", "")
+		}
+		intent.NegativePrompt = strings.TrimSpace(intent.NegativePrompt)
+		if utf8.RuneCountInString(intent.NegativePrompt) > 500 {
+			return invalidCommand("intent.negativePrompt", "负向提示词不能超过 500 个字符", "")
 		}
 		return nil
 	}

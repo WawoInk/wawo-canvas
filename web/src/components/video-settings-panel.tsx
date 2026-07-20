@@ -155,7 +155,7 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, showTitle, c
                         </div>
                     </SettingGroup>
                 ) : null}
-                {!profile ? (
+                {!isDrama ? (
                     <SettingGroup title="负向提示词（可选）" color={theme.node.muted}>
                         <textarea
                             value={config.videoNegativePrompt || ""}
