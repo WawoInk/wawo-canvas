@@ -119,6 +119,27 @@ func TestCreateGenerationRejectsInvalidViduDramaInput(t *testing.T) {
 	}
 }
 
+func TestCreateGenerationAcceptsGeneratedDramaImage(t *testing.T) {
+	userID, asset := setupDramaValidationTest(t, "image/png")
+	item, ok, err := repository.GetUserFileByID(asset.Reference.FileID, userID)
+	if err != nil || !ok {
+		t.Fatalf("get user file: ok=%v err=%v", ok, err)
+	}
+	item.FileType = "results/images"
+	if err := repository.UpdateUserFile(item); err != nil {
+		t.Fatalf("update user file: %v", err)
+	}
+	routeErr := errors.New("route reached")
+	previousChannel := generationChannel
+	defer func() { generationChannel = previousChannel }()
+	generationChannel = func(string) (model.ModelChannel, error) { return model.ModelChannel{}, routeErr }
+
+	_, err = CreateGeneration(context.Background(), model.AuthUser{ID: userID}, dramaCommand("generated-image-"+uuid.NewString(), asset, nil))
+	if !errors.Is(err, routeErr) {
+		t.Fatalf("error = %v, want route reached", err)
+	}
+}
+
 func TestCreateGenerationReturnsLocatableDramaMediaErrors(t *testing.T) {
 	for _, testCase := range []struct {
 		name       string

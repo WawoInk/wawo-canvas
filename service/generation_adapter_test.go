@@ -47,6 +47,52 @@ func TestCreateGenerationRejectsForeignMedia(t *testing.T) {
 	}
 }
 
+func TestCreateGenerationAcceptsGeneratedImageReference(t *testing.T) {
+	previousProfiles := generationProfiles
+	previousChannel := generationChannel
+	defer func() {
+		generationProfiles = previousProfiles
+		generationChannel = previousChannel
+	}()
+	generationProfiles = func() []model.GenerationProfile {
+		return []model.GenerationProfile{{ID: "seedance-result-media", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "seedance-result-media", Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}}
+	}
+	routeErr := errors.New("route reached")
+	generationChannel = func(string) (model.ModelChannel, error) { return model.ModelChannel{}, routeErr }
+	userID := "result-media-user-" + uuid.NewString()
+	fileID := "result-image-" + uuid.NewString()
+	if err := repository.CreateUserFile(model.UserFile{ID: fileID, UserID: userID, FileType: "results/images", S3Key: "results/images/" + userID + "/file.png", OriginalName: "file.png", MimeType: "image/png", CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}); err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+
+	_, err := CreateGeneration(context.Background(), model.AuthUser{ID: userID}, model.GenerationCommand{
+		CommandVersion: 1, ClientRequestID: "request-result-media-" + uuid.NewString(), ModelProfileID: "seedance-result-media", Source: string(model.SourceCanvas),
+		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "test", References: model.GenerationReferences{Images: []model.MediaReference{{FileID: fileID, SourceNodeID: "node-1"}}}},
+	})
+	if !errors.Is(err, routeErr) {
+		t.Fatalf("error = %v, want route reached", err)
+	}
+}
+
+func TestGenerationFileMatchesMediaType(t *testing.T) {
+	for _, testCase := range []struct {
+		fileType string
+		expected string
+		want     bool
+	}{
+		{"images", "images", true}, {"results/images", "images", true},
+		{"videos", "videos", true}, {"results/videos", "videos", true},
+		{"audios", "audios", true}, {"results/audios", "audios", true},
+		{"videos", "images", false}, {"results/videos", "images", false},
+		{"uploads/images", "images", false}, {"foo/images", "images", false},
+		{"results/images/extra", "images", false}, {"", "images", false},
+	} {
+		if got := generationFileMatchesMediaType(testCase.fileType, testCase.expected); got != testCase.want {
+			t.Fatalf("generationFileMatchesMediaType(%q, %q) = %v, want %v", testCase.fileType, testCase.expected, got, testCase.want)
+		}
+	}
+}
+
 func TestCreateGenerationAppliesProfileSettingsToSeedance(t *testing.T) {
 	var gotBody map[string]any
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -394,9 +440,9 @@ func TestCreateGenerationRunsMediaSeedanceTask(t *testing.T) {
 		s3Key    string
 		target   *[]model.MediaReference
 	}{
-		{"image-" + key, "images", "uploads/images/" + userID + "/image.png", &references.Images},
-		{"video-" + key, "videos", "uploads/videos/" + userID + "/video.mp4", &references.Videos},
-		{"audio-" + key, "audios", "uploads/audios/" + userID + "/audio.mp3", &references.Audios},
+		{"image-" + key, "results/images", "results/images/" + userID + "/image.png", &references.Images},
+		{"video-" + key, "results/videos", "results/videos/" + userID + "/video.mp4", &references.Videos},
+		{"audio-" + key, "results/audios", "results/audios/" + userID + "/audio.mp3", &references.Audios},
 	} {
 		if err := repository.CreateUserFile(model.UserFile{ID: item.id, UserID: userID, FileType: item.fileType, S3Key: item.s3Key}); err != nil {
 			t.Fatalf("create %s: %v", item.fileType, err)
