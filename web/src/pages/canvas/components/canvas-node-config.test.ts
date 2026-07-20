@@ -24,6 +24,7 @@ const defaults: AiConfig = {
     vquality: "720",
     videoGenerateAudio: "true",
     videoWatermark: "false",
+    videoNegativePrompt: "",
     systemPrompt: "",
     models: [],
     imageModels: [],
@@ -54,10 +55,11 @@ test("buildNodeConfig preserves node overrides and image canvas count", () => {
 });
 
 test("buildNodeConfig maps media metadata to effective config", () => {
-    const config = buildNodeConfig(defaults, defaults, node({ seconds: "12", generateAudio: "false", watermark: "true", audioVoice: "nova", audioFormat: "wav", audioSpeed: "1.25", audioInstructions: "calm" }), "video");
+    const config = buildNodeConfig(defaults, defaults, node({ seconds: "12", generateAudio: "false", watermark: "true", negativePrompt: "低质量，模糊", audioVoice: "nova", audioFormat: "wav", audioSpeed: "1.25", audioInstructions: "calm" }), "video");
     assert.equal(config.videoSeconds, "12");
     assert.equal(config.videoGenerateAudio, "false");
     assert.equal(config.videoWatermark, "true");
+    assert.equal(config.videoNegativePrompt, "低质量，模糊");
     assert.equal(config.audioVoice, "nova");
     assert.equal(config.audioFormat, "wav");
     assert.equal(config.audioSpeed, "1.25");
@@ -68,6 +70,7 @@ test("config patches map setting keys to node metadata", () => {
     assert.deepEqual(videoConfigPatch("videoSeconds", "10"), { seconds: "10" });
     assert.deepEqual(videoConfigPatch("videoGenerateAudio", "false"), { generateAudio: "false" });
     assert.deepEqual(videoConfigPatch("videoWatermark", "true"), { watermark: "true" });
+    assert.deepEqual(videoConfigPatch("videoNegativePrompt", "低质量，模糊"), { negativePrompt: "低质量，模糊" });
     assert.deepEqual(videoConfigPatch("vquality", "1080"), { vquality: "1080" });
     assert.deepEqual(audioConfigPatch("audioVoice", "nova"), { audioVoice: "nova" });
     assert.deepEqual(audioConfigPatch("audioInstructions", "calm"), { audioInstructions: "calm" });

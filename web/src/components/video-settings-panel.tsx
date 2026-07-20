@@ -20,7 +20,7 @@ const sizeOptions = [
 
 type VideoSettingsPanelProps = {
     config: AiConfig;
-    onConfigChange: (key: "quality" | "vquality" | "size" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark", value: string) => void;
+    onConfigChange: (key: "quality" | "vquality" | "size" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark" | "videoNegativePrompt", value: string) => void;
     theme: CanvasTheme;
     showTitle?: boolean;
     className?: string;
@@ -153,6 +153,20 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, showTitle, c
                             {definitions?.generateAudio ? <SwitchRow label="生成声音" checked={Boolean(videoSettings.generateAudio)} theme={theme} onChange={(checked) => onConfigChange("videoGenerateAudio", String(checked))} /> : null}
                             {definitions?.watermark ? <SwitchRow label="添加水印" checked={Boolean(videoSettings.watermark)} theme={theme} onChange={(checked) => onConfigChange("videoWatermark", String(checked))} /> : null}
                         </div>
+                    </SettingGroup>
+                ) : null}
+                {!profile ? (
+                    <SettingGroup title="负向提示词（可选）" color={theme.node.muted}>
+                        <textarea
+                            value={config.videoNegativePrompt || ""}
+                            maxLength={500}
+                            placeholder="例如：低质量、模糊、畸形。"
+                            className="thin-scrollbar h-20 w-full resize-none rounded-xl border bg-transparent px-3 py-2 text-sm leading-5 outline-none"
+                            style={{ borderColor: theme.node.stroke, color: theme.node.text }}
+                            onChange={(event) => onConfigChange("videoNegativePrompt", event.target.value)}
+                            onMouseDown={(event) => event.stopPropagation()}
+                        />
+                        <div className="text-right text-[10px] opacity-55">{(config.videoNegativePrompt || "").length}/500</div>
                     </SettingGroup>
                 ) : null}
             </div>
