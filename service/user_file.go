@@ -22,6 +22,7 @@ var validFileTypes = map[string]bool{
 	"prompts":        true,
 	"results/images": true,
 	"results/videos": true,
+	"results/audios": true,
 }
 
 var presignExpiry = 12 * time.Hour

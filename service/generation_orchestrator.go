@@ -281,7 +281,7 @@ func validateShortDramaReferences(userID string, profile model.GenerationProfile
 		if !ok {
 			return NewGenerationValidationError("MEDIA_NOT_FOUND", fieldPath, "资产图片不存在或无权使用", false, asset.SourceNodeID)
 		}
-		if item.FileType != "images" {
+		if !generationFileMatchesMediaType(item.FileType, "images") {
 			return NewGenerationValidationError("MEDIA_UNSUPPORTED", fieldPath, "短剧资产必须是图片", false, asset.SourceNodeID)
 		}
 		allowed := false
@@ -298,6 +298,10 @@ func validateShortDramaReferences(userID string, profile model.GenerationProfile
 	return nil
 }
 
+func generationFileMatchesMediaType(fileType, expected string) bool {
+	return fileType == expected || fileType == "results/"+expected
+}
+
 func validateGenerationReferences(userID string, references model.GenerationReferences) error {
 	for fileType, items := range map[string][]model.MediaReference{
 		"images": references.Images,
@@ -309,7 +313,7 @@ func validateGenerationReferences(userID string, references model.GenerationRefe
 			if err != nil {
 				return err
 			}
-			if !ok || item.FileType != fileType {
+			if !ok || !generationFileMatchesMediaType(item.FileType, fileType) {
 				return ErrGenerationMediaForbidden
 			}
 		}
@@ -508,7 +512,7 @@ func generationIntentFromTask(ctx context.Context, task model.GenerationTask) (m
 			if err != nil {
 				return model.GenerationIntent{}, AdapterMediaReferences{}, err
 			}
-			if !ok || item.FileType != group.fileType {
+			if !ok || !generationFileMatchesMediaType(item.FileType, group.fileType) {
 				return model.GenerationIntent{}, AdapterMediaReferences{}, ErrGenerationMediaForbidden
 			}
 			url, err := generationPresign(ctx, item.S3Key, presignExpiry)
