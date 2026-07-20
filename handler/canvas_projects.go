@@ -17,8 +17,8 @@ type createCanvasProjectRequest struct {
 }
 
 type updateCanvasProjectRequest struct {
-	Project           any    `json:"project"`
-	ExpectedUpdatedAt string `json:"expectedUpdatedAt"`
+	Project          any    `json:"project"`
+	ExpectedRevision uint64 `json:"expectedRevision"`
 }
 
 // ListCanvasProjects GET /api/v1/canvas/projects
@@ -113,7 +113,7 @@ func UpdateCanvasProject(w http.ResponseWriter, r *http.Request, id string) {
 		projectJSON = string(pj)
 	}
 
-	project, err := service.UpdateCanvasProject(id, user.ID, projectJSON, req.ExpectedUpdatedAt)
+	project, err := service.UpdateCanvasProject(id, user.ID, projectJSON, req.ExpectedRevision)
 	if err != nil {
 		if errors.Is(err, repository.ErrConflict) {
 			Conflict(w, "画布已被其他会话修改", project)

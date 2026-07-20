@@ -15,9 +15,10 @@ func Sync(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	cursor := q.Get("cursor")
+	canvasCursor := q.Get("canvasCursor")
 	domains := q.Get("domains")
 
-	result, err := service.SyncUserDomains(user.ID, cursor, domains)
+	result, err := service.SyncUserDomains(user.ID, cursor, canvasCursor, domains)
 	if err != nil {
 		FailError(w, err)
 		return

@@ -42,6 +42,10 @@ func DB() (*gorm.DB, error) {
 		if dbErr != nil {
 			return
 		}
+		dbErr = db.Exec("CREATE SEQUENCE IF NOT EXISTS canvas_revision_seq").Error
+		if dbErr != nil {
+			return
+		}
 		dbErr = db.AutoMigrate(
 			&model.User{},
 			&model.CreditLog{},
