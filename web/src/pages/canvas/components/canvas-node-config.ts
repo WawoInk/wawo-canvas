@@ -14,6 +14,7 @@ export function buildNodeConfig(globalConfig: AiConfig, defaults: AiConfig, node
         vquality: metadata?.vquality || globalConfig.vquality || defaults.vquality,
         videoGenerateAudio: metadata?.generateAudio || globalConfig.videoGenerateAudio || defaults.videoGenerateAudio,
         videoWatermark: metadata?.watermark || globalConfig.videoWatermark || defaults.videoWatermark,
+        videoNegativePrompt: metadata?.negativePrompt ?? globalConfig.videoNegativePrompt ?? defaults.videoNegativePrompt,
         audioVoice: metadata?.audioVoice || globalConfig.audioVoice || defaults.audioVoice,
         audioFormat: metadata?.audioFormat || globalConfig.audioFormat || defaults.audioFormat,
         audioSpeed: metadata?.audioSpeed || globalConfig.audioSpeed || defaults.audioSpeed,
@@ -26,6 +27,7 @@ export function videoConfigPatch(key: keyof AiConfig, value: string): Partial<Ca
     if (key === "videoSeconds") return { seconds: value };
     if (key === "videoGenerateAudio") return { generateAudio: value };
     if (key === "videoWatermark") return { watermark: value };
+    if (key === "videoNegativePrompt") return { negativePrompt: value };
     return { [key]: value };
 }
 

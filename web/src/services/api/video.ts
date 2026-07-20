@@ -58,20 +58,7 @@ export async function createVideoGenerationTask(
     const selectedModel = (config.model || config.videoModel).trim();
     const requestConfig = resolveModelRequestConfig(config, selectedModel);
     assertVideoConfig(requestConfig, requestConfig.model);
-    if (audioReferences.length && !references.length && !videoReferences.length) {
-        throw new Error("参考音频不能单独使用，请同时添加参考图或参考视频");
-    }
-    const content = await buildSeedanceContent(requestConfig, prompt, references, videoReferences, audioReferences);
-    if (!content.length) throw new Error("请输入视频提示词，或连接参考图片/视频/音频");
-    const payload = {
-        model: modelOptionName(selectedModel),
-        content,
-        ratio: normalizeSeedanceRatio(requestConfig.size),
-        resolution: normalizeSeedanceResolution(requestConfig.vquality, modelOptionName(selectedModel)),
-        duration: normalizeSeedanceDuration(requestConfig.videoSeconds),
-        generate_audio: boolConfig(requestConfig.videoGenerateAudio, true),
-        watermark: boolConfig(requestConfig.videoWatermark, false),
-    };
+    const payload = await buildVideoGenerationPayload(requestConfig, selectedModel, prompt, references, videoReferences, audioReferences);
 
     try {
         const headers: Record<string, string> = { ...aiHeaders(requestConfig, "application/json") };
@@ -123,6 +110,24 @@ export async function storeGeneratedVideo(result: VideoGenerationResult): Promis
 function videoTaskApiUrl(config: AiConfig, taskId?: string) {
     const path = `/contents/generations/tasks${taskId ? `/${encodeURIComponent(taskId)}` : ""}`;
     return config.channelMode === "remote" ? `/api/v1${path}` : buildApiUrl(config.baseUrl, path);
+}
+
+export async function buildVideoGenerationPayload(config: AiConfig, selectedModel: string, prompt: string, references: ReferenceImage[] = [], videoReferences: ReferenceVideo[] = [], audioReferences: ReferenceAudio[] = []) {
+    if (audioReferences.length && !references.length && !videoReferences.length) throw new Error("参考音频不能单独使用，请同时添加参考图或参考视频");
+    const content = await buildSeedanceContent(config, prompt, references, videoReferences, audioReferences);
+    if (!content.length) throw new Error("请输入视频提示词，或连接参考图片/视频/音频");
+    const negativePrompt = config.videoNegativePrompt.trim();
+    if (negativePrompt.length > 500) throw new Error("负向提示词不能超过 500 个字符");
+    return {
+        model: modelOptionName(selectedModel),
+        content,
+        ratio: normalizeSeedanceRatio(config.size),
+        resolution: normalizeSeedanceResolution(config.vquality, modelOptionName(selectedModel)),
+        duration: normalizeSeedanceDuration(config.videoSeconds),
+        generate_audio: boolConfig(config.videoGenerateAudio, true),
+        watermark: boolConfig(config.videoWatermark, false),
+        ...(negativePrompt ? { metadata: { extra_params: { negative_prompt: negativePrompt } } } : {}),
+    };
 }
 
 async function buildSeedanceContent(config: AiConfig, prompt: string, references: ReferenceImage[], videoReferences: ReferenceVideo[], audioReferences: ReferenceAudio[]) {

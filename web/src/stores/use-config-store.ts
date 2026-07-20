@@ -37,6 +37,7 @@ export type AiConfig = {
     vquality: string;
     videoGenerateAudio: string;
     videoWatermark: string;
+    videoNegativePrompt: string;
     systemPrompt: string;
     models: string[];
     imageModels: string[];
@@ -93,6 +94,7 @@ export const defaultConfig: AiConfig = {
     vquality: "720",
     videoGenerateAudio: "true",
     videoWatermark: "false",
+    videoNegativePrompt: "",
     systemPrompt: "",
     models: ["default::gpt-image-2", "default::grok-imagine-video", "default::gpt-5.5", "default::gpt-4o-mini-tts"],
     imageModels: ["default::gpt-image-2"],
