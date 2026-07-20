@@ -50,9 +50,11 @@ type CanvasNodeProps = {
     onContextMenu: (event: React.MouseEvent, nodeId: string) => void;
 };
 
+type Theme = (typeof canvasThemes)[keyof typeof canvasThemes];
+
 type NodeContentRendererProps = {
     node: CanvasNodeData;
-    theme: (typeof canvasThemes)[keyof typeof canvasThemes];
+    theme: Theme;
     isEditingContent: boolean;
     textareaRef: React.RefObject<HTMLTextAreaElement | null>;
     isBatchRoot: boolean;
@@ -338,22 +340,42 @@ export const CanvasNode = React.memo(function CanvasNode({
 });
 
 function NodeContent(props: NodeContentRendererProps) {
-    if (props.node.type === CanvasNodeType.Config && props.renderNodeContent) return props.renderNodeContent(props.node);
+    const { node, theme } = props;
+    if (node.type === CanvasNodeType.Config && props.renderNodeContent) return props.renderNodeContent(node);
     if (props.isBatchRoot) return <ImageNodeContent {...props} />;
-    if (props.node.metadata?.status === "loading") return <LoadingContent node={props.node} theme={props.theme} />;
-    if (props.node.metadata?.status === "error") return <ErrorContent node={props.node} theme={props.theme} onRetry={props.onRetry} />;
+    if (node.metadata?.status === "loading") return <LoadingContent node={node} theme={theme} />;
+    if (node.metadata?.status === "error") return <ErrorContent node={node} theme={theme} onRetry={props.onRetry} />;
 
-    const Renderer = nodeContentRenderers[props.node.type];
-    return Renderer ? <Renderer {...props} /> : <UnknownNodeContent theme={props.theme} />;
+    switch (node.type) {
+        case CanvasNodeType.Text:
+            return (
+                <TextContent
+                    node={node}
+                    theme={theme}
+                    isEditingContent={props.isEditingContent}
+                    textareaRef={props.textareaRef}
+                    mentionReferences={props.mentionReferences}
+                    onContentChange={props.onContentChange}
+                    onStopEditing={props.onStopEditing}
+                    onGenerateImage={props.onGenerateImage}
+                />
+            );
+        case CanvasNodeType.Image:
+            return <ImageNodeContent {...props} />;
+        case CanvasNodeType.Config:
+            return <EmptyImageContent theme={theme} />;
+        case CanvasNodeType.Video:
+            return <VideoNodeContent node={node} theme={theme} />;
+        case CanvasNodeType.Audio:
+            return <AudioNodeContent node={node} theme={theme} />;
+        default:
+            return <UnknownNodeContent theme={theme} />;
+    }
 }
 
-const nodeContentRenderers = {
-    [CanvasNodeType.Text]: TextContent,
-    [CanvasNodeType.Image]: ImageNodeContent,
-    [CanvasNodeType.Config]: EmptyImageContent,
-    [CanvasNodeType.Video]: VideoNodeContent,
-    [CanvasNodeType.Audio]: AudioNodeContent,
-} satisfies Record<CanvasNodeType, (props: NodeContentRendererProps) => ReactNode>;
+type ThemeRendererProps = Pick<NodeContentRendererProps, "theme">;
+type MediaRendererProps = Pick<NodeContentRendererProps, "node" | "theme">;
+type TextContentProps = Pick<NodeContentRendererProps, "node" | "theme" | "isEditingContent" | "textareaRef" | "mentionReferences" | "onContentChange" | "onStopEditing" | "onGenerateImage">;
 
 function LoadingContent({ node, theme }: Pick<NodeContentRendererProps, "node" | "theme">) {
     return (
@@ -385,7 +407,7 @@ function ErrorContent({ node, theme, onRetry }: Pick<NodeContentRendererProps, "
     );
 }
 
-function UnknownNodeContent({ theme }: Pick<NodeContentRendererProps, "theme">) {
+function UnknownNodeContent({ theme }: ThemeRendererProps) {
     return (
         <div className="flex h-full w-full items-center justify-center text-sm" style={{ color: theme.node.placeholder }}>
             未知节点
@@ -393,7 +415,7 @@ function UnknownNodeContent({ theme }: Pick<NodeContentRendererProps, "theme">) 
     );
 }
 
-function TextContent({ node, theme, isEditingContent, textareaRef, mentionReferences, onContentChange, onStopEditing, onGenerateImage }: NodeContentRendererProps) {
+function TextContent({ node, theme, isEditingContent, textareaRef, mentionReferences, onContentChange, onStopEditing, onGenerateImage }: TextContentProps) {
     const fontSize = node.metadata?.fontSize || 14;
     const textStyle = { fontSize: `${fontSize}px`, lineHeight: `${Math.round(fontSize * 1.65)}px`, color: theme.node.text, boxSizing: "border-box" } as React.CSSProperties;
 
@@ -477,7 +499,9 @@ function ImageNodeContent(props: NodeContentRendererProps) {
     );
 }
 
-function EmptyImageContent({ theme, isBatchRoot, batchCount, batchExpanded, batchOpening, batchRecovering, onToggleBatch }: NodeContentRendererProps) {
+type EmptyImageContentProps = Pick<NodeContentRendererProps, "theme"> & Partial<Pick<NodeContentRendererProps, "isBatchRoot" | "batchCount" | "batchExpanded" | "batchOpening" | "batchRecovering" | "onToggleBatch">>;
+
+function EmptyImageContent({ theme, isBatchRoot = false, batchCount = 0, batchExpanded = false, batchOpening = false, batchRecovering = false, onToggleBatch }: EmptyImageContentProps) {
     const content = (
         <div className="flex h-full w-full flex-col items-center justify-center gap-3" style={{ color: theme.node.placeholder }}>
             <div className="flex size-14 items-center justify-center rounded-2xl" style={{ background: theme.toolbar.activeBg }}>
@@ -495,7 +519,7 @@ function EmptyImageContent({ theme, isBatchRoot, batchCount, batchExpanded, batc
     return content;
 }
 
-function VideoNodeContent({ node, theme }: NodeContentRendererProps) {
+function VideoNodeContent({ node, theme }: MediaRendererProps) {
     if (!node.metadata?.content)
         return (
             <div className="flex h-full w-full flex-col items-center justify-center gap-3" style={{ color: theme.node.placeholder }}>
@@ -506,7 +530,7 @@ function VideoNodeContent({ node, theme }: NodeContentRendererProps) {
     return <video src={node.metadata.content} controls className="h-full w-full rounded-[18px] bg-black object-contain" data-canvas-no-zoom />;
 }
 
-function AudioNodeContent({ node, theme }: NodeContentRendererProps) {
+function AudioNodeContent({ node, theme }: MediaRendererProps) {
     if (!node.metadata?.content)
         return (
             <div className="flex h-full w-full flex-col items-center justify-center gap-2" style={{ color: theme.node.placeholder }}>
