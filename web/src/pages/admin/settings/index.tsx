@@ -312,8 +312,8 @@ export default function AdminSettingsPage() {
 
     function addGenerationProfile() {
         const profiles = currentGenerationProfiles(form);
-        const profileId = generationProfileOptions.find((option) => !profiles.some((profile) => profile.profileId === option.value))?.value || generationProfileOptions[0].value;
-        updateGenerationProfiles([...profiles, { profileId, upstreamModels: [], channelName: "", enabled: true, limitOverrides: {} }]);
+        const profileId = generationProfileOptions[0].value;
+        updateGenerationProfiles([...profiles, { id: "", profileId, upstreamModel: "", channelName: "", enabled: true, limitOverrides: {} }]);
     }
 
     function updateGenerationProfile(index: number, patch: Partial<AdminGenerationProfileBinding>) {
@@ -718,14 +718,16 @@ export default function AdminSettingsPage() {
                                                 return (
                                                     <Card key={`${binding.profileId}-${index}`} size="small" styles={{ body: { paddingBottom: 4 } }}>
                                                         <Row gutter={12} align="middle">
+                                                            <Col xs={24} md={8} xl={4}>
+                                                                <Form.Item label="绑定 ID">
+                                                                    <Input value={binding.id} placeholder="stable-profile-id" onChange={(event) => updateGenerationProfile(index, { id: event.target.value })} />
+                                                                </Form.Item>
+                                                            </Col>
                                                             <Col xs={24} md={8} xl={5}>
                                                                 <Form.Item label="画布能力">
                                                                     <Select
                                                                         value={binding.profileId}
-                                                                        options={generationProfileOptions.map((option) => ({
-                                                                            ...option,
-                                                                            disabled: generationProfileBindings.some((item: AdminGenerationProfileBinding, itemIndex: number) => itemIndex !== index && item.profileId === option.value),
-                                                                        }))}
+                                                                        options={generationProfileOptions}
                                                                         onChange={(profileId) => updateGenerationProfile(index, { profileId, limitOverrides: {} })}
                                                                     />
                                                                 </Form.Item>
@@ -737,20 +739,19 @@ export default function AdminSettingsPage() {
                                                                         value={binding.channelName || undefined}
                                                                         placeholder="选择渠道"
                                                                         options={channelOptions}
-                                                                        onChange={(channelName) => updateGenerationProfile(index, { channelName, upstreamModel: undefined, upstreamModels: [] })}
+                                                                        onChange={(channelName) => updateGenerationProfile(index, { channelName, upstreamModel: "", upstreamModels: undefined })}
                                                                     />
                                                                 </Form.Item>
                                                             </Col>
                                                             <Col xs={24} md={8} xl={6}>
                                                                 <Form.Item label="上游模型">
                                                                     <Select
-                                                                        mode="multiple"
                                                                         showSearch
-                                                                        value={binding.upstreamModels || (binding.upstreamModel ? [binding.upstreamModel] : [])}
-                                                                        placeholder={binding.channelName ? "选择一个或多个模型" : "请先选择渠道"}
+                                                                        value={binding.upstreamModel || undefined}
+                                                                        placeholder={binding.channelName ? "选择模型" : "请先选择渠道"}
                                                                         disabled={!binding.channelName}
                                                                         options={modelOptions}
-                                                                        onChange={(upstreamModels) => updateGenerationProfile(index, { upstreamModel: undefined, upstreamModels })}
+                                                                        onChange={(upstreamModel) => updateGenerationProfile(index, { upstreamModel, upstreamModels: undefined, ...(!binding.id ? { id: upstreamModel } : {}) })}
                                                                     />
                                                                 </Form.Item>
                                                             </Col>
@@ -1079,8 +1080,9 @@ function normalizePrivateSetting(setting: Partial<AdminSettings["private"]> = {}
         channels: (setting.channels || []).map(normalizeChannel),
         generationProfiles:
             setting.generationProfiles?.map((binding) => ({
+                id: binding.id || binding.upstreamModel || (binding.upstreamModels?.length === 1 ? binding.upstreamModels[0] : ""),
                 profileId: binding.profileId || "",
-                upstreamModels: uniqueModels(binding.upstreamModels?.length ? binding.upstreamModels : binding.upstreamModel ? [binding.upstreamModel] : []),
+                upstreamModel: binding.upstreamModel || (binding.upstreamModels?.length === 1 ? binding.upstreamModels[0] : ""),
                 channelName: binding.channelName || "",
                 ...(binding.credits == null ? {} : { credits: Math.max(0, Number(binding.credits) || 0) }),
                 enabled: binding.enabled !== false,

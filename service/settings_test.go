@@ -108,12 +108,12 @@ func TestResolveGenerationProfilesAppliesOperationalBinding(t *testing.T) {
 	private := normalizePrivateSetting(model.PrivateSetting{
 		Channels: []model.ModelChannel{{Name: "seedance-route", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"upstream-seedance"}}},
 		GenerationProfiles: []model.GenerationProfileBinding{{
-			ProfileID: "seedance-1-5-pro", UpstreamModel: "upstream-seedance", ChannelName: "seedance-route", Credits: &credits, Enabled: true,
+			ID: "stable-seedance", ProfileID: "seedance-1-5-pro", UpstreamModel: "upstream-seedance", ChannelName: "seedance-route", Credits: &credits, Enabled: true,
 			LimitOverrides: model.GenerationLimitOverrides{DurationSecondsMax: &maxDuration},
 		}},
 	})
 
-	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private)
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, model.PublicSetting{})
 	if err != nil {
 		t.Fatalf("resolveGenerationProfiles: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestResolveGenerationProfilesAppliesOperationalBinding(t *testing.T) {
 		t.Fatalf("profiles = %#v", profiles)
 	}
 	profile := profiles[0]
-	if profile.ID != "upstream-seedance" || profile.UpstreamModel != "upstream-seedance" || profile.ChannelName != "seedance-route" || profile.Credits == nil || *profile.Credits != 7 {
+	if profile.ID != "stable-seedance" || profile.UpstreamModel != "upstream-seedance" || profile.ChannelName != "seedance-route" || profile.Credits != 7 {
 		t.Fatalf("profile = %#v", profile)
 	}
 	if max := profile.Capabilities.Settings["durationSeconds"].Max; max == nil || *max != 8 {
@@ -136,12 +136,12 @@ func TestResolveGenerationProfilesRoutesDynamicModelsThroughOneChannel(t *testin
 			Models: []string{"doubao-seedance-2-0-pro", "vidu-q3-pro"},
 		}},
 		GenerationProfiles: []model.GenerationProfileBinding{
-			{ProfileID: "seedance-1-5-pro", UpstreamModel: "doubao-seedance-2-0-pro", ChannelName: "xvanai", Enabled: true},
-			{ProfileID: "vidu-q3-drama", UpstreamModel: "vidu-q3-pro", ChannelName: "xvanai", Enabled: true},
+			{ID: "seedance-pro", ProfileID: "seedance-1-5-pro", UpstreamModel: "doubao-seedance-2-0-pro", ChannelName: "xvanai", Enabled: true},
+			{ID: "vidu-drama", ProfileID: "vidu-q3-drama", UpstreamModel: "vidu-q3-pro", ChannelName: "xvanai", Enabled: true},
 		},
 	})
 
-	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private)
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, model.PublicSetting{})
 	if err != nil {
 		t.Fatalf("resolveGenerationProfiles: %v", err)
 	}
@@ -156,45 +156,42 @@ func TestResolveGenerationProfilesRoutesDynamicModelsThroughOneChannel(t *testin
 	}
 }
 
-func TestResolveGenerationProfilesExpandsOneCapabilityAcrossMultipleModels(t *testing.T) {
+func TestResolveGenerationProfilesRejectsMultiModelBinding(t *testing.T) {
 	private := normalizePrivateSetting(model.PrivateSetting{
-		Channels: []model.ModelChannel{{
-			Protocol: "xvanai", Name: "xvanai", BaseURL: "https://example.com", APIKey: "secret", Enabled: true,
-			Models: []string{"seedance-2.0", "vidu-i2v", "vidu-t2v", "vidu-r2v", "vidu-headtail", "viduq3-drama"},
+		Channels: []model.ModelChannel{{Name: "xvanai", Enabled: true, Models: []string{"seedance-2.0", "vidu-i2v"}}},
+		GenerationProfiles: []model.GenerationProfileBinding{{
+			ID: "video", ProfileID: "seedance-1-5-pro", UpstreamModels: []string{"seedance-2.0", "vidu-i2v"}, ChannelName: "xvanai", Enabled: true,
 		}},
-		GenerationProfiles: []model.GenerationProfileBinding{
-			{ProfileID: "seedance-1-5-pro", UpstreamModels: []string{"seedance-2.0", "vidu-i2v", "vidu-t2v", "vidu-r2v", "vidu-headtail"}, ChannelName: "xvanai", Enabled: true},
-			{ProfileID: "vidu-q3-drama", UpstreamModels: []string{"viduq3-drama"}, ChannelName: "xvanai", Enabled: true},
-		},
 	})
 
-	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private)
+	if _, err := resolveGenerationProfiles(GenerationProfiles(), private, model.PublicSetting{}); err == nil {
+		t.Fatal("multi-model binding accepted")
+	}
+}
+
+func TestResolveGenerationProfilesPublishesEffectiveBillingCredits(t *testing.T) {
+	private := normalizePrivateSetting(model.PrivateSetting{
+		Channels: []model.ModelChannel{{Name: "video", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"priced", "override"}}},
+		GenerationProfiles: []model.GenerationProfileBinding{
+			{ID: "public-price", ProfileID: "seedance-1-5-pro", UpstreamModel: "priced", ChannelName: "video", Enabled: true},
+			{ID: "binding-price", ProfileID: "seedance-1-5-pro", UpstreamModel: "override", ChannelName: "video", Credits: intPtr(9), Enabled: true},
+		},
+	})
+	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "priced", Credits: 4}, {Model: "override", Credits: 5}}}}
+
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, public)
 	if err != nil {
 		t.Fatalf("resolveGenerationProfiles: %v", err)
 	}
-	if len(profiles) != 6 {
-		t.Fatalf("profiles = %#v", profiles)
-	}
-	for index, expected := range []struct {
-		id, adapter string
-	}{
-		{"seedance-2.0", "seedance-contents-v1"},
-		{"vidu-i2v", "seedance-contents-v1"},
-		{"vidu-t2v", "seedance-contents-v1"},
-		{"vidu-r2v", "seedance-contents-v1"},
-		{"vidu-headtail", "seedance-contents-v1"},
-		{"viduq3-drama", "vidu-short-drama-v1"},
-	} {
-		if profiles[index].ID != expected.id || profiles[index].DisplayName != expected.id || profiles[index].UpstreamModel != expected.id || profiles[index].AdapterKey != expected.adapter {
-			t.Fatalf("profile %d = %#v", index, profiles[index])
-		}
+	if profiles[0].Credits != 4 || profiles[1].Credits != 9 {
+		t.Fatalf("credits = %d/%d, want 4/9", profiles[0].Credits, profiles[1].Credits)
 	}
 }
 
 func TestNormalizePrivateSettingKeepsLegacyGenerationModel(t *testing.T) {
 	private := normalizePrivateSetting(model.PrivateSetting{GenerationProfiles: []model.GenerationProfileBinding{{UpstreamModel: " legacy-model "}}})
 	binding := private.GenerationProfiles[0]
-	if binding.UpstreamModel != "legacy-model" || !reflect.DeepEqual(binding.UpstreamModels, []string{"legacy-model"}) {
+	if binding.ID != "legacy-model" || binding.UpstreamModel != "legacy-model" {
 		t.Fatalf("binding = %#v", binding)
 	}
 }
@@ -204,12 +201,12 @@ func TestResolveGenerationProfilesDoesNotShareLimitOverrides(t *testing.T) {
 	private := normalizePrivateSetting(model.PrivateSetting{
 		Channels: []model.ModelChannel{{Name: "video", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"limited", "default"}}},
 		GenerationProfiles: []model.GenerationProfileBinding{
-			{ProfileID: "seedance-1-5-pro", UpstreamModels: []string{"limited"}, ChannelName: "video", Enabled: true, LimitOverrides: model.GenerationLimitOverrides{DurationSecondsMax: &maxDuration}},
-			{ProfileID: "seedance-1-5-pro", UpstreamModels: []string{"default"}, ChannelName: "video", Enabled: true},
+			{ID: "limited-profile", ProfileID: "seedance-1-5-pro", UpstreamModels: []string{"limited"}, ChannelName: "video", Enabled: true, LimitOverrides: model.GenerationLimitOverrides{DurationSecondsMax: &maxDuration}},
+			{ID: "default-profile", ProfileID: "seedance-1-5-pro", UpstreamModels: []string{"default"}, ChannelName: "video", Enabled: true},
 		},
 	})
 
-	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private)
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, model.PublicSetting{})
 	if err != nil {
 		t.Fatalf("resolveGenerationProfiles: %v", err)
 	}
@@ -231,7 +228,7 @@ func TestResolveGenerationProfilesRejectsUnsafeOrUnroutableBindings(t *testing.T
 			_, err := resolveGenerationProfiles(GenerationProfiles(), normalizePrivateSetting(model.PrivateSetting{
 				Channels:           []model.ModelChannel{{Name: "seedance-route", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"upstream-seedance"}}},
 				GenerationProfiles: []model.GenerationProfileBinding{binding},
-			}))
+			}), model.PublicSetting{})
 			if err == nil {
 				t.Fatal("invalid binding accepted")
 			}
@@ -240,7 +237,7 @@ func TestResolveGenerationProfilesRejectsUnsafeOrUnroutableBindings(t *testing.T
 }
 
 func TestResolveGenerationProfilesAllowsExplicitDisable(t *testing.T) {
-	profiles, err := resolveGenerationProfiles(GenerationProfiles(), normalizePrivateSetting(model.PrivateSetting{GenerationProfiles: []model.GenerationProfileBinding{{ProfileID: "seedance-1-5-pro", Enabled: false}}}))
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), normalizePrivateSetting(model.PrivateSetting{GenerationProfiles: []model.GenerationProfileBinding{{ProfileID: "seedance-1-5-pro", Enabled: false}}}), model.PublicSetting{})
 	if err != nil || len(profiles) != 0 {
 		t.Fatalf("profiles = %#v, err = %v", profiles, err)
 	}

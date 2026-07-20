@@ -115,10 +115,8 @@ func CreateGeneration(ctx context.Context, user model.AuthUser, command model.Ge
 	if err != nil {
 		return model.FirstPartyGenerationTask{}, err
 	}
-	credits := 0
-	if profile.Credits != nil {
-		credits = *profile.Credits
-	} else {
+	credits := profile.Credits
+	if !profile.HasCredits {
 		credits, err = generationCost(profile.UpstreamModel)
 		if err != nil {
 			return model.FirstPartyGenerationTask{}, err

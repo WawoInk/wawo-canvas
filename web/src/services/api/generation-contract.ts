@@ -47,6 +47,7 @@ export type GenerationProfile = {
     id: string;
     version: number;
     displayName: string;
+    credits: number;
     adapterKey: string;
     intents: string[];
     capabilities: {

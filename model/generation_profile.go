@@ -16,7 +16,8 @@ type GenerationProfile struct {
 	AdapterKey    string                 `json:"adapterKey"`
 	UpstreamModel string                 `json:"-"`
 	ChannelName   string                 `json:"-"`
-	Credits       *int                   `json:"-"`
+	Credits       int                    `json:"credits"`
+	HasCredits    bool                   `json:"-"`
 	Intents       []GenerationIntentKind `json:"intents"`
 	Capabilities  GenerationCapabilities `json:"capabilities"`
 }

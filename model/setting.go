@@ -70,8 +70,9 @@ type GenerationLimitOverrides struct {
 }
 
 type GenerationProfileBinding struct {
+	ID             string                   `json:"id"`
 	ProfileID      string                   `json:"profileId"`
-	UpstreamModel  string                   `json:"upstreamModel,omitempty"`
+	UpstreamModel  string                   `json:"upstreamModel"`
 	UpstreamModels []string                 `json:"upstreamModels,omitempty"`
 	ChannelName    string                   `json:"channelName"`
 	Credits        *int                     `json:"credits,omitempty"`

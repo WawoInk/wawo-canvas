@@ -39,19 +39,17 @@ func normalizeSettings(settings model.Settings) model.Settings {
 	settings.Private = normalizePrivateSetting(settings.Private)
 	settings.Public = normalizePublicSettingWithChannels(settings.Public, settings.Private.Channels)
 	if settings.Private.GenerationProfiles != nil {
-		profileIDs := []string{}
+		bindingIDs := []string{}
 		upstreamModels := map[string]bool{}
 		for _, binding := range settings.Private.GenerationProfiles {
-			if !binding.Enabled {
+			if !binding.Enabled || binding.ID == "" || binding.UpstreamModel == "" {
 				continue
 			}
-			for _, upstreamModel := range generationBindingModels(binding) {
-				profileIDs = append(profileIDs, upstreamModel)
-				upstreamModels[upstreamModel] = true
-			}
+			bindingIDs = append(bindingIDs, binding.ID)
+			upstreamModels[binding.UpstreamModel] = true
 		}
-		settings.Public.ModelChannel.AvailableModels = replaceBoundUpstreamModels(settings.Public.ModelChannel.AvailableModels, upstreamModels, profileIDs)
-		settings.Public.ModelChannel.VideoModels = replaceBoundUpstreamModels(settings.Public.ModelChannel.VideoModels, upstreamModels, profileIDs)
+		settings.Public.ModelChannel.AvailableModels = replaceBoundUpstreamModels(settings.Public.ModelChannel.AvailableModels, upstreamModels, bindingIDs)
+		settings.Public.ModelChannel.VideoModels = replaceBoundUpstreamModels(settings.Public.ModelChannel.VideoModels, upstreamModels, bindingIDs)
 	}
 	return settings
 }
@@ -149,10 +147,10 @@ func ModelCost(modelName string) (int, error) {
 }
 
 func generationBindingModels(binding model.GenerationProfileBinding) []string {
-	if len(binding.UpstreamModels) > 0 {
-		return uniqueModelNames(binding.UpstreamModels)
+	if binding.UpstreamModel != "" {
+		return []string{binding.UpstreamModel}
 	}
-	return uniqueModelNames([]string{binding.UpstreamModel})
+	return uniqueModelNames(binding.UpstreamModels)
 }
 
 func normalizePrivateSetting(setting model.PrivateSetting) model.PrivateSetting {
@@ -173,11 +171,16 @@ func normalizePrivateSetting(setting model.PrivateSetting) model.PrivateSetting 
 	}
 	for i := range setting.GenerationProfiles {
 		binding := &setting.GenerationProfiles[i]
+		binding.ID = strings.TrimSpace(binding.ID)
 		binding.ProfileID = strings.TrimSpace(binding.ProfileID)
 		binding.UpstreamModel = strings.TrimSpace(binding.UpstreamModel)
 		binding.UpstreamModels = uniqueModelNames(binding.UpstreamModels)
-		if len(binding.UpstreamModels) == 0 && binding.UpstreamModel != "" {
-			binding.UpstreamModels = []string{binding.UpstreamModel}
+		// Legacy multi-model bindings remain readable, but new bindings select one model.
+		if binding.UpstreamModel == "" && len(binding.UpstreamModels) == 1 {
+			binding.UpstreamModel = binding.UpstreamModels[0]
+		}
+		if binding.ID == "" {
+			binding.ID = binding.UpstreamModel
 		}
 		binding.ChannelName = strings.TrimSpace(binding.ChannelName)
 	}
