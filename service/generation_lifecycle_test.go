@@ -212,8 +212,10 @@ func TestGenerationConcurrentTerminalNotificationsPersistOnce(t *testing.T) {
 }
 
 func TestGenerationCompensationPollTimesOutWithStableError(t *testing.T) {
+	var polls atomic.Int32
 	adapter := lifecycleFakeAdapter{
 		poll: func(context.Context, model.ModelChannel, string) (ProviderTaskRef, error) {
+			polls.Add(1)
 			return ProviderTaskRef{ID: "provider-timeout", Status: model.TaskStatusRunning}, nil
 		},
 	}
@@ -235,8 +237,11 @@ func TestGenerationCompensationPollTimesOutWithStableError(t *testing.T) {
 	if err != nil || stored.Status != model.TaskStatusFailed || stored.ErrorCode != "GENERATION_TIMEOUT" || stored.ErrorRetryable {
 		t.Fatalf("stored=%#v err=%v", stored, err)
 	}
+	if polls.Load() == 0 {
+		t.Fatal("compensation poll was not attempted")
+	}
 	events, err := repository.ListGenerationTaskEvents(task.ID)
-	if err != nil || !hasGenerationEvent(events, "timeout") || !hasGenerationEvent(events, "poll") {
+	if err != nil || !hasGenerationEvent(events, "timeout") || !hasGenerationEvent(events, "terminal") {
 		t.Fatalf("events=%#v err=%v", events, err)
 	}
 }
