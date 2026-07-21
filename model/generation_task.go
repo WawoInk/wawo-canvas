@@ -32,6 +32,14 @@ const (
 	TaskStatusCancelled TaskStatus = "cancelled"
 )
 
+// EquivalentTaskStatuses returns persisted statuses with the same meaning.
+func EquivalentTaskStatuses(status TaskStatus) []TaskStatus {
+	if status == TaskStatusSuccess || status == TaskStatusSucceeded {
+		return []TaskStatus{TaskStatusSuccess, TaskStatusSucceeded}
+	}
+	return []TaskStatus{status}
+}
+
 // GenerationTask 统一 AI 生成任务元数据。
 type GenerationTask struct {
 	ID                   string     `json:"id" gorm:"primaryKey"`

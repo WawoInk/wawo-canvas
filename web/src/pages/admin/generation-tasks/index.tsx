@@ -7,6 +7,7 @@ import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 
 import type { AdminGenerationTask, AdminGenerationTaskDetailResponse } from "@/services/api/admin";
+import { generationTaskStatus } from "./generation-task-status";
 import { useAdminGenerationTasks } from "./use-admin-generation-tasks";
 
 const taskTypeLabels: Record<string, string> = {
@@ -21,22 +22,6 @@ const taskTypeColors: Record<string, string> = {
     video: "blue",
     audio: "orange",
     chat: "green",
-};
-
-const statusLabels: Record<string, string> = {
-    pending: "等待中",
-    running: "运行中",
-    success: "成功",
-    failed: "失败",
-    cancelled: "已取消",
-};
-
-const statusColors: Record<string, string> = {
-    pending: "default",
-    running: "processing",
-    success: "success",
-    failed: "error",
-    cancelled: "warning",
 };
 
 export default function AdminGenerationTasksPage() {
@@ -117,7 +102,10 @@ export default function AdminGenerationTasksPage() {
             title: "状态",
             dataIndex: "status",
             width: 90,
-            render: (_, item) => <Tag color={statusColors[item.status] || "default"}>{statusLabels[item.status] || item.status}</Tag>,
+            render: (_, item) => {
+                const status = generationTaskStatus(item.status);
+                return <Tag color={status.color}>{status.label}</Tag>;
+            },
         },
         {
             title: "扣费",
@@ -300,7 +288,7 @@ export default function AdminGenerationTasksPage() {
                             <Col span={6}>
                                 <Typography.Text type="secondary">状态</Typography.Text>
                                 <br />
-                                <Tag color={statusColors[detail.task.status]}>{statusLabels[detail.task.status] || detail.task.status}</Tag>
+                                <Tag color={generationTaskStatus(detail.task.status).color}>{generationTaskStatus(detail.task.status).label}</Tag>
                             </Col>
                             <Col span={6}>
                                 <Typography.Text type="secondary">扣费</Typography.Text>
