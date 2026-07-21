@@ -69,7 +69,7 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, showTitle, c
             : null;
     const videoSettings = profile && !isDrama ? buildVideoGenerationSettings(profile, provided) : provided;
     const settings = dramaSettings || videoSettings;
-    const resolutionOptions = definitions?.resolution.values?.map((value) => ({ value, label: value })) || seedanceResolutionOptions;
+    const supportedResolutions = definitions?.resolution.values ? new Set(definitions.resolution.values) : null;
     const ratioOptions = definitions?.aspectRatio.values?.map((value) => ({ value, label: seedanceRatioOptions.find((item) => item.value === value)?.label || value })) || seedanceRatioOptions;
     const durationDefinition = definitions?.durationSeconds;
     const durationValue = settings.durationSeconds;
@@ -88,8 +88,14 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, showTitle, c
                 <div style={settingError("resolution")}>
                     <SettingGroup title="分辨率" color={theme.node.muted}>
                         <div className="grid grid-cols-3 gap-2.5">
-                            {resolutionOptions.map((item) => (
-                                <OptionPill key={item.value} selected={settings.resolution === item.value} theme={theme} onClick={() => onConfigChange("vquality", item.value)}>
+                            {seedanceResolutionOptions.map((item) => (
+                                <OptionPill
+                                    key={item.value}
+                                    selected={settings.resolution === item.value}
+                                    disabled={supportedResolutions != null && !supportedResolutions.has(item.value)}
+                                    theme={theme}
+                                    onClick={() => onConfigChange("vquality", item.value)}
+                                >
                                     {item.label}
                                 </OptionPill>
                             ))}

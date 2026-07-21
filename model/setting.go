@@ -66,7 +66,8 @@ type PublicLinuxDoAuthSetting struct {
 }
 
 type GenerationLimitOverrides struct {
-	DurationSecondsMax *int `json:"durationSecondsMax,omitempty"`
+	DurationSecondsMax *int     `json:"durationSecondsMax,omitempty"`
+	ResolutionValues   []string `json:"resolutionValues,omitempty"`
 }
 
 type GenerationProfileBinding struct {

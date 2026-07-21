@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/basketikun/infinite-canvas/model"
@@ -234,6 +235,28 @@ func resolveGenerationProfiles(templates []model.GenerationProfile, private mode
 			}
 			definition.Max = intPtr(*max)
 			profile.Capabilities.Settings["durationSeconds"] = definition
+		}
+		if values := binding.LimitOverrides.ResolutionValues; values != nil {
+			definition, ok := profile.Capabilities.Settings["resolution"]
+			allowed := map[string]bool{}
+			for _, value := range definition.Values {
+				allowed[value] = true
+			}
+			seenValues := map[string]bool{}
+			for _, value := range values {
+				if !allowed[value] || seenValues[value] {
+					ok = false
+				}
+				seenValues[value] = true
+			}
+			if !ok || len(values) == 0 {
+				return nil, safeMessageError{message: fmt.Sprintf("generation profile %q has an unsafe resolution limit override", binding.ID)}
+			}
+			definition.Values = slices.Clone(values)
+			if defaultValue, ok := definition.Default.(string); !ok || !seenValues[defaultValue] {
+				definition.Default = values[0]
+			}
+			profile.Capabilities.Settings["resolution"] = definition
 		}
 		profiles = append(profiles, profile)
 	}

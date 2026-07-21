@@ -52,8 +52,8 @@ const emptySettings: AdminSettings = {
 };
 const emptyChannel: AdminModelChannel = { protocol: "openai", name: "", baseUrl: "", apiKey: "", models: [], weight: 1, enabled: true, remark: "" };
 const generationProfileOptions = [
-    { label: "普通视频（Seedance）", value: "seedance-1-5-pro" },
-    { label: "短剧（Vidu Drama）", value: "vidu-q3-drama" },
+    { label: "普通视频（Seedance）", value: "seedance-1-5-pro", durationRange: { min: 4, max: 15 }, resolutionValues: ["480p", "720p", "1080p"] },
+    { label: "短剧（Vidu Drama）", value: "vidu-q3-drama", durationRange: { min: 8, max: 12 }, resolutionValues: ["1080p"] },
 ];
 
 type SettingsTabKey = "public" | "private";
@@ -714,7 +714,8 @@ export default function AdminSettingsPage() {
                                         <Flex vertical gap={12}>
                                             {generationProfileBindings.map((binding: AdminGenerationProfileBinding, index: number) => {
                                                 const modelOptions = (channelModelsByName[binding.channelName] || []).map((model) => ({ label: model, value: model }));
-                                                const durationRange = binding.profileId === "vidu-q3-drama" ? { min: 8, max: 12 } : { min: 4, max: 15 };
+                                                const profileOption = generationProfileOptions.find((option) => option.value === binding.profileId) || generationProfileOptions[0];
+                                                const resolutionValues = binding.limitOverrides?.resolutionValues ?? profileOption.resolutionValues;
                                                 return (
                                                     <Card key={`${binding.profileId}-${index}`} size="small" styles={{ body: { paddingBottom: 4 } }}>
                                                         <Row gutter={12} align="middle">
@@ -751,18 +752,38 @@ export default function AdminSettingsPage() {
                                                                     />
                                                                 </Form.Item>
                                                             </Col>
-                                                            <Col xs={12} md={8} xl={4}>
+                                                            <Col xs={12} md={8} xl={3}>
                                                                 <Form.Item label="最大时长">
                                                                     <InputNumber
-                                                                        min={durationRange.min}
-                                                                        max={durationRange.max}
+                                                                        min={profileOption.durationRange.min}
+                                                                        max={profileOption.durationRange.max}
                                                                         step={1}
                                                                         precision={0}
                                                                         className="!w-full"
                                                                         value={binding.limitOverrides?.durationSecondsMax}
-                                                                        placeholder={`${durationRange.max}s`}
+                                                                        placeholder={`${profileOption.durationRange.max}s`}
                                                                         addonAfter="秒"
-                                                                        onChange={(durationSecondsMax) => updateGenerationProfile(index, { limitOverrides: durationSecondsMax == null ? {} : { durationSecondsMax } })}
+                                                                        onChange={(durationSecondsMax) =>
+                                                                            updateGenerationProfile(index, {
+                                                                                limitOverrides: { ...binding.limitOverrides, durationSecondsMax: durationSecondsMax ?? undefined },
+                                                                            })
+                                                                        }
+                                                                    />
+                                                                </Form.Item>
+                                                            </Col>
+                                                            <Col xs={24} md={12} xl={5}>
+                                                                <Form.Item label="支持分辨率">
+                                                                    <Select
+                                                                        mode="multiple"
+                                                                        value={resolutionValues}
+                                                                        options={profileOption.resolutionValues.map((value) => ({ label: value, value }))}
+                                                                        onChange={(values) => {
+                                                                            if (!values.length) return;
+                                                                            const resolutionOverride = values.length === profileOption.resolutionValues.length ? undefined : values;
+                                                                            updateGenerationProfile(index, {
+                                                                                limitOverrides: { ...binding.limitOverrides, resolutionValues: resolutionOverride },
+                                                                            });
+                                                                        }}
                                                                     />
                                                                 </Form.Item>
                                                             </Col>

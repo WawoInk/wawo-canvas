@@ -269,7 +269,7 @@ export type AdminGenerationProfileBinding = {
     /** @deprecated Retained only for rollback-compatible settings round trips. */
     credits?: number;
     enabled: boolean;
-    limitOverrides: { durationSecondsMax?: number };
+    limitOverrides: { durationSecondsMax?: number; resolutionValues?: string[] };
 };
 
 export type AdminPrivateSettings = {

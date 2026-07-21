@@ -285,6 +285,74 @@ func TestNormalizePrivateSettingKeepsLegacyGenerationModel(t *testing.T) {
 	}
 }
 
+func TestResolveGenerationProfilesAppliesResolutionLimits(t *testing.T) {
+	private := normalizePrivateSetting(model.PrivateSetting{
+		Channels: []model.ModelChannel{{Name: "video", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"limited", "preserved", "default"}}},
+		GenerationProfiles: []model.GenerationProfileBinding{
+			{ID: "limited", ProfileID: "seedance-1-5-pro", UpstreamModel: "limited", ChannelName: "video", Enabled: true, LimitOverrides: model.GenerationLimitOverrides{ResolutionValues: []string{"1080p", "480p"}}},
+			{ID: "preserved", ProfileID: "seedance-1-5-pro", UpstreamModel: "preserved", ChannelName: "video", Enabled: true, LimitOverrides: model.GenerationLimitOverrides{ResolutionValues: []string{"1080p", "720p"}}},
+			{ID: "default", ProfileID: "seedance-1-5-pro", UpstreamModel: "default", ChannelName: "video", Enabled: true},
+		},
+	})
+
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, model.PublicSetting{})
+	if err != nil {
+		t.Fatalf("resolveGenerationProfiles: %v", err)
+	}
+	limited := profiles[0].Capabilities.Settings["resolution"]
+	if !reflect.DeepEqual(limited.Values, []string{"1080p", "480p"}) || limited.Default != "1080p" {
+		t.Fatalf("limited resolution = %#v", limited)
+	}
+	preserved := profiles[1].Capabilities.Settings["resolution"]
+	if !reflect.DeepEqual(preserved.Values, []string{"1080p", "720p"}) || preserved.Default != "720p" {
+		t.Fatalf("preserved resolution = %#v", preserved)
+	}
+	inherited := profiles[2].Capabilities.Settings["resolution"]
+	if !reflect.DeepEqual(inherited.Values, []string{"480p", "720p", "1080p"}) || inherited.Default != "720p" {
+		t.Fatalf("inherited resolution = %#v", inherited)
+	}
+	template := GenerationProfiles()[0].Capabilities.Settings["resolution"]
+	if !reflect.DeepEqual(template.Values, []string{"480p", "720p", "1080p"}) || template.Default != "720p" {
+		t.Fatalf("template resolution mutated: %#v", template)
+	}
+
+	settings, err := normalizeGenerationSettings(profiles[0], model.ScalarSettings{"resolution": "1080p"})
+	if err != nil || settings["resolution"] != "1080p" {
+		t.Fatalf("allowed resolution = %#v, err = %v", settings, err)
+	}
+	settings, err = normalizeGenerationSettings(profiles[0], nil)
+	if err != nil || settings["resolution"] != "1080p" {
+		t.Fatalf("default resolution = %#v, err = %v", settings, err)
+	}
+	if _, err = normalizeGenerationSettings(profiles[0], model.ScalarSettings{"resolution": "720p"}); err == nil {
+		t.Fatal("excluded resolution accepted")
+	} else if validationErr, ok := err.(GenerationValidationError); !ok || validationErr.Code != "INVALID_SETTING" || validationErr.FieldPath != "intent.settings.resolution" {
+		t.Fatalf("error = %#v", err)
+	}
+}
+
+func TestResolveGenerationProfilesRejectsUnsafeResolutionLimits(t *testing.T) {
+	for name, values := range map[string][]string{
+		"empty":     {},
+		"unknown":   {"4k"},
+		"mixed":     {"720p", "4k"},
+		"duplicate": {"720p", "720p"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := resolveGenerationProfiles(GenerationProfiles(), normalizePrivateSetting(model.PrivateSetting{
+				Channels: []model.ModelChannel{{Name: "video", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"limited"}}},
+				GenerationProfiles: []model.GenerationProfileBinding{{
+					ID: "limited", ProfileID: "seedance-1-5-pro", UpstreamModel: "limited", ChannelName: "video", Enabled: true,
+					LimitOverrides: model.GenerationLimitOverrides{ResolutionValues: values},
+				}},
+			}), model.PublicSetting{})
+			if err == nil {
+				t.Fatal("unsafe resolution limit accepted")
+			}
+		})
+	}
+}
+
 func TestResolveGenerationProfilesDoesNotShareLimitOverrides(t *testing.T) {
 	maxDuration := 8
 	private := normalizePrivateSetting(model.PrivateSetting{
