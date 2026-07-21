@@ -125,7 +125,7 @@ func ListGenerationTasks(q model.GenerationTaskQuery) ([]model.GenerationTask, i
 		tx = tx.Where("task_type = ?", q.TaskType)
 	}
 	if q.Status != "" {
-		tx = tx.Where("status = ?", q.Status)
+		tx = tx.Where("status IN ?", model.EquivalentTaskStatuses(q.Status))
 	}
 	if q.StartTime != "" {
 		tx = tx.Where("created_at >= ?", q.StartTime)
