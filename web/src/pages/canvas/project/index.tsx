@@ -29,7 +29,8 @@ import { NODE_DEFAULT_SIZE, getNodeSpec } from "../constants";
 import { ActiveConnectionPath, ConnectionPath } from "../components/canvas-connections";
 import { CanvasConfigComposer } from "../components/canvas-config-composer";
 import { CanvasConfigNodePanel } from "../components/canvas-config-node-panel";
-import { buildNodeConfig } from "../components/canvas-node-config";
+import { canvasGenerationResume } from "../components/canvas-generation-resume";
+import { buildNodeConfig, buildSavedImageConfig } from "../components/canvas-node-config";
 import { CANVAS_AGENT_PANEL_MOTION_MS, CanvasAssistantPanel } from "../components/canvas-assistant-panel";
 import { CanvasNodeContextMenu } from "../components/canvas-context-menu";
 import { CanvasNodeAngleDialog, type CanvasImageAngleParams } from "../components/canvas-node-angle-dialog";
@@ -52,6 +53,7 @@ import { InfiniteCanvas } from "../components/infinite-canvas";
 import { Minimap } from "../components/canvas-mini-map";
 import { CanvasNode } from "../components/canvas-node";
 import { CanvasNodePromptPanel, type CanvasNodeGenerationMode } from "../components/canvas-node-prompt-panel";
+import { CanvasOverviewSidebar } from "../components/canvas-overview-sidebar";
 import { CanvasToolbar } from "../components/canvas-toolbar";
 import { AssetPickerModal, type InsertAssetPayload } from "../components/asset-picker-modal";
 import { CanvasZoomControls } from "../components/canvas-zoom-controls";
@@ -325,6 +327,7 @@ function InfiniteCanvasPage() {
     const [showImageInfo, setShowImageInfo] = useState(false);
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
     const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+    const [overviewCollapsed, setOverviewCollapsed] = useState(false);
     const [projectLoaded, setProjectLoaded] = useState(false);
     const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null);
     const [nodeImageSettingsOpen, setNodeImageSettingsOpen] = useState(false);
@@ -425,7 +428,7 @@ function InfiniteCanvasPage() {
         });
         setRunningNodeId((current) => (current === runningId ? null : current));
         if (affectedNodeIds.size) {
-            setNodes((prev) => prev.map((node) => (affectedNodeIds.has(node.id) && node.metadata?.generationTaskId ? { ...node, metadata: { ...node.metadata, generationPollingPaused: true } } : node)));
+            setNodes((prev) => prev.map((node) => (affectedNodeIds.has(node.id) && generationTaskId(node.metadata) ? { ...node, metadata: { ...node.metadata, generationPollingPaused: true } } : node)));
         }
     }, []);
 
@@ -445,11 +448,18 @@ function InfiniteCanvasPage() {
 
     const resumeGenerationQuery = useCallback((nodeId: string) => {
         const node = nodesRef.current.find((item) => item.id === nodeId);
-        const taskId = generationTaskId(node?.metadata);
-        if (!taskId || !node?.metadata?.generationProfileId) return;
+        const resume = canvasGenerationResume(node);
+        if (!node || !resume) return;
         setNodes((prev) => prev.map((item) => (item.id === nodeId ? { ...item, metadata: { ...item.metadata, generationPollingPaused: false } } : item)));
-        void pollFirstPartyCanvasVideoNode(nodeId, taskId);
-    }, []);
+        if (resume.kind === "image") {
+            void pollCanvasImageNode(nodeId, { id: resume.taskId, model: resume.model || effectiveConfig.imageModel || effectiveConfig.model }, buildSavedImageConfig(effectiveConfig, node.metadata || {}));
+        } else if (resume.kind === "first-party-video") {
+            void pollFirstPartyCanvasVideoNode(nodeId, resume.taskId);
+        } else {
+            const config = buildNodeConfig(effectiveConfig, defaultConfig, node, "video");
+            void pollCanvasVideoNode(nodeId, { id: resume.taskId, model: resume.model || config.model }, config);
+        }
+    }, [effectiveConfig]);
 
     const confirmCancelGeneration = useCallback(
         (nodeId: string) => {
@@ -2517,13 +2527,7 @@ function InfiniteCanvasPage() {
             const hasSavedImageMetadata = Boolean(savedImageMetadata?.generationType);
             const generationConfig =
                 hasSavedImageMetadata && savedImageMetadata
-                    ? {
-                          ...effectiveConfig,
-                          model: savedImageMetadata.model || effectiveConfig.imageModel || effectiveConfig.model,
-                          quality: savedImageMetadata.quality || effectiveConfig.quality,
-                          size: savedImageMetadata.size || effectiveConfig.size,
-                          count: "1",
-                      }
+                    ? buildSavedImageConfig(effectiveConfig, savedImageMetadata)
                     : { ...buildNodeConfig(effectiveConfig, defaultConfig, sourceNode, node.type === CanvasNodeType.Text ? "text" : node.type === CanvasNodeType.Video ? "video" : node.type === CanvasNodeType.Audio ? "audio" : "image"), count: "1" };
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
@@ -2863,7 +2867,7 @@ function InfiniteCanvasPage() {
 
     const insertAssistantImage = useCallback(
         async (image: CanvasAssistantImage) => {
-            const storedImage = image.storageKey ? { url: image.dataUrl, storageKey: image.storageKey, width: 1, height: 1, bytes: 0, mimeType: "image/png" } : await uploadImage(image.dataUrl);
+            const storedImage = image.storageKey || image.fileId ? { url: image.dataUrl, storageKey: image.storageKey || "", width: image.width || 1, height: image.height || 1, bytes: 0, mimeType: "image/png" } : await uploadImage(image.dataUrl);
             const meta = storedImage.width === 1 && storedImage.height === 1 ? await readImageMeta(storedImage.url) : storedImage;
             const config = fitNodeSize(meta.width, meta.height);
             const center = screenToCanvas((containerRef.current?.getBoundingClientRect().left || 0) + size.width / 2, (containerRef.current?.getBoundingClientRect().top || 0) + size.height / 2);
@@ -2875,7 +2879,7 @@ function InfiniteCanvasPage() {
                 position: { x: center.x - config.width / 2, y: center.y - config.height / 2 },
                 width: config.width,
                 height: config.height,
-                metadata: { ...imageMetadata({ ...storedImage, width: meta.width, height: meta.height }), prompt: image.prompt },
+                metadata: { ...imageMetadata({ ...storedImage, width: meta.width, height: meta.height }), ...(image.fileId ? { fileId: image.fileId } : {}), prompt: image.prompt },
             };
 
             setNodes((prev) => [...prev, node]);
@@ -2919,19 +2923,32 @@ function InfiniteCanvasPage() {
                         position: { x: center.x - nextSize.width / 2, y: center.y - nextSize.height / 2 },
                         width: nextSize.width,
                         height: nextSize.height,
-                        metadata: { content: payload.url, storageKey: payload.storageKey, status: NODE_STATUS_SUCCESS, naturalWidth: payload.width, naturalHeight: payload.height },
+                        metadata: { content: payload.url, storageKey: payload.storageKey, fileId: payload.fileId, status: NODE_STATUS_SUCCESS, naturalWidth: payload.width, naturalHeight: payload.height },
                     },
                 ]);
                 setSelectedNodeIds(new Set([id]));
             } else {
-                insertAssistantImage({ id: `asset-${Date.now()}`, prompt: payload.title, dataUrl: payload.dataUrl, storageKey: payload.storageKey });
+                void insertAssistantImage({ id: `asset-${Date.now()}`, prompt: payload.title, dataUrl: payload.dataUrl, storageKey: payload.storageKey, fileId: payload.fileId, width: payload.width, height: payload.height }).catch(() => message.error("素材图片暂时不可用，请刷新后重试"));
             }
             setAssetPickerOpen(false);
         },
-        [insertAssistantImage, insertAssistantText, screenToCanvas, size.height, size.width],
+        [insertAssistantImage, insertAssistantText, message, screenToCanvas, size.height, size.width],
     );
 
     const assistantOpen = assistantMounted && !assistantCollapsed;
+    const focusOverviewNode = useCallback(
+        (nodeId: string) => {
+            const node = nodesRef.current.find((item) => item.id === nodeId);
+            const rect = containerRef.current?.getBoundingClientRect();
+            if (!node || !rect) return;
+            const k = viewportRef.current.k;
+            setSelectedNodeIds(new Set([nodeId]));
+            setSelectedConnectionId(null);
+            setContextMenu(null);
+            setViewport({ x: rect.width / 2 - (node.position.x + node.width / 2) * k, y: rect.height / 2 - (node.position.y + node.height / 2) * k, k });
+        },
+        [],
+    );
     const openAgent = (mode: CanvasAgentMode = agentMode) => {
         if (agentCloseTimerRef.current) {
             clearTimeout(agentCloseTimerRef.current);
@@ -2957,6 +2974,7 @@ function InfiniteCanvasPage() {
 
     return (
         <main className="flex h-full min-h-0 overflow-hidden" style={{ background: theme.canvas.background, color: theme.node.text }}>
+            <CanvasOverviewSidebar nodes={nodes} selectedNodeIds={selectedNodeIds} collapsed={overviewCollapsed} onCollapsedChange={setOverviewCollapsed} onSelectNode={focusOverviewNode} onInsertAsset={handleAssetInsert} />
             <section className="relative min-w-0 flex-1 overflow-hidden">
                 <CanvasTopBar
                     title={currentProject?.title || "未命名画布"}
@@ -3523,6 +3541,7 @@ function buildImageGenerationMetadata(type: CanvasImageGenerationType, config: A
         model: config.model,
         size: config.size,
         quality: config.quality,
+        background: config.background,
         count,
         references: references.map(referenceUrl).filter((url): url is string => Boolean(url)),
     };

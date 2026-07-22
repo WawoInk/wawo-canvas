@@ -8,6 +8,7 @@
 + [重构] 拆分 settings.go 为 settings + channel + channel_admin；抽出 ai_proxy.go。
 + [新增] Docker 多容器部署（开发 docker-compose.local.yml + 生产 docker-compose.yml，api + web + postgres）。
 + [调整] 前端重新接入认证/后台/remote 模式；移除内存提示词路由与 Vercel 一键部署。
++ [新增] Canvas 支持透明背景图片生成、Prompt 资源 Chips 及可折叠元素/素材总览侧栏。
 
 ## v0.4.0 - 2026-06-16
 

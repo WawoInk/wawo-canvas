@@ -32,7 +32,7 @@ const aspectOptions = [
 
 type ImageSettingsPanelProps = {
     config: AiConfig;
-    onConfigChange: (key: "quality" | "size" | "count", value: string) => void;
+    onConfigChange: (key: "quality" | "size" | "background" | "count", value: string) => void;
     theme: CanvasTheme;
     showTitle?: boolean;
     className?: string;
@@ -114,6 +114,17 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                                 <span>{item.label}</span>
                             </button>
                         ))}
+                    </div>
+                </div>
+                <div className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-3">
+                        <div>
+                            <SettingTitle color={theme.node.muted}>透明背景</SettingTitle>
+                            <div className="mt-1 text-xs" style={{ color: theme.node.muted }}>
+                                仅部分模型支持透明背景
+                            </div>
+                        </div>
+                        <Switch aria-label="透明背景" checked={config.background === "transparent"} onChange={(checked) => onConfigChange("background", checked ? "transparent" : "")} />
                     </div>
                 </div>
                 <div className="space-y-2.5">

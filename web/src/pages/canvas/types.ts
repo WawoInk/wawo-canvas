@@ -36,6 +36,7 @@ export type CanvasNodeMetadata = {
     model?: string;
     size?: string;
     quality?: string;
+    background?: "" | "transparent";
     count?: number;
     seconds?: string;
     vquality?: string;
@@ -102,6 +103,9 @@ export type CanvasAssistantImage = {
     id: string;
     dataUrl: string;
     storageKey?: string;
+    fileId?: string;
+    width?: number;
+    height?: number;
     prompt: string;
 };
 

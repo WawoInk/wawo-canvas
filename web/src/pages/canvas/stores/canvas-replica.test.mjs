@@ -26,3 +26,8 @@ test("rejects malformed persisted projects", () => {
     assert.equal(normalizeCanvasProject(null), null);
     assert.equal(normalizeCanvasProject({ title: "missing id" }), null);
 });
+
+test("preserves Canvas asset file associations", () => {
+    const project = normalizeCanvasProject({ id: "project-1", nodes: [{ id: "image-1", metadata: { fileId: "file-image-1" } }] });
+    assert.equal(project.nodes[0].metadata.fileId, "file-image-1");
+});

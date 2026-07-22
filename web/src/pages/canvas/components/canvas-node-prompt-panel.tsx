@@ -14,7 +14,7 @@ import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
 import { CanvasPromptLibrary } from "./canvas-prompt-library";
 import { CanvasAudioSettingsPopover } from "./canvas-audio-settings-popover";
 import { audioConfigPatch, buildNodeConfig, videoConfigPatch } from "./canvas-node-config";
-import { CanvasResourceMentionTextarea } from "./canvas-resource-mention-textarea";
+import { CanvasPromptChipEditor } from "./canvas-prompt-chip-editor";
 import { CanvasVideoSettingsPopover } from "./canvas-video-settings-popover";
 import { CanvasNodeType, type CanvasGenerationMode, type CanvasNodeData } from "../types";
 import type { CanvasResourceReference } from "../utils/canvas-resource-references";
@@ -95,7 +95,7 @@ export function CanvasNodePromptPanel({ node, isRunning, canResume = false, onPr
             onPointerDown={(event) => event.stopPropagation()}
             onWheel={(event) => event.stopPropagation()}
         >
-            <CanvasResourceMentionTextarea
+            <CanvasPromptChipEditor
                 value={prompt}
                 references={mentionReferences}
                 onChange={updatePrompt}
@@ -149,7 +149,7 @@ export function CanvasNodePromptPanel({ node, isRunning, canResume = false, onPr
                                 config={config}
                                 placement="topLeft"
                                 buttonClassName="!h-10 !max-w-[170px] !justify-start !rounded-full !px-3"
-                                onConfigChange={(key, value) => onConfigChange(node.id, key === "count" ? { count: Number(value) || 1 } : { [key]: value })}
+                                onConfigChange={(key, value) => onConfigChange(node.id, key === "count" ? { count: Number(value) || 1 } : key === "background" ? { background: value === "transparent" ? "transparent" : "" } : { [key]: value })}
                                 onMissingConfig={() => openConfigDialog(true)}
                                 onOpenChange={onImageSettingsOpenChange}
                             />

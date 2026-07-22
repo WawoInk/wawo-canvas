@@ -6,13 +6,13 @@ import { Play, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { LazyImage } from "@/components/lazy-media";
-import { useAssetStore, type Asset } from "@/stores/use-asset-store";
-import { assetFileIdsToRefresh } from "./asset-picker";
+import { useAssetStore } from "@/stores/use-asset-store";
+import { assetFileIdsToRefresh, assetInsertPayload, assetPreviewKind } from "./asset-picker";
 
 export type InsertAssetPayload =
     | { kind: "text"; content: string; title: string }
-    | { kind: "image"; dataUrl: string; title: string; storageKey?: string }
-    | { kind: "video"; url: string; title: string; storageKey?: string; width?: number; height?: number };
+    | { kind: "image"; dataUrl: string; title: string; storageKey?: string; fileId?: string; width?: number; height?: number }
+    | { kind: "video"; url: string; title: string; storageKey?: string; fileId?: string; width?: number; height?: number };
 
 type Props = {
     open: boolean;
@@ -22,22 +22,87 @@ type Props = {
 };
 
 export function AssetPickerModal({ open, defaultTab: _defaultTab, onInsert, onClose }: Props) {
+    return (
+        <Modal title="选择素材" open={open} onCancel={onClose} footer={null} width={860} destroyOnHidden styles={{ body: { padding: "0 24px 24px", minHeight: 480 } }}>
+            <MyAssetsPanel active={open} onInsert={onInsert} />
+        </Modal>
+    );
+}
+
+export function MyAssetsPanel({ active, compact = false, onInsert }: { active: boolean; compact?: boolean; onInsert: (payload: InsertAssetPayload) => void }) {
     const assets = useAssetStore((state) => state.assets);
     const refreshAssetUrls = useAssetStore((state) => state.refreshAssetUrls);
-    const fileIdsKey = useMemo(() => assetFileIdsToRefresh(open, assets).join("\0"), [open, assets]);
+    const fileIdsKey = useMemo(() => assetFileIdsToRefresh(active, assets).join("\0"), [active, assets]);
+    const [keyword, setKeyword] = useState("");
+    const [kindFilter, setKindFilter] = useState("all");
+    const [page, setPage] = useState(1);
 
     useEffect(() => {
         if (fileIdsKey) void refreshAssetUrls(fileIdsKey.split("\0"));
     }, [fileIdsKey, refreshAssetUrls]);
 
+    const pageSize = compact ? 6 : 8;
+    const filtered = useMemo(() => {
+        const query = keyword.trim().toLowerCase();
+        return assets
+            .filter((asset) => asset.kind === "text" || asset.kind === "image" || asset.kind === "video")
+            .filter((asset) => kindFilter === "all" || asset.kind === kindFilter)
+            .filter((asset) => !query || [asset.title, ...(asset.tags || [])].join(" ").toLowerCase().includes(query));
+    }, [assets, keyword, kindFilter]);
+    const visible = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page, pageSize]);
+
+    useEffect(() => {
+        setPage((value) => Math.min(value, Math.max(1, Math.ceil(filtered.length / pageSize))));
+    }, [filtered.length, pageSize]);
+
     return (
-        <Modal title="选择素材" open={open} onCancel={onClose} footer={null} width={860} destroyOnHidden styles={{ body: { padding: "0 24px 24px", minHeight: 480 } }}>
-            <MyAssetsTab onInsert={onInsert} />
-        </Modal>
+        <div className={compact ? "space-y-3" : "space-y-4"}>
+            <div className={compact ? "space-y-2" : "flex flex-wrap items-center gap-3"}>
+                <Input
+                    className={compact ? "w-full" : "w-56"}
+                    size="small"
+                    prefix={<Search className="size-3.5 text-muted-foreground" />}
+                    placeholder="搜索素材"
+                    value={keyword}
+                    allowClear
+                    onChange={(event) => {
+                        setPage(1);
+                        setKeyword(event.target.value);
+                    }}
+                />
+                <div className="flex flex-wrap gap-1">
+                    {kindOptions.map((option) => (
+                        <Tag.CheckableTag
+                            key={option.value}
+                            checked={kindFilter === option.value}
+                            className={cn("prompt-filter-tag", kindFilter === option.value && "is-active")}
+                            onChange={() => {
+                                setPage(1);
+                                setKindFilter(option.value);
+                            }}
+                        >
+                            {option.label}
+                        </Tag.CheckableTag>
+                    ))}
+                </div>
+            </div>
+            {visible.length ? (
+                <div className={compact ? "grid grid-cols-2 gap-2" : "grid grid-cols-4 gap-3"}>
+                    {visible.map((asset) => (
+                        <PickerCard key={asset.id} title={asset.title} kind={asset.kind} source={asset.kind === "video" ? asset.data.url : asset.coverUrl || (asset.kind === "image" ? asset.data.dataUrl : "")} onClick={() => onInsert(assetInsertPayload(asset))} compact={compact} />
+                    ))}
+                </div>
+            ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有素材" className="py-12" />
+            )}
+            {filtered.length > pageSize ? (
+                <div className="flex justify-center">
+                    <Pagination simple={compact} size="small" current={page} pageSize={pageSize} total={filtered.length} onChange={setPage} showSizeChanger={false} />
+                </div>
+            ) : null}
+        </div>
     );
 }
-
-const PAGE_SIZE = 8;
 
 const kindOptions = [
     { label: "全部", value: "all" },
@@ -46,113 +111,26 @@ const kindOptions = [
     { label: "视频", value: "video" },
 ];
 
-function PickerCard({ title, kind, cover, onClick }: { title: string; kind: string; cover: string; onClick: () => void }) {
+function PickerCard({ title, kind, source, compact = false, onClick }: { title: string; kind: string; source: string; compact?: boolean; onClick: () => void }) {
+    const preview = assetPreviewKind(kind, source);
     return (
         <button
             type="button"
             className="group relative cursor-pointer overflow-hidden rounded-lg border border-border bg-card text-left transition hover:border-muted-foreground hover:shadow-md dark:border-border dark:bg-card dark:hover:border-muted-foreground"
             onClick={onClick}
         >
-            {kind === "video" ? (
-                <div className="relative flex aspect-[4/3] items-center justify-center bg-muted dark:bg-card">
-                    <Play className="size-6 text-muted-foreground" />
-                </div>
-            ) : cover ? (
-                <LazyImage src={cover} alt={title} className="aspect-[4/3] w-full" />
-            ) : (
-                <div className="flex aspect-[4/3] items-center justify-center bg-muted p-3 text-center text-xs leading-5 text-muted-foreground dark:bg-card dark:text-muted-foreground">{title}</div>
-            )}
-            <div className="p-2.5">
+            <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-muted dark:bg-card">
+                {kind === "video" ? <Play className="size-6 text-muted-foreground" /> : preview === "icon" ? <span className="p-3 text-center text-xs leading-5 text-muted-foreground">{title}</span> : null}
+                {preview === "image" ? <LazyImage src={source} alt={title} className="absolute inset-0 size-full" /> : null}
+                {preview === "video" ? <video src={source} aria-label={`${title}预览`} className="absolute inset-0 size-full object-cover" muted playsInline preload="auto" onError={(event) => event.currentTarget.remove()} /> : null}
+            </div>
+            <div className={compact ? "p-1.5" : "p-2.5"}>
                 <div className="flex items-center justify-between gap-2">
                     <span className="line-clamp-1 text-xs font-medium text-foreground dark:text-foreground">{title}</span>
-                    <Tag className="m-0 shrink-0 text-[10px]">{kind === "image" ? "图片" : kind === "video" ? "视频" : "文本"}</Tag>
+                    {!compact ? <Tag className="m-0 shrink-0 text-[10px]">{kind === "image" ? "图片" : kind === "video" ? "视频" : "文本"}</Tag> : null}
                 </div>
             </div>
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-foreground/0 text-sm font-medium text-white opacity-0 transition group-hover:bg-foreground/55 group-hover:opacity-100">插入</div>
         </button>
-    );
-}
-
-function MyAssetsTab({ onInsert }: { onInsert: (payload: InsertAssetPayload) => void }) {
-    const assets = useAssetStore((state) => state.assets);
-    const [keyword, setKeyword] = useState("");
-    const [kindFilter, setKindFilter] = useState("all");
-    const [page, setPage] = useState(1);
-
-    const filtered = useMemo(() => {
-        const query = keyword.trim().toLowerCase();
-        return assets
-            .filter((a) => a.kind === "text" || a.kind === "image" || a.kind === "video")
-            .filter((a) => kindFilter === "all" || a.kind === kindFilter)
-            .filter((a) => !query || [a.title, ...(a.tags || [])].join(" ").toLowerCase().includes(query));
-    }, [assets, keyword, kindFilter]);
-
-    const visible = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page]);
-
-    useEffect(() => {
-        const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-        setPage((v) => Math.min(v, maxPage));
-    }, [filtered.length]);
-
-    const handleInsert = (asset: Asset) => {
-        if (asset.kind === "text") {
-            onInsert({ kind: "text", content: asset.data.content, title: asset.title });
-        } else {
-            onInsert(
-                asset.kind === "video"
-                    ? { kind: "video", url: asset.data.url, storageKey: asset.data.storageKey, title: asset.title, width: asset.data.width, height: asset.data.height }
-                    : { kind: "image", dataUrl: asset.data.dataUrl, storageKey: asset.data.storageKey, title: asset.title },
-            );
-        }
-    };
-
-    return (
-        <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
-                <Input
-                    className="w-56"
-                    size="small"
-                    prefix={<Search className="size-3.5 text-muted-foreground" />}
-                    placeholder="搜索素材"
-                    value={keyword}
-                    allowClear
-                    onChange={(e) => {
-                        setPage(1);
-                        setKeyword(e.target.value);
-                    }}
-                />
-                <div className="flex gap-1.5">
-                    {kindOptions.map((opt) => (
-                        <Tag.CheckableTag
-                            key={opt.value}
-                            checked={kindFilter === opt.value}
-                            className={cn("prompt-filter-tag", kindFilter === opt.value && "is-active")}
-                            onChange={() => {
-                                setPage(1);
-                                setKindFilter(opt.value);
-                            }}
-                        >
-                            {opt.label}
-                        </Tag.CheckableTag>
-                    ))}
-                </div>
-            </div>
-
-            {visible.length ? (
-                <div className="grid grid-cols-4 gap-3">
-                    {visible.map((asset) => (
-                        <PickerCard key={asset.id} title={asset.title} kind={asset.kind} cover={asset.coverUrl || (asset.kind === "image" ? asset.data.dataUrl : "")} onClick={() => handleInsert(asset)} />
-                    ))}
-                </div>
-            ) : (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有素材" className="py-12" />
-            )}
-
-            {filtered.length > PAGE_SIZE && (
-                <div className="flex justify-center">
-                    <Pagination size="small" current={page} pageSize={PAGE_SIZE} total={filtered.length} onChange={setPage} showSizeChanger={false} />
-                </div>
-            )}
-        </div>
     );
 }

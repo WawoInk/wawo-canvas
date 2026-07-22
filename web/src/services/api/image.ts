@@ -5,7 +5,8 @@ import { useUserStore } from "@/stores/use-user-store";
 import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
-import { buildAsyncImageEditFormData } from "@/services/api/async-image-edit-form";
+import { applyImageBackground, buildAsyncImageEditFormData } from "@/services/api/async-image-edit-form";
+import { imageBackgroundFields } from "@/services/api/image-background";
 import { imageToDataUrl } from "@/services/blob-storage";
 import type { ReferenceImage } from "@/types/image";
 
@@ -788,6 +789,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
                 n,
                 ...(quality ? { quality } : {}),
                 ...(requestSize ? { size: requestSize } : {}),
+                ...imageBackgroundFields(requestConfig.background),
                 output_format: IMAGE_OUTPUT_FORMAT,
             },
             {
@@ -827,6 +829,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     if (requestSize) {
         formData.set("size", requestSize);
     }
+    applyImageBackground(formData, requestConfig.background);
     const files = await Promise.all(references.map(async (image) => dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) })));
     files.forEach((file) => formData.append("image", file));
     if (mask) formData.set("mask", dataUrlToFile(mask));
@@ -876,6 +879,7 @@ export async function createAsyncImageTask(config: AiConfig, prompt: string, cou
                 n,
                 ...(quality ? { quality } : {}),
                 ...(requestSize ? { size: requestSize } : {}),
+                ...imageBackgroundFields(requestConfig.background),
                 output_format: IMAGE_OUTPUT_FORMAT,
             },
             { headers: { ...aiHeaders(requestConfig, "application/json"), "X-Source": "canvas" } },
@@ -903,6 +907,7 @@ export async function createAsyncImageEditTask(config: AiConfig, prompt: string,
                 image,
                 n,
                 ...(requestSize ? { size: requestSize } : {}),
+                ...imageBackgroundFields(requestConfig.background),
                 output_format: IMAGE_OUTPUT_FORMAT,
             }),
             { headers: { ...aiHeaders(requestConfig), "X-Source": "canvas" } },

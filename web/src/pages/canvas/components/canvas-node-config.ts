@@ -10,6 +10,7 @@ export function buildNodeConfig(globalConfig: AiConfig, defaults: AiConfig, node
         model: metadata?.model || defaultModel || (mode === "audio" ? defaults.audioModel : globalConfig.model || defaults.model),
         quality: metadata?.quality || globalConfig.quality || defaults.quality,
         size: metadata?.size || globalConfig.size || defaults.size,
+        background: metadata?.background ?? globalConfig.background ?? defaults.background,
         videoSeconds: metadata?.seconds || globalConfig.videoSeconds || defaults.videoSeconds,
         vquality: metadata?.vquality || globalConfig.vquality || defaults.vquality,
         videoGenerateAudio: metadata?.generateAudio || globalConfig.videoGenerateAudio || defaults.videoGenerateAudio,
@@ -20,6 +21,17 @@ export function buildNodeConfig(globalConfig: AiConfig, defaults: AiConfig, node
         audioSpeed: metadata?.audioSpeed || globalConfig.audioSpeed || defaults.audioSpeed,
         audioInstructions: metadata?.audioInstructions || globalConfig.audioInstructions || defaults.audioInstructions,
         count: String(metadata?.count || (mode === "image" ? globalConfig.canvasImageCount || globalConfig.count : globalConfig.count) || defaults.count),
+    };
+}
+
+export function buildSavedImageConfig(globalConfig: AiConfig, metadata: CanvasNodeMetadata): AiConfig {
+    return {
+        ...globalConfig,
+        model: metadata.model || globalConfig.imageModel || globalConfig.model,
+        quality: metadata.quality || globalConfig.quality,
+        size: metadata.size || globalConfig.size,
+        background: metadata.background === "transparent" ? "transparent" : "",
+        count: "1",
     };
 }
 

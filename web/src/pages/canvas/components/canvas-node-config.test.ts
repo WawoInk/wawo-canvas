@@ -25,6 +25,7 @@ const defaults: AiConfig = {
     videoGenerateAudio: "true",
     videoWatermark: "false",
     videoNegativePrompt: "",
+    background: "",
     systemPrompt: "",
     models: [],
     imageModels: [],
@@ -48,10 +49,11 @@ const node = (metadata: CanvasNodeData["metadata"] = {}): CanvasNodeData => ({
 });
 
 test("buildNodeConfig preserves node overrides and image canvas count", () => {
-    const config = buildNodeConfig({ ...defaults, imageModel: "global-image", canvasImageCount: "3" }, defaults, node({ model: "node-model", quality: "hd", count: 2 }), "image");
+    const config = buildNodeConfig({ ...defaults, imageModel: "global-image", canvasImageCount: "3", background: "transparent" }, defaults, node({ model: "node-model", quality: "hd", count: 2, background: "" }), "image");
     assert.equal(config.model, "node-model");
     assert.equal(config.quality, "hd");
     assert.equal(config.count, "2");
+    assert.equal(config.background, "");
 });
 
 test("buildNodeConfig maps media metadata to effective config", () => {

@@ -4,8 +4,13 @@ export type AsyncImageEditFields = {
     image: File;
     n: number;
     size?: string;
+    background?: string;
     output_format: string;
 };
+
+export function applyImageBackground(formData: FormData, background?: string) {
+    if (background === "transparent") formData.set("background", background);
+}
 
 export function buildAsyncImageEditFormData(fields: AsyncImageEditFields) {
     const formData = new FormData();
@@ -14,6 +19,7 @@ export function buildAsyncImageEditFormData(fields: AsyncImageEditFields) {
     formData.set("image", fields.image);
     formData.set("n", String(fields.n));
     if (fields.size) formData.set("size", fields.size);
+    applyImageBackground(formData, fields.background);
     formData.set("output_format", fields.output_format);
     return formData;
 }
