@@ -72,6 +72,10 @@ _Avoid_: Shared account, child session
 The current authenticated user ID used to partition browser-persisted Canvas projects, personal assets, synchronization cursors, workbench history, and protected query results.
 _Avoid_: Browser cache namespace
 
+**Enterprise Shared Asset**:
+An enterprise-owned asset read on demand from the enterprise API. It records its creator but does not enter personal asset persistence, incremental synchronization, or WebDAV.
+_Avoid_: Shared personal asset, synchronized enterprise asset
+
 ## Compatibility
 
 **Compatibility Acceptance**:

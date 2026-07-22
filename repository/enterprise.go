@@ -190,10 +190,10 @@ func TransferEnterpriseMemberCredits(enterpriseID, ownerID, memberID string, act
 		if action == model.EnterpriseCreditActionReclaim {
 			logType, ownerDelta, memberDelta, remark = model.CreditLogTypeEnterpriseReclaim, amount, -amount, "企业积分收回"
 		}
-		var existing model.EnterpriseCreditTransferRequest
-		err := tx.Where("owner_id = ? AND action = ? AND request_id = ?", ownerID, action, requestID).Take(&existing).Error
+		var existing model.CreditLog
+		err := tx.Where("user_id = ? AND type = ? AND related_id = ?", ownerID, logType, requestID).Take(&existing).Error
 		if err == nil {
-			if existing.MemberID != memberID || existing.Amount != amount {
+			if existing.CounterpartyID != memberID || existing.Amount != ownerDelta {
 				return ErrCreditTransferRequestConflict
 			}
 			return nil
@@ -203,9 +203,6 @@ func TransferEnterpriseMemberCredits(enterpriseID, ownerID, memberID string, act
 		}
 		if owner.Credits+ownerDelta < 0 || member.Credits+memberDelta < 0 {
 			return ErrInsufficientCredits
-		}
-		if err := tx.Create(&model.EnterpriseCreditTransferRequest{OwnerID: ownerID, Action: action, RequestID: requestID, MemberID: memberID, Amount: amount, CreatedAt: updatedAt}).Error; err != nil {
-			return err
 		}
 		owner.Credits += ownerDelta
 		member.Credits += memberDelta

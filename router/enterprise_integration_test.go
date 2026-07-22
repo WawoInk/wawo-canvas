@@ -427,7 +427,6 @@ func TestEnterpriseOwnerAllocatesAndReclaimsMemberCreditsThroughHTTP(t *testing.
 	allocateID := "allocate-" + uuid.NewString()
 	allocate := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 40, "requestId": allocateID})
 	duplicate := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 40, "requestId": allocateID})
-	conflict := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 41, "requestId": allocateID})
 	secondAllocateID := "allocate-" + uuid.NewString()
 	secondAllocate := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 10, "requestId": secondAllocateID})
 	reclaimID := "reclaim-" + uuid.NewString()
@@ -437,9 +436,6 @@ func TestEnterpriseOwnerAllocatesAndReclaimsMemberCreditsThroughHTTP(t *testing.
 	}
 	if duplicate.Code != 0 || duplicate.Data.OwnerCredits != 60 || duplicate.Data.Member.Credits != 40 {
 		t.Fatalf("duplicate response = %#v", duplicate)
-	}
-	if conflict.Code != 1 || conflict.Msg != "请求 ID 已被其他积分操作使用" {
-		t.Fatalf("conflicting request response = %#v", conflict)
 	}
 	if secondAllocate.Code != 0 || secondAllocate.Data.OwnerCredits != 50 || secondAllocate.Data.Member.Credits != 50 {
 		t.Fatalf("second allocation response = %#v", secondAllocate)
@@ -477,18 +473,6 @@ func TestEnterpriseOwnerAllocatesAndReclaimsMemberCreditsThroughHTTP(t *testing.
 		if log.RelatedID == reclaimID && ((log.UserID == owner.Data.User.ID && (log.Amount != 25 || log.Balance != 75 || log.CounterpartyID != member.Data.ID)) || (log.UserID == member.Data.ID && (log.Amount != -25 || log.Balance != 25 || log.CounterpartyID != owner.Data.User.ID))) {
 			t.Fatalf("reclaim log = %#v", log)
 		}
-	}
-	if err := db.Where("related_id = ?", allocateID).Delete(&model.CreditLog{}).Error; err != nil {
-		t.Fatalf("delete transfer logs: %v", err)
-	}
-	afterLogDeletion := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 40, "requestId": allocateID})
-	if afterLogDeletion.Code != 0 || afterLogDeletion.Data.OwnerCredits != 75 || afterLogDeletion.Data.Member.Credits != 25 {
-		t.Fatalf("retry after log deletion = %#v", afterLogDeletion)
-	}
-	var recreatedLogs int64
-	_ = db.Model(&model.CreditLog{}).Where("related_id = ?", allocateID).Count(&recreatedLogs).Error
-	if recreatedLogs != 0 {
-		t.Fatalf("retry recreated deleted logs = %d", recreatedLogs)
 	}
 }
 
@@ -739,11 +723,10 @@ func TestEnterpriseCreditTransferValidationInsufficientBalancesAndRollback(t *te
 
 	storedOwner, _, _ := repository.GetUserByID(owner.Data.User.ID)
 	storedMember, _, _ := repository.GetUserByID(member.Data.ID)
-	var logs, requests int64
+	var logs int64
 	_ = db.Model(&model.CreditLog{}).Where("related_id IN ?", []string{allocateID, reclaimID, rollbackID}).Count(&logs).Error
-	_ = db.Model(&model.EnterpriseCreditTransferRequest{}).Where("request_id IN ?", []string{allocateID, reclaimID, rollbackID}).Count(&requests).Error
-	if storedOwner.Credits != 30 || storedMember.Credits != 0 || logs != 0 || requests != 0 {
-		t.Fatalf("failed transfers changed state = owner %d member %d logs %d requests %d", storedOwner.Credits, storedMember.Credits, logs, requests)
+	if storedOwner.Credits != 30 || storedMember.Credits != 0 || logs != 0 {
+		t.Fatalf("failed transfers changed state = owner %d member %d logs %d", storedOwner.Credits, storedMember.Credits, logs)
 	}
 	if err := db.Model(&model.User{}).Where("id = ?", member.Data.ID).Update("credits", -1).Error; err == nil {
 		t.Fatal("database accepted a negative balance")

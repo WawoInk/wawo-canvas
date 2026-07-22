@@ -50,7 +50,6 @@ func DB() (*gorm.DB, error) {
 			&model.Enterprise{},
 			&model.User{},
 			&model.CreditLog{},
-			&model.EnterpriseCreditTransferRequest{},
 			&model.Prompt{},
 			&model.Asset{},
 			&model.Setting{},

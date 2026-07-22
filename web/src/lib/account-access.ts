@@ -12,5 +12,6 @@ export function enterpriseCapabilities(user?: EnterpriseIdentity | null) {
         canRename: active && user?.enterpriseRole === "owner",
         canManageMembers: active && user?.enterpriseRole === "owner",
         canAccessAssets: active,
+        canManageAssets: active && user?.enterpriseRole === "owner",
     };
 }

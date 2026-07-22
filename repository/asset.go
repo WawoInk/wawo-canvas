@@ -17,7 +17,7 @@ func ListAssets(userID string, q model.Query) ([]model.Asset, int64, error) {
 		return nil, 0, err
 	}
 	q.Normalize()
-	tx := applyAssetFilters(db.Model(&model.Asset{}).Where("user_id = ?", userID), q)
+	tx := applyAssetFilters(db.Model(&model.Asset{}).Where("user_id = ? AND enterprise_id IS NULL", userID), q)
 
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {
@@ -37,7 +37,7 @@ func ListAssetTags(userID string, q model.Query) ([]string, error) {
 	}
 	q.Normalize()
 	q.Tags = nil
-	tx := applyAssetFilters(db.Model(&model.Asset{}).Where("user_id = ?", userID), q)
+	tx := applyAssetFilters(db.Model(&model.Asset{}).Where("user_id = ? AND enterprise_id IS NULL", userID), q)
 
 	var items []model.Asset
 	if err := tx.Select("tags").Find(&items).Error; err != nil {
@@ -68,7 +68,7 @@ func SaveAssetWithLock(item model.Asset, expectedUpdatedAt string) (model.Asset,
 		return item, err
 	}
 
-	saved, exists, err := findAsset(db, item.ID)
+	saved, exists, err := findPersonalAsset(db, item.ID, item.UserID)
 	if err != nil {
 		return item, err
 	}
@@ -90,13 +90,13 @@ func SaveAssetWithLock(item model.Asset, expectedUpdatedAt string) (model.Asset,
 	}
 	if result.RowsAffected == 0 {
 		// re-read current row so Conflict handler can return the real server version
-		updated, _, err := findAsset(db, item.ID)
+		updated, _, err := findPersonalAsset(db, item.ID, item.UserID)
 		if err != nil {
 			return item, err
 		}
 		return updated, ErrConflict
 	}
-	updated, _, err := findAsset(db, item.ID)
+	updated, _, err := findPersonalAsset(db, item.ID, item.UserID)
 	return updated, err
 }
 
@@ -106,7 +106,79 @@ func DeleteAsset(userID, id string) error {
 	if err != nil {
 		return err
 	}
-	return db.Where("id = ? AND user_id = ?", id, userID).Delete(&model.Asset{}).Error
+	return db.Where("id = ? AND user_id = ? AND enterprise_id IS NULL", id, userID).Delete(&model.Asset{}).Error
+}
+
+func ListEnterpriseAssets(enterpriseID string, q model.Query) ([]model.Asset, int64, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, 0, err
+	}
+	q.Normalize()
+	tx := applyAssetFilters(db.Table("assets AS asset").Joins("JOIN users AS creator ON creator.id = asset.user_id").Where("asset.enterprise_id = ?", enterpriseID), q)
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var items []model.Asset
+	err = tx.Select("asset.*, COALESCE(NULLIF(creator.display_name, ''), creator.username) AS creator_name").Order("asset.updated_at DESC, asset.id DESC").Offset(q.Offset()).Limit(q.PageSize).Find(&items).Error
+	return items, total, err
+}
+
+func ListEnterpriseAssetTags(enterpriseID string, q model.Query) ([]string, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, err
+	}
+	q.Normalize()
+	q.Tags = nil
+	var items []model.Asset
+	err = applyAssetFilters(db.Model(&model.Asset{}).Where("enterprise_id = ?", enterpriseID), q).Select("tags").Find(&items).Error
+	return assetTagsFromItems(items), err
+}
+
+func GetEnterpriseAsset(enterpriseID, id string) (model.Asset, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.Asset{}, false, err
+	}
+	var item model.Asset
+	err = db.Table("assets AS asset").Select("asset.*, COALESCE(NULLIF(creator.display_name, ''), creator.username) AS creator_name").Joins("JOIN users AS creator ON creator.id = asset.user_id").Where("asset.id = ? AND asset.enterprise_id = ?", id, enterpriseID).First(&item).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return model.Asset{}, false, nil
+	}
+	return item, err == nil, err
+}
+
+func CreateEnterpriseAsset(item model.Asset) (model.Asset, error) {
+	db, err := DB()
+	if err != nil {
+		return item, err
+	}
+	return item, db.Create(&item).Error
+}
+
+func UpdateEnterpriseAsset(item model.Asset) (model.Asset, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return item, false, err
+	}
+	result := db.Model(&model.Asset{}).Where("id = ? AND enterprise_id = ?", item.ID, item.EnterpriseID).
+		Select("title", "type", "tags", "category", "description", "content", "updated_at").Updates(item)
+	if result.Error != nil || result.RowsAffected == 0 {
+		return item, false, result.Error
+	}
+	updated, ok, err := GetEnterpriseAsset(*item.EnterpriseID, item.ID)
+	return updated, ok, err
+}
+
+func DeleteEnterpriseAsset(enterpriseID, id string) (bool, error) {
+	db, err := DB()
+	if err != nil {
+		return false, err
+	}
+	result := db.Where("id = ? AND enterprise_id = ?", id, enterpriseID).Delete(&model.Asset{})
+	return result.RowsAffected > 0, result.Error
 }
 
 // applyAssetFilters 应用素材列表的搜索条件。
@@ -125,6 +197,15 @@ func applyAssetFilters(tx *gorm.DB, q model.Query) *gorm.DB {
 func findAsset(db *gorm.DB, id string) (model.Asset, bool, error) {
 	item := model.Asset{}
 	err := db.Where("id = ?", id).First(&item).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return model.Asset{}, false, nil
+	}
+	return item, err == nil, err
+}
+
+func findPersonalAsset(db *gorm.DB, id, userID string) (model.Asset, bool, error) {
+	item := model.Asset{}
+	err := db.Where("id = ? AND user_id = ? AND enterprise_id IS NULL", id, userID).First(&item).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return model.Asset{}, false, nil
 	}

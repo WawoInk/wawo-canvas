@@ -63,6 +63,79 @@ func DeleteAsset(w http.ResponseWriter, r *http.Request, id string) {
 	OK(w, map[string]string{"id": id, "deletedAt": time.Now().Format(time.RFC3339)})
 }
 
+func EnterpriseAssets(w http.ResponseWriter, r *http.Request) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	result, err := service.ListEnterpriseAssets(user, parseQuery(r))
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, result)
+}
+
+func EnterpriseAsset(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	result, err := service.GetEnterpriseAsset(user, id)
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, result)
+}
+
+func CreateEnterpriseAsset(w http.ResponseWriter, r *http.Request) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	var item model.Asset
+	_ = json.NewDecoder(r.Body).Decode(&item)
+	result, err := service.CreateEnterpriseAsset(user, item)
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, result)
+}
+
+func UpdateEnterpriseAsset(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	var item model.Asset
+	_ = json.NewDecoder(r.Body).Decode(&item)
+	result, err := service.UpdateEnterpriseAsset(user, id, item)
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, result)
+}
+
+func DeleteEnterpriseAsset(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	if err := service.DeleteEnterpriseAsset(user, id); err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, map[string]string{"id": id, "deletedAt": time.Now().Format(time.RFC3339)})
+}
+
 func AdminAssets(w http.ResponseWriter, r *http.Request) {
 	// Admin sees all assets (userID empty), using parseQuery for type/keyword filter.
 	q := parseQuery(r)

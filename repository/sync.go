@@ -53,7 +53,7 @@ func ListUpdatedAssets(userID, cursor string) ([]model.Asset, error) {
 		return nil, err
 	}
 	var items []model.Asset
-	err = db.Where("user_id = ? AND updated_at > ?", userID, cursor).
+	err = db.Where("user_id = ? AND enterprise_id IS NULL AND updated_at > ?", userID, cursor).
 		Order("updated_at asc").
 		Limit(syncLimit).
 		Find(&items).Error
