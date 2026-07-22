@@ -14,6 +14,13 @@ const (
 	EnterpriseRoleMember EnterpriseRole = "member"
 )
 
+type EnterpriseCreditAction string
+
+const (
+	EnterpriseCreditActionAllocate EnterpriseCreditAction = "allocate"
+	EnterpriseCreditActionReclaim  EnterpriseCreditAction = "reclaim"
+)
+
 type Enterprise struct {
 	ID        string           `json:"id" gorm:"primaryKey"`
 	Name      string           `json:"name"`
@@ -62,4 +69,12 @@ type EnterpriseMember struct {
 type EnterpriseMemberList struct {
 	Items []EnterpriseMember `json:"items"`
 	Total int                `json:"total"`
+}
+
+type EnterpriseCreditTransfer struct {
+	RequestID    string                 `json:"requestId"`
+	Action       EnterpriseCreditAction `json:"action"`
+	Amount       int                    `json:"amount"`
+	OwnerCredits int                    `json:"ownerCredits"`
+	Member       EnterpriseMember       `json:"member"`
 }

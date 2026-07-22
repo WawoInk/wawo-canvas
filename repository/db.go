@@ -83,6 +83,9 @@ func DB() (*gorm.DB, error) {
 			dbErr = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_logs_task_type ON credit_logs (task_id, type) WHERE task_id <> ''").Error
 		}
 		if dbErr == nil {
+			dbErr = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_logs_transfer_request ON credit_logs (user_id, type, related_id) WHERE related_id <> '' AND type IN ('enterprise_allocate', 'enterprise_reclaim')").Error
+		}
+		if dbErr == nil {
 			dbErr = db.Exec(`DO $$ BEGIN
 				ALTER TABLE enterprises ADD CONSTRAINT fk_enterprises_owner FOREIGN KEY (owner_id) REFERENCES users(id) DEFERRABLE INITIALLY DEFERRED;
 			EXCEPTION WHEN duplicate_object THEN NULL; END $$`).Error

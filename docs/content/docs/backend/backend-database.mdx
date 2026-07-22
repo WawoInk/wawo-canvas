@@ -21,11 +21,25 @@ description: 核心数据表和第一方生成任务事务约束
 
 企业或成员禁用不删除数据。认证中间件每次从数据库读取当前用户和企业状态，因此禁用会立即拒绝已有会话和新登录；成员密码重置会递增 `session_version`。
 
-## credit_logs 与企业充值
+## credit_logs 与企业积分
 
 平台管理员调整企业主账号积分时，`users.credits` 更新与一条 `credit_logs` 记录在同一个 PostgreSQL 事务中完成。事务会锁定目标主账号行，按 `delta` 增减余额，并在扣减后余额小于 0 时整体失败，因此并发调整不会覆盖其他请求的结果。
 
 平台调整流水使用 `admin_adjust` 类型：`user_id` 记录目标主账号，`related_id` 记录操作的平台管理员，`amount` 记录增量，`balance` 记录本次变动后的余额，`remark` 记录调整原因。
+
+企业主账号向成员分配积分使用 `enterprise_allocate`，收回积分使用 `enterprise_reclaim`。每次操作在同一个事务中锁定主账号和目标成员，更新双方 `users.credits`，并写入两条共享 `related_id` 的流水；`counterparty_id` 记录对方账号，`amount` 使用双方各自视角的正负值，`balance` 保存本次变动后的余额。
+
+`users.credits` 具有非负检查约束。企业积分流水对 `user_id + type + related_id` 建立部分唯一索引，仅作用于分配和收回类型，用于保证客户端请求 ID 幂等；余额不足、流水写入失败或并发竞争时整个事务回滚。
+
+兼容 AI 代理的 `ai_consume/ai_refund` 也在锁定用户行后，于同一事务更新余额并写入流水；因此生成扣费、退款和企业划拨会按同一用户串行结算，普通资料或登录信息保存不会写回陈旧积分。
+
+## assets 与企业文本素材
+
+`assets.enterprise_id` 为空时是现有个人素材，继续由 `user_id` 表达个人所有权；个人素材查询、更新、删除和同步都显式限定 `enterprise_id IS NULL`。
+
+`assets.enterprise_id` 非空时是企业共享素材，`user_id` 记录创建者账号。企业列表和详情始终以当前认证账号推导出的企业 ID 查询，并按需关联创建者昵称或用户名；客户端提交的 `enterpriseId`、`userId` 或其他企业素材 ID 不参与授权范围。
+
+当前企业素材切片只允许 `text`。企业素材使用独立 API 按需读取，不进入个人素材 Zustand store、IndexedDB 增量同步或 WebDAV 清单。
 
 ## generation_tasks
 

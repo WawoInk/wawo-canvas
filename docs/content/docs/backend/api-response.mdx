@@ -80,3 +80,20 @@ description: 后端统一响应信封与结构化生成错误
 | `POST` | `/api/v1/enterprise/members` | 创建固定为 `user/member`、初始积分为零的子账号 |
 | `POST` | `/api/v1/enterprise/members/{id}/status` | 设置成员 `active/ban` 状态 |
 | `POST` | `/api/v1/enterprise/members/{id}/password` | 重置成员密码并使旧 JWT 失效 |
+| `POST` | `/api/v1/enterprise/members/{id}/credits` | 使用 `{ action, amount, requestId }` 分配或收回成员积分；`action` 为 `allocate/reclaim`，`amount` 必须为正整数 |
+
+积分操作响应同时返回主账号最新积分 `ownerCredits` 和更新后的 `member`。客户端请求 ID 最长 128 字符；相同账号、操作类型和请求 ID 的重试只生效一次，复用请求 ID 但修改成员或数量会被拒绝。
+
+## 企业素材接口
+
+有效企业的 `owner/member` 使用独立接口读取本企业素材，企业范围只从当前认证账号推导。当前切片只支持文本素材；仅 `owner` 可写，`member` 只读。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/v1/enterprise/assets` | 按 `keyword/type/tag/page/pageSize` 查询本企业素材和可用标签 |
+| `GET` | `/api/v1/enterprise/assets/{id}` | 读取本企业素材详情 |
+| `POST` | `/api/v1/enterprise/assets` | 主账号新增文本素材 |
+| `PUT` | `/api/v1/enterprise/assets/{id}` | 主账号更新本企业文本素材 |
+| `DELETE` | `/api/v1/enterprise/assets/{id}` | 主账号删除本企业素材 |
+
+请求体中的素材 ID、企业 ID和创建者 ID均不会改变服务端授权范围。企业素材响应包含 `enterpriseId`、创建者 `userId/creatorName`，但不会写入个人素材同步缓存。

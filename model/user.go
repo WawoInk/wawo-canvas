@@ -24,7 +24,7 @@ type User struct {
 	DisplayName    string          `json:"displayName"`
 	AvatarURL      string          `json:"avatarUrl"`
 	Role           UserRole        `json:"role"`
-	Credits        int             `json:"credits"`
+	Credits        int             `json:"credits" gorm:"not null;default:0;check:chk_users_credits_nonnegative,credits >= 0"`
 	AffCode        string          `json:"affCode" gorm:"uniqueIndex"`
 	AffCount       int             `json:"affCount"`
 	InviterID      string          `json:"inviterId"`
@@ -95,23 +95,26 @@ func PublicUser(user User) AuthUser {
 type CreditLogType string
 
 const (
-	CreditLogTypeAdminAdjust CreditLogType = "admin_adjust"
-	CreditLogTypeAIConsume   CreditLogType = "ai_consume"
-	CreditLogTypeAIRefund    CreditLogType = "ai_refund"
+	CreditLogTypeAdminAdjust        CreditLogType = "admin_adjust"
+	CreditLogTypeAIConsume          CreditLogType = "ai_consume"
+	CreditLogTypeAIRefund           CreditLogType = "ai_refund"
+	CreditLogTypeEnterpriseAllocate CreditLogType = "enterprise_allocate"
+	CreditLogTypeEnterpriseReclaim  CreditLogType = "enterprise_reclaim"
 )
 
 // CreditLog 用户算力点变更流水。
 type CreditLog struct {
-	ID        string        `json:"id" gorm:"primaryKey"`
-	UserID    string        `json:"userId" gorm:"index"`
-	TaskID    string        `json:"taskId" gorm:"index"`
-	Type      CreditLogType `json:"type"`
-	Amount    int           `json:"amount"`
-	Balance   int           `json:"balance"`
-	RelatedID string        `json:"relatedId"`
-	Remark    string        `json:"remark"`
-	Extra     string        `json:"extra" gorm:"type:text"`
-	CreatedAt string        `json:"createdAt"`
+	ID             string        `json:"id" gorm:"primaryKey"`
+	UserID         string        `json:"userId" gorm:"index"`
+	TaskID         string        `json:"taskId" gorm:"index"`
+	Type           CreditLogType `json:"type"`
+	Amount         int           `json:"amount"`
+	Balance        int           `json:"balance"`
+	RelatedID      string        `json:"relatedId"`
+	CounterpartyID string        `json:"counterpartyId" gorm:"index"`
+	Remark         string        `json:"remark"`
+	Extra          string        `json:"extra" gorm:"type:text"`
+	CreatedAt      string        `json:"createdAt"`
 }
 
 type CreditLogList struct {

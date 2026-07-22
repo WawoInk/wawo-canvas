@@ -106,6 +106,20 @@ func New() *gin.Engine {
 	v1.POST("/enterprise/members/:id/password", func(c *gin.Context) {
 		handler.ResetEnterpriseMemberPassword(c.Writer, c.Request, c.Param("id"))
 	})
+	v1.GET("/enterprise/assets", gin.WrapF(handler.EnterpriseAssets))
+	v1.POST("/enterprise/assets", gin.WrapF(handler.CreateEnterpriseAsset))
+	v1.GET("/enterprise/assets/:id", func(c *gin.Context) {
+		handler.EnterpriseAsset(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.PUT("/enterprise/assets/:id", func(c *gin.Context) {
+		handler.UpdateEnterpriseAsset(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.DELETE("/enterprise/assets/:id", func(c *gin.Context) {
+		handler.DeleteEnterpriseAsset(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.POST("/enterprise/members/:id/credits", func(c *gin.Context) {
+		handler.TransferEnterpriseMemberCredits(c.Writer, c.Request, c.Param("id"))
+	})
 	// Delta sync (cursor-based)
 	v1.GET("/sync", gin.WrapF(handler.Sync))
 	// Canvas project sync

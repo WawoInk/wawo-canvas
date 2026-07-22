@@ -6,6 +6,7 @@ import (
 
 	"github.com/basketikun/infinite-canvas/model"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ListUsers 分页查询用户。
@@ -77,7 +78,31 @@ func SaveUser(user model.User) (model.User, error) {
 	if err != nil {
 		return user, err
 	}
-	return user, db.Save(&user).Error
+	var total int64
+	if err := db.Model(&model.User{}).Where("id = ?", user.ID).Count(&total).Error; err != nil {
+		return user, err
+	}
+	if total == 0 {
+		return user, db.Create(&user).Error
+	}
+	if err := db.Model(&model.User{}).Where("id = ?", user.ID).Select("*").Omit("credits").Updates(&user).Error; err != nil {
+		return user, err
+	}
+	user, _, err = findUser(db, "id = ?", user.ID)
+	return user, err
+}
+
+func UpdateUserCredits(id string, credits int, updatedAt string) (model.User, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.User{}, false, err
+	}
+	result := db.Model(&model.User{}).Where("id = ?", id).Updates(map[string]any{"credits": credits, "updated_at": updatedAt})
+	if result.Error != nil {
+		return model.User{}, false, result.Error
+	}
+	user, ok, err := findUser(db, "id = ?", id)
+	return user, ok && result.RowsAffected > 0, err
 }
 
 func ConsumeUserCredits(id string, credits int, now string) (model.User, bool, error) {
@@ -118,6 +143,48 @@ func RefundUserCredits(id string, credits int, now string) (model.User, bool, er
 	}
 	user, ok, err := GetUserByID(id)
 	return user, ok && tx.RowsAffected > 0, err
+}
+
+func ApplyUserCreditLog(userID string, amount int, log model.CreditLog, updatedAt string) (model.User, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.User{}, false, err
+	}
+	var user model.User
+	applied := false
+	err = db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", userID).Take(&user).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return err
+		}
+		if log.TaskID != "" {
+			var existing model.CreditLog
+			err := tx.Where("task_id = ? AND type = ?", log.TaskID, log.Type).Take(&existing).Error
+			if err == nil {
+				applied = true
+				return nil
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+		}
+		if user.Credits+amount < 0 {
+			return nil
+		}
+		user.Credits += amount
+		if err := tx.Model(&model.User{}).Where("id = ?", userID).Updates(map[string]any{"credits": user.Credits, "updated_at": updatedAt}).Error; err != nil {
+			return err
+		}
+		log.UserID, log.Amount, log.Balance, log.CreatedAt = userID, amount, user.Credits, updatedAt
+		if err := tx.Create(&log).Error; err != nil {
+			return err
+		}
+		applied = true
+		return nil
+	})
+	return user, applied, err
 }
 
 // SaveCreditLog 保存算力点变更流水。

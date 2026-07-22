@@ -416,9 +416,10 @@ func AdjustUserCredits(id string, credits int) (model.User, error) {
 		return user, safeMessageError{message: "请在企业管理中按增量调整主账号积分"}
 	}
 	oldCredits := user.Credits
-	user.Credits = credits
-	user.UpdatedAt = now()
-	user, err = repository.SaveUser(user)
+	user, ok, err = repository.UpdateUserCredits(user.ID, credits, now())
+	if err == nil && !ok {
+		return user, safeMessageError{message: "用户不存在"}
+	}
 	if err == nil && oldCredits != credits {
 		_, err = repository.SaveCreditLog(model.CreditLog{
 			ID:        newID("credit"),
@@ -435,26 +436,10 @@ func AdjustUserCredits(id string, credits int) (model.User, error) {
 }
 
 func ConsumeUserCreditsOnce(userID, modelName string, credits int, path, taskID string) error {
-	if taskID == "" || credits <= 0 {
-		return ConsumeUserCreditsWithTask(userID, modelName, credits, path, taskID)
-	}
-	if _, found, err := repository.GetCreditLogByTaskAndType(taskID, model.CreditLogTypeAIConsume); err != nil {
-		return err
-	} else if found {
-		return nil
-	}
 	return ConsumeUserCreditsWithTask(userID, modelName, credits, path, taskID)
 }
 
 func RefundUserCreditsOnce(userID, modelName string, credits int, path, taskID string) error {
-	if taskID == "" || credits <= 0 {
-		return RefundUserCreditsWithTask(userID, modelName, credits, path, taskID)
-	}
-	if _, found, err := repository.GetCreditLogByTaskAndType(taskID, model.CreditLogTypeAIRefund); err != nil {
-		return err
-	} else if found {
-		return nil
-	}
 	return RefundUserCreditsWithTask(userID, modelName, credits, path, taskID)
 }
 func ConsumeUserCredits(userID string, modelName string, credits int, path string) error {
@@ -465,26 +450,22 @@ func ConsumeUserCreditsWithTask(userID string, modelName string, credits int, pa
 	if credits <= 0 {
 		return nil
 	}
-	user, ok, err := repository.ConsumeUserCredits(userID, credits, now())
+	extra, _ := json.Marshal(map[string]string{"model": modelName, "path": path})
+	stamp := now()
+	_, ok, err := repository.ApplyUserCreditLog(userID, -credits, model.CreditLog{
+		ID:     newID("credit"),
+		TaskID: taskID,
+		Type:   model.CreditLogTypeAIConsume,
+		Remark: "调用模型 " + modelName,
+		Extra:  string(extra),
+	}, stamp)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return safeMessageError{message: "算力点不足"}
 	}
-	extra, _ := json.Marshal(map[string]string{"model": modelName, "path": path})
-	_, err = repository.SaveCreditLog(model.CreditLog{
-		ID:        newID("credit"),
-		UserID:    userID,
-		TaskID:    taskID,
-		Type:      model.CreditLogTypeAIConsume,
-		Amount:    -credits,
-		Balance:   user.Credits,
-		Remark:    "调用模型 " + modelName,
-		Extra:     string(extra),
-		CreatedAt: now(),
-	})
-	return err
+	return nil
 }
 
 func RefundUserCredits(userID string, modelName string, credits int, path string) error {
@@ -495,26 +476,22 @@ func RefundUserCreditsWithTask(userID string, modelName string, credits int, pat
 	if credits <= 0 {
 		return nil
 	}
-	user, ok, err := repository.RefundUserCredits(userID, credits, now())
+	extra, _ := json.Marshal(map[string]string{"model": modelName, "path": path})
+	stamp := now()
+	_, ok, err := repository.ApplyUserCreditLog(userID, credits, model.CreditLog{
+		ID:     newID("credit"),
+		TaskID: taskID,
+		Type:   model.CreditLogTypeAIRefund,
+		Remark: "模型调用失败返还 " + modelName,
+		Extra:  string(extra),
+	}, stamp)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return safeMessageError{message: "用户不存在"}
 	}
-	extra, _ := json.Marshal(map[string]string{"model": modelName, "path": path})
-	_, err = repository.SaveCreditLog(model.CreditLog{
-		ID:        newID("credit"),
-		UserID:    userID,
-		TaskID:    taskID,
-		Type:      model.CreditLogTypeAIRefund,
-		Amount:    credits,
-		Balance:   user.Credits,
-		Remark:    "模型调用失败返还 " + modelName,
-		Extra:     string(extra),
-		CreatedAt: now(),
-	})
-	return err
+	return nil
 }
 
 func ListCreditLogs(q model.Query) (model.CreditLogList, error) {
