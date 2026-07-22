@@ -98,6 +98,14 @@ func New() *gin.Engine {
 	v1.POST("/account/password", gin.WrapF(handler.ChangeAccountPassword))
 	v1.PUT("/account/enterprise", gin.WrapF(handler.UpdateAccountEnterprise))
 	v1.GET("/enterprise/summary", gin.WrapF(handler.EnterpriseAccountSummary))
+	v1.GET("/enterprise/members", gin.WrapF(handler.EnterpriseMembers))
+	v1.POST("/enterprise/members", gin.WrapF(handler.CreateEnterpriseMember))
+	v1.POST("/enterprise/members/:id/status", func(c *gin.Context) {
+		handler.SetEnterpriseMemberStatus(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.POST("/enterprise/members/:id/password", func(c *gin.Context) {
+		handler.ResetEnterpriseMemberPassword(c.Writer, c.Request, c.Param("id"))
+	})
 	// Delta sync (cursor-based)
 	v1.GET("/sync", gin.WrapF(handler.Sync))
 	// Canvas project sync

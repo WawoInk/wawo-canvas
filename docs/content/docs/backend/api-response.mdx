@@ -68,3 +68,12 @@ description: 后端统一响应信封与结构化生成错误
 | `POST` | `/api/v1/account/password` | 校验当前密码后修改新密码，并使旧 JWT 失效 |
 | `GET` | `/api/v1/enterprise/summary` | 有效企业账号读取企业名称、角色、状态和成员数；个人账号拒绝访问 |
 | `PUT` | `/api/v1/account/enterprise` | 企业主账号修改本企业名称 |
+
+企业主账号使用以下接口管理本企业 `member`。企业范围只从当前 JWT 对应账号推导；跨企业或非成员目标统一返回“成员不存在或无权操作”。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/v1/enterprise/members` | 按 `keyword/page/pageSize` 分页搜索本企业成员 |
+| `POST` | `/api/v1/enterprise/members` | 创建固定为 `user/member`、初始积分为零的子账号 |
+| `POST` | `/api/v1/enterprise/members/{id}/status` | 设置成员 `active/ban` 状态 |
+| `POST` | `/api/v1/enterprise/members/{id}/password` | 重置成员密码并使旧 JWT 失效 |

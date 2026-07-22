@@ -43,3 +43,23 @@ type EnterpriseAccountSummary struct {
 	Role        EnterpriseRole   `json:"role"`
 	MemberCount int              `json:"memberCount"`
 }
+
+// EnterpriseMember 企业成员管理视图。
+type EnterpriseMember struct {
+	ID             string         `json:"id"`
+	Username       string         `json:"username"`
+	Email          string         `json:"email"`
+	DisplayName    string         `json:"displayName"`
+	Status         UserStatus     `json:"status"`
+	Credits        int            `json:"credits"`
+	Role           UserRole       `json:"role"`
+	EnterpriseID   string         `json:"enterpriseId"`
+	EnterpriseRole EnterpriseRole `json:"enterpriseRole"`
+	CreatedAt      string         `json:"createdAt"`
+	UpdatedAt      string         `json:"updatedAt"`
+}
+
+type EnterpriseMemberList struct {
+	Items []EnterpriseMember `json:"items"`
+	Total int                `json:"total"`
+}

@@ -10,6 +10,7 @@ export function enterpriseCapabilities(user?: EnterpriseIdentity | null) {
     return {
         showSummary: active,
         canRename: active && user?.enterpriseRole === "owner",
+        canManageMembers: active && user?.enterpriseRole === "owner",
         canAccessAssets: active,
     };
 }

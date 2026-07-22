@@ -2,10 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { App, Button, Descriptions, Form, Input, Skeleton } from "antd";
+import { App, Button, Descriptions, Form, Input, Modal, Popconfirm, Skeleton, Space, Table, Tag } from "antd";
 
 import { enterpriseCapabilities } from "@/lib/account-access";
-import { changeAccountPassword, fetchEnterpriseAccountSummary, updateAccountEnterprise, updateAccountProfile, type EnterpriseAccountSummary } from "@/services/api/auth";
+import {
+    changeAccountPassword,
+    createEnterpriseMember,
+    fetchEnterpriseAccountSummary,
+    fetchEnterpriseMembers,
+    resetEnterpriseMemberPassword,
+    setEnterpriseMemberStatus,
+    updateAccountEnterprise,
+    updateAccountProfile,
+    type EnterpriseAccountSummary,
+    type EnterpriseMember,
+} from "@/services/api/auth";
 import { useUserStore } from "@/stores/use-user-store";
 
 const platformRoleLabels = { guest: "访客", user: "普通用户", admin: "平台管理员" } as const;
@@ -185,7 +196,205 @@ export default function AccountPage() {
                         ) : null}
                     </section>
                 ) : null}
+
+                {capabilities.canManageMembers ? <EnterpriseMembers onCreated={() => setSummary((current) => (current ? { ...current, memberCount: current.memberCount + 1 } : current))} /> : null}
             </div>
         </main>
+    );
+}
+
+function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
+    const { message } = App.useApp();
+    const token = useUserStore((state) => state.token);
+    const [createForm] = Form.useForm();
+    const [passwordForm] = Form.useForm();
+    const [members, setMembers] = useState<EnterpriseMember[]>([]);
+    const [total, setTotal] = useState(0);
+    const [keyword, setKeyword] = useState("");
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+    const [refreshKey, setRefreshKey] = useState(0);
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [createOpen, setCreateOpen] = useState(false);
+    const [resetMember, setResetMember] = useState<EnterpriseMember | null>(null);
+
+    useEffect(() => {
+        let current = true;
+        setLoading(true);
+        void fetchEnterpriseMembers(token, { keyword, page, pageSize })
+            .then((result) => {
+                if (!current) return;
+                setMembers(result.items);
+                setTotal(result.total);
+            })
+            .catch((error) => current && message.error(error instanceof Error ? error.message : "成员加载失败"))
+            .finally(() => current && setLoading(false));
+        return () => {
+            current = false;
+        };
+    }, [keyword, message, page, pageSize, refreshKey, token]);
+
+    const create = async (values: { username: string; password: string; displayName?: string; email?: string }) => {
+        setSaving(true);
+        try {
+            await createEnterpriseMember(token, values);
+            createForm.resetFields();
+            setCreateOpen(false);
+            setPage(1);
+            setRefreshKey((value) => value + 1);
+            onCreated();
+            message.success("成员已创建");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "成员创建失败");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const setStatus = async (member: EnterpriseMember) => {
+        setSaving(true);
+        try {
+            await setEnterpriseMemberStatus(token, member.id, member.status === "active" ? "ban" : "active");
+            setRefreshKey((value) => value + 1);
+            message.success(member.status === "active" ? "成员已禁用" : "成员已启用");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "成员状态更新失败");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const resetPassword = async ({ password }: { password: string }) => {
+        if (!resetMember) return;
+        setSaving(true);
+        try {
+            await resetEnterpriseMemberPassword(token, resetMember.id, password);
+            passwordForm.resetFields();
+            setResetMember(null);
+            message.success("成员密码已重置");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "密码重置失败");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <section className="rounded-2xl border border-border bg-card p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 className="text-lg font-semibold">企业成员</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">创建和管理本企业子账号</p>
+                </div>
+                <Button type="primary" onClick={() => setCreateOpen(true)}>
+                    创建成员
+                </Button>
+            </div>
+            <Input.Search
+                allowClear
+                placeholder="搜索用户名、昵称或邮箱"
+                className="mt-5 max-w-md"
+                onSearch={(value) => {
+                    setKeyword(value.trim());
+                    setPage(1);
+                }}
+            />
+            <Table<EnterpriseMember>
+                rowKey="id"
+                className="mt-4"
+                loading={loading}
+                dataSource={members}
+                scroll={{ x: 760 }}
+                pagination={{
+                    current: page,
+                    pageSize,
+                    total,
+                    showSizeChanger: true,
+                    onChange: (nextPage, nextPageSize) => {
+                        setPage(nextPageSize !== pageSize ? 1 : nextPage);
+                        setPageSize(nextPageSize);
+                    },
+                }}
+                columns={[
+                    {
+                        title: "成员",
+                        render: (_, item) => (
+                            <div>
+                                <div>{item.displayName || item.username}</div>
+                                <div className="text-xs text-muted-foreground">{item.username}</div>
+                            </div>
+                        ),
+                    },
+                    { title: "邮箱", dataIndex: "email", render: (value: string) => value || "-" },
+                    { title: "积分", dataIndex: "credits", render: (value: number) => value.toLocaleString() },
+                    { title: "状态", dataIndex: "status", render: (value: EnterpriseMember["status"]) => <Tag color={value === "active" ? "success" : "default"}>{value === "active" ? "正常" : "已禁用"}</Tag> },
+                    {
+                        title: "操作",
+                        fixed: "right",
+                        width: 180,
+                        render: (_, item) => (
+                            <Space size={0}>
+                                <Popconfirm title={item.status === "active" ? "确认禁用该成员？" : "确认启用该成员？"} onConfirm={() => setStatus(item)}>
+                                    <Button type="link" danger={item.status === "active"} loading={saving}>
+                                        {item.status === "active" ? "禁用" : "启用"}
+                                    </Button>
+                                </Popconfirm>
+                                <Button type="link" onClick={() => setResetMember(item)}>
+                                    重置密码
+                                </Button>
+                            </Space>
+                        ),
+                    },
+                ]}
+            />
+
+            <Modal
+                title="创建企业成员"
+                open={createOpen}
+                footer={null}
+                onCancel={() => {
+                    setCreateOpen(false);
+                    createForm.resetFields();
+                }}
+            >
+                <Form form={createForm} layout="vertical" requiredMark={false} onFinish={create}>
+                    <Form.Item label="用户名" name="username" rules={[{ required: true, whitespace: true, message: "请输入用户名" }]}>
+                        <Input autoComplete="off" />
+                    </Form.Item>
+                    <Form.Item label="初始密码" name="password" rules={[{ required: true, message: "请输入初始密码" }]}>
+                        <Input.Password autoComplete="new-password" />
+                    </Form.Item>
+                    <Form.Item label="昵称" name="displayName">
+                        <Input />
+                    </Form.Item>
+                    <Form.Item label="邮箱" name="email" rules={[{ type: "email", message: "请输入有效邮箱" }]}>
+                        <Input />
+                    </Form.Item>
+                    <Button type="primary" htmlType="submit" loading={saving}>
+                        创建成员
+                    </Button>
+                </Form>
+            </Modal>
+
+            <Modal
+                title={`重置密码${resetMember ? `：${resetMember.displayName || resetMember.username}` : ""}`}
+                open={Boolean(resetMember)}
+                footer={null}
+                onCancel={() => {
+                    setResetMember(null);
+                    passwordForm.resetFields();
+                }}
+            >
+                <Form form={passwordForm} layout="vertical" requiredMark={false} onFinish={resetPassword}>
+                    <Form.Item label="新密码" name="password" rules={[{ required: true, message: "请输入新密码" }]}>
+                        <Input.Password autoComplete="new-password" />
+                    </Form.Item>
+                    <Button type="primary" htmlType="submit" loading={saving}>
+                        重置密码
+                    </Button>
+                </Form>
+            </Modal>
+        </section>
     );
 }

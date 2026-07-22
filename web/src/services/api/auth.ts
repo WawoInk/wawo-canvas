@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from "@/services/api/request";
+import { apiGet, apiPost, apiPut, compactApiParams } from "@/services/api/request";
 
 export const AUTH_TOKEN_KEY = "infinite-canvas-auth-token-v1";
 
@@ -38,6 +38,25 @@ export type EnterpriseAccountSummary = {
     memberCount: number;
 };
 
+export type EnterpriseMember = {
+    id: string;
+    username: string;
+    email: string;
+    displayName: string;
+    status: "active" | "ban";
+    credits: number;
+    role: "user";
+    enterpriseId: string;
+    enterpriseRole: "member";
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type EnterpriseMemberList = {
+    items: EnterpriseMember[];
+    total: number;
+};
+
 export async function login(payload: AuthPayload) {
     return apiPost<AuthSession>("/api/auth/login", payload);
 }
@@ -64,4 +83,20 @@ export async function fetchEnterpriseAccountSummary(token: string) {
 
 export async function updateAccountEnterprise(token: string, name: string) {
     return apiPut<EnterpriseAccountSummary>("/api/v1/account/enterprise", { name }, token);
+}
+
+export async function fetchEnterpriseMembers(token: string, query: { keyword?: string; page?: number; pageSize?: number } = {}) {
+    return apiGet<EnterpriseMemberList>("/api/v1/enterprise/members", compactApiParams(query), token);
+}
+
+export async function createEnterpriseMember(token: string, payload: { username: string; password: string; displayName?: string; email?: string }) {
+    return apiPost<EnterpriseMember>("/api/v1/enterprise/members", payload, token);
+}
+
+export async function setEnterpriseMemberStatus(token: string, id: string, status: "active" | "ban") {
+    return apiPost<EnterpriseMember>(`/api/v1/enterprise/members/${encodeURIComponent(id)}/status`, { status }, token);
+}
+
+export async function resetEnterpriseMemberPassword(token: string, id: string, password: string) {
+    return apiPost<EnterpriseMember>(`/api/v1/enterprise/members/${encodeURIComponent(id)}/password`, { password }, token);
 }

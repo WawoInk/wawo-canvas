@@ -43,6 +43,34 @@ func ListEnterprises(q model.Query) ([]model.EnterpriseView, int64, error) {
 	return items, total, err
 }
 
+func ListEnterpriseMembers(enterpriseID string, q model.Query) ([]model.User, int64, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, 0, err
+	}
+	q.Normalize()
+	tx := db.Model(&model.User{}).Where("enterprise_id = ? AND enterprise_role = ?", enterpriseID, model.EnterpriseRoleMember)
+	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
+		like := "%" + keyword + "%"
+		tx = tx.Where("username LIKE ? OR display_name LIKE ? OR email LIKE ?", like, like, like)
+	}
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var users []model.User
+	err = tx.Order("created_at DESC").Offset(q.Offset()).Limit(q.PageSize).Find(&users).Error
+	return users, total, err
+}
+
+func GetEnterpriseMember(enterpriseID, id string) (model.User, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.User{}, false, err
+	}
+	return findUser(db, "id = ? AND enterprise_id = ? AND enterprise_role = ?", id, enterpriseID, model.EnterpriseRoleMember)
+}
+
 func GetEnterpriseByID(id string) (model.Enterprise, error) {
 	db, err := DB()
 	if err != nil {

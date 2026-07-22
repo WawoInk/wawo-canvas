@@ -15,14 +15,14 @@ import (
 )
 
 type enterpriseView struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Status      string `json:"status"`
-	OwnerID     string `json:"ownerId"`
-	OwnerName   string `json:"ownerName"`
-	OwnerStatus string `json:"ownerStatus"`
-	MemberCount int    `json:"memberCount"`
-	OwnerCredits int   `json:"ownerCredits"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Status       string `json:"status"`
+	OwnerID      string `json:"ownerId"`
+	OwnerName    string `json:"ownerName"`
+	OwnerStatus  string `json:"ownerStatus"`
+	MemberCount  int    `json:"memberCount"`
+	OwnerCredits int    `json:"ownerCredits"`
 }
 
 func TestEnterpriseOwnerIsEnforcedByDatabase(t *testing.T) {
@@ -200,5 +200,178 @@ func assertRejectedSession(t *testing.T, baseURL, token string) {
 	response := doJSON[model.CreditLogList](t, http.MethodGet, baseURL+"/api/v1/credit-logs", token, nil)
 	if response.Code != 1 {
 		t.Fatalf("session remained active = %#v", response)
+	}
+}
+
+type enterpriseMember struct {
+	ID             string               `json:"id"`
+	Username       string               `json:"username"`
+	DisplayName    string               `json:"displayName"`
+	Email          string               `json:"email"`
+	Status         model.UserStatus     `json:"status"`
+	Credits        int                  `json:"credits"`
+	Role           model.UserRole       `json:"role"`
+	EnterpriseID   string               `json:"enterpriseId"`
+	EnterpriseRole model.EnterpriseRole `json:"enterpriseRole"`
+}
+
+type enterpriseMemberList struct {
+	Items []enterpriseMember `json:"items"`
+	Total int                `json:"total"`
+}
+
+func TestEnterpriseOwnerCreatesAndListsMembersThroughHTTP(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "enterprise-member-create-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	ownerUsername := "member-owner-" + uuid.NewString()
+	enterprise, err := service.CreateEnterprise(service.CreateEnterpriseInput{Name: "成员测试企业", OwnerUsername: ownerUsername, OwnerPassword: "owner-password"})
+	if err != nil {
+		t.Fatalf("create enterprise: %v", err)
+	}
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	owner := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerUsername, "password": "owner-password"})
+	invalidUsername := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members", owner.Data.Token, map[string]string{"username": "invalid member", "password": "member-password"})
+	if invalidUsername.Code != 1 || invalidUsername.Msg != "用户名不能包含空格" {
+		t.Fatalf("invalid member username = %#v", invalidUsername)
+	}
+	emptyPassword := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members", owner.Data.Token, map[string]string{"username": "empty-password-" + uuid.NewString(), "password": ""})
+	if emptyPassword.Code != 1 || emptyPassword.Msg != "密码不能为空" {
+		t.Fatalf("empty member password = %#v", emptyPassword)
+	}
+	memberUsername := "created-member-" + uuid.NewString()
+	created := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members", owner.Data.Token, map[string]any{
+		"username": memberUsername, "password": "member-password", "displayName": "新成员", "email": "member@example.com",
+		"enterpriseId": "enterprise-other", "enterpriseRole": "owner", "role": "admin", "status": "ban", "credits": 999,
+	})
+	if created.Code != 0 || created.Data.ID == "" || created.Data.Username != memberUsername || created.Data.DisplayName != "新成员" || created.Data.Email != "member@example.com" {
+		t.Fatalf("create member response = %#v", created)
+	}
+	if created.Data.EnterpriseID != enterprise.ID || created.Data.EnterpriseRole != model.EnterpriseRoleMember || created.Data.Role != model.UserRoleUser || created.Data.Status != model.UserStatusActive || created.Data.Credits != 0 {
+		t.Fatalf("server-controlled member fields = %#v", created.Data)
+	}
+
+	listed := doJSON[enterpriseMemberList](t, http.MethodGet, server.URL+"/api/v1/enterprise/members?keyword="+memberUsername+"&page=1&pageSize=10", owner.Data.Token, nil)
+	if listed.Code != 0 || listed.Data.Total != 1 || len(listed.Data.Items) != 1 || listed.Data.Items[0].ID != created.Data.ID {
+		t.Fatalf("member list response = %#v", listed)
+	}
+	login := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": memberUsername, "password": "member-password"})
+	if login.Code != 0 || login.Data.User.ID != created.Data.ID || login.Data.User.EnterpriseRole != model.EnterpriseRoleMember || login.Data.User.Credits != 0 {
+		t.Fatalf("member login response = %#v", login)
+	}
+}
+
+func TestEnterpriseMemberScopeIsEnforcedThroughHTTP(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "enterprise-member-scope-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	ownerAUsername := "scope-owner-a-" + uuid.NewString()
+	ownerBUsername := "scope-owner-b-" + uuid.NewString()
+	if _, err := service.CreateEnterprise(service.CreateEnterpriseInput{Name: "企业 A", OwnerUsername: ownerAUsername, OwnerPassword: "owner-password"}); err != nil {
+		t.Fatalf("create enterprise A: %v", err)
+	}
+	if _, err := service.CreateEnterprise(service.CreateEnterpriseInput{Name: "企业 B", OwnerUsername: ownerBUsername, OwnerPassword: "owner-password"}); err != nil {
+		t.Fatalf("create enterprise B: %v", err)
+	}
+	personalUsername := "scope-personal-" + uuid.NewString()
+	if _, err := service.SaveUser(model.User{Username: personalUsername}, "personal-password"); err != nil {
+		t.Fatalf("create personal user: %v", err)
+	}
+	adminUsername := "scope-admin-" + uuid.NewString()
+	if _, err := service.SaveUser(model.User{Username: adminUsername, Role: model.UserRoleAdmin}, "admin-password"); err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	ownerA := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerAUsername, "password": "owner-password"})
+	ownerB := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerBUsername, "password": "owner-password"})
+	personal := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": personalUsername, "password": "personal-password"})
+	admin := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/admin/login", "", map[string]string{"username": adminUsername, "password": "admin-password"})
+	memberAUsername := "scope-member-a-" + uuid.NewString()
+	memberBUsername := "scope-member-b-" + uuid.NewString()
+	memberA := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members", ownerA.Data.Token, map[string]string{"username": memberAUsername, "password": "member-password"})
+	memberB := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members", ownerB.Data.Token, map[string]string{"username": memberBUsername, "password": "member-password"})
+	memberASession := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": memberAUsername, "password": "member-password"})
+
+	for label, token := range map[string]string{"member": memberASession.Data.Token, "personal": personal.Data.Token, "admin": admin.Data.Token} {
+		response := doJSON[enterpriseMemberList](t, http.MethodGet, server.URL+"/api/v1/enterprise/members", token, nil)
+		if response.Code != 1 || response.Msg != "仅企业主账号可管理成员" {
+			t.Fatalf("%s listed enterprise members = %#v", label, response)
+		}
+	}
+	memberCreate := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members", memberASession.Data.Token, map[string]string{"username": "forbidden-member-" + uuid.NewString(), "password": "member-password"})
+	if memberCreate.Code != 1 || memberCreate.Msg != "仅企业主账号可管理成员" {
+		t.Fatalf("member created enterprise member = %#v", memberCreate)
+	}
+	for label, targetID := range map[string]string{
+		"self": ownerA.Data.User.ID, "other owner": ownerB.Data.User.ID, "personal": personal.Data.User.ID,
+		"admin": admin.Data.User.ID, "other enterprise member": memberB.Data.ID,
+	} {
+		response := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+targetID+"/status", ownerA.Data.Token, map[string]string{"status": "ban"})
+		if response.Code != 1 || response.Msg != "成员不存在或无权操作" {
+			t.Fatalf("owner changed %s = %#v", label, response)
+		}
+	}
+	crossEnterprise := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+memberA.Data.ID+"/status", ownerB.Data.Token, map[string]string{"status": "ban"})
+	if crossEnterprise.Code != 1 || crossEnterprise.Msg != "成员不存在或无权操作" {
+		t.Fatalf("cross-enterprise status response = %#v", crossEnterprise)
+	}
+	crossReset := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+memberA.Data.ID+"/password", ownerB.Data.Token, map[string]string{"password": "forbidden-password"})
+	if crossReset.Code != 1 || crossReset.Msg != "成员不存在或无权操作" {
+		t.Fatalf("cross-enterprise password response = %#v", crossReset)
+	}
+	if login := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": memberAUsername, "password": "member-password"}); login.Code != 0 {
+		t.Fatalf("rejected requests changed member = %#v", login)
+	}
+}
+
+func TestEnterpriseMemberStatusAndPasswordInvalidateSessionsThroughHTTP(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "enterprise-member-session-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	ownerUsername := "session-owner-" + uuid.NewString()
+	if _, err := service.CreateEnterprise(service.CreateEnterpriseInput{Name: "会话测试企业", OwnerUsername: ownerUsername, OwnerPassword: "owner-password"}); err != nil {
+		t.Fatalf("create enterprise: %v", err)
+	}
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	owner := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerUsername, "password": "owner-password"})
+	memberUsername := "session-member-" + uuid.NewString()
+	member := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members", owner.Data.Token, map[string]string{"username": memberUsername, "password": "old-password"})
+	oldSession := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": memberUsername, "password": "old-password"})
+
+	disabled := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/status", owner.Data.Token, map[string]string{"status": "ban"})
+	if disabled.Code != 0 || disabled.Data.Status != model.UserStatusBan {
+		t.Fatalf("disable member = %#v", disabled)
+	}
+	assertRejectedSession(t, server.URL, oldSession.Data.Token)
+	if login := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": memberUsername, "password": "old-password"}); login.Code != 1 || login.Msg != "账号已被禁用" {
+		t.Fatalf("disabled member login = %#v", login)
+	}
+
+	enabled := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/status", owner.Data.Token, map[string]string{"status": "active"})
+	if enabled.Code != 0 || enabled.Data.Status != model.UserStatusActive {
+		t.Fatalf("enable member = %#v", enabled)
+	}
+	activeSession := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": memberUsername, "password": "old-password"})
+	emptyPassword := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/password", owner.Data.Token, map[string]string{"password": ""})
+	if emptyPassword.Code != 1 || emptyPassword.Msg != "密码不能为空" {
+		t.Fatalf("empty member password = %#v", emptyPassword)
+	}
+	reset := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/password", owner.Data.Token, map[string]string{"password": "new-password"})
+	if reset.Code != 0 || reset.Data.ID != member.Data.ID {
+		t.Fatalf("reset member password = %#v", reset)
+	}
+	assertRejectedSession(t, server.URL, activeSession.Data.Token)
+	if oldPassword := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": memberUsername, "password": "old-password"}); oldPassword.Code != 1 {
+		t.Fatalf("old member password still works = %#v", oldPassword)
+	}
+	if newPassword := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": memberUsername, "password": "new-password"}); newPassword.Code != 0 {
+		t.Fatalf("new member password login = %#v", newPassword)
 	}
 }
