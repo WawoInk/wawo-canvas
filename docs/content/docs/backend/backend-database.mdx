@@ -21,6 +21,12 @@ description: 核心数据表和第一方生成任务事务约束
 
 企业或成员禁用不删除数据。认证中间件每次从数据库读取当前用户和企业状态，因此禁用会立即拒绝已有会话和新登录；成员密码重置会递增 `session_version`。
 
+## credit_logs 与企业充值
+
+平台管理员调整企业主账号积分时，`users.credits` 更新与一条 `credit_logs` 记录在同一个 PostgreSQL 事务中完成。事务会锁定目标主账号行，按 `delta` 增减余额，并在扣减后余额小于 0 时整体失败，因此并发调整不会覆盖其他请求的结果。
+
+平台调整流水使用 `admin_adjust` 类型：`user_id` 记录目标主账号，`related_id` 记录操作的平台管理员，`amount` 记录增量，`balance` 记录本次变动后的余额，`remark` 记录调整原因。
+
 ## generation_tasks
 
 `generation_tasks` 是第一方生成、兼容生成历史和后台恢复共用的任务事实表。第一方任务使用以下生命周期：

@@ -5,7 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { App } from "antd";
 
 import {
+    adjustAdminEnterpriseCredits,
     createAdminEnterprise,
+    fetchAdminCreditLogs,
     fetchAdminEnterprises,
     resetAdminEnterpriseOwnerPassword,
     setAdminEnterpriseOwnerStatus,
@@ -23,10 +25,15 @@ export function useAdminEnterprises() {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const query = useQuery({ queryKey: ["admin", "enterprises", token, keyword, page, pageSize], queryFn: () => fetchAdminEnterprises(token, { keyword, page, pageSize }), enabled: Boolean(token) });
-    const refresh = () => queryClient.invalidateQueries({ queryKey: ["admin", "enterprises"] });
     const mutation = useMutation({
         mutationFn: (action: (() => Promise<AdminEnterprise>)) => action(),
-        onSuccess: async () => void (await refresh()),
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ["admin", "enterprises"] }),
+                queryClient.invalidateQueries({ queryKey: ["admin", "users"] }),
+                queryClient.invalidateQueries({ queryKey: ["admin", "credit-logs"] }),
+            ]);
+        },
         onError: (error) => message.error(error instanceof Error ? error.message : "操作失败"),
     });
 
@@ -54,5 +61,14 @@ export function useAdminEnterprises() {
         setStatus: (item: AdminEnterprise, active: boolean) => mutation.mutateAsync(() => setAdminEnterpriseStatus(token, item.id, active ? "active" : "disabled")),
         setOwnerStatus: (item: AdminEnterprise, active: boolean) => mutation.mutateAsync(() => setAdminEnterpriseOwnerStatus(token, item.id, active ? "active" : "ban")),
         resetPassword: (item: AdminEnterprise, password: string) => mutation.mutateAsync(() => resetAdminEnterpriseOwnerPassword(token, item.id, password)),
+        adjustCredits: (item: AdminEnterprise, delta: number, reason: string) => mutation.mutateAsync(() => adjustAdminEnterpriseCredits(token, item.id, delta, reason)),
+        loadCreditLogs: async (ownerId: string) => {
+            try {
+                return (await fetchAdminCreditLogs(token, { keyword: ownerId, type: "admin_adjust", pageSize: 20 })).items.filter((item) => item.userId === ownerId);
+            } catch (error) {
+                message.error(error instanceof Error ? error.message : "读取充值记录失败");
+                return [];
+            }
+        },
     };
 }

@@ -157,6 +157,9 @@ func New() *gin.Engine {
 	admin.POST("/enterprises/:id/owner/password", func(c *gin.Context) {
 		handler.AdminResetEnterpriseOwnerPassword(c.Writer, c.Request, c.Param("id"))
 	})
+	admin.POST("/enterprises/:id/credits", func(c *gin.Context) {
+		handler.AdminAdjustEnterpriseOwnerCredits(c.Writer, c.Request, c.Param("id"))
+	})
 	admin.GET("/users", gin.WrapF(handler.AdminUsers))
 	admin.POST("/users", gin.WrapF(handler.AdminSaveUser))
 	admin.POST("/users/:id/credits", func(c *gin.Context) {

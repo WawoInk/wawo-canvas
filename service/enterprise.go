@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/basketikun/infinite-canvas/model"
@@ -187,6 +188,27 @@ func ResetEnterpriseOwnerPassword(id, password string) (model.EnterpriseView, er
 		return model.EnterpriseView{}, err
 	}
 	if err := repository.UpdateEnterpriseOwnerPassword(id, hash, now()); err != nil {
+		return model.EnterpriseView{}, err
+	}
+	return repository.GetEnterpriseView(id)
+}
+
+func AdjustEnterpriseOwnerCredits(id, actorID string, delta int, reason string) (model.EnterpriseView, error) {
+	reason = strings.TrimSpace(reason)
+	if delta == 0 {
+		return model.EnterpriseView{}, safeMessageError{message: "调整数量不能为 0"}
+	}
+	if reason == "" {
+		return model.EnterpriseView{}, safeMessageError{message: "调整原因不能为空"}
+	}
+	err := repository.AdjustEnterpriseOwnerCredits(id, actorID, delta, reason, now(), newID("credit"))
+	if errors.Is(err, repository.ErrEnterpriseNotFound) {
+		return model.EnterpriseView{}, safeMessageError{message: "企业不存在"}
+	}
+	if errors.Is(err, repository.ErrInsufficientCredits) {
+		return model.EnterpriseView{}, safeMessageError{message: "主账号余额不足"}
+	}
+	if err != nil {
 		return model.EnterpriseView{}, err
 	}
 	return repository.GetEnterpriseView(id)

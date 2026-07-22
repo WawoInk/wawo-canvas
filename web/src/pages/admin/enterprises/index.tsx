@@ -1,21 +1,31 @@
 "use client";
 
-import { KeyOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import { KeyOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, WalletOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import { Button, Card, Col, Flex, Form, Input, Modal, Row, Space, Switch, Tag, Tooltip, Typography } from "antd";
+import { Button, Card, Col, Flex, Form, Input, InputNumber, Modal, Row, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
 
-import type { AdminEnterprise, CreateAdminEnterprise } from "@/services/api/admin";
+import type { AdminCreditLog, AdminEnterprise, CreateAdminEnterprise } from "@/services/api/admin";
 import { useAdminEnterprises } from "./use-admin-enterprises";
 
 export default function AdminEnterprisesPage() {
-    const { enterprises, total, keyword, page, pageSize, isLoading, search, reset, changePage, refresh, create, setStatus, setOwnerStatus, resetPassword } = useAdminEnterprises();
+    const { enterprises, total, keyword, page, pageSize, isLoading, search, reset, changePage, refresh, create, setStatus, setOwnerStatus, resetPassword, adjustCredits, loadCreditLogs } = useAdminEnterprises();
     const [keywordText, setKeywordText] = useState(keyword);
     const [creating, setCreating] = useState(false);
     const [resetting, setResetting] = useState<AdminEnterprise | null>(null);
+    const [adjusting, setAdjusting] = useState<AdminEnterprise | null>(null);
+    const [creditLogs, setCreditLogs] = useState<AdminCreditLog[]>([]);
     const [createForm] = Form.useForm<CreateAdminEnterprise>();
     const [passwordForm] = Form.useForm<{ password: string }>();
+    const [creditForm] = Form.useForm<{ delta: number; reason: string }>();
+
+    const openCreditAdjustment = async (item: AdminEnterprise) => {
+        setAdjusting(item);
+        creditForm.resetFields();
+        setCreditLogs(await loadCreditLogs(item.ownerId));
+    };
+
     const columns: ProColumns<AdminEnterprise>[] = [
         {
             title: "企业",
@@ -47,12 +57,17 @@ export default function AdminEnterprisesPage() {
         {
             title: "操作",
             key: "actions",
-            width: 72,
+            width: 104,
             align: "right",
             render: (_, item) => (
-                <Tooltip title="重置主账号密码">
-                    <Button type="text" size="small" icon={<KeyOutlined />} onClick={() => setResetting(item)} />
-                </Tooltip>
+                <Space size={4}>
+                    <Tooltip title="调整主账号积分">
+                        <Button type="text" size="small" icon={<WalletOutlined />} onClick={() => void openCreditAdjustment(item)} />
+                    </Tooltip>
+                    <Tooltip title="重置主账号密码">
+                        <Button type="text" size="small" icon={<KeyOutlined />} onClick={() => setResetting(item)} />
+                    </Tooltip>
+                </Space>
             ),
         },
     ];
@@ -104,6 +119,56 @@ export default function AdminEnterprisesPage() {
                         <Col span={12}><Form.Item name="ownerPassword" label="初始密码" rules={[{ required: true, message: "请输入初始密码" }]}><Input.Password autoComplete="new-password" /></Form.Item></Col>
                     </Row>
                 </Form>
+            </Modal>
+
+            <Modal
+                title={`调整主账号积分 · ${adjusting?.ownerName || ""}`}
+                open={Boolean(adjusting)}
+                width={760}
+                confirmLoading={isLoading}
+                onCancel={() => setAdjusting(null)}
+                onOk={async () => {
+                    if (!adjusting) return;
+                    const { delta, reason } = await creditForm.validateFields();
+                    const updated = await adjustCredits(adjusting, delta, reason);
+                    setAdjusting(updated);
+                    setCreditLogs(await loadCreditLogs(updated.ownerId));
+                    creditForm.resetFields();
+                }}
+                okText="确认调整"
+                cancelText="关闭"
+                destroyOnHidden
+            >
+                <Typography.Paragraph type="secondary">当前余额：<Typography.Text strong>{adjusting?.ownerCredits.toLocaleString()}</Typography.Text>。正数增加，负数扣减，扣减后余额不能小于 0。</Typography.Paragraph>
+                <Form form={creditForm} layout="vertical" requiredMark={false}>
+                    <Row gutter={14}>
+                        <Col span={8}>
+                            <Form.Item name="delta" label="调整数量" rules={[{ required: true, message: "请输入调整数量" }, { validator: (_, value) => value === 0 ? Promise.reject(new Error("调整数量不能为 0")) : Promise.resolve() }]}>
+                                <InputNumber precision={0} style={{ width: "100%" }} placeholder="例如 100 或 -50" />
+                            </Form.Item>
+                        </Col>
+                        <Col span={16}>
+                            <Form.Item name="reason" label="调整原因" rules={[{ required: true, whitespace: true, message: "请输入调整原因" }]}>
+                                <Input maxLength={200} placeholder="例如：线下充值到账" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                </Form>
+                <Typography.Text strong>最近平台调整</Typography.Text>
+                <Table<AdminCreditLog>
+                    rowKey="id"
+                    size="small"
+                    pagination={false}
+                    dataSource={creditLogs}
+                    style={{ marginTop: 12 }}
+                    columns={[
+                        { title: "时间", dataIndex: "createdAt", width: 160, render: (value: string) => dayjs(value).format("YYYY-MM-DD HH:mm") },
+                        { title: "变动", dataIndex: "amount", width: 90, render: (value: number) => <Typography.Text type={value >= 0 ? "success" : "danger"}>{value > 0 ? `+${value}` : value}</Typography.Text> },
+                        { title: "余额", dataIndex: "balance", width: 90 },
+                        { title: "原因", dataIndex: "remark", ellipsis: true },
+                        { title: "操作者", dataIndex: "relatedId", width: 160, ellipsis: true },
+                    ]}
+                />
             </Modal>
 
             <Modal title="重置主账号密码" open={Boolean(resetting)} onCancel={() => setResetting(null)} onOk={async () => { if (!resetting) return; const { password } = await passwordForm.validateFields(); await resetPassword(resetting, password); setResetting(null); passwordForm.resetFields(); }} okText="重置" cancelText="取消" destroyOnHidden>
