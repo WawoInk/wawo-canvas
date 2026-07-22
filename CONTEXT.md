@@ -54,6 +54,24 @@ _Avoid_: Missing record, empty response
 A durable remote participant in Canvas project synchronization. PostgreSQL persists synchronized project state; WebDAV participates as a merge peer rather than an authority that may erase Offline Dirty state.
 _Avoid_: Source of truth, backup
 
+## Enterprises
+
+**Platform Role**:
+The existing `guest`, `user`, or `admin` permission level. It is independent from enterprise identity; enterprise owners and members both keep the `user` platform role.
+_Avoid_: Enterprise admin role
+
+**Enterprise Owner**:
+The single `owner` identity for an enterprise. The Enterprise Owner is a normal platform user who can manage that enterprise; it is not a Platform Administrator.
+_Avoid_: Admin, enterprise admin
+
+**Enterprise Member**:
+A `member` identity belonging to one enterprise. An Enterprise Member has an independent login, balance, personal assets, and Canvas Project Replicas.
+_Avoid_: Shared account, child session
+
+**Account Data Boundary**:
+The current authenticated user ID used to partition browser-persisted Canvas projects, personal assets, synchronization cursors, workbench history, and protected query results.
+_Avoid_: Browser cache namespace
+
 ## Compatibility
 
 **Compatibility Acceptance**:

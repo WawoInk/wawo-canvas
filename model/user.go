@@ -32,6 +32,9 @@ type User struct {
 	LinuxDoID   string     `json:"linuxDoId" gorm:"index"`
 	WechatID    string     `json:"wechatId"`
 	Status      UserStatus `json:"status"`
+	EnterpriseID   *string         `json:"enterpriseId,omitempty" gorm:"index;uniqueIndex:idx_users_enterprise_owner,where:enterprise_role = 'owner';check:chk_users_enterprise_identity,(enterprise_id IS NULL AND enterprise_role IS NULL) OR (enterprise_id IS NOT NULL AND enterprise_role IS NOT NULL)"`
+	EnterpriseRole *EnterpriseRole `json:"enterpriseRole,omitempty" gorm:"check:enterprise_role IS NULL OR enterprise_role IN ('owner','member')"`
+	SessionVersion int             `json:"-" gorm:"not null;default:1"`
 	LastLoginAt string     `json:"lastLoginAt"`
 	Extra       string     `json:"extra" gorm:"type:text"`
 	CreatedAt   string     `json:"createdAt"`
@@ -52,6 +55,10 @@ type AuthUser struct {
 	AvatarURL   string   `json:"avatarUrl"`
 	Role        UserRole `json:"role"`
 	Credits     int      `json:"credits"`
+	EnterpriseID     string           `json:"enterpriseId,omitempty"`
+	EnterpriseName   string           `json:"enterpriseName,omitempty"`
+	EnterpriseRole   EnterpriseRole   `json:"enterpriseRole,omitempty"`
+	EnterpriseStatus EnterpriseStatus `json:"enterpriseStatus,omitempty"`
 	CreatedAt   string   `json:"createdAt"`
 	UpdatedAt   string   `json:"updatedAt"`
 }
@@ -63,7 +70,7 @@ type AuthSession struct {
 }
 
 func PublicUser(user User) AuthUser {
-	return AuthUser{
+	result := AuthUser{
 		ID:          user.ID,
 		Username:    user.Username,
 		DisplayName: user.DisplayName,
@@ -73,6 +80,13 @@ func PublicUser(user User) AuthUser {
 		CreatedAt:   user.CreatedAt,
 		UpdatedAt:   user.UpdatedAt,
 	}
+	if user.EnterpriseID != nil {
+		result.EnterpriseID = *user.EnterpriseID
+	}
+	if user.EnterpriseRole != nil {
+		result.EnterpriseRole = *user.EnterpriseRole
+	}
+	return result
 }
 
 type CreditLogType string

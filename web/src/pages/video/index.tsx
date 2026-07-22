@@ -13,6 +13,7 @@ import { ModelPicker } from "@/components/model-picker";
 import { PromptSelectDialog } from "@/components/prompts/prompt-select-dialog";
 import { VideoSettingsPanel, normalizeVideoResolutionValue, videoSizeLabel } from "@/components/video-settings-panel";
 import { canvasThemes } from "@/lib/canvas-theme";
+import { accountStoreName } from "@/lib/account-storage";
 import { formatBytes, formatDuration } from "@/lib/image-utils";
 import { getVideoPoster } from "@/lib/video-poster";
 import { boolConfig, normalizeSeedanceRatio, seedanceReferenceLabel, SEEDANCE_REFERENCE_LIMITS } from "@/lib/seedance-video";
@@ -80,7 +81,7 @@ const LOG_STORE_KEY = "infinite-canvas:video_generation_logs";
 function logStoreForUser() {
     const user = useUserStore.getState().user;
     const userId = user?.id || "anonymous";
-    return localforage.createInstance({ name: "infinite-canvas", storeName: `video_generation_logs_${userId}` });
+    return localforage.createInstance({ name: "infinite-canvas", storeName: accountStoreName("video_generation_logs", userId) });
 }
 
 // ponytail: module-level bridge between syncClient (singleton) and component (closure-scoped refreshLogs)

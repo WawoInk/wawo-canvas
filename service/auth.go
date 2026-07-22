@@ -25,6 +25,7 @@ type TokenClaims struct {
 	UserID   string         `json:"userId"`
 	Username string         `json:"username"`
 	Role     model.UserRole `json:"role"`
+	SessionVersion int      `json:"sessionVersion"`
 	jwt.RegisteredClaims
 }
 
@@ -110,6 +111,9 @@ func Login(username string, password string) (model.AuthSession, error) {
 	}
 	if user.Status == model.UserStatusBan {
 		return model.AuthSession{}, safeMessageError{message: "账号已被禁用"}
+	}
+	if _, err := publicUser(user); err != nil {
+		return model.AuthSession{}, err
 	}
 	normalizeUserDefaults(&user)
 	user.LastLoginAt = now()
@@ -225,10 +229,11 @@ func CurrentAuthUser(tokenText string) (model.AuthUser, bool) {
 	if err != nil || !ok {
 		return model.AuthUser{}, false
 	}
-	if user.Status == model.UserStatusBan {
+	if user.Status == model.UserStatusBan || user.SessionVersion != claims.SessionVersion {
 		return model.AuthUser{}, false
 	}
-	return model.PublicUser(user), true
+	public, err := publicUser(user)
+	return public, err == nil
 }
 
 func ListUsers(q model.Query) (model.UserList, error) {
@@ -285,6 +290,9 @@ func SaveUser(user model.User, password string) (model.User, error) {
 			user.LinuxDoID = saved.LinuxDoID
 		}
 		user.LastLoginAt = saved.LastLoginAt
+		user.EnterpriseID = saved.EnterpriseID
+		user.EnterpriseRole = saved.EnterpriseRole
+		user.SessionVersion = saved.SessionVersion
 	}
 	if password != "" {
 		hash, err := hashPassword(password)
@@ -292,6 +300,9 @@ func SaveUser(user model.User, password string) (model.User, error) {
 			return user, err
 		}
 		user.Password = hash
+		if !isCreate {
+			user.SessionVersion++
+		}
 	}
 	if isCreate && user.Password == "" {
 		return user, safeMessageError{message: "密码不能为空"}
@@ -454,7 +465,8 @@ func newSession(user model.User) (model.AuthSession, error) {
 	if err != nil {
 		return model.AuthSession{}, err
 	}
-	return model.AuthSession{Token: token, User: model.PublicUser(user)}, nil
+	public, err := publicUser(user)
+	return model.AuthSession{Token: token, User: public}, err
 }
 
 func newToken(user model.User) (string, error) {
@@ -466,6 +478,7 @@ func newToken(user model.User) (string, error) {
 		UserID:   user.ID,
 		Username: user.Username,
 		Role:     user.Role,
+		SessionVersion: user.SessionVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(expireHours) * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -499,6 +512,26 @@ func normalizeUserDefaults(user *model.User) {
 	if user.AffCode == "" {
 		user.AffCode = newAffCode()
 	}
+	if user.SessionVersion == 0 {
+		user.SessionVersion = 1
+	}
+}
+
+func publicUser(user model.User) (model.AuthUser, error) {
+	public := model.PublicUser(user)
+	if user.EnterpriseID == nil {
+		return public, nil
+	}
+	enterprise, err := repository.GetEnterpriseByID(*user.EnterpriseID)
+	if err != nil {
+		return model.AuthUser{}, err
+	}
+	if enterprise.Status != model.EnterpriseStatusActive {
+		return model.AuthUser{}, safeMessageError{message: "企业已被禁用"}
+	}
+	public.EnterpriseName = enterprise.Name
+	public.EnterpriseStatus = enterprise.Status
+	return public, nil
 }
 
 type linuxDoTokenResponse struct {

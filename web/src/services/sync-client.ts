@@ -1,5 +1,6 @@
 // web/src/services/sync-client.ts
 import localforage from "localforage";
+import { isCurrentSession } from "@/lib/account-storage";
 import { useUserStore } from "@/stores/use-user-store";
 
 export type Domain = "assets" | "canvas" | "tasks";
@@ -105,6 +106,7 @@ class SyncClient {
         const userId = useUserStore.getState().user?.id;
         const token = useUserStore.getState().token;
         if (!userId || !token) return;
+        const session = { token, userId };
 
         const [cursor, canvasCursor] = await Promise.all([this.getCursor(), this.getCanvasCursor()]);
         const params = new URLSearchParams();
@@ -119,6 +121,8 @@ class SyncClient {
             if (!resp.ok) return;
             const json = await resp.json();
             if (json.code !== 0) return;
+            const current = useUserStore.getState();
+            if (!isCurrentSession(session, { token: current.token, userId: current.user?.id })) return;
 
             const delta = json.data as SyncDelta;
             const accepted = this.applyDelta(delta);

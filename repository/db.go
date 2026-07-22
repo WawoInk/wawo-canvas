@@ -47,6 +47,7 @@ func DB() (*gorm.DB, error) {
 			return
 		}
 		dbErr = db.AutoMigrate(
+			&model.Enterprise{},
 			&model.User{},
 			&model.CreditLog{},
 			&model.Prompt{},
@@ -80,6 +81,27 @@ func DB() (*gorm.DB, error) {
 		}
 		if dbErr == nil {
 			dbErr = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_logs_task_type ON credit_logs (task_id, type) WHERE task_id <> ''").Error
+		}
+		if dbErr == nil {
+			dbErr = db.Exec(`DO $$ BEGIN
+				ALTER TABLE enterprises ADD CONSTRAINT fk_enterprises_owner FOREIGN KEY (owner_id) REFERENCES users(id) DEFERRABLE INITIALLY DEFERRED;
+			EXCEPTION WHEN duplicate_object THEN NULL; END $$`).Error
+		}
+		if dbErr == nil {
+			dbErr = db.Exec(`DO $$ BEGIN
+				ALTER TABLE users ADD CONSTRAINT fk_users_enterprise FOREIGN KEY (enterprise_id) REFERENCES enterprises(id) DEFERRABLE INITIALLY DEFERRED;
+			EXCEPTION WHEN duplicate_object THEN NULL; END $$`).Error
+		}
+		if dbErr == nil {
+			dbErr = db.Exec(`CREATE OR REPLACE FUNCTION validate_enterprise_owner() RETURNS trigger AS $$
+			BEGIN
+				IF NOT EXISTS (SELECT 1 FROM users WHERE id = NEW.owner_id AND enterprise_id = NEW.id AND enterprise_role = 'owner') THEN
+					RAISE EXCEPTION 'enterprise owner must be its owner user';
+				END IF;
+				RETURN NEW;
+			END; $$ LANGUAGE plpgsql;
+			DROP TRIGGER IF EXISTS enterprise_owner_identity ON enterprises;
+			CREATE CONSTRAINT TRIGGER enterprise_owner_identity AFTER INSERT OR UPDATE ON enterprises DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION validate_enterprise_owner()`).Error
 		}
 	})
 	return db, dbErr

@@ -7,6 +7,19 @@ description: 核心数据表和第一方生成任务事务约束
 
 后端使用 PostgreSQL 和 GORM。本文记录需要跨模块理解的核心表；字段以 `model/` 中的结构为准。
 
+## enterprises 与 users
+
+`enterprises` 保存企业名称、`active/disabled` 状态和唯一主账号 ID。企业和主账号在同一个 PostgreSQL 事务中创建；延迟外键与约束触发器在事务提交时保证主账号存在、属于当前企业且企业身份为 `owner`。
+
+`users` 的平台角色仍为 `guest/user/admin`。企业归属使用可空的 `enterprise_id` 和 `enterprise_role` 表达，企业身份只允许 `owner/member`：
+
+- 无企业账号的两个字段均为空；企业账号的两个字段必须同时存在。
+- `enterprise_id + owner` 使用部分唯一索引，保证一个企业最多一个主账号。
+- 一个账号只有一个 `enterprise_id`，第一版不支持跨企业或多企业成员关系。
+- `session_version` 默认从 1 开始；密码重置递增版本，使旧 JWT 立即失效。
+
+企业禁用不删除企业或用户数据。认证中间件每次从数据库读取当前用户和企业状态，因此企业禁用会立即拒绝已有会话。
+
 ## generation_tasks
 
 `generation_tasks` 是第一方生成、兼容生成历史和后台恢复共用的任务事实表。第一方任务使用以下生命周期：

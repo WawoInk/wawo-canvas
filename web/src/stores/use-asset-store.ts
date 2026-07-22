@@ -6,6 +6,7 @@ import { persist, type PersistStorage, type StorageValue } from "zustand/middlew
 import { nanoid } from "nanoid";
 import { message } from "antd";
 
+import { createAccountStorage, isCurrentSession } from "@/lib/account-storage";
 import { localForageStorage } from "@/lib/localforage-storage";
 import { useUserStore } from "@/stores/use-user-store";
 import { resolveFileUrls } from "@/services/resolve-file-urls";
@@ -48,16 +49,18 @@ type AssetStore = {
 };
 
 const ASSET_STORE_KEY = "infinite-canvas:asset_store";
+let switchingAccount = false;
+const scopedStorage = createAccountStorage(localForageStorage, () => useUserStore.getState().user?.id, () => !switchingAccount);
 
 const assetStorage: PersistStorage<AssetStore> = {
     getItem: async (name) => {
-        const value = await localForageStorage.getItem(name);
+        const value = await scopedStorage.getItem(name);
         if (!value) return null;
         const parsed = JSON.parse(value) as StorageValue<AssetStore>;
         return parsed;
     },
-    setItem: (name, value) => localForageStorage.setItem(name, JSON.stringify(value)),
-    removeItem: (name) => localForageStorage.removeItem(name),
+    setItem: (name, value) => scopedStorage.setItem(name, JSON.stringify(value)),
+    removeItem: (name) => scopedStorage.removeItem(name),
 };
 
 export const useAssetStore = create<AssetStore>()(
@@ -166,9 +169,13 @@ export const useAssetStore = create<AssetStore>()(
             refreshFromServer: async () => {
                 try {
                     const token = useUserStore.getState().token;
-                    if (!token) return;
+                    const userId = useUserStore.getState().user?.id;
+                    if (!token || !userId) return;
+                    const session = { token, userId };
                     // ponytail: 一次性拉取最多500条，远超普通用户素材量；超大库走 sync 增量补充
                     const result = await fetchAssetLibrary({ pageSize: 500, page: 1 });
+                    const current = useUserStore.getState();
+                    if (!isCurrentSession(session, { token: current.token, userId: current.user?.id })) return;
                     const assets = (result.items || []).map(toLocalAsset);
                     set({ assets });
                     syncScheduler.markActivity();
@@ -197,6 +204,19 @@ export const useAssetStore = create<AssetStore>()(
         },
     ),
 );
+
+if (typeof window !== "undefined") {
+    let lastUserId = useUserStore.getState().user?.id;
+    useUserStore.subscribe((state) => {
+        const userId = state.user?.id;
+        if (userId === lastUserId) return;
+        lastUserId = userId;
+        switchingAccount = true;
+        useAssetStore.setState({ assets: [], hydrated: false, synced: false });
+        switchingAccount = false;
+        if (userId) void useAssetStore.persist.rehydrate();
+    });
+}
 
 // ── Sync delta 回调：后台同步的增量数据直接覆盖本地缓存 ──
 syncClient.onDelta("assets", (data) => {

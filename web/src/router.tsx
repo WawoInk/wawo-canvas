@@ -15,6 +15,7 @@ import AssetsPage from "@/pages/assets";
 import AssetLibraryPage from "@/pages/asset-library";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminUsers from "@/pages/admin/users";
+import AdminEnterprises from "@/pages/admin/enterprises";
 import AdminCreditLogs from "@/pages/admin/credit-logs";
 import AdminGenerationTasks from "@/pages/admin/generation-tasks";
 import AdminPrompts from "@/pages/admin/prompts";
@@ -57,6 +58,7 @@ export const router = createBrowserRouter([
                 children: [
                     { path: "/admin", element: <AdminDashboard /> },
                     { path: "/admin/users", element: <AdminUsers /> },
+                    { path: "/admin/enterprises", element: <AdminEnterprises /> },
                     { path: "/admin/credit-logs", element: <AdminCreditLogs /> },
                     { path: "/admin/generation-tasks", element: <AdminGenerationTasks /> },
                     { path: "/admin/prompts", element: <AdminPrompts /> },

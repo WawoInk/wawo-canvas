@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { AppTopNav } from "@/components/layout/app-top-nav";
+import { canRenderProtectedData } from "@/lib/account-storage";
 import { useUserStore } from "@/stores/use-user-store";
 
 // Public paths that don't require login. Everything else redirects to /login.
@@ -33,9 +34,8 @@ export default function UserLayout({ children }: { children: ReactNode }) {
         }
     }, [isReady, user, pathname, navigate]);
 
-    // While auth state is resolving, show a neutral splash instead of rendering
-    // protected pages (which would flash their content + fire authenticated API calls).
-    if (isReady && !user && !PUBLIC_PATHS.has(pathname) && pathname !== "/admin/login") {
+    const isPublic = PUBLIC_PATHS.has(pathname) || pathname === "/admin/login";
+    if (!isPublic && !canRenderProtectedData(isReady, Boolean(token && user))) {
         return <div className="flex h-dvh items-center justify-center bg-background" />;
     }
 

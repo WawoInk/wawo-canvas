@@ -45,3 +45,17 @@ description: 后端统一响应信封与结构化生成错误
 - `resourceId`：关联的 Canvas 节点或平台资源 ID；不适用时省略。
 
 取消、回调等操作错误至少返回稳定的 `data.code`。异步失败通过 `GET /api/v1/generations/{id}` 的任务 `error` 字段返回同一套归一化信息。
+
+## 企业基础接口
+
+平台管理员使用现有 Bearer JWT 调用以下接口，响应继续使用统一信封：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/admin/enterprises` | 按 `keyword/page/pageSize` 查询企业、主账号、成员数和主账号余额 |
+| `POST` | `/api/admin/enterprises` | 在同一事务中创建企业及唯一主账号 |
+| `POST` | `/api/admin/enterprises/{id}/status` | 设置企业 `active/disabled` 状态 |
+| `POST` | `/api/admin/enterprises/{id}/owner/status` | 设置主账号 `active/ban` 状态 |
+| `POST` | `/api/admin/enterprises/{id}/owner/password` | 重置主账号密码并使旧会话失效 |
+
+`/api/auth/login` 和 `/api/auth/me` 的公开用户信息可包含 `enterpriseId`、`enterpriseName`、`enterpriseRole` 和 `enterpriseStatus`。企业范围由服务端当前用户推导，不接受客户端提交企业 ID 来切换身份。

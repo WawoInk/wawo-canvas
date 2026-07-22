@@ -2,6 +2,7 @@
 
 import localforage from "localforage";
 
+import { accountStoreName } from "@/lib/account-storage";
 import { getMediaBlob, resolveMediaUrl, setMediaBlob, getImageBlob, resolveImageUrl, setImageBlob } from "@/services/blob-storage";
 import { downloadWebdavFile, uploadWebdavFile, WEBDAV_MANIFEST_FILE_NAME } from "@/services/webdav-sync";
 import type { Asset } from "@/stores/use-asset-store";
@@ -9,6 +10,7 @@ import { useAssetStore } from "@/stores/use-asset-store";
 import type { WebdavSyncConfig } from "@/stores/use-config-store";
 import type { CanvasProject } from "@/pages/canvas/stores/use-canvas-store";
 import { useCanvasStore } from "@/pages/canvas/stores/use-canvas-store";
+import { useUserStore } from "@/stores/use-user-store";
 
 type StoredLog = Record<string, unknown> & { id?: string };
 export type AppSyncDomainKey = "canvas" | "assets" | "image-workbench" | "video-workbench";
@@ -76,15 +78,17 @@ export type AppSyncProgressEvent = {
 export type AppSyncProgress = (event: AppSyncProgressEvent) => void;
 
 const FILE_CONCURRENCY = 3;
-const imageLogStore = localforage.createInstance({ name: "infinite-canvas", storeName: "image_generation_logs" });
-const videoLogStore = localforage.createInstance({ name: "infinite-canvas", storeName: "video_generation_logs" });
-type LogStore = typeof imageLogStore;
+type LogStore = ReturnType<typeof localforage.createInstance>;
 const storageKeyPattern = /^(image|video|audio|file|video-reference|audio-reference):/;
 
 export async function syncAppDataToWebdav(config: WebdavSyncConfig, onProgress?: AppSyncProgress): Promise<AppSyncResult> {
     emitProgress(onProgress, { stage: "等待本地数据加载" });
     await Promise.all([waitForHydration(useCanvasStore), waitForHydration(useAssetStore)]);
 
+    const userId = useUserStore.getState().user?.id;
+    if (!userId) throw new Error("未登录");
+    const imageLogStore = localforage.createInstance({ name: "infinite-canvas", storeName: accountStoreName("image_generation_logs", userId) });
+    const videoLogStore = localforage.createInstance({ name: "infinite-canvas", storeName: accountStoreName("video_generation_logs", userId) });
     const [canvas, assets, imageLogs, videoLogs] = await Promise.all([
         syncDomain<CanvasDomainData>(config, onProgress, {
             key: "canvas",

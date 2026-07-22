@@ -134,6 +134,17 @@ func New() *gin.Engine {
 	api.POST("/admin/login", gin.WrapF(handler.AdminLogin))
 
 	admin := api.Group("/admin", middleware.AdminAuth)
+	admin.GET("/enterprises", gin.WrapF(handler.AdminEnterprises))
+	admin.POST("/enterprises", gin.WrapF(handler.AdminCreateEnterprise))
+	admin.POST("/enterprises/:id/status", func(c *gin.Context) {
+		handler.AdminSetEnterpriseStatus(c.Writer, c.Request, c.Param("id"))
+	})
+	admin.POST("/enterprises/:id/owner/status", func(c *gin.Context) {
+		handler.AdminSetEnterpriseOwnerStatus(c.Writer, c.Request, c.Param("id"))
+	})
+	admin.POST("/enterprises/:id/owner/password", func(c *gin.Context) {
+		handler.AdminResetEnterpriseOwnerPassword(c.Writer, c.Request, c.Param("id"))
+	})
 	admin.GET("/users", gin.WrapF(handler.AdminUsers))
 	admin.POST("/users", gin.WrapF(handler.AdminSaveUser))
 	admin.POST("/users/:id/credits", func(c *gin.Context) {

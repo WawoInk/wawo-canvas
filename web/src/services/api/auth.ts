@@ -11,6 +11,10 @@ export type AuthUser = {
     avatarUrl: string;
     role: UserRole;
     credits: number;
+    enterpriseId?: string;
+    enterpriseName?: string;
+    enterpriseRole?: "owner" | "member";
+    enterpriseStatus?: "active" | "disabled";
     createdAt: string;
     updatedAt: string;
 };

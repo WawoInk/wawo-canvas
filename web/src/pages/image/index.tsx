@@ -12,6 +12,7 @@ import { PromptSelectDialog } from "@/components/prompts/prompt-select-dialog";
 import { AssetPickerModal, type InsertAssetPayload } from "@/pages/canvas/components/asset-picker-modal";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { imageReferenceLabel } from "@/lib/image-reference-prompt";
+import { accountStoreName } from "@/lib/account-storage";
 import { modelOptionLabel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { nanoid } from "nanoid";
@@ -78,7 +79,7 @@ const RESULT_ACTION_BUTTON_CLASS = "min-w-0 px-1.5 [&_.ant-btn-icon]:shrink-0 [&
 function logStoreForUser() {
     const user = useUserStore.getState().user;
     const userId = user?.id || "anonymous";
-    return localforage.createInstance({ name: "infinite-canvas", storeName: `image_generation_logs_${userId}` });
+    return localforage.createInstance({ name: "infinite-canvas", storeName: accountStoreName("image_generation_logs", userId) });
 }
 
 // ponytail: module-level bridge between syncClient (singleton) and component (closure-scoped refreshLogs)

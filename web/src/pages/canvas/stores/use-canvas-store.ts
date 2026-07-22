@@ -3,6 +3,7 @@ import { persist, type PersistStorage, type StorageValue } from "zustand/middlew
 
 import { nanoid } from "nanoid";
 
+import { createAccountStorage, isCurrentSession } from "@/lib/account-storage";
 import { localForageStorage } from "@/lib/localforage-storage";
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "../types";
@@ -50,28 +51,17 @@ export type CanvasStore = {
 
 const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
 const CANVAS_STORE_KEY = "infinite-canvas:canvas_store";
-
-// ─── Persist storage adapter (user-scoped) ───────────────────────────
-
-function userStoreKey(name: string) {
-    const userId = useUserStore.getState().user?.id;
-    return userId ? `${name}:${userId}` : name;
-}
+let switchingAccount = false;
+const scopedStorage = createAccountStorage(localForageStorage, () => useUserStore.getState().user?.id, () => !switchingAccount);
 
 const canvasStorage: PersistStorage<CanvasStore> = {
     getItem: async (name) => {
-        const userId = useUserStore.getState().user?.id;
-        if (!userId) return null;
-        const value = await localForageStorage.getItem(userStoreKey(name));
+        const value = await scopedStorage.getItem(name);
         if (!value) return null;
         return JSON.parse(value) as StorageValue<CanvasStore>;
     },
-    setItem: (name, value) => {
-        const userId = useUserStore.getState().user?.id;
-        if (!userId) return;
-        void localForageStorage.setItem(userStoreKey(name), JSON.stringify(value));
-    },
-    removeItem: (name) => localForageStorage.removeItem(userStoreKey(name)),
+    setItem: (name, value) => scopedStorage.setItem(name, JSON.stringify(value)),
+    removeItem: (name) => scopedStorage.removeItem(name),
 };
 
 // ─── Store ──────────────────────────────────────────────────────────────
@@ -139,10 +129,14 @@ export const useCanvasStore = create<CanvasStore>()(
 
                 fetchProjectFromBackend: async (id: string) => {
                     const token = useUserStore.getState().token;
-                    if (!token) return null;
+                    const userId = useUserStore.getState().user?.id;
+                    if (!token || !userId) return null;
+                    const session = { token, userId };
                     try {
                         const { fetchCanvasProject } = await import("@/services/api/canvas-projects");
                         const detail = await fetchCanvasProject(id);
+                        const current = useUserStore.getState();
+                        if (!isCurrentSession(session, { token: current.token, userId: current.user?.id })) return null;
                         const parsed = parseProjectJson(detail.projectJson);
                         const project: CanvasProject = normalizeCanvasProject({
                             ...parsed,
@@ -199,6 +193,7 @@ export const useCanvasStore = create<CanvasStore>()(
                     if (!user?.id) return;
                     const token = useUserStore.getState().token;
                     if (!token) return;
+                    const session = { token, userId: user.id };
                     try {
                         const { fetchCanvasProjects, fetchCanvasProject } = await import("@/services/api/canvas-projects");
                         const serverProjects = await fetchCanvasProjects();
@@ -208,6 +203,8 @@ export const useCanvasStore = create<CanvasStore>()(
                         }
                         const tombstones = new Set(get().tombstones);
                         const details = await Promise.allSettled(serverProjects.filter((project) => !tombstones.has(project.id)).map((p) => fetchCanvasProject(p.id)));
+                        const current = useUserStore.getState();
+                        if (!isCurrentSession(session, { token: current.token, userId: current.user?.id })) return;
                         const map = new Map(
                             get()
                                 .projects.filter((project) => !tombstones.has(project.id))
@@ -290,7 +287,9 @@ if (typeof window !== "undefined") {
         if (currentId === lastUserId) return;
         lastUserId = currentId;
 
+        switchingAccount = true;
         useCanvasStore.getState().clearProjects();
+        switchingAccount = false;
 
         if (currentId) {
             void useCanvasStore.persist.rehydrate()?.then(() => {

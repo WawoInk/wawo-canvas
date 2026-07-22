@@ -33,6 +33,31 @@ export type AdminUserListResponse = {
     total: number;
 };
 
+export type AdminEnterprise = {
+    id: string;
+    name: string;
+    status: "active" | "disabled";
+    ownerId: string;
+    ownerName: string;
+    ownerStatus: "active" | "ban";
+    ownerCredits: number;
+    memberCount: number;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type CreateAdminEnterprise = {
+    name: string;
+    ownerUsername: string;
+    ownerPassword: string;
+    ownerDisplayName?: string;
+};
+
+export type AdminEnterpriseListResponse = {
+    items: AdminEnterprise[];
+    total: number;
+};
+
 export type AdminCreditLog = {
     id: string;
     userId: string;
@@ -58,6 +83,26 @@ export type AdminUserQuery = {
 
 export async function fetchAdminUsers(token: string, query: AdminUserQuery = {}) {
     return apiGet<AdminUserListResponse>("/api/admin/users", compactApiParams(query), token);
+}
+
+export async function fetchAdminEnterprises(token: string, query: AdminUserQuery = {}) {
+    return apiGet<AdminEnterpriseListResponse>("/api/admin/enterprises", compactApiParams(query), token);
+}
+
+export async function createAdminEnterprise(token: string, enterprise: CreateAdminEnterprise) {
+    return apiPost<AdminEnterprise>("/api/admin/enterprises", enterprise, token);
+}
+
+export async function setAdminEnterpriseStatus(token: string, id: string, status: AdminEnterprise["status"]) {
+    return apiPost<AdminEnterprise>(`/api/admin/enterprises/${encodeURIComponent(id)}/status`, { status }, token);
+}
+
+export async function setAdminEnterpriseOwnerStatus(token: string, id: string, status: AdminEnterprise["ownerStatus"]) {
+    return apiPost<AdminEnterprise>(`/api/admin/enterprises/${encodeURIComponent(id)}/owner/status`, { status }, token);
+}
+
+export async function resetAdminEnterpriseOwnerPassword(token: string, id: string, password: string) {
+    return apiPost<AdminEnterprise>(`/api/admin/enterprises/${encodeURIComponent(id)}/owner/password`, { password }, token);
 }
 
 export async function saveAdminUser(token: string, user: Partial<AdminUser> & { password?: string }) {
