@@ -22,6 +22,41 @@ type CreateEnterpriseMemberInput struct {
 	Email       string
 }
 
+func TransferEnterpriseMemberCredits(current model.AuthUser, id string, action model.EnterpriseCreditAction, amount int, requestID string) (model.EnterpriseCreditTransfer, error) {
+	enterpriseID, err := enterpriseOwnerID(current)
+	if err != nil {
+		return model.EnterpriseCreditTransfer{}, err
+	}
+	requestID = strings.TrimSpace(requestID)
+	if action != model.EnterpriseCreditActionAllocate && action != model.EnterpriseCreditActionReclaim {
+		return model.EnterpriseCreditTransfer{}, safeMessageError{message: "积分操作无效"}
+	}
+	if amount <= 0 {
+		return model.EnterpriseCreditTransfer{}, safeMessageError{message: "积分数量必须为正整数"}
+	}
+	if requestID == "" || len(requestID) > 128 {
+		return model.EnterpriseCreditTransfer{}, safeMessageError{message: "请求 ID 无效"}
+	}
+	owner, member, err := repository.TransferEnterpriseMemberCredits(enterpriseID, current.ID, id, action, amount, requestID, now())
+	if errors.Is(err, repository.ErrEnterpriseMemberNotFound) {
+		return model.EnterpriseCreditTransfer{}, safeMessageError{message: "成员不存在或无权操作"}
+	}
+	if errors.Is(err, repository.ErrInsufficientCredits) {
+		message := "主账号余额不足"
+		if action == model.EnterpriseCreditActionReclaim {
+			message = "成员余额不足"
+		}
+		return model.EnterpriseCreditTransfer{}, safeMessageError{message: message}
+	}
+	if errors.Is(err, repository.ErrCreditTransferRequestConflict) {
+		return model.EnterpriseCreditTransfer{}, safeMessageError{message: "请求 ID 已被其他积分操作使用"}
+	}
+	if err != nil {
+		return model.EnterpriseCreditTransfer{}, err
+	}
+	return model.EnterpriseCreditTransfer{RequestID: requestID, Action: action, Amount: amount, OwnerCredits: owner.Credits, Member: enterpriseMember(member)}, nil
+}
+
 func CreateEnterprise(input CreateEnterpriseInput) (model.EnterpriseView, error) {
 	input.Name = strings.TrimSpace(input.Name)
 	input.OwnerUsername = strings.TrimSpace(input.OwnerUsername)

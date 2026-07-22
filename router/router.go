@@ -106,6 +106,9 @@ func New() *gin.Engine {
 	v1.POST("/enterprise/members/:id/password", func(c *gin.Context) {
 		handler.ResetEnterpriseMemberPassword(c.Writer, c.Request, c.Param("id"))
 	})
+	v1.POST("/enterprise/members/:id/credits", func(c *gin.Context) {
+		handler.TransferEnterpriseMemberCredits(c.Writer, c.Request, c.Param("id"))
+	})
 	// Delta sync (cursor-based)
 	v1.GET("/sync", gin.WrapF(handler.Sync))
 	// Canvas project sync

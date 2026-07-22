@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { App, Button, Descriptions, Form, Input, Modal, Popconfirm, Skeleton, Space, Table, Tag } from "antd";
+import { App, Button, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Skeleton, Space, Table, Tag } from "antd";
+import { nanoid } from "nanoid";
 
 import { enterpriseCapabilities } from "@/lib/account-access";
 import {
@@ -12,9 +13,11 @@ import {
     fetchEnterpriseMembers,
     resetEnterpriseMemberPassword,
     setEnterpriseMemberStatus,
+    transferEnterpriseMemberCredits,
     updateAccountEnterprise,
     updateAccountProfile,
     type EnterpriseAccountSummary,
+    type EnterpriseCreditAction,
     type EnterpriseMember,
 } from "@/services/api/auth";
 import { useUserStore } from "@/stores/use-user-store";
@@ -208,6 +211,7 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
     const token = useUserStore((state) => state.token);
     const [createForm] = Form.useForm();
     const [passwordForm] = Form.useForm();
+    const [creditsForm] = Form.useForm();
     const [members, setMembers] = useState<EnterpriseMember[]>([]);
     const [total, setTotal] = useState(0);
     const [keyword, setKeyword] = useState("");
@@ -218,6 +222,7 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
     const [saving, setSaving] = useState(false);
     const [createOpen, setCreateOpen] = useState(false);
     const [resetMember, setResetMember] = useState<EnterpriseMember | null>(null);
+    const [creditsTarget, setCreditsTarget] = useState<{ member: EnterpriseMember; action: EnterpriseCreditAction; requestId: string } | null>(null);
 
     useEffect(() => {
         let current = true;
@@ -280,6 +285,24 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
         }
     };
 
+    const transferCredits = async ({ amount }: { amount: number }) => {
+        if (!creditsTarget) return;
+        setSaving(true);
+        try {
+            const result = await transferEnterpriseMemberCredits(token, creditsTarget.member.id, { action: creditsTarget.action, amount, requestId: creditsTarget.requestId });
+            setMembers((current) => current.map((item) => (item.id === result.member.id ? result.member : item)));
+            const session = useUserStore.getState();
+            if (session.token === token && session.user) session.setSession(token, { ...session.user, credits: result.ownerCredits });
+            setCreditsTarget(null);
+            creditsForm.resetFields();
+            message.success(result.action === "allocate" ? "积分分配成功" : "积分收回成功");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : creditsTarget.action === "allocate" ? "积分分配失败" : "积分收回失败");
+        } finally {
+            setSaving(false);
+        }
+    };
+
     return (
         <section className="rounded-2xl border border-border bg-card p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -305,7 +328,7 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
                 className="mt-4"
                 loading={loading}
                 dataSource={members}
-                scroll={{ x: 760 }}
+                scroll={{ x: 900 }}
                 pagination={{
                     current: page,
                     pageSize,
@@ -332,9 +355,15 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
                     {
                         title: "操作",
                         fixed: "right",
-                        width: 180,
+                        width: 320,
                         render: (_, item) => (
                             <Space size={0}>
+                                <Button type="link" onClick={() => setCreditsTarget({ member: item, action: "allocate", requestId: nanoid() })}>
+                                    分配积分
+                                </Button>
+                                <Button type="link" onClick={() => setCreditsTarget({ member: item, action: "reclaim", requestId: nanoid() })}>
+                                    收回积分
+                                </Button>
                                 <Popconfirm title={item.status === "active" ? "确认禁用该成员？" : "确认启用该成员？"} onConfirm={() => setStatus(item)}>
                                     <Button type="link" danger={item.status === "active"} loading={saving}>
                                         {item.status === "active" ? "禁用" : "启用"}
@@ -393,6 +422,29 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
                     <Button type="primary" htmlType="submit" loading={saving}>
                         重置密码
                     </Button>
+                </Form>
+            </Modal>
+
+            <Modal
+                title={`${creditsTarget?.action === "reclaim" ? "收回" : "分配"}积分${creditsTarget ? `：${creditsTarget.member.displayName || creditsTarget.member.username}` : ""}`}
+                open={Boolean(creditsTarget)}
+                okText={creditsTarget?.action === "reclaim" ? "确认收回" : "确认分配"}
+                cancelText="取消"
+                confirmLoading={saving}
+                closable={!saving}
+                keyboard={!saving}
+                maskClosable={!saving}
+                onOk={() => creditsForm.submit()}
+                onCancel={() => {
+                    if (saving) return;
+                    setCreditsTarget(null);
+                    creditsForm.resetFields();
+                }}
+            >
+                <Form form={creditsForm} layout="vertical" requiredMark={false} onFinish={transferCredits}>
+                    <Form.Item label="积分数量" name="amount" rules={[{ required: true, type: "integer", min: 1, message: "请输入正整数积分" }]}>
+                        <InputNumber min={1} precision={0} className="w-full" placeholder="请输入正整数积分" />
+                    </Form.Item>
                 </Form>
             </Modal>
         </section>

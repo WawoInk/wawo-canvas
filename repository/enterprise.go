@@ -5,12 +5,16 @@ import (
 	"strings"
 
 	"github.com/basketikun/infinite-canvas/model"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var (
-	ErrEnterpriseNotFound  = errors.New("enterprise not found")
-	ErrInsufficientCredits = errors.New("insufficient credits")
+	ErrEnterpriseNotFound            = errors.New("enterprise not found")
+	ErrEnterpriseMemberNotFound      = errors.New("enterprise member not found")
+	ErrInsufficientCredits           = errors.New("insufficient credits")
+	ErrCreditTransferRequestConflict = errors.New("credit transfer request conflict")
 )
 
 func CreateEnterpriseWithOwner(enterprise *model.Enterprise, owner *model.User) error {
@@ -160,4 +164,61 @@ func AdjustEnterpriseOwnerCredits(enterpriseID, actorID string, delta int, reaso
 			RelatedID: actorID, Remark: reason, CreatedAt: updatedAt,
 		}).Error
 	})
+}
+
+func TransferEnterpriseMemberCredits(enterpriseID, ownerID, memberID string, action model.EnterpriseCreditAction, amount int, requestID, updatedAt string) (model.User, model.User, error) {
+	db, err := DB()
+	if err != nil {
+		return model.User{}, model.User{}, err
+	}
+	var owner, member model.User
+	err = db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND enterprise_id = ? AND enterprise_role = ?", ownerID, enterpriseID, model.EnterpriseRoleOwner).Take(&owner).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrEnterpriseNotFound
+			}
+			return err
+		}
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND enterprise_id = ? AND enterprise_role = ?", memberID, enterpriseID, model.EnterpriseRoleMember).Take(&member).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrEnterpriseMemberNotFound
+			}
+			return err
+		}
+
+		logType, ownerDelta, memberDelta, remark := model.CreditLogTypeEnterpriseAllocate, -amount, amount, "企业积分分配"
+		if action == model.EnterpriseCreditActionReclaim {
+			logType, ownerDelta, memberDelta, remark = model.CreditLogTypeEnterpriseReclaim, amount, -amount, "企业积分收回"
+		}
+		var existing model.EnterpriseCreditTransferRequest
+		err := tx.Where("owner_id = ? AND action = ? AND request_id = ?", ownerID, action, requestID).Take(&existing).Error
+		if err == nil {
+			if existing.MemberID != memberID || existing.Amount != amount {
+				return ErrCreditTransferRequestConflict
+			}
+			return nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if owner.Credits+ownerDelta < 0 || member.Credits+memberDelta < 0 {
+			return ErrInsufficientCredits
+		}
+		if err := tx.Create(&model.EnterpriseCreditTransferRequest{OwnerID: ownerID, Action: action, RequestID: requestID, MemberID: memberID, Amount: amount, CreatedAt: updatedAt}).Error; err != nil {
+			return err
+		}
+		owner.Credits += ownerDelta
+		member.Credits += memberDelta
+		if err := tx.Model(&model.User{}).Where("id = ?", owner.ID).Updates(map[string]any{"credits": owner.Credits, "updated_at": updatedAt}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.User{}).Where("id = ?", member.ID).Updates(map[string]any{"credits": member.Credits, "updated_at": updatedAt}).Error; err != nil {
+			return err
+		}
+		return tx.Create(&[]model.CreditLog{
+			{ID: "credit-" + uuid.NewString(), UserID: owner.ID, Type: logType, Amount: ownerDelta, Balance: owner.Credits, RelatedID: requestID, CounterpartyID: member.ID, Remark: remark, CreatedAt: updatedAt},
+			{ID: "credit-" + uuid.NewString(), UserID: member.ID, Type: logType, Amount: memberDelta, Balance: member.Credits, RelatedID: requestID, CounterpartyID: owner.ID, Remark: remark, CreatedAt: updatedAt},
+		}).Error
+	})
+	return owner, member, err
 }

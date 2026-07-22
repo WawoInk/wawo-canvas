@@ -57,6 +57,8 @@ export type EnterpriseMemberList = {
     total: number;
 };
 
+export type EnterpriseCreditAction = "allocate" | "reclaim";
+
 export async function login(payload: AuthPayload) {
     return apiPost<AuthSession>("/api/auth/login", payload);
 }
@@ -99,4 +101,8 @@ export async function setEnterpriseMemberStatus(token: string, id: string, statu
 
 export async function resetEnterpriseMemberPassword(token: string, id: string, password: string) {
     return apiPost<EnterpriseMember>(`/api/v1/enterprise/members/${encodeURIComponent(id)}/password`, { password }, token);
+}
+
+export async function transferEnterpriseMemberCredits(token: string, id: string, payload: { action: EnterpriseCreditAction; amount: number; requestId: string }) {
+    return apiPost<{ requestId: string; action: EnterpriseCreditAction; amount: number; ownerCredits: number; member: EnterpriseMember }>(`/api/v1/enterprise/members/${encodeURIComponent(id)}/credits`, payload, token);
 }

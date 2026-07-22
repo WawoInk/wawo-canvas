@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/basketikun/infinite-canvas/config"
 	"github.com/basketikun/infinite-canvas/model"
@@ -223,6 +224,23 @@ type enterpriseMemberList struct {
 	Total int                `json:"total"`
 }
 
+type enterpriseCreditTransfer struct {
+	RequestID    string           `json:"requestId"`
+	Action       string           `json:"action"`
+	Amount       int              `json:"amount"`
+	OwnerCredits int              `json:"ownerCredits"`
+	Member       enterpriseMember `json:"member"`
+}
+
+type enterpriseCreditLog struct {
+	UserID         string              `gorm:"column:user_id"`
+	Type           model.CreditLogType `gorm:"column:type"`
+	Amount         int                 `gorm:"column:amount"`
+	Balance        int                 `gorm:"column:balance"`
+	RelatedID      string              `gorm:"column:related_id"`
+	CounterpartyID string              `gorm:"column:counterparty_id"`
+}
+
 func TestEnterpriseOwnerCreatesAndListsMembersThroughHTTP(t *testing.T) {
 	previousJWTSecret := config.Cfg.JWTSecret
 	config.Cfg.JWTSecret = "enterprise-member-create-test-secret"
@@ -310,6 +328,12 @@ func TestEnterpriseMemberScopeIsEnforcedThroughHTTP(t *testing.T) {
 	if memberCreate.Code != 1 || memberCreate.Msg != "仅企业主账号可管理成员" {
 		t.Fatalf("member created enterprise member = %#v", memberCreate)
 	}
+	for label, token := range map[string]string{"member": memberASession.Data.Token, "personal": personal.Data.Token, "admin": admin.Data.Token} {
+		response := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+memberA.Data.ID+"/credits", token, map[string]any{"action": "allocate", "amount": 1, "requestId": "forbidden-" + uuid.NewString()})
+		if response.Code != 1 || response.Msg != "仅企业主账号可管理成员" {
+			t.Fatalf("%s transferred enterprise credits = %#v", label, response)
+		}
+	}
 	for label, targetID := range map[string]string{
 		"self": ownerA.Data.User.ID, "other owner": ownerB.Data.User.ID, "personal": personal.Data.User.ID,
 		"admin": admin.Data.User.ID, "other enterprise member": memberB.Data.ID,
@@ -326,6 +350,10 @@ func TestEnterpriseMemberScopeIsEnforcedThroughHTTP(t *testing.T) {
 	crossReset := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+memberA.Data.ID+"/password", ownerB.Data.Token, map[string]string{"password": "forbidden-password"})
 	if crossReset.Code != 1 || crossReset.Msg != "成员不存在或无权操作" {
 		t.Fatalf("cross-enterprise password response = %#v", crossReset)
+	}
+	crossTransfer := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+memberA.Data.ID+"/credits", ownerB.Data.Token, map[string]any{"action": "allocate", "amount": 1, "requestId": "cross-" + uuid.NewString()})
+	if crossTransfer.Code != 1 || crossTransfer.Msg != "成员不存在或无权操作" {
+		t.Fatalf("cross-enterprise transfer response = %#v", crossTransfer)
 	}
 	if login := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": memberAUsername, "password": "member-password"}); login.Code != 0 {
 		t.Fatalf("rejected requests changed member = %#v", login)
@@ -376,6 +404,432 @@ func TestEnterpriseMemberStatusAndPasswordInvalidateSessionsThroughHTTP(t *testi
 	}
 	if newPassword := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": memberUsername, "password": "new-password"}); newPassword.Code != 0 {
 		t.Fatalf("new member password login = %#v", newPassword)
+	}
+}
+
+func TestEnterpriseOwnerAllocatesAndReclaimsMemberCreditsThroughHTTP(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "enterprise-transfer-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	ownerUsername := "transfer-owner-" + uuid.NewString()
+	enterprise, err := service.CreateEnterprise(service.CreateEnterpriseInput{Name: "积分划拨企业", OwnerUsername: ownerUsername, OwnerPassword: "owner-password"})
+	if err != nil {
+		t.Fatalf("create enterprise: %v", err)
+	}
+	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "transfer-test-admin", 100, "测试充值"); err != nil {
+		t.Fatalf("fund owner: %v", err)
+	}
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	owner := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerUsername, "password": "owner-password"})
+	member := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members", owner.Data.Token, map[string]string{"username": "transfer-member-" + uuid.NewString(), "password": "member-password"})
+	allocateID := "allocate-" + uuid.NewString()
+	allocate := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 40, "requestId": allocateID})
+	duplicate := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 40, "requestId": allocateID})
+	conflict := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 41, "requestId": allocateID})
+	secondAllocateID := "allocate-" + uuid.NewString()
+	secondAllocate := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 10, "requestId": secondAllocateID})
+	reclaimID := "reclaim-" + uuid.NewString()
+	reclaim := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "reclaim", "amount": 25, "requestId": reclaimID})
+	if allocate.Code != 0 || allocate.Data.OwnerCredits != 60 || allocate.Data.Member.Credits != 40 || allocate.Data.RequestID != allocateID || allocate.Data.Action != "allocate" || allocate.Data.Amount != 40 {
+		t.Fatalf("allocate response = %#v", allocate)
+	}
+	if duplicate.Code != 0 || duplicate.Data.OwnerCredits != 60 || duplicate.Data.Member.Credits != 40 {
+		t.Fatalf("duplicate response = %#v", duplicate)
+	}
+	if conflict.Code != 1 || conflict.Msg != "请求 ID 已被其他积分操作使用" {
+		t.Fatalf("conflicting request response = %#v", conflict)
+	}
+	if secondAllocate.Code != 0 || secondAllocate.Data.OwnerCredits != 50 || secondAllocate.Data.Member.Credits != 50 {
+		t.Fatalf("second allocation response = %#v", secondAllocate)
+	}
+	if reclaim.Code != 0 || reclaim.Data.OwnerCredits != 75 || reclaim.Data.Member.Credits != 25 || reclaim.Data.RequestID != reclaimID || reclaim.Data.Action != "reclaim" || reclaim.Data.Amount != 25 {
+		t.Fatalf("reclaim response = %#v", reclaim)
+	}
+
+	storedOwner, ownerOK, err := repository.GetUserByID(owner.Data.User.ID)
+	if err != nil || !ownerOK || storedOwner.Credits != 75 {
+		t.Fatalf("stored owner = %#v ok=%v err=%v", storedOwner, ownerOK, err)
+	}
+	storedMember, memberOK, err := repository.GetUserByID(member.Data.ID)
+	if err != nil || !memberOK || storedMember.Credits != 25 {
+		t.Fatalf("stored member = %#v ok=%v err=%v", storedMember, memberOK, err)
+	}
+	db, err := repository.DB()
+	if err != nil {
+		t.Fatalf("database: %v", err)
+	}
+	var logs []enterpriseCreditLog
+	if err := db.Table("credit_logs").Where("related_id IN ?", []string{allocateID, secondAllocateID, reclaimID}).Order("related_id, user_id").Find(&logs).Error; err != nil {
+		t.Fatalf("list transfer logs: %v", err)
+	}
+	if len(logs) != 6 {
+		t.Fatalf("transfer logs = %#v", logs)
+	}
+	for _, log := range logs {
+		if log.RelatedID == allocateID && ((log.UserID == owner.Data.User.ID && (log.Amount != -40 || log.Balance != 60 || log.CounterpartyID != member.Data.ID)) || (log.UserID == member.Data.ID && (log.Amount != 40 || log.Balance != 40 || log.CounterpartyID != owner.Data.User.ID))) {
+			t.Fatalf("allocate log = %#v", log)
+		}
+		if log.RelatedID == secondAllocateID && ((log.UserID == owner.Data.User.ID && (log.Amount != -10 || log.Balance != 50 || log.CounterpartyID != member.Data.ID)) || (log.UserID == member.Data.ID && (log.Amount != 10 || log.Balance != 50 || log.CounterpartyID != owner.Data.User.ID))) {
+			t.Fatalf("second allocate log = %#v", log)
+		}
+		if log.RelatedID == reclaimID && ((log.UserID == owner.Data.User.ID && (log.Amount != 25 || log.Balance != 75 || log.CounterpartyID != member.Data.ID)) || (log.UserID == member.Data.ID && (log.Amount != -25 || log.Balance != 25 || log.CounterpartyID != owner.Data.User.ID))) {
+			t.Fatalf("reclaim log = %#v", log)
+		}
+	}
+	if err := db.Where("related_id = ?", allocateID).Delete(&model.CreditLog{}).Error; err != nil {
+		t.Fatalf("delete transfer logs: %v", err)
+	}
+	afterLogDeletion := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 40, "requestId": allocateID})
+	if afterLogDeletion.Code != 0 || afterLogDeletion.Data.OwnerCredits != 75 || afterLogDeletion.Data.Member.Credits != 25 {
+		t.Fatalf("retry after log deletion = %#v", afterLogDeletion)
+	}
+	var recreatedLogs int64
+	_ = db.Model(&model.CreditLog{}).Where("related_id = ?", allocateID).Count(&recreatedLogs).Error
+	if recreatedLogs != 0 {
+		t.Fatalf("retry recreated deleted logs = %d", recreatedLogs)
+	}
+}
+
+func TestSavingStaleUserDoesNotOverwriteEnterpriseCreditTransfer(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "enterprise-transfer-stale-user-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	ownerUsername := "transfer-stale-owner-" + uuid.NewString()
+	enterprise, err := service.CreateEnterprise(service.CreateEnterpriseInput{Name: "陈旧写入企业", OwnerUsername: ownerUsername, OwnerPassword: "owner-password"})
+	if err != nil {
+		t.Fatalf("create enterprise: %v", err)
+	}
+	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "transfer-stale-admin", 100, "测试充值"); err != nil {
+		t.Fatalf("fund owner: %v", err)
+	}
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	owner := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerUsername, "password": "owner-password"})
+	member := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members", owner.Data.Token, map[string]string{"username": "transfer-stale-member-" + uuid.NewString(), "password": "member-password"})
+	staleOwner, ok, err := repository.GetUserByID(owner.Data.User.ID)
+	if err != nil || !ok {
+		t.Fatalf("read stale owner: ok=%v err=%v", ok, err)
+	}
+	transferred := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 40, "requestId": "stale-" + uuid.NewString()})
+	if transferred.Code != 0 || transferred.Data.OwnerCredits != 60 {
+		t.Fatalf("transfer response = %#v", transferred)
+	}
+	staleOwner.LastLoginAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := repository.SaveUser(staleOwner); err != nil {
+		t.Fatalf("save stale owner: %v", err)
+	}
+	storedOwner, _, _ := repository.GetUserByID(owner.Data.User.ID)
+	if storedOwner.Credits != 60 {
+		t.Fatalf("stale user save restored credits to %d", storedOwner.Credits)
+	}
+}
+
+func TestEnterpriseCreditTransfersSerializeWithConcurrentTransfersAndGenerationCharges(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "enterprise-transfer-concurrency-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	ownerUsername := "transfer-concurrency-owner-" + uuid.NewString()
+	enterprise, err := service.CreateEnterprise(service.CreateEnterpriseInput{Name: "积分并发企业", OwnerUsername: ownerUsername, OwnerPassword: "owner-password"})
+	if err != nil {
+		t.Fatalf("create enterprise: %v", err)
+	}
+	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "transfer-concurrency-admin", 50, "测试充值"); err != nil {
+		t.Fatalf("fund owner: %v", err)
+	}
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	owner := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerUsername, "password": "owner-password"})
+	members := []enterpriseMember{
+		doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members", owner.Data.Token, map[string]string{"username": "transfer-concurrency-a-" + uuid.NewString(), "password": "member-password"}).Data,
+		doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members", owner.Data.Token, map[string]string{"username": "transfer-concurrency-b-" + uuid.NewString(), "password": "member-password"}).Data,
+	}
+	type transferResult struct {
+		memberID  string
+		requestID string
+		response  apiResponse[enterpriseCreditTransfer]
+		err       error
+	}
+	results := make(chan transferResult, 2)
+	requestIDs := []string{"parallel-a-" + uuid.NewString(), "parallel-b-" + uuid.NewString()}
+	start := make(chan struct{})
+	for i := range members {
+		go func(i int) {
+			<-start
+			response, err := requestEnterpriseMemberCredit(server.URL, owner.Data.Token, members[i].ID, "allocate", 40, requestIDs[i])
+			results <- transferResult{memberID: members[i].ID, requestID: requestIDs[i], response: response, err: err}
+		}(i)
+	}
+	close(start)
+	successfulMemberID := ""
+	successfulRequestID := ""
+	failedRequestID := ""
+	for range 2 {
+		result := <-results
+		if result.err != nil {
+			t.Fatalf("parallel transfer request: %v", result.err)
+		}
+		if result.response.Code == 0 {
+			if successfulMemberID != "" {
+				t.Fatalf("both overcommitted transfers succeeded")
+			}
+			successfulMemberID = result.memberID
+			successfulRequestID = result.requestID
+		} else if result.response.Msg != "主账号余额不足" {
+			t.Fatalf("parallel transfer response = %#v", result.response)
+		} else {
+			failedRequestID = result.requestID
+		}
+	}
+	if successfulMemberID == "" {
+		t.Fatal("both parallel transfers failed")
+	}
+
+	storedOwner, _, _ := repository.GetUserByID(owner.Data.User.ID)
+	memberTotal := 0
+	for _, item := range members {
+		stored, _, err := repository.GetUserByID(item.ID)
+		if err != nil || stored.Credits < 0 {
+			t.Fatalf("stored member = %#v err=%v", stored, err)
+		}
+		memberTotal += stored.Credits
+	}
+	if storedOwner.Credits != 10 || memberTotal != 40 || storedOwner.Credits+memberTotal != 50 {
+		t.Fatalf("balances after parallel transfers = owner %d members %d", storedOwner.Credits, memberTotal)
+	}
+	db, err := repository.DB()
+	if err != nil {
+		t.Fatalf("database: %v", err)
+	}
+	var successfulLogs []enterpriseCreditLog
+	if err := db.Table("credit_logs").Where("related_id = ?", successfulRequestID).Find(&successfulLogs).Error; err != nil || len(successfulLogs) != 2 {
+		t.Fatalf("successful parallel transfer logs = %#v err=%v", successfulLogs, err)
+	}
+	for _, log := range successfulLogs {
+		if log.UserID == owner.Data.User.ID && (log.Amount != -40 || log.Balance != 10 || log.CounterpartyID != successfulMemberID) {
+			t.Fatalf("successful owner log = %#v", log)
+		}
+		if log.UserID == successfulMemberID && (log.Amount != 40 || log.Balance != 40 || log.CounterpartyID != owner.Data.User.ID) {
+			t.Fatalf("successful member log = %#v", log)
+		}
+	}
+	var failedLogs int64
+	if err := db.Model(&model.CreditLog{}).Where("related_id = ?", failedRequestID).Count(&failedLogs).Error; err != nil || failedLogs != 0 {
+		t.Fatalf("failed parallel transfer logs = %d err=%v", failedLogs, err)
+	}
+
+	raceID := "charge-race-" + uuid.NewString()
+	taskID := "transfer-charge-task-" + uuid.NewString()
+	chargeDone := make(chan error, 1)
+	reclaimDone := make(chan transferResult, 1)
+	start = make(chan struct{})
+	go func() {
+		<-start
+		chargeDone <- service.ConsumeUserCreditsWithTask(successfulMemberID, "并发模型", 20, "/api/v1/images/generations", taskID)
+	}()
+	go func() {
+		<-start
+		response, err := requestEnterpriseMemberCredit(server.URL, owner.Data.Token, successfulMemberID, "reclaim", 30, raceID)
+		reclaimDone <- transferResult{response: response, err: err}
+	}()
+	close(start)
+	chargeErr := <-chargeDone
+	reclaimResult := <-reclaimDone
+	if reclaimResult.err != nil {
+		t.Fatalf("concurrent reclaim request: %v", reclaimResult.err)
+	}
+	chargeSucceeded := chargeErr == nil
+	reclaimSucceeded := reclaimResult.response.Code == 0
+	if chargeSucceeded == reclaimSucceeded {
+		t.Fatalf("charge success=%v reclaim=%#v chargeErr=%v", chargeSucceeded, reclaimResult.response, chargeErr)
+	}
+	if !reclaimSucceeded && reclaimResult.response.Msg != "成员余额不足" {
+		t.Fatalf("concurrent reclaim response = %#v", reclaimResult.response)
+	}
+
+	storedOwner, _, _ = repository.GetUserByID(owner.Data.User.ID)
+	chargedMember, _, _ := repository.GetUserByID(successfulMemberID)
+	otherMember, _, _ := repository.GetUserByID(members[0].ID)
+	if otherMember.ID == successfulMemberID {
+		otherMember, _, _ = repository.GetUserByID(members[1].ID)
+	}
+	consumed := 0
+	if chargeSucceeded {
+		consumed = 20
+	}
+	if storedOwner.Credits < 0 || chargedMember.Credits < 0 || otherMember.Credits < 0 || storedOwner.Credits+chargedMember.Credits+otherMember.Credits+consumed != 50 {
+		t.Fatalf("balances after charge race = owner %d member %d other %d consumed %d", storedOwner.Credits, chargedMember.Credits, otherMember.Credits, consumed)
+	}
+	var reclaimLogs, consumeLogs int64
+	_ = db.Model(&model.CreditLog{}).Where("related_id = ?", raceID).Count(&reclaimLogs).Error
+	_ = db.Model(&model.CreditLog{}).Where("task_id = ? AND type = ?", taskID, model.CreditLogTypeAIConsume).Count(&consumeLogs).Error
+	if reclaimSucceeded && (reclaimLogs != 2 || consumeLogs != 0) {
+		t.Fatalf("reclaim won: reclaim logs=%d consume logs=%d", reclaimLogs, consumeLogs)
+	}
+	if chargeSucceeded && (reclaimLogs != 0 || consumeLogs != 1) {
+		t.Fatalf("charge won: reclaim logs=%d consume logs=%d", reclaimLogs, consumeLogs)
+	}
+}
+
+func TestEnterpriseCreditTransferValidationInsufficientBalancesAndRollback(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "enterprise-transfer-rollback-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	ownerUsername := "transfer-rollback-owner-" + uuid.NewString()
+	enterprise, err := service.CreateEnterprise(service.CreateEnterpriseInput{Name: "积分回滚企业", OwnerUsername: ownerUsername, OwnerPassword: "owner-password"})
+	if err != nil {
+		t.Fatalf("create enterprise: %v", err)
+	}
+	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "transfer-rollback-admin", 30, "测试充值"); err != nil {
+		t.Fatalf("fund owner: %v", err)
+	}
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	owner := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerUsername, "password": "owner-password"})
+	member := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members", owner.Data.Token, map[string]string{"username": "transfer-rollback-member-" + uuid.NewString(), "password": "member-password"})
+
+	invalid := []struct {
+		payload map[string]any
+		message string
+	}{
+		{map[string]any{"action": "invalid", "amount": 1, "requestId": "invalid-" + uuid.NewString()}, "积分操作无效"},
+		{map[string]any{"action": "allocate", "amount": 0, "requestId": "zero-" + uuid.NewString()}, "积分数量必须为正整数"},
+		{map[string]any{"action": "allocate", "amount": 1, "requestId": ""}, "请求 ID 无效"},
+	}
+	for _, item := range invalid {
+		response := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, item.payload)
+		if response.Code != 1 || response.Msg != item.message {
+			t.Fatalf("invalid transfer = %#v", response)
+		}
+	}
+	allocateID := "insufficient-owner-" + uuid.NewString()
+	allocate := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 31, "requestId": allocateID})
+	reclaimID := "insufficient-member-" + uuid.NewString()
+	reclaim := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "reclaim", "amount": 1, "requestId": reclaimID})
+	if allocate.Code != 1 || allocate.Msg != "主账号余额不足" || reclaim.Code != 1 || reclaim.Msg != "成员余额不足" {
+		t.Fatalf("insufficient responses = allocate %#v reclaim %#v", allocate, reclaim)
+	}
+
+	db, err := repository.DB()
+	if err != nil {
+		t.Fatalf("database: %v", err)
+	}
+	rollbackID := "rollback-" + uuid.NewString()
+	suffix := uuid.NewString()[:8]
+	functionName := "fail_transfer_" + suffix
+	triggerName := "fail_transfer_log_" + suffix
+	if err := db.Exec(fmt.Sprintf(`CREATE FUNCTION %s() RETURNS trigger AS $$ BEGIN IF NEW.related_id = '%s' THEN RAISE EXCEPTION 'forced transfer log failure'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql`, functionName, rollbackID)).Error; err != nil {
+		t.Fatalf("create rollback function: %v", err)
+	}
+	if err := db.Exec(fmt.Sprintf("CREATE TRIGGER %s BEFORE INSERT ON credit_logs FOR EACH ROW EXECUTE FUNCTION %s()", triggerName, functionName)).Error; err != nil {
+		t.Fatalf("create rollback trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Exec("DROP TRIGGER IF EXISTS " + triggerName + " ON credit_logs").Error
+		_ = db.Exec("DROP FUNCTION IF EXISTS " + functionName + "()").Error
+	})
+	rolledBack := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 10, "requestId": rollbackID})
+	if rolledBack.Code != 1 {
+		t.Fatalf("forced rollback response = %#v", rolledBack)
+	}
+
+	storedOwner, _, _ := repository.GetUserByID(owner.Data.User.ID)
+	storedMember, _, _ := repository.GetUserByID(member.Data.ID)
+	var logs, requests int64
+	_ = db.Model(&model.CreditLog{}).Where("related_id IN ?", []string{allocateID, reclaimID, rollbackID}).Count(&logs).Error
+	_ = db.Model(&model.EnterpriseCreditTransferRequest{}).Where("request_id IN ?", []string{allocateID, reclaimID, rollbackID}).Count(&requests).Error
+	if storedOwner.Credits != 30 || storedMember.Credits != 0 || logs != 0 || requests != 0 {
+		t.Fatalf("failed transfers changed state = owner %d member %d logs %d requests %d", storedOwner.Credits, storedMember.Credits, logs, requests)
+	}
+	if err := db.Model(&model.User{}).Where("id = ?", member.Data.ID).Update("credits", -1).Error; err == nil {
+		t.Fatal("database accepted a negative balance")
+	}
+	storedMember, _, _ = repository.GetUserByID(member.Data.ID)
+	if storedMember.Credits != 0 {
+		t.Fatalf("negative update changed member = %#v", storedMember)
+	}
+}
+
+func TestGenerationCreditChargeRollsBackWhenLedgerWriteFails(t *testing.T) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	user := model.User{ID: "transfer-charge-rollback-user-" + uuid.NewString(), Username: "transfer-charge-rollback-" + uuid.NewString(), AffCode: "aff-" + uuid.NewString(), Role: model.UserRoleUser, Credits: 20, CreatedAt: now, UpdatedAt: now}
+	if _, err := repository.SaveUser(user); err != nil {
+		t.Fatalf("create charged user: %v", err)
+	}
+	db, err := repository.DB()
+	if err != nil {
+		t.Fatalf("database: %v", err)
+	}
+	taskID := "transfer-charge-rollback-task-" + uuid.NewString()
+	suffix := uuid.NewString()[:8]
+	functionName := "fail_charge_" + suffix
+	triggerName := "fail_charge_log_" + suffix
+	if err := db.Exec(fmt.Sprintf(`CREATE FUNCTION %s() RETURNS trigger AS $$ BEGIN IF NEW.task_id = '%s' THEN RAISE EXCEPTION 'forced charge log failure'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql`, functionName, taskID)).Error; err != nil {
+		t.Fatalf("create charge rollback function: %v", err)
+	}
+	if err := db.Exec(fmt.Sprintf("CREATE TRIGGER %s BEFORE INSERT ON credit_logs FOR EACH ROW EXECUTE FUNCTION %s()", triggerName, functionName)).Error; err != nil {
+		t.Fatalf("create charge rollback trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Exec("DROP TRIGGER IF EXISTS " + triggerName + " ON credit_logs").Error
+		_ = db.Exec("DROP FUNCTION IF EXISTS " + functionName + "()").Error
+	})
+	if err := service.ConsumeUserCreditsWithTask(user.ID, "回滚模型", 5, "/api/v1/images/generations", taskID); err == nil {
+		t.Fatal("charge succeeded despite forced ledger failure")
+	}
+	stored, _, _ := repository.GetUserByID(user.ID)
+	var logs int64
+	_ = db.Model(&model.CreditLog{}).Where("task_id = ? AND type = ?", taskID, model.CreditLogTypeAIConsume).Count(&logs).Error
+	if stored.Credits != 20 || logs != 0 {
+		t.Fatalf("failed charge changed state = credits %d logs %d", stored.Credits, logs)
+	}
+	idempotentTaskID := "transfer-charge-idempotent-task-" + uuid.NewString()
+	if err := service.ConsumeUserCreditsOnce(user.ID, "幂等模型", 5, "/api/v1/images/generations", idempotentTaskID); err != nil {
+		t.Fatalf("consume credits: %v", err)
+	}
+	if err := service.ConsumeUserCreditsOnce(user.ID, "幂等模型", 5, "/api/v1/images/generations", idempotentTaskID); err != nil {
+		t.Fatalf("repeat consume credits: %v", err)
+	}
+	if err := service.RefundUserCreditsOnce(user.ID, "幂等模型", 5, "/api/v1/images/generations", idempotentTaskID); err != nil {
+		t.Fatalf("refund credits: %v", err)
+	}
+	if err := service.RefundUserCreditsOnce(user.ID, "幂等模型", 5, "/api/v1/images/generations", idempotentTaskID); err != nil {
+		t.Fatalf("repeat refund credits: %v", err)
+	}
+	stored, _, _ = repository.GetUserByID(user.ID)
+	var settledLogs int64
+	_ = db.Model(&model.CreditLog{}).Where("task_id = ?", idempotentTaskID).Count(&settledLogs).Error
+	if stored.Credits != 20 || settledLogs != 2 {
+		t.Fatalf("idempotent charge/refund = credits %d logs %d", stored.Credits, settledLogs)
+	}
+}
+
+func requestEnterpriseMemberCredit(baseURL, token, memberID, action string, amount int, requestID string) (apiResponse[enterpriseCreditTransfer], error) {
+	body, _ := json.Marshal(map[string]any{"action": action, "amount": amount, "requestId": requestID})
+	request, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/enterprise/members/"+memberID+"/credits", bytes.NewReader(body))
+	if err != nil {
+		return apiResponse[enterpriseCreditTransfer]{}, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return apiResponse[enterpriseCreditTransfer]{}, err
+	}
+	defer response.Body.Close()
+	var result apiResponse[enterpriseCreditTransfer]
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		return result, err
+	}
+	if response.StatusCode != http.StatusOK {
+		return result, fmt.Errorf("status %d", response.StatusCode)
+	}
+	return result, nil
+}
 
 func TestAdminAdjustsEnterpriseOwnerCreditsByDeltaAndRecordsLog(t *testing.T) {
 	previousJWTSecret := config.Cfg.JWTSecret

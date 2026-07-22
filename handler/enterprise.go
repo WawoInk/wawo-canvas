@@ -69,9 +69,31 @@ func ResetEnterpriseMemberPassword(w http.ResponseWriter, r *http.Request, id st
 		Fail(w, "未登录或权限不足")
 		return
 	}
-	var body struct{ Password string `json:"password"` }
+	var body struct {
+		Password string `json:"password"`
+	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	result, err := service.ResetEnterpriseMemberPassword(user, id, body.Password)
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, result)
+}
+
+func TransferEnterpriseMemberCredits(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	var body struct {
+		Action    model.EnterpriseCreditAction `json:"action"`
+		Amount    int                          `json:"amount"`
+		RequestID string                       `json:"requestId"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	result, err := service.TransferEnterpriseMemberCredits(user, id, body.Action, body.Amount, body.RequestID)
 	if err != nil {
 		FailError(w, err)
 		return
