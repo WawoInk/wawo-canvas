@@ -241,6 +241,25 @@ type enterpriseCreditLog struct {
 	CounterpartyID string              `gorm:"column:counterparty_id"`
 }
 
+type enterpriseCreditLogView struct {
+	ID             string              `json:"id"`
+	UserID         string              `json:"userId"`
+	Username       string              `json:"username"`
+	DisplayName    string              `json:"displayName"`
+	TaskID         string              `json:"taskId"`
+	Type           model.CreditLogType `json:"type"`
+	Amount         int                 `json:"amount"`
+	Balance        int                 `json:"balance"`
+	RelatedID      string              `json:"relatedId"`
+	CounterpartyID string              `json:"counterpartyId"`
+	Remark         string              `json:"remark"`
+}
+
+type enterpriseCreditLogList struct {
+	Items []enterpriseCreditLogView `json:"items"`
+	Total int                       `json:"total"`
+}
+
 func TestEnterpriseOwnerCreatesAndListsMembersThroughHTTP(t *testing.T) {
 	previousJWTSecret := config.Cfg.JWTSecret
 	config.Cfg.JWTSecret = "enterprise-member-create-test-secret"
@@ -473,6 +492,108 @@ func TestEnterpriseOwnerAllocatesAndReclaimsMemberCreditsThroughHTTP(t *testing.
 		if log.RelatedID == reclaimID && ((log.UserID == owner.Data.User.ID && (log.Amount != 25 || log.Balance != 75 || log.CounterpartyID != member.Data.ID)) || (log.UserID == member.Data.ID && (log.Amount != -25 || log.Balance != 25 || log.CounterpartyID != owner.Data.User.ID))) {
 			t.Fatalf("reclaim log = %#v", log)
 		}
+	}
+}
+
+func TestEnterpriseOwnerListsEnterpriseCreditLogsThroughHTTP(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "enterprise-credit-ledger-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	ownerUsername := "ledger-owner-" + uuid.NewString()
+	enterprise, err := service.CreateEnterprise(service.CreateEnterpriseInput{Name: "企业积分流水", OwnerUsername: ownerUsername, OwnerPassword: "owner-password"})
+	if err != nil {
+		t.Fatalf("create enterprise: %v", err)
+	}
+	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "ledger-admin", 100, "平台充值"); err != nil {
+		t.Fatalf("fund owner: %v", err)
+	}
+	otherEnterprise, err := service.CreateEnterprise(service.CreateEnterpriseInput{Name: "其他企业流水", OwnerUsername: "ledger-other-owner-" + uuid.NewString(), OwnerPassword: "owner-password"})
+	if err != nil {
+		t.Fatalf("create other enterprise: %v", err)
+	}
+	if _, err := service.AdjustEnterpriseOwnerCredits(otherEnterprise.ID, "ledger-other-admin", 20, "外部企业流水"); err != nil {
+		t.Fatalf("fund other owner: %v", err)
+	}
+	for _, user := range []model.User{
+		{Username: "ledger-personal-" + uuid.NewString(), Credits: 10},
+		{Username: "ledger-admin-" + uuid.NewString(), Role: model.UserRoleAdmin, Credits: 10},
+	} {
+		created, err := service.SaveUser(user, "outside-password")
+		if err != nil {
+			t.Fatalf("create outside user: %v", err)
+		}
+		if err := service.ConsumeUserCreditsWithTask(created.ID, "outside-ledger-model", 1, "/api/v1/images/generations", "outside-ledger-"+uuid.NewString()); err != nil {
+			t.Fatalf("charge outside user: %v", err)
+		}
+	}
+
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	owner := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerUsername, "password": "owner-password"})
+	memberUsername := "ledger-member-" + uuid.NewString()
+	member := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members", owner.Data.Token, map[string]string{"username": memberUsername, "password": "member-password", "displayName": "流水成员"})
+	memberSession := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": memberUsername, "password": "member-password"})
+	allocateID := "ledger-allocate-" + uuid.NewString()
+	allocate := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 40, "requestId": allocateID})
+	if allocate.Code != 0 {
+		t.Fatalf("allocate credits = %#v", allocate)
+	}
+	taskID := "ledger-task-" + uuid.NewString()
+	if err := service.ConsumeUserCreditsWithTask(member.Data.ID, "ledger-model", 5, "/api/v1/images/generations", taskID); err != nil {
+		t.Fatalf("consume member credits: %v", err)
+	}
+	if err := service.RefundUserCreditsWithTask(member.Data.ID, "ledger-model", 5, "/api/v1/images/generations", taskID); err != nil {
+		t.Fatalf("refund member credits: %v", err)
+	}
+	reclaimID := "ledger-reclaim-" + uuid.NewString()
+	reclaim := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "reclaim", "amount": 10, "requestId": reclaimID})
+	if reclaim.Code != 0 {
+		t.Fatalf("reclaim credits = %#v", reclaim)
+	}
+
+	logs := doJSON[enterpriseCreditLogList](t, http.MethodGet, server.URL+"/api/v1/enterprise/credit-logs?page=1&pageSize=20", owner.Data.Token, nil)
+	if logs.Code != 0 || logs.Data.Total != 7 || len(logs.Data.Items) != 7 {
+		t.Fatalf("enterprise credit logs = %#v", logs)
+	}
+	types := map[model.CreditLogType]int{}
+	foundConsume := false
+	for _, log := range logs.Data.Items {
+		types[log.Type]++
+		if log.Type == model.CreditLogTypeAIConsume && log.UserID == member.Data.ID {
+			foundConsume = log.Username == memberUsername && log.DisplayName == "流水成员" && log.Amount == -5 && log.Balance == 35 && log.TaskID == taskID
+		}
+	}
+	if !foundConsume || types[model.CreditLogTypeAdminAdjust] != 1 || types[model.CreditLogTypeEnterpriseAllocate] != 2 || types[model.CreditLogTypeEnterpriseReclaim] != 2 || types[model.CreditLogTypeAIConsume] != 1 || types[model.CreditLogTypeAIRefund] != 1 {
+		t.Fatalf("enterprise credit ledger data = %#v", logs.Data.Items)
+	}
+
+	filtered := doJSON[enterpriseCreditLogList](t, http.MethodGet, server.URL+"/api/v1/enterprise/credit-logs?memberId="+member.Data.ID+"&type=ai_consume&keyword=ledger-model&page=1&pageSize=10", owner.Data.Token, nil)
+	if filtered.Code != 0 || filtered.Data.Total != 1 || len(filtered.Data.Items) != 1 || filtered.Data.Items[0].TaskID != taskID {
+		t.Fatalf("filtered enterprise credit logs = %#v", filtered)
+	}
+	for _, page := range []int{1, 2} {
+		paged := doJSON[enterpriseCreditLogList](t, http.MethodGet, fmt.Sprintf("%s/api/v1/enterprise/credit-logs?page=%d&pageSize=2", server.URL, page), owner.Data.Token, nil)
+		if paged.Code != 0 || paged.Data.Total != 7 || len(paged.Data.Items) != 2 {
+			t.Fatalf("enterprise credit page %d = %#v", page, paged)
+		}
+	}
+
+	outside := doJSON[enterpriseCreditLogList](t, http.MethodGet, server.URL+"/api/v1/enterprise/credit-logs?enterpriseId="+otherEnterprise.ID+"&memberId="+otherEnterprise.OwnerID+"&id=outside-ledger&pageSize=10", owner.Data.Token, nil)
+	if outside.Code != 0 || outside.Data.Total != 0 || len(outside.Data.Items) != 0 {
+		t.Fatalf("cross-enterprise credit logs = %#v", outside)
+	}
+	outside = doJSON[enterpriseCreditLogList](t, http.MethodGet, server.URL+"/api/v1/enterprise/credit-logs?keyword=outside-ledger-model&pageSize=10", owner.Data.Token, nil)
+	if outside.Code != 0 || outside.Data.Total != 0 {
+		t.Fatalf("outside personal or admin logs leaked = %#v", outside)
+	}
+	memberLogs := doJSON[model.CreditLogList](t, http.MethodGet, server.URL+"/api/v1/credit-logs?page=1&pageSize=10", memberSession.Data.Token, nil)
+	if memberLogs.Code != 0 || memberLogs.Data.Total != 4 || len(memberLogs.Data.Items) != 4 {
+		t.Fatalf("member personal logs = %#v", memberLogs)
+	}
+	forbidden := doJSON[enterpriseCreditLogList](t, http.MethodGet, server.URL+"/api/v1/enterprise/credit-logs", memberSession.Data.Token, nil)
+	if forbidden.Code != 1 || forbidden.Msg != "仅企业主账号可管理成员" {
+		t.Fatalf("member enterprise ledger = %#v", forbidden)
 	}
 }
 

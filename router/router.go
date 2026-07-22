@@ -99,6 +99,7 @@ func New() *gin.Engine {
 	v1.PUT("/account/enterprise", gin.WrapF(handler.UpdateAccountEnterprise))
 	v1.GET("/enterprise/summary", gin.WrapF(handler.EnterpriseAccountSummary))
 	v1.GET("/enterprise/members", gin.WrapF(handler.EnterpriseMembers))
+	v1.GET("/enterprise/credit-logs", gin.WrapF(handler.EnterpriseCreditLogs))
 	v1.POST("/enterprise/members", gin.WrapF(handler.CreateEnterpriseMember))
 	v1.POST("/enterprise/members/:id/status", func(c *gin.Context) {
 		handler.SetEnterpriseMemberStatus(c.Writer, c.Request, c.Param("id"))

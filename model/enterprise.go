@@ -78,3 +78,15 @@ type EnterpriseCreditTransfer struct {
 	OwnerCredits int                    `json:"ownerCredits"`
 	Member       EnterpriseMember       `json:"member"`
 }
+
+// EnterpriseCreditLog 企业范围的积分流水，附带流水所属账号信息。
+type EnterpriseCreditLog struct {
+	CreditLog
+	Username    string `json:"username"`
+	DisplayName string `json:"displayName"`
+}
+
+type EnterpriseCreditLogList struct {
+	Items []EnterpriseCreditLog `json:"items"`
+	Total int                   `json:"total"`
+}

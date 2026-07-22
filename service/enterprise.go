@@ -106,6 +106,18 @@ func ListEnterpriseMembers(current model.AuthUser, q model.Query) (model.Enterpr
 	return model.EnterpriseMemberList{Items: items, Total: int(total)}, nil
 }
 
+func ListEnterpriseCreditLogs(current model.AuthUser, memberID string, q model.Query) (model.EnterpriseCreditLogList, error) {
+	enterpriseID, err := enterpriseOwnerID(current)
+	if err != nil {
+		return model.EnterpriseCreditLogList{}, err
+	}
+	items, total, err := repository.ListEnterpriseCreditLogs(enterpriseID, memberID, q)
+	if err != nil {
+		return model.EnterpriseCreditLogList{}, err
+	}
+	return model.EnterpriseCreditLogList{Items: items, Total: int(total)}, nil
+}
+
 func CreateEnterpriseMember(current model.AuthUser, input CreateEnterpriseMemberInput) (model.EnterpriseMember, error) {
 	enterpriseID, err := enterpriseOwnerID(current)
 	if err != nil {

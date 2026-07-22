@@ -22,6 +22,20 @@ func EnterpriseMembers(w http.ResponseWriter, r *http.Request) {
 	OK(w, result)
 }
 
+func EnterpriseCreditLogs(w http.ResponseWriter, r *http.Request) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	result, err := service.ListEnterpriseCreditLogs(user, r.URL.Query().Get("memberId"), parseQuery(r))
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, result)
+}
+
 func CreateEnterpriseMember(w http.ResponseWriter, r *http.Request) {
 	user, ok := service.UserFromContext(r.Context())
 	if !ok {

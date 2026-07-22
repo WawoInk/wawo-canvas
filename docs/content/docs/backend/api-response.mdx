@@ -77,12 +77,15 @@ description: 后端统一响应信封与结构化生成错误
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/api/v1/enterprise/members` | 按 `keyword/page/pageSize` 分页搜索本企业成员 |
+| `GET` | `/api/v1/enterprise/credit-logs` | 主账号按 `memberId/type/keyword/page/pageSize` 查询本企业主账号和当前成员的积分流水 |
 | `POST` | `/api/v1/enterprise/members` | 创建固定为 `user/member`、初始积分为零的子账号 |
 | `POST` | `/api/v1/enterprise/members/{id}/status` | 设置成员 `active/ban` 状态 |
 | `POST` | `/api/v1/enterprise/members/{id}/password` | 重置成员密码并使旧 JWT 失效 |
 | `POST` | `/api/v1/enterprise/members/{id}/credits` | 使用 `{ action, amount, requestId }` 分配或收回成员积分；`action` 为 `allocate/reclaim`，`amount` 必须为正整数 |
 
 积分操作响应同时返回主账号最新积分 `ownerCredits` 和更新后的 `member`。客户端请求 ID 最长 128 字符；相同账号、操作类型和请求 ID 的重试只生效一次，复用请求 ID 但修改成员或数量会被拒绝。
+
+企业积分流水只接受当前企业主账号查询，企业 ID 始终从认证账号推导；客户端提交 `enterpriseId`、其他企业的 `memberId` 或无关流水 ID 不会扩大范围。列表包含 `admin_adjust`、`enterprise_allocate`、`enterprise_reclaim`、`ai_consume` 和 `ai_refund`，每条记录附带所属账号的 `username/displayName`；子账号继续使用 `/api/v1/credit-logs` 查看自己的个人流水。
 
 ## 企业素材接口
 
@@ -96,4 +99,4 @@ description: 后端统一响应信封与结构化生成错误
 | `PUT` | `/api/v1/enterprise/assets/{id}` | 主账号更新本企业文本素材 |
 | `DELETE` | `/api/v1/enterprise/assets/{id}` | 主账号删除本企业素材 |
 
-请求体中的素材 ID、企业 ID和创建者 ID均不会改变服务端授权范围。企业素材响应包含 `enterpriseId`、创建者 `userId/creatorName`，但不会写入个人素材同步缓存。
+请求体中的素材 ID、企业 ID 和创建者 ID均不会改变服务端授权范围。企业素材响应包含 `enterpriseId`、创建者 `userId/creatorName`，但不会写入个人素材同步缓存。

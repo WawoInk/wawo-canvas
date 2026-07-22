@@ -73,6 +73,34 @@ func ListEnterpriseMembers(enterpriseID string, q model.Query) ([]model.User, in
 	return users, total, err
 }
 
+func ListEnterpriseCreditLogs(enterpriseID, memberID string, q model.Query) ([]model.EnterpriseCreditLog, int64, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, 0, err
+	}
+	q.Normalize()
+	tx := db.Table("credit_logs AS log").Joins("JOIN users AS member ON member.id = log.user_id").
+		Where("member.enterprise_id = ? AND member.enterprise_role IN ?", enterpriseID, []model.EnterpriseRole{model.EnterpriseRoleOwner, model.EnterpriseRoleMember}).
+		Where("log.type IN ?", []model.CreditLogType{model.CreditLogTypeAdminAdjust, model.CreditLogTypeEnterpriseAllocate, model.CreditLogTypeEnterpriseReclaim, model.CreditLogTypeAIConsume, model.CreditLogTypeAIRefund})
+	if memberID = strings.TrimSpace(memberID); memberID != "" {
+		tx = tx.Where("log.user_id = ?", memberID)
+	}
+	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
+		like := "%" + keyword + "%"
+		tx = tx.Where("log.type LIKE ? OR log.remark LIKE ? OR log.related_id LIKE ? OR log.counterparty_id LIKE ? OR member.username LIKE ? OR member.display_name LIKE ?", like, like, like, like, like, like)
+	}
+	if q.Type != "" {
+		tx = tx.Where("log.type = ?", q.Type)
+	}
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var logs []model.EnterpriseCreditLog
+	err = tx.Select("log.*, member.username, member.display_name").Order("log.created_at DESC, log.id DESC").Offset(q.Offset()).Limit(q.PageSize).Scan(&logs).Error
+	return logs, total, err
+}
+
 func GetEnterpriseMember(enterpriseID, id string) (model.User, bool, error) {
 	db, err := DB()
 	if err != nil {

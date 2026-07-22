@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { App, Button, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Skeleton, Space, Table, Tag } from "antd";
+import { App, Button, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Skeleton, Space, Table, Tag } from "antd";
 import { nanoid } from "nanoid";
 
 import { enterpriseCapabilities } from "@/lib/account-access";
@@ -10,6 +10,7 @@ import {
     changeAccountPassword,
     createEnterpriseMember,
     fetchEnterpriseAccountSummary,
+    fetchEnterpriseCreditLogs,
     fetchEnterpriseMembers,
     resetEnterpriseMemberPassword,
     setEnterpriseMemberStatus,
@@ -18,6 +19,7 @@ import {
     updateAccountProfile,
     type EnterpriseAccountSummary,
     type EnterpriseCreditAction,
+    type EnterpriseCreditLog,
     type EnterpriseMember,
 } from "@/services/api/auth";
 import { useUserStore } from "@/stores/use-user-store";
@@ -25,6 +27,13 @@ import { useUserStore } from "@/stores/use-user-store";
 const platformRoleLabels = { guest: "访客", user: "普通用户", admin: "平台管理员" } as const;
 const enterpriseRoleLabels = { owner: "企业主账号", member: "企业成员" } as const;
 const enterpriseStatusLabels = { active: "正常", disabled: "已禁用" } as const;
+const creditLogTypeLabels = {
+    admin_adjust: "平台调整",
+    ai_consume: "模型消费",
+    ai_refund: "失败返还",
+    enterprise_allocate: "企业分配",
+    enterprise_reclaim: "企业收回",
+} as const;
 
 export default function AccountPage() {
     const { message } = App.useApp();
@@ -200,9 +209,170 @@ export default function AccountPage() {
                     </section>
                 ) : null}
 
-                {capabilities.canManageMembers ? <EnterpriseMembers onCreated={() => setSummary((current) => (current ? { ...current, memberCount: current.memberCount + 1 } : current))} /> : null}
+                {capabilities.canManageMembers ? (
+                    <>
+                        <EnterpriseMembers onCreated={() => setSummary((current) => (current ? { ...current, memberCount: current.memberCount + 1 } : current))} />
+                        <EnterpriseCreditLogs key={user.id} />
+                    </>
+                ) : null}
             </div>
         </main>
+    );
+}
+
+function EnterpriseCreditLogs() {
+    const { message } = App.useApp();
+    const token = useUserStore((state) => state.token);
+    const user = useUserStore((state) => state.user);
+    const [members, setMembers] = useState<EnterpriseMember[]>([]);
+    const [logs, setLogs] = useState<EnterpriseCreditLog[]>([]);
+    const [total, setTotal] = useState(0);
+    const [memberId, setMemberId] = useState("");
+    const [type, setType] = useState("");
+    const [keyword, setKeyword] = useState("");
+    const [keywordText, setKeywordText] = useState("");
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+
+    useEffect(() => {
+        let current = true;
+        setMembers([]);
+        // ponytail: 500 follows the API cap; use remote member search when an enterprise exceeds it.
+        void fetchEnterpriseMembers(token, { page: 1, pageSize: 500 })
+            .then((result) => current && setMembers(result.items))
+            .catch((reason) => current && message.error(reason instanceof Error ? reason.message : "成员筛选加载失败"));
+        return () => {
+            current = false;
+        };
+    }, [message, token, user?.id]);
+
+    useEffect(() => {
+        let current = true;
+        setLoading(true);
+        setError("");
+        setLogs([]);
+        setTotal(0);
+        void fetchEnterpriseCreditLogs(token, { memberId, type, keyword, page, pageSize })
+            .then((result) => {
+                if (!current) return;
+                setLogs(result.items);
+                setTotal(result.total);
+            })
+            .catch((reason) => {
+                if (!current) return;
+                const detail = reason instanceof Error ? reason.message : "企业积分流水加载失败";
+                setLogs([]);
+                setTotal(0);
+                setError(detail);
+            })
+            .finally(() => current && setLoading(false));
+        return () => {
+            current = false;
+        };
+    }, [keyword, memberId, page, pageSize, token, type, user?.credits, user?.id]);
+
+    return (
+        <section className="rounded-2xl border border-border bg-card p-6">
+            <div>
+                <h2 className="text-lg font-semibold">企业积分流水</h2>
+                <p className="mt-1 text-sm text-muted-foreground">查看本企业的积分分配、消费和退款记录</p>
+            </div>
+            <Space wrap className="mt-5">
+                <Select
+                    allowClear
+                    aria-label="按成员筛选企业积分流水"
+                    className="w-48"
+                    placeholder="全部成员"
+                    value={memberId || undefined}
+                    options={[
+                        ...(user ? [{ value: user.id, label: `${user.displayName || user.username}（主账号）` }] : []),
+                        ...members.map((member) => ({ value: member.id, label: member.displayName ? `${member.displayName}（${member.username}）` : member.username })),
+                    ]}
+                    onChange={(value) => {
+                        setMemberId(value || "");
+                        setPage(1);
+                    }}
+                />
+                <Select
+                    allowClear
+                    aria-label="按类型筛选企业积分流水"
+                    className="w-36"
+                    placeholder="全部类型"
+                    value={type || undefined}
+                    options={Object.entries(creditLogTypeLabels).map(([value, label]) => ({ value, label }))}
+                    onChange={(value) => {
+                        setType(value || "");
+                        setPage(1);
+                    }}
+                />
+                <Input.Search
+                    allowClear
+                    aria-label="搜索企业积分流水"
+                    className="w-72"
+                    placeholder="搜索成员、类型、备注或关联 ID"
+                    value={keywordText}
+                    onChange={(event) => {
+                        const value = event.target.value;
+                        setKeywordText(value);
+                        if (!value) {
+                            setKeyword("");
+                            setPage(1);
+                        }
+                    }}
+                    onSearch={() => {
+                        setKeyword(keywordText.trim());
+                        setPage(1);
+                    }}
+                />
+            </Space>
+            {error ? <p className="mt-4 text-sm text-red-500">{error}</p> : null}
+            <Table<EnterpriseCreditLog>
+                rowKey="id"
+                className="mt-4"
+                loading={loading}
+                dataSource={logs}
+                scroll={{ x: 1100 }}
+                pagination={{
+                    current: page,
+                    pageSize,
+                    total,
+                    showSizeChanger: true,
+                    onChange: (nextPage, nextPageSize) => {
+                        setPage(nextPageSize !== pageSize ? 1 : nextPage);
+                        setPageSize(nextPageSize);
+                    },
+                }}
+                columns={[
+                    {
+                        title: "成员",
+                        width: 180,
+                        render: (_, item) => (
+                            <div>
+                                <div>{item.displayName || item.username}</div>
+                                <div className="text-xs text-muted-foreground">{item.username}</div>
+                            </div>
+                        ),
+                    },
+                    { title: "类型", dataIndex: "type", width: 120, render: (value: EnterpriseCreditLog["type"]) => <Tag>{creditLogTypeLabels[value]}</Tag> },
+                    { title: "变动", dataIndex: "amount", width: 100, render: (value: number) => <span className={value >= 0 ? "text-green-600" : "text-red-500"}>{value > 0 ? `+${value}` : value}</span> },
+                    { title: "余额", dataIndex: "balance", width: 100, render: (value: number) => value.toLocaleString() },
+                    {
+                        title: "关联信息",
+                        width: 260,
+                        render: (_, item) => (
+                            <div className="text-xs text-muted-foreground">
+                                <div>{item.relatedId || item.taskId || "-"}</div>
+                                {item.counterpartyId ? <div>对方：{item.counterpartyId}</div> : null}
+                            </div>
+                        ),
+                    },
+                    { title: "备注", dataIndex: "remark", ellipsis: true, render: (value: string) => value || "-" },
+                    { title: "时间", dataIndex: "createdAt", width: 180, render: (value: string) => (value ? new Date(value).toLocaleString("zh-CN") : "-") },
+                ]}
+            />
+        </section>
     );
 }
 

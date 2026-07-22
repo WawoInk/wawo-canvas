@@ -59,6 +59,27 @@ export type EnterpriseMemberList = {
 
 export type EnterpriseCreditAction = "allocate" | "reclaim";
 
+export type EnterpriseCreditLog = {
+    id: string;
+    userId: string;
+    username: string;
+    displayName: string;
+    taskId: string;
+    type: "admin_adjust" | "ai_consume" | "ai_refund" | "enterprise_allocate" | "enterprise_reclaim";
+    amount: number;
+    balance: number;
+    relatedId: string;
+    counterpartyId: string;
+    remark: string;
+    extra: string;
+    createdAt: string;
+};
+
+export type EnterpriseCreditLogList = {
+    items: EnterpriseCreditLog[];
+    total: number;
+};
+
 export async function login(payload: AuthPayload) {
     return apiPost<AuthSession>("/api/auth/login", payload);
 }
@@ -89,6 +110,10 @@ export async function updateAccountEnterprise(token: string, name: string) {
 
 export async function fetchEnterpriseMembers(token: string, query: { keyword?: string; page?: number; pageSize?: number } = {}) {
     return apiGet<EnterpriseMemberList>("/api/v1/enterprise/members", compactApiParams(query), token);
+}
+
+export async function fetchEnterpriseCreditLogs(token: string, query: { memberId?: string; keyword?: string; type?: string; page?: number; pageSize?: number } = {}) {
+    return apiGet<EnterpriseCreditLogList>("/api/v1/enterprise/credit-logs", compactApiParams(query), token);
 }
 
 export async function createEnterpriseMember(token: string, payload: { username: string; password: string; displayName?: string; email?: string }) {
