@@ -94,6 +94,10 @@ func New() *gin.Engine {
 	})
 	// User credit logs
 	v1.GET("/credit-logs", gin.WrapF(handler.UserCreditLogs))
+	v1.PUT("/account/profile", gin.WrapF(handler.UpdateAccountProfile))
+	v1.POST("/account/password", gin.WrapF(handler.ChangeAccountPassword))
+	v1.PUT("/account/enterprise", gin.WrapF(handler.UpdateAccountEnterprise))
+	v1.GET("/enterprise/summary", gin.WrapF(handler.EnterpriseAccountSummary))
 	// Delta sync (cursor-based)
 	v1.GET("/sync", gin.WrapF(handler.Sync))
 	// Canvas project sync

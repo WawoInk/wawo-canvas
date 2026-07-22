@@ -35,3 +35,11 @@ type EnterpriseList struct {
 	Items []EnterpriseView `json:"items"`
 	Total int              `json:"total"`
 }
+
+type EnterpriseAccountSummary struct {
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	Status      EnterpriseStatus `json:"status"`
+	Role        EnterpriseRole   `json:"role"`
+	MemberCount int              `json:"memberCount"`
+}

@@ -13,6 +13,8 @@ import VideoPage from "@/pages/video";
 import PromptsPage from "@/pages/prompts";
 import AssetsPage from "@/pages/assets";
 import AssetLibraryPage from "@/pages/asset-library";
+import AccountPage from "@/pages/account";
+import EnterpriseAssetsPage from "@/pages/enterprise-assets";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminUsers from "@/pages/admin/users";
 import AdminEnterprises from "@/pages/admin/enterprises";
@@ -47,6 +49,8 @@ export const router = createBrowserRouter([
                     { path: "/prompts", element: <PromptsPage /> },
                     { path: "/assets", element: <AssetsPage /> },
                     { path: "/asset-library", element: <AssetLibraryPage /> },
+                    { path: "/account", element: <AccountPage /> },
+                    { path: "/enterprise-assets", element: <EnterpriseAssetsPage /> },
                 ],
             },
             {

@@ -51,6 +51,7 @@ type UserList struct {
 type AuthUser struct {
 	ID          string   `json:"id"`
 	Username    string   `json:"username"`
+	Email       string   `json:"email"`
 	DisplayName string   `json:"displayName"`
 	AvatarURL   string   `json:"avatarUrl"`
 	Role        UserRole `json:"role"`
@@ -73,6 +74,7 @@ func PublicUser(user User) AuthUser {
 	result := AuthUser{
 		ID:          user.ID,
 		Username:    user.Username,
+		Email:       user.Email,
 		DisplayName: user.DisplayName,
 		AvatarURL:   user.AvatarURL,
 		Role:        user.Role,

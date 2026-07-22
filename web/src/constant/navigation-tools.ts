@@ -1,4 +1,6 @@
-import { FileText, ImagePlus, Images, Maximize2, Video } from "lucide-react";
+import { Building2, FileText, ImagePlus, Images, Maximize2, Video } from "lucide-react";
+
+import { enterpriseCapabilities, type EnterpriseIdentity } from "@/lib/account-access";
 
 export const navigationTools = [
     {
@@ -28,4 +30,14 @@ export const navigationTools = [
     },
 ] as const;
 
-export type NavigationToolSlug = (typeof navigationTools)[number]["slug"];
+export const enterpriseNavigationTool = {
+    slug: "enterprise-assets",
+    label: "企业素材库",
+    icon: Building2,
+} as const;
+
+export function navigationToolsForUser(user?: EnterpriseIdentity | null) {
+    return enterpriseCapabilities(user).canAccessAssets ? [...navigationTools, enterpriseNavigationTool] : navigationTools;
+}
+
+export type NavigationToolSlug = (typeof navigationTools)[number]["slug"] | typeof enterpriseNavigationTool.slug;

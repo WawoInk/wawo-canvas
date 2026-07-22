@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"strings"
 	"time"
@@ -311,6 +312,96 @@ func SaveUser(user model.User, password string) (model.User, error) {
 	user, err := repository.SaveUser(user)
 	user.Password = ""
 	return user, err
+}
+
+func UpdateAccountProfile(userID, displayName, email string) (model.AuthUser, error) {
+	user, err := accountUser(userID)
+	if err != nil {
+		return model.AuthUser{}, err
+	}
+	email = strings.TrimSpace(email)
+	if email != "" {
+		address, err := mail.ParseAddress(email)
+		if err != nil || address.Address != email {
+			return model.AuthUser{}, safeMessageError{message: "邮箱格式不正确"}
+		}
+	}
+	user.DisplayName = strings.TrimSpace(displayName)
+	user.Email = email
+	user.UpdatedAt = now()
+	user, err = repository.SaveUser(user)
+	if err != nil {
+		return model.AuthUser{}, err
+	}
+	return publicUser(user)
+}
+
+func ChangeAccountPassword(userID, currentPassword, newPassword string) error {
+	if newPassword == "" {
+		return safeMessageError{message: "新密码不能为空"}
+	}
+	user, err := accountUser(userID)
+	if err != nil {
+		return err
+	}
+	if user.Password != "" && bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(currentPassword)) != nil {
+		return safeMessageError{message: "当前密码错误"}
+	}
+	user.Password, err = hashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	user.SessionVersion++
+	user.UpdatedAt = now()
+	_, err = repository.SaveUser(user)
+	return err
+}
+
+func EnterpriseAccountSummary(userID string) (model.EnterpriseAccountSummary, error) {
+	user, err := accountUser(userID)
+	if err != nil {
+		return model.EnterpriseAccountSummary{}, err
+	}
+	if user.EnterpriseID == nil || user.EnterpriseRole == nil {
+		return model.EnterpriseAccountSummary{}, safeMessageError{message: "当前账号不属于企业"}
+	}
+	enterprise, err := repository.GetEnterpriseView(*user.EnterpriseID)
+	if err != nil {
+		return model.EnterpriseAccountSummary{}, err
+	}
+	if enterprise.Status != model.EnterpriseStatusActive {
+		return model.EnterpriseAccountSummary{}, safeMessageError{message: "企业已被禁用"}
+	}
+	return model.EnterpriseAccountSummary{ID: enterprise.ID, Name: enterprise.Name, Status: enterprise.Status, Role: *user.EnterpriseRole, MemberCount: enterprise.MemberCount}, nil
+}
+
+func RenameAccountEnterprise(userID, name string) (model.EnterpriseAccountSummary, error) {
+	user, err := accountUser(userID)
+	if err != nil {
+		return model.EnterpriseAccountSummary{}, err
+	}
+	if user.EnterpriseID == nil || user.EnterpriseRole == nil {
+		return model.EnterpriseAccountSummary{}, safeMessageError{message: "当前账号不属于企业"}
+	}
+	if *user.EnterpriseRole != model.EnterpriseRoleOwner {
+		return model.EnterpriseAccountSummary{}, safeMessageError{message: "仅企业主账号可修改企业名称"}
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return model.EnterpriseAccountSummary{}, safeMessageError{message: "企业名称不能为空"}
+	}
+	if err := repository.UpdateEnterpriseName(*user.EnterpriseID, user.ID, name, now()); err != nil {
+		return model.EnterpriseAccountSummary{}, err
+	}
+	return EnterpriseAccountSummary(userID)
+}
+
+func accountUser(userID string) (model.User, error) {
+	user, ok, err := repository.GetUserByID(userID)
+	if err != nil || ok {
+		return user, err
+	}
+	return user, safeMessageError{message: "用户不存在"}
 }
 
 func AdjustUserCredits(id string, credits int) (model.User, error) {

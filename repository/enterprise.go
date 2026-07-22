@@ -60,6 +60,14 @@ func UpdateEnterpriseStatus(id string, status model.EnterpriseStatus, updatedAt 
 	return db.Model(&model.Enterprise{}).Where("id = ?", id).Updates(map[string]any{"status": status, "updated_at": updatedAt}).Error
 }
 
+func UpdateEnterpriseName(id, ownerID, name, updatedAt string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	return db.Model(&model.Enterprise{}).Where("id = ? AND owner_id = ?", id, ownerID).Updates(map[string]any{"name": name, "updated_at": updatedAt}).Error
+}
+
 func UpdateEnterpriseOwnerStatus(id string, status model.UserStatus, updatedAt string) error {
 	db, err := DB()
 	if err != nil {

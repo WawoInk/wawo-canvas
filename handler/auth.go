@@ -34,6 +34,20 @@ type adjustUserCreditsRequest struct {
 	Credits int `json:"credits"`
 }
 
+type updateAccountProfileRequest struct {
+	DisplayName string `json:"displayName"`
+	Email       string `json:"email"`
+}
+
+type changeAccountPasswordRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
+}
+
+type updateAccountEnterpriseRequest struct {
+	Name string `json:"name"`
+}
+
 func Register(w http.ResponseWriter, r *http.Request) {
 	var request registerRequest
 	_ = json.NewDecoder(r.Body).Decode(&request)
@@ -95,6 +109,67 @@ func CurrentUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	OK(w, service.GuestUser())
+}
+
+func UpdateAccountProfile(w http.ResponseWriter, r *http.Request) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	var request updateAccountProfileRequest
+	_ = json.NewDecoder(r.Body).Decode(&request)
+	updated, err := service.UpdateAccountProfile(user.ID, request.DisplayName, request.Email)
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, updated)
+}
+
+func ChangeAccountPassword(w http.ResponseWriter, r *http.Request) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	var request changeAccountPasswordRequest
+	_ = json.NewDecoder(r.Body).Decode(&request)
+	if err := service.ChangeAccountPassword(user.ID, request.CurrentPassword, request.NewPassword); err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, true)
+}
+
+func EnterpriseAccountSummary(w http.ResponseWriter, r *http.Request) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	summary, err := service.EnterpriseAccountSummary(user.ID)
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, summary)
+}
+
+func UpdateAccountEnterprise(w http.ResponseWriter, r *http.Request) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	var request updateAccountEnterpriseRequest
+	_ = json.NewDecoder(r.Body).Decode(&request)
+	summary, err := service.RenameAccountEnterprise(user.ID, request.Name)
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, summary)
 }
 
 func AdminUsers(w http.ResponseWriter, r *http.Request) {
