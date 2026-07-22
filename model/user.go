@@ -17,28 +17,29 @@ const (
 
 // User 系统用户。
 type User struct {
-	ID          string     `json:"id" gorm:"primaryKey"`
-	Username    string     `json:"username" gorm:"uniqueIndex"`
-	Password    string     `json:"password,omitempty"`
-	Email       string     `json:"email"`
-	DisplayName string     `json:"displayName"`
-	AvatarURL   string     `json:"avatarUrl"`
-	Role        UserRole   `json:"role"`
-	Credits     int        `json:"credits"`
-	AffCode     string     `json:"affCode" gorm:"uniqueIndex"`
-	AffCount    int        `json:"affCount"`
-	InviterID   string     `json:"inviterId"`
-	GithubID    string     `json:"githubId"`
-	LinuxDoID   string     `json:"linuxDoId" gorm:"index"`
-	WechatID    string     `json:"wechatId"`
-	Status      UserStatus `json:"status"`
+	ID             string          `json:"id" gorm:"primaryKey"`
+	Username       string          `json:"username" gorm:"uniqueIndex"`
+	Password       string          `json:"password,omitempty"`
+	Email          string          `json:"email"`
+	DisplayName    string          `json:"displayName"`
+	AvatarURL      string          `json:"avatarUrl"`
+	Role           UserRole        `json:"role"`
+	Credits        int             `json:"credits"`
+	AffCode        string          `json:"affCode" gorm:"uniqueIndex"`
+	AffCount       int             `json:"affCount"`
+	InviterID      string          `json:"inviterId"`
+	GithubID       string          `json:"githubId"`
+	LinuxDoID      string          `json:"linuxDoId" gorm:"index"`
+	WechatID       string          `json:"wechatId"`
+	Status         UserStatus      `json:"status"`
 	EnterpriseID   *string         `json:"enterpriseId,omitempty" gorm:"index;uniqueIndex:idx_users_enterprise_owner,where:enterprise_role = 'owner';check:chk_users_enterprise_identity,(enterprise_id IS NULL AND enterprise_role IS NULL) OR (enterprise_id IS NOT NULL AND enterprise_role IS NOT NULL)"`
+	EnterpriseName string          `json:"enterpriseName,omitempty" gorm:"->;-:migration"`
 	EnterpriseRole *EnterpriseRole `json:"enterpriseRole,omitempty" gorm:"check:enterprise_role IS NULL OR enterprise_role IN ('owner','member')"`
 	SessionVersion int             `json:"-" gorm:"not null;default:1"`
-	LastLoginAt string     `json:"lastLoginAt"`
-	Extra       string     `json:"extra" gorm:"type:text"`
-	CreatedAt   string     `json:"createdAt"`
-	UpdatedAt   string     `json:"updatedAt"`
+	LastLoginAt    string          `json:"lastLoginAt"`
+	Extra          string          `json:"extra" gorm:"type:text"`
+	CreatedAt      string          `json:"createdAt"`
+	UpdatedAt      string          `json:"updatedAt"`
 }
 
 // UserList 用户分页结果。
@@ -49,19 +50,19 @@ type UserList struct {
 
 // AuthUser 用户公开信息。
 type AuthUser struct {
-	ID          string   `json:"id"`
-	Username    string   `json:"username"`
-	Email       string   `json:"email"`
-	DisplayName string   `json:"displayName"`
-	AvatarURL   string   `json:"avatarUrl"`
-	Role        UserRole `json:"role"`
-	Credits     int      `json:"credits"`
+	ID               string           `json:"id"`
+	Username         string           `json:"username"`
+	Email            string           `json:"email"`
+	DisplayName      string           `json:"displayName"`
+	AvatarURL        string           `json:"avatarUrl"`
+	Role             UserRole         `json:"role"`
+	Credits          int              `json:"credits"`
 	EnterpriseID     string           `json:"enterpriseId,omitempty"`
 	EnterpriseName   string           `json:"enterpriseName,omitempty"`
 	EnterpriseRole   EnterpriseRole   `json:"enterpriseRole,omitempty"`
 	EnterpriseStatus EnterpriseStatus `json:"enterpriseStatus,omitempty"`
-	CreatedAt   string   `json:"createdAt"`
-	UpdatedAt   string   `json:"updatedAt"`
+	CreatedAt        string           `json:"createdAt"`
+	UpdatedAt        string           `json:"updatedAt"`
 }
 
 // AuthSession 登录会话信息。

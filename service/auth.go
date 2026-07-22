@@ -23,10 +23,10 @@ import (
 )
 
 type TokenClaims struct {
-	UserID   string         `json:"userId"`
-	Username string         `json:"username"`
-	Role     model.UserRole `json:"role"`
-	SessionVersion int      `json:"sessionVersion"`
+	UserID         string         `json:"userId"`
+	Username       string         `json:"username"`
+	Role           model.UserRole `json:"role"`
+	SessionVersion int            `json:"sessionVersion"`
 	jwt.RegisteredClaims
 }
 
@@ -412,6 +412,9 @@ func AdjustUserCredits(id string, credits int) (model.User, error) {
 		}
 		return user, safeMessageError{message: "用户不存在"}
 	}
+	if user.EnterpriseID != nil {
+		return user, safeMessageError{message: "请在企业管理中按增量调整主账号积分"}
+	}
 	oldCredits := user.Credits
 	user.Credits = credits
 	user.UpdatedAt = now()
@@ -566,9 +569,9 @@ func newToken(user model.User) (string, error) {
 		expireHours = 168
 	}
 	claims := TokenClaims{
-		UserID:   user.ID,
-		Username: user.Username,
-		Role:     user.Role,
+		UserID:         user.ID,
+		Username:       user.Username,
+		Role:           user.Role,
 		SessionVersion: user.SessionVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(expireHours) * time.Hour)),

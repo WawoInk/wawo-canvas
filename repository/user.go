@@ -15,10 +15,11 @@ func ListUsers(q model.Query) ([]model.User, int64, error) {
 		return nil, 0, err
 	}
 	q.Normalize()
-	tx := db.Model(&model.User{})
+	tx := db.Table("users AS users").Select("users.*, enterprise.name AS enterprise_name").
+		Joins("LEFT JOIN enterprises AS enterprise ON enterprise.id = users.enterprise_id")
 	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
 		like := "%" + keyword + "%"
-		tx = tx.Where("username LIKE ? OR display_name LIKE ? OR email LIKE ? OR linux_do_id LIKE ?", like, like, like, like)
+		tx = tx.Where("users.username LIKE ? OR users.display_name LIKE ? OR users.email LIKE ? OR users.linux_do_id LIKE ? OR enterprise.name LIKE ?", like, like, like, like, like)
 	}
 
 	var total int64
@@ -27,7 +28,7 @@ func ListUsers(q model.Query) ([]model.User, int64, error) {
 	}
 
 	var users []model.User
-	err = tx.Order("created_at desc").Offset(q.Offset()).Limit(q.PageSize).Find(&users).Error
+	err = tx.Order("users.created_at desc").Offset(q.Offset()).Limit(q.PageSize).Find(&users).Error
 	return users, total, err
 }
 
@@ -139,6 +140,9 @@ func ListCreditLogs(q model.Query) ([]model.CreditLog, int64, error) {
 		like := "%" + keyword + "%"
 		tx = tx.Where("user_id LIKE ? OR type LIKE ? OR remark LIKE ? OR related_id LIKE ?", like, like, like, like)
 	}
+	if q.Type != "" {
+		tx = tx.Where("type = ?", q.Type)
+	}
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -159,6 +163,9 @@ func ListCreditLogsByUserID(userID string, q model.Query) ([]model.CreditLog, in
 	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
 		like := "%" + keyword + "%"
 		tx = tx.Where("type LIKE ? OR remark LIKE ? OR related_id LIKE ?", like, like, like)
+	}
+	if q.Type != "" {
+		tx = tx.Where("type = ?", q.Type)
 	}
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {

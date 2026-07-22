@@ -36,23 +36,44 @@ func AdminEnterprises(w http.ResponseWriter, r *http.Request) {
 }
 
 func AdminSetEnterpriseStatus(w http.ResponseWriter, r *http.Request, id string) {
-	var body struct{ Status string `json:"status"` }
+	var body struct {
+		Status string `json:"status"`
+	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	result, err := service.SetEnterpriseStatus(id, model.EnterpriseStatus(body.Status))
 	respondEnterprise(w, result, err)
 }
 
 func AdminSetEnterpriseOwnerStatus(w http.ResponseWriter, r *http.Request, id string) {
-	var body struct{ Status string `json:"status"` }
+	var body struct {
+		Status string `json:"status"`
+	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	result, err := service.SetEnterpriseOwnerStatus(id, model.UserStatus(body.Status))
 	respondEnterprise(w, result, err)
 }
 
 func AdminResetEnterpriseOwnerPassword(w http.ResponseWriter, r *http.Request, id string) {
-	var body struct{ Password string `json:"password"` }
+	var body struct {
+		Password string `json:"password"`
+	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	result, err := service.ResetEnterpriseOwnerPassword(id, body.Password)
+	respondEnterprise(w, result, err)
+}
+
+func AdminAdjustEnterpriseOwnerCredits(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	var body struct {
+		Delta  int    `json:"delta"`
+		Reason string `json:"reason"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	result, err := service.AdjustEnterpriseOwnerCredits(id, user.ID, body.Delta, body.Reason)
 	respondEnterprise(w, result, err)
 }
 

@@ -1,6 +1,9 @@
 package router_test
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,14 +18,14 @@ import (
 )
 
 type enterpriseView struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Status      string `json:"status"`
-	OwnerID     string `json:"ownerId"`
-	OwnerName   string `json:"ownerName"`
-	OwnerStatus string `json:"ownerStatus"`
-	MemberCount int    `json:"memberCount"`
-	OwnerCredits int   `json:"ownerCredits"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Status       string `json:"status"`
+	OwnerID      string `json:"ownerId"`
+	OwnerName    string `json:"ownerName"`
+	OwnerStatus  string `json:"ownerStatus"`
+	MemberCount  int    `json:"memberCount"`
+	OwnerCredits int    `json:"ownerCredits"`
 }
 
 func TestEnterpriseOwnerIsEnforcedByDatabase(t *testing.T) {
@@ -200,5 +203,227 @@ func assertRejectedSession(t *testing.T, baseURL, token string) {
 	response := doJSON[model.CreditLogList](t, http.MethodGet, baseURL+"/api/v1/credit-logs", token, nil)
 	if response.Code != 1 {
 		t.Fatalf("session remained active = %#v", response)
+	}
+}
+
+func TestAdminAdjustsEnterpriseOwnerCreditsByDeltaAndRecordsLog(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "enterprise-credit-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	adminUsername := "enterprise-credit-admin-" + uuid.NewString()
+	if _, err := service.SaveUser(model.User{Username: adminUsername, Role: model.UserRoleAdmin}, "enterprise-test-password"); err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	admin := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/admin/login", "", map[string]string{"username": adminUsername, "password": "enterprise-test-password"})
+	enterprise := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises", admin.Data.Token, map[string]string{
+		"name": "充值测试企业", "ownerUsername": "enterprise-credit-owner-" + uuid.NewString(), "ownerPassword": "owner-test-password",
+	})
+
+	first := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/credits", admin.Data.Token, map[string]any{"delta": 100, "reason": "首次充值"})
+	second := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/credits", admin.Data.Token, map[string]any{"delta": 50, "reason": "追加充值"})
+	if first.Code != 0 || first.Data.OwnerCredits != 100 || second.Code != 0 || second.Data.OwnerCredits != 150 {
+		t.Fatalf("delta adjustments = first %#v, second %#v", first, second)
+	}
+
+	doJSON[model.CreditLog](t, http.MethodPost, server.URL+"/api/admin/credit-logs", admin.Data.Token, model.CreditLog{
+		UserID: enterprise.Data.OwnerID, Type: model.CreditLogTypeAIConsume, Amount: -1, Balance: 149, Remark: "测试类型筛选",
+	})
+	logs := doJSON[model.CreditLogList](t, http.MethodGet, server.URL+"/api/admin/credit-logs?keyword="+enterprise.Data.OwnerID+"&type=admin_adjust&pageSize=10", admin.Data.Token, nil)
+	if logs.Code != 0 || logs.Data.Total != 2 || len(logs.Data.Items) != 2 {
+		t.Fatalf("credit logs = %#v", logs)
+	}
+	amounts := map[int]bool{}
+	for _, log := range logs.Data.Items {
+		if log.UserID != enterprise.Data.OwnerID || log.RelatedID != admin.Data.User.ID || log.Type != model.CreditLogTypeAdminAdjust || log.Remark == "" {
+			t.Fatalf("credit log association = %#v", log)
+		}
+		amounts[log.Amount] = true
+	}
+	if !amounts[100] || !amounts[50] {
+		t.Fatalf("credit log amounts = %#v", logs.Data.Items)
+	}
+}
+
+func TestEnterpriseOwnerCreditsCannotBeOverwrittenThroughUserAdminEndpoint(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "enterprise-credit-overwrite-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	adminUsername := "enterprise-credit-overwrite-admin-" + uuid.NewString()
+	if _, err := service.SaveUser(model.User{Username: adminUsername, Role: model.UserRoleAdmin}, "enterprise-test-password"); err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	admin := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/admin/login", "", map[string]string{"username": adminUsername, "password": "enterprise-test-password"})
+	enterprise := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises", admin.Data.Token, map[string]string{
+		"name": "覆盖保护企业", "ownerUsername": "enterprise-credit-overwrite-owner-" + uuid.NewString(), "ownerPassword": "owner-test-password",
+	})
+	doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/credits", admin.Data.Token, map[string]any{"delta": 100, "reason": "初始充值"})
+
+	overwrite := doJSON[model.User](t, http.MethodPost, server.URL+"/api/admin/users/"+enterprise.Data.OwnerID+"/credits", admin.Data.Token, map[string]int{"credits": 999})
+	if overwrite.Code != 1 || overwrite.Msg != "请在企业管理中按增量调整主账号积分" {
+		t.Fatalf("owner overwrite response = %#v", overwrite)
+	}
+	listed := doJSON[enterpriseList](t, http.MethodGet, server.URL+"/api/admin/enterprises?keyword="+enterprise.Data.OwnerName, admin.Data.Token, nil)
+	if listed.Code != 0 || listed.Data.Total != 1 || listed.Data.Items[0].OwnerCredits != 100 {
+		t.Fatalf("owner balance after overwrite = %#v", listed)
+	}
+}
+
+func TestEnterpriseOwnerCreditAdjustmentGuardsAndConcurrency(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "enterprise-credit-guard-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	adminUsername := "enterprise-credit-guard-admin-" + uuid.NewString()
+	if _, err := service.SaveUser(model.User{Username: adminUsername, Role: model.UserRoleAdmin}, "admin-password"); err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	admin := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/admin/login", "", map[string]string{"username": adminUsername, "password": "admin-password"})
+	ownerUsername := "enterprise-credit-guard-owner-" + uuid.NewString()
+	enterprise := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises", admin.Data.Token, map[string]string{
+		"name": "并发充值企业", "ownerUsername": ownerUsername, "ownerPassword": "owner-password",
+	})
+	memberUsername := "enterprise-credit-guard-member-" + uuid.NewString()
+	memberRole := model.EnterpriseRoleMember
+	if _, err := service.SaveUser(model.User{Username: memberUsername, EnterpriseID: &enterprise.Data.ID, EnterpriseRole: &memberRole}, "member-password"); err != nil {
+		t.Fatalf("create member: %v", err)
+	}
+	personalUsername := "enterprise-credit-guard-personal-" + uuid.NewString()
+	if _, err := service.SaveUser(model.User{Username: personalUsername}, "personal-password"); err != nil {
+		t.Fatalf("create personal user: %v", err)
+	}
+
+	added := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/credits", admin.Data.Token, map[string]any{"delta": 100, "reason": "充值"})
+	deducted := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/credits", admin.Data.Token, map[string]any{"delta": -30, "reason": "人工扣减"})
+	insufficient := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/credits", admin.Data.Token, map[string]any{"delta": -80, "reason": "余额不足"})
+	if added.Code != 0 || added.Data.OwnerCredits != 100 || deducted.Code != 0 || deducted.Data.OwnerCredits != 70 {
+		t.Fatalf("add/deduct responses = added %#v, deducted %#v", added, deducted)
+	}
+	if insufficient.Code != 1 || insufficient.Msg != "主账号余额不足" {
+		t.Fatalf("insufficient response = %#v", insufficient)
+	}
+
+	results := make(chan creditRequestResult, 2)
+	for _, delta := range []int{10, 20} {
+		go func(delta int) {
+			response, err := requestEnterpriseCredit(server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/credits", admin.Data.Token, delta, "并发充值")
+			results <- creditRequestResult{response: response, err: err}
+		}(delta)
+	}
+	for range 2 {
+		result := <-results
+		if result.err != nil || result.response.Code != 0 {
+			t.Fatalf("concurrent adjustment = response %#v, error %v", result.response, result.err)
+		}
+	}
+
+	owner := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerUsername, "password": "owner-password"})
+	member := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": memberUsername, "password": "member-password"})
+	personal := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": personalUsername, "password": "personal-password"})
+	for label, token := range map[string]string{"owner": owner.Data.Token, "member": member.Data.Token, "personal": personal.Data.Token} {
+		response := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/credits", token, map[string]any{"delta": 10, "reason": "越权调整"})
+		if response.Code != 1 || response.Msg != "未登录或权限不足" {
+			t.Fatalf("%s adjustment response = %#v", label, response)
+		}
+	}
+
+	listed := doJSON[enterpriseList](t, http.MethodGet, server.URL+"/api/admin/enterprises?keyword="+enterprise.Data.OwnerName, admin.Data.Token, nil)
+	logs := doJSON[model.CreditLogList](t, http.MethodGet, server.URL+"/api/admin/credit-logs?keyword="+enterprise.Data.OwnerID+"&type=admin_adjust&pageSize=10", admin.Data.Token, nil)
+	if listed.Code != 0 || listed.Data.Total != 1 || listed.Data.Items[0].OwnerCredits != 100 {
+		t.Fatalf("final enterprise balance = %#v", listed)
+	}
+	if logs.Code != 0 || logs.Data.Total != 4 || len(logs.Data.Items) != 4 {
+		t.Fatalf("final credit logs = %#v", logs)
+	}
+	amountTotal := 0
+	concurrentFinalBalances := 0
+	for _, log := range logs.Data.Items {
+		amountTotal += log.Amount
+		if log.UserID != enterprise.Data.OwnerID || log.RelatedID != admin.Data.User.ID || log.Balance < 0 {
+			t.Fatalf("inconsistent credit log = %#v", log)
+		}
+		if (log.Amount == 10 || log.Amount == 20) && log.Balance == 100 {
+			concurrentFinalBalances++
+		}
+	}
+	if amountTotal != 100 || concurrentFinalBalances != 1 {
+		t.Fatalf("credit log totals = %#v", logs.Data.Items)
+	}
+}
+
+type creditRequestResult struct {
+	response apiResponse[enterpriseView]
+	err      error
+}
+
+func requestEnterpriseCredit(url, token string, delta int, reason string) (apiResponse[enterpriseView], error) {
+	body, _ := json.Marshal(map[string]any{"delta": delta, "reason": reason})
+	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return apiResponse[enterpriseView]{}, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return apiResponse[enterpriseView]{}, err
+	}
+	defer response.Body.Close()
+	var result apiResponse[enterpriseView]
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		return result, err
+	}
+	if response.StatusCode != http.StatusOK {
+		return result, fmt.Errorf("status %d", response.StatusCode)
+	}
+	return result, nil
+}
+
+type adminUserView struct {
+	ID             string               `json:"id"`
+	Username       string               `json:"username"`
+	Credits        int                  `json:"credits"`
+	EnterpriseID   string               `json:"enterpriseId"`
+	EnterpriseName string               `json:"enterpriseName"`
+	EnterpriseRole model.EnterpriseRole `json:"enterpriseRole"`
+}
+
+type adminUserList struct {
+	Items []adminUserView `json:"items"`
+	Total int             `json:"total"`
+}
+
+func TestAdminUserListShowsEnterpriseIdentityAndOwnerBalance(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "enterprise-user-list-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	adminUsername := "enterprise-user-list-admin-" + uuid.NewString()
+	if _, err := service.SaveUser(model.User{Username: adminUsername, Role: model.UserRoleAdmin}, "admin-password"); err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	admin := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/admin/login", "", map[string]string{"username": adminUsername, "password": "admin-password"})
+	ownerUsername := "enterprise-user-list-owner-" + uuid.NewString()
+	enterprise := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises", admin.Data.Token, map[string]string{
+		"name": "用户视图企业", "ownerUsername": ownerUsername, "ownerPassword": "owner-password",
+	})
+	doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/credits", admin.Data.Token, map[string]any{"delta": 80, "reason": "测试充值"})
+
+	users := doJSON[adminUserList](t, http.MethodGet, server.URL+"/api/admin/users?keyword="+ownerUsername, admin.Data.Token, nil)
+	if users.Code != 0 || users.Data.Total != 1 || len(users.Data.Items) != 1 {
+		t.Fatalf("admin user list = %#v", users)
+	}
+	owner := users.Data.Items[0]
+	if owner.ID != enterprise.Data.OwnerID || owner.Credits != 80 || owner.EnterpriseID != enterprise.Data.ID || owner.EnterpriseName != "用户视图企业" || owner.EnterpriseRole != model.EnterpriseRoleOwner {
+		t.Fatalf("enterprise owner user view = %#v", owner)
 	}
 }

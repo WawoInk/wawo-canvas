@@ -23,6 +23,9 @@ export type AdminUser = {
     inviterId: string;
     linuxDoId: string;
     status: "active" | "ban";
+    enterpriseId?: string;
+    enterpriseName?: string;
+    enterpriseRole?: "owner" | "member";
     lastLoginAt: string;
     createdAt: string;
     updatedAt: string;
@@ -79,6 +82,7 @@ export type AdminUserQuery = {
     keyword?: string;
     page?: number;
     pageSize?: number;
+    type?: string;
 };
 
 export async function fetchAdminUsers(token: string, query: AdminUserQuery = {}) {
@@ -103,6 +107,10 @@ export async function setAdminEnterpriseOwnerStatus(token: string, id: string, s
 
 export async function resetAdminEnterpriseOwnerPassword(token: string, id: string, password: string) {
     return apiPost<AdminEnterprise>(`/api/admin/enterprises/${encodeURIComponent(id)}/owner/password`, { password }, token);
+}
+
+export async function adjustAdminEnterpriseCredits(token: string, id: string, delta: number, reason: string) {
+    return apiPost<AdminEnterprise>(`/api/admin/enterprises/${encodeURIComponent(id)}/credits`, { delta, reason }, token);
 }
 
 export async function saveAdminUser(token: string, user: Partial<AdminUser> & { password?: string }) {

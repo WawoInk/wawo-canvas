@@ -73,6 +73,17 @@ export default function AdminUsersPage() {
             render: (_, item) => <Tag color={item.role === "admin" ? "gold" : "default"}>{item.role === "admin" ? "管理员" : "用户"}</Tag>,
         },
         {
+            title: "企业归属",
+            dataIndex: "enterpriseName",
+            width: 180,
+            render: (_, item) => item.enterpriseId ? (
+                <Flex vertical gap={2}>
+                    <Typography.Text ellipsis>{item.enterpriseName || item.enterpriseId}</Typography.Text>
+                    <Tag style={{ width: "fit-content", marginInlineEnd: 0 }}>{item.enterpriseRole === "owner" ? "主账号" : "子账号"}</Tag>
+                </Flex>
+            ) : <Typography.Text type="secondary">个人账号</Typography.Text>,
+        },
+        {
             title: "状态",
             dataIndex: "status",
             width: 90,
@@ -220,7 +231,7 @@ export default function AdminUsersPage() {
                             </Form.Item>
                         </Col>
                     </Row>
-                    {editingUser?.id ? (
+                    {editingUser?.id && !editingUser.enterpriseId ? (
                         <>
                             <Divider style={{ margin: "4px 0 16px" }} />
                             <Typography.Text strong>算力点调整</Typography.Text>
@@ -236,6 +247,11 @@ export default function AdminUsersPage() {
                                     </Form.Item>
                                 </Col>
                             </Row>
+                        </>
+                    ) : editingUser?.id ? (
+                        <>
+                            <Divider style={{ margin: "4px 0 16px" }} />
+                            <Typography.Text type="secondary">企业账号积分请在企业管理中按增量调整。</Typography.Text>
                         </>
                     ) : null}
                 </Form>
