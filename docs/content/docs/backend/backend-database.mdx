@@ -35,13 +35,15 @@ description: 核心数据表和第一方生成任务事务约束
 
 兼容 AI 代理的 `ai_consume/ai_refund` 也在锁定用户行后，于同一事务更新余额并写入流水；因此生成扣费、退款和企业划拨会按同一用户串行结算，普通资料或登录信息保存不会写回陈旧积分。
 
-## assets 与企业文本素材
+## assets、user_files 与企业共享媒体
 
-`assets.enterprise_id` 为空时是现有个人素材，继续由 `user_id` 表达个人所有权；个人素材查询、更新、删除和同步都显式限定 `enterprise_id IS NULL`。
+`assets.enterprise_id` 为空时是现有个人素材，继续由 `user_id` 表达个人所有权；个人素材查询、更新、删除和同步都显式限定 `enterprise_id IS NULL`。`assets.enterprise_id` 非空时是企业共享素材，`user_id` 记录创建者账号，`type` 可为 `text/image/video`，图片和视频通过 `file_id` 关联企业文件。
 
-`assets.enterprise_id` 非空时是企业共享素材，`user_id` 记录创建者账号。企业列表和详情始终以当前认证账号推导出的企业 ID 查询，并按需关联创建者昵称或用户名；客户端提交的 `enterpriseId`、`userId` 或其他企业素材 ID 不参与授权范围。
+`user_files.enterprise_id` 为空时是个人文件；个人文件接口同样显式限定企业字段为空，因此企业主账号即使与文件创建者是同一用户，也不能通过个人文件接口读取、下载或删除企业文件。非空时文件属于企业，`user_id` 记录上传者，企业文件对象 Key 只保存在服务端。
 
-当前企业素材切片只允许 `text`。企业素材使用独立 API 按需读取，不进入个人素材 Zustand store、IndexedDB 增量同步或 WebDAV 清单。
+企业列表、详情和文件读取始终以当前认证账号推导出的企业 ID 查询；客户端提交的 `enterpriseId`、`userId`、素材 ID 或文件 ID 不参与授权范围。主账号可上传、替换和删除企业媒体；有效主账号和成员可读取、预览和下载。文件的读取、下载、预签名、更新和删除分别校验权限，企业或成员停用后不再签发新的 URL。
+
+企业媒体按需返回短期预签名 URL，API 不返回原始 S3 Key。企业素材使用独立 API 按需读取，不进入个人素材 Zustand store、IndexedDB 增量同步或 WebDAV 清单；删除企业素材时同步移除其关联企业文件记录。
 
 ## generation_tasks
 

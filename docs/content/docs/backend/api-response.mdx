@@ -89,14 +89,19 @@ description: 后端统一响应信封与结构化生成错误
 
 ## 企业素材接口
 
-有效企业的 `owner/member` 使用独立接口读取本企业素材，企业范围只从当前认证账号推导。当前切片只支持文本素材；仅 `owner` 可写，`member` 只读。
+有效企业的 `owner/member` 使用独立接口读取本企业素材，企业范围只从当前认证账号推导。`owner` 可管理素材和企业媒体文件，`member` 只读、预览和下载。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/api/v1/enterprise/assets` | 按 `keyword/type/tag/page/pageSize` 查询本企业素材和可用标签 |
-| `GET` | `/api/v1/enterprise/assets/{id}` | 读取本企业素材详情 |
-| `POST` | `/api/v1/enterprise/assets` | 主账号新增文本素材 |
-| `PUT` | `/api/v1/enterprise/assets/{id}` | 主账号更新本企业文本素材 |
-| `DELETE` | `/api/v1/enterprise/assets/{id}` | 主账号删除本企业素材 |
+| `GET` | `/api/v1/enterprise/assets` | 按 `keyword/type/tag/page/pageSize` 查询本企业文本、图片、视频素材和可用标签 |
+| `GET` | `/api/v1/enterprise/assets/{id}` | 读取本企业素材详情；媒体素材返回短期 `url` |
+| `POST` | `/api/v1/enterprise/assets` | 主账号新增文本或已上传媒体素材；媒体使用 `fileId` 关联企业文件 |
+| `PUT` | `/api/v1/enterprise/assets/{id}` | 主账号更新本企业素材元数据或媒体关联 |
+| `DELETE` | `/api/v1/enterprise/assets/{id}` | 主账号删除本企业素材及其关联企业文件记录 |
+| `POST` | `/api/v1/enterprise/files` | 主账号上传图片/视频企业文件，表单字段为 `fileType` 和 `file` |
+| `GET` | `/api/v1/enterprise/files/{id}` | 企业有效账号读取文件元数据和短期预签名 `url` |
+| `GET` | `/api/v1/enterprise/files/{id}/content` | 企业有效账号下载文件内容 |
+| `PUT` | `/api/v1/enterprise/files/{id}` | 主账号替换企业文件内容和元数据 |
+| `DELETE` | `/api/v1/enterprise/files/{id}` | 主账号删除企业文件 |
 
-请求体中的素材 ID、企业 ID 和创建者 ID均不会改变服务端授权范围。企业素材响应包含 `enterpriseId`、创建者 `userId/creatorName`，但不会写入个人素材同步缓存。
+素材和文件响应只返回短期预签名 `url`，不返回原始对象存储 Key。个人 `/api/v1/files` 的列表、详情和上传确认响应也使用 `url` 字段；现有 Canvas 仍通过 `fileId` 重新读取该 URL。文件读取、下载、签名、更新和删除分别执行企业范围与角色校验；企业或成员停用后不再签发新的媒体 URL。请求体中的素材 ID、文件 ID、企业 ID 和创建者 ID均不会改变服务端授权范围。企业素材响应包含 `enterpriseId`、创建者 `userId/creatorName`，但不会写入个人素材同步缓存。

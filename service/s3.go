@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -32,7 +33,11 @@ func S3() (*s3.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("s3: %w", err)
 	}
-	s3Client = s3.NewFromConfig(cfg)
+	options := []func(*s3.Options){}
+	if os.Getenv("AWS_ENDPOINT_URL_S3") != "" {
+		options = append(options, func(options *s3.Options) { options.UsePathStyle = true })
+	}
+	s3Client = s3.NewFromConfig(cfg, options...)
 	return s3Client, nil
 }
 

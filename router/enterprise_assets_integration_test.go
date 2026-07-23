@@ -24,6 +24,12 @@ type enterpriseAssetView struct {
 	Tags         []string        `json:"tags"`
 	Description  string          `json:"description"`
 	Content      string          `json:"content"`
+	URL          string          `json:"url"`
+	FileID       string          `json:"fileId"`
+	Width        int             `json:"width"`
+	Height       int             `json:"height"`
+	Bytes        int64           `json:"bytes"`
+	MimeType     string          `json:"mimeType"`
 }
 
 type enterpriseAssetList struct {
@@ -182,7 +188,7 @@ func TestEnterpriseAssetRolesAndScopeAreEnforcedThroughHTTP(t *testing.T) {
 		t.Fatalf("personal user listed enterprise assets = %#v", personalList)
 	}
 	media := doJSON[enterpriseAssetView](t, http.MethodPost, server.URL+"/api/v1/enterprise/assets", ownerA.Data.Token, map[string]string{"type": "image", "title": "越界媒体", "content": "不应创建"})
-	if media.Code != 1 || media.Msg != "当前仅支持企业文本素材" {
+	if media.Code != 1 || media.Msg != "请先上传企业媒体文件" {
 		t.Fatalf("media enterprise asset = %#v", media)
 	}
 

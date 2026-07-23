@@ -79,6 +79,7 @@ func ListEnterpriseAssets(current model.AuthUser, q model.Query) (model.AssetLis
 	if err != nil {
 		return model.AssetList{}, err
 	}
+	enrichEnterpriseAssetURLs(items, enterpriseID)
 	tags, err := repository.ListEnterpriseAssetTags(enterpriseID, q)
 	return model.AssetList{Items: items, Tags: tags, Total: int(total)}, err
 }
@@ -95,7 +96,9 @@ func GetEnterpriseAsset(current model.AuthUser, id string) (model.Asset, error) 
 	if !ok {
 		return model.Asset{}, safeMessageError{message: "素材不存在或无权访问"}
 	}
-	return item, nil
+	items := []model.Asset{item}
+	enrichEnterpriseAssetURLs(items, enterpriseID)
+	return items[0], nil
 }
 
 func CreateEnterpriseAsset(current model.AuthUser, item model.Asset) (model.Asset, error) {
@@ -103,7 +106,10 @@ func CreateEnterpriseAsset(current model.AuthUser, item model.Asset) (model.Asse
 	if err != nil {
 		return model.Asset{}, err
 	}
-	if err := normalizeEnterpriseTextAsset(&item); err != nil {
+	if err := normalizeEnterpriseAsset(&item); err != nil {
+		return model.Asset{}, err
+	}
+	if err := bindEnterpriseAssetFile(enterpriseID, &item); err != nil {
 		return model.Asset{}, err
 	}
 	now := time.Now().Format(time.RFC3339)
@@ -116,7 +122,13 @@ func CreateEnterpriseAsset(current model.AuthUser, item model.Asset) (model.Asse
 	if item.CreatorName == "" {
 		item.CreatorName = current.Username
 	}
-	return repository.CreateEnterpriseAsset(item)
+	created, err := repository.CreateEnterpriseAsset(item)
+	if err != nil {
+		return model.Asset{}, err
+	}
+	items := []model.Asset{created}
+	enrichEnterpriseAssetURLs(items, enterpriseID)
+	return items[0], nil
 }
 
 func UpdateEnterpriseAsset(current model.AuthUser, id string, item model.Asset) (model.Asset, error) {
@@ -131,7 +143,10 @@ func UpdateEnterpriseAsset(current model.AuthUser, id string, item model.Asset) 
 	if !ok {
 		return model.Asset{}, safeMessageError{message: "素材不存在或无权操作"}
 	}
-	if err := normalizeEnterpriseTextAsset(&item); err != nil {
+	if err := normalizeEnterpriseAsset(&item); err != nil {
+		return model.Asset{}, err
+	}
+	if err := bindEnterpriseAssetFile(enterpriseID, &item); err != nil {
 		return model.Asset{}, err
 	}
 	item.ID = id
@@ -146,7 +161,9 @@ func UpdateEnterpriseAsset(current model.AuthUser, id string, item model.Asset) 
 	if !ok {
 		return model.Asset{}, safeMessageError{message: "素材不存在或无权操作"}
 	}
-	return updated, nil
+	items := []model.Asset{updated}
+	enrichEnterpriseAssetURLs(items, enterpriseID)
+	return items[0], nil
 }
 
 func DeleteEnterpriseAsset(current model.AuthUser, id string) error {
@@ -154,12 +171,16 @@ func DeleteEnterpriseAsset(current model.AuthUser, id string) error {
 	if err != nil {
 		return err
 	}
-	deleted, err := repository.DeleteEnterpriseAsset(enterpriseID, id)
+	file, deleted, err := repository.DeleteEnterpriseAsset(enterpriseID, id)
 	if err != nil {
 		return err
 	}
 	if !deleted {
 		return safeMessageError{message: "素材不存在或无权操作"}
+	}
+	if file.S3Key != "" {
+		// Authorization is removed transactionally; object cleanup is best effort.
+		_ = S3Delete(context.Background(), file.S3Key)
 	}
 	return nil
 }
@@ -182,26 +203,65 @@ func enterpriseAssetOwnerID(current model.AuthUser) (string, error) {
 	return enterpriseID, nil
 }
 
-func normalizeEnterpriseTextAsset(item *model.Asset) error {
+func normalizeEnterpriseAsset(item *model.Asset) error {
 	item.Title = strings.TrimSpace(item.Title)
 	if item.Type == "" {
 		item.Type = model.AssetTypeText
 	}
-	if item.Type != model.AssetTypeText {
-		return safeMessageError{message: "当前仅支持企业文本素材"}
-	}
 	if item.Title == "" {
 		return safeMessageError{message: "素材标题不能为空"}
-	}
-	if strings.TrimSpace(item.Content) == "" {
-		return safeMessageError{message: "素材内容不能为空"}
 	}
 	if item.Tags == nil {
 		item.Tags = []string{}
 	}
-	item.CoverURL, item.URL, item.FileID = "", "", ""
-	item.Width, item.Height, item.Bytes, item.MimeType = 0, 0, 0, ""
+	item.URL = ""
+	switch item.Type {
+	case model.AssetTypeText:
+		if strings.TrimSpace(item.Content) == "" {
+			return safeMessageError{message: "素材内容不能为空"}
+		}
+		item.CoverURL, item.FileID = "", ""
+		item.Width, item.Height, item.Bytes, item.MimeType = 0, 0, 0, ""
+	case model.AssetTypeImage, model.AssetTypeVideo:
+		if item.FileID == "" {
+			return safeMessageError{message: "请先上传企业媒体文件"}
+		}
+		item.CoverURL, item.Content = "", ""
+	default:
+		return safeMessageError{message: "不支持的企业素材类型"}
+	}
 	return nil
+}
+
+func bindEnterpriseAssetFile(enterpriseID string, item *model.Asset) error {
+	if item.Type == model.AssetTypeText {
+		return nil
+	}
+	file, ok, err := repository.GetEnterpriseFileByID(item.FileID, enterpriseID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return safeMessageError{message: "文件不存在或无权操作"}
+	}
+	if file.FileType != string(item.Type)+"s" {
+		return safeMessageError{message: "文件类型与素材类型不匹配"}
+	}
+	item.Bytes, item.MimeType = file.Bytes, file.MimeType
+	return nil
+}
+
+func enrichEnterpriseAssetURLs(items []model.Asset, enterpriseID string) {
+	for i := range items {
+		if items[i].FileID == "" {
+			continue
+		}
+		file, ok, err := repository.GetEnterpriseFileByID(items[i].FileID, enterpriseID)
+		if err != nil || !ok {
+			continue
+		}
+		items[i].URL, _ = S3PresignGet(context.Background(), file.S3Key, enterpriseFilePresignExpiry)
+	}
 }
 
 func DeleteAsset(userID, id string) error {

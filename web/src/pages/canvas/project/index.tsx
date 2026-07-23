@@ -1680,7 +1680,7 @@ function InfiniteCanvasPage() {
                 if (token) {
                     const resp = await fetch(`/api/v1/files/${encodeURIComponent(node.metadata.fileId)}`, { headers: { Authorization: `Bearer ${token}` } });
                     const json = await resp.json();
-                    if (json.code === 0 && json.data?.s3Key) url = json.data.s3Key;
+                    if (json.code === 0 && json.data?.url) url = json.data.url;
                 }
             } catch {
                 /* use existing url */
@@ -1710,7 +1710,7 @@ function InfiniteCanvasPage() {
                         if (token) {
                             const resp = await fetch(`/api/v1/files/${encodeURIComponent(node.metadata.fileId)}`, { headers: { Authorization: `Bearer ${token}` } });
                             const json = await resp.json();
-                            if (json.code === 0 && json.data?.s3Key) assetUrl = json.data.s3Key;
+                            if (json.code === 0 && json.data?.url) assetUrl = json.data.url;
                         }
                     } catch {
                         /* use existing */
@@ -2717,7 +2717,7 @@ function InfiniteCanvasPage() {
             const token = JSON.parse(raw)?.state?.token || "";
             const response = await fetch(`/api/v1/files/${encodeURIComponent(file.fileId)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
             const body = await response.json();
-            if (body.code !== 0 || !body.data?.s3Key) throw new Error(body.msg || "视频文件不可用");
+            if (body.code !== 0 || !body.data?.url) throw new Error(body.msg || "视频文件不可用");
             const defaultSize = spec || NODE_DEFAULT_SIZE[CanvasNodeType.Video];
             const videoSize = fitNodeSize(file.width || defaultSize.width, file.height || defaultSize.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
             setNodes((prev) =>
@@ -2729,7 +2729,7 @@ function InfiniteCanvasPage() {
                               height: videoSize.height,
                               metadata: {
                                   ...n.metadata,
-                                  content: body.data.s3Key,
+                                  content: body.data.url,
                                   fileId: file.fileId,
                                   status: NODE_STATUS_SUCCESS,
                                   naturalWidth: file.width,
@@ -3594,8 +3594,8 @@ async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
                     if (token) {
                         const resp = await fetch(`/api/v1/files/${encodeURIComponent(fid)}`, { headers: { Authorization: `Bearer ${token}` } });
                         const json = await resp.json();
-                        if (json.code === 0 && json.data?.s3Key) {
-                            return { ...node, metadata: { ...node.metadata, content: json.data.s3Key } };
+                        if (json.code === 0 && json.data?.url) {
+                            return { ...node, metadata: { ...node.metadata, content: json.data.url } };
                         }
                     }
                 } catch {

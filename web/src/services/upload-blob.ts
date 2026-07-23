@@ -62,20 +62,20 @@ async function uploadBlobServer(blob: Blob, fileType: FileType): Promise<UploadR
     const resp = await fetch("/api/v1/files", { method: "POST", body: form, headers });
     const json = await resp.json();
     if (json.code !== 0) throw new Error(json.msg || "上传失败");
-    const { id, s3Key, mimeType, bytes } = json.data;
+    const { id, url, mimeType, bytes } = json.data;
     if (fileType === "images" || fileType === "results/images") {
         const meta = await readImageMeta(URL.createObjectURL(blob));
-        return { fileId: id, url: s3Key, width: meta.width, height: meta.height, bytes: bytes || blob.size, mimeType: mimeType || blob.type };
+        return { fileId: id, url, width: meta.width, height: meta.height, bytes: bytes || blob.size, mimeType: mimeType || blob.type };
     }
     if (fileType === "videos" || fileType === "results/videos") {
         const meta = await videoMeta(blob);
-        return { fileId: id, url: s3Key, width: meta.width, height: meta.height, bytes: bytes || blob.size, mimeType: mimeType || blob.type, durationMs: meta.durationMs };
+        return { fileId: id, url, width: meta.width, height: meta.height, bytes: bytes || blob.size, mimeType: mimeType || blob.type, durationMs: meta.durationMs };
     }
     if (fileType === "audios" || fileType === "results/audios") {
         const meta = await audioMeta(blob);
-        return { fileId: id, url: s3Key, width: 0, height: 0, bytes: bytes || blob.size, mimeType: mimeType || blob.type, durationMs: meta.durationMs };
+        return { fileId: id, url, width: 0, height: 0, bytes: bytes || blob.size, mimeType: mimeType || blob.type, durationMs: meta.durationMs };
     }
-    return { fileId: id, url: s3Key, width: 0, height: 0, bytes: bytes || blob.size, mimeType: mimeType || blob.type };
+    return { fileId: id, url, width: 0, height: 0, bytes: bytes || blob.size, mimeType: mimeType || blob.type };
 }
 
 /** Upload a blob (image or video) to S3 under {fileType}/{userId}/ and return fileId + presigned URL. */
@@ -97,5 +97,5 @@ export async function uploadUrlToS3(url: string, fileType: FileType): Promise<Up
     const json = await resp.json();
     if (json.code !== 0) throw new Error(json.msg || "代理上传失败");
     const meta = fileType.endsWith("images") ? { width: 1024, height: 1024 } : { width: 0, height: 0 };
-    return { fileId: json.data.id, url: json.data.s3Key, width: meta.width, height: meta.height, bytes: json.data.bytes || 0, mimeType: json.data.mimeType || "application/octet-stream" };
+    return { fileId: json.data.id, url: json.data.url, width: meta.width, height: meta.height, bytes: json.data.bytes || 0, mimeType: json.data.mimeType || "application/octet-stream" };
 }

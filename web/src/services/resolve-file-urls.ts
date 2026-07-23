@@ -18,7 +18,7 @@ export async function resolveFileUrls(fileIds: string[]): Promise<Map<string, st
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 const json = await resp.json();
-                if (json.code === 0 && json.data?.s3Key) return [fileId, json.data.s3Key] as const;
+                if (json.code === 0 && json.data?.url) return [fileId, json.data.url] as const;
             } catch {}
             return null;
         }),

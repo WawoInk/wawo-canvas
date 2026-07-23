@@ -23,7 +23,7 @@ func ListUserFiles(userID, fileType string, page, pageSize int) ([]model.UserFil
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 20
 	}
-	tx := db.Model(&model.UserFile{}).Where("user_id = ?", userID)
+	tx := db.Model(&model.UserFile{}).Where("user_id = ? AND enterprise_id IS NULL", userID)
 	if fileType != "" {
 		tx = tx.Where("file_type = ?", fileType)
 	}
@@ -44,7 +44,7 @@ func GetUserFileByID(id, userID string) (model.UserFile, bool, error) {
 		return model.UserFile{}, false, err
 	}
 	var item model.UserFile
-	err = db.Where("id = ? AND user_id = ?", id, userID).First(&item).Error
+	err = db.Where("id = ? AND user_id = ? AND enterprise_id IS NULL", id, userID).First(&item).Error
 	if err != nil {
 		return model.UserFile{}, false, nil
 	}
@@ -65,6 +65,38 @@ func DeleteUserFile(id, userID string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	result := db.Where("id = ? AND user_id = ?", id, userID).Delete(&model.UserFile{})
+	result := db.Where("id = ? AND user_id = ? AND enterprise_id IS NULL", id, userID).Delete(&model.UserFile{})
+	return result.RowsAffected > 0, result.Error
+}
+
+func GetEnterpriseFileByID(id, enterpriseID string) (model.UserFile, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.UserFile{}, false, err
+	}
+	var item model.UserFile
+	err = db.Where("id = ? AND enterprise_id = ?", id, enterpriseID).First(&item).Error
+	if err != nil {
+		return model.UserFile{}, false, nil
+	}
+	return item, true, nil
+}
+
+func UpdateEnterpriseFile(item model.UserFile) (bool, error) {
+	db, err := DB()
+	if err != nil {
+		return false, err
+	}
+	result := db.Model(&model.UserFile{}).Where("id = ? AND enterprise_id = ?", item.ID, item.EnterpriseID).
+		Select("file_type", "s3_key", "original_name", "mime_type", "bytes").Updates(item)
+	return result.RowsAffected > 0, result.Error
+}
+
+func DeleteEnterpriseFile(id, enterpriseID string) (bool, error) {
+	db, err := DB()
+	if err != nil {
+		return false, err
+	}
+	result := db.Where("id = ? AND enterprise_id = ?", id, enterpriseID).Delete(&model.UserFile{})
 	return result.RowsAffected > 0, result.Error
 }

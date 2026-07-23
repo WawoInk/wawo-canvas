@@ -164,7 +164,7 @@ func UpdateEnterpriseAsset(item model.Asset) (model.Asset, bool, error) {
 		return item, false, err
 	}
 	result := db.Model(&model.Asset{}).Where("id = ? AND enterprise_id = ?", item.ID, item.EnterpriseID).
-		Select("title", "type", "tags", "category", "description", "content", "updated_at").Updates(item)
+		Select("title", "type", "cover_url", "tags", "category", "description", "content", "file_id", "width", "height", "bytes", "mime_type", "updated_at").Updates(item)
 	if result.Error != nil || result.RowsAffected == 0 {
 		return item, false, result.Error
 	}
@@ -172,13 +172,33 @@ func UpdateEnterpriseAsset(item model.Asset) (model.Asset, bool, error) {
 	return updated, ok, err
 }
 
-func DeleteEnterpriseAsset(enterpriseID, id string) (bool, error) {
+func DeleteEnterpriseAsset(enterpriseID, id string) (model.UserFile, bool, error) {
 	db, err := DB()
 	if err != nil {
-		return false, err
+		return model.UserFile{}, false, err
 	}
-	result := db.Where("id = ? AND enterprise_id = ?", id, enterpriseID).Delete(&model.Asset{})
-	return result.RowsAffected > 0, result.Error
+	var file model.UserFile
+	deleted := false
+	err = db.Transaction(func(tx *gorm.DB) error {
+		var item model.Asset
+		if err := tx.Where("id = ? AND enterprise_id = ?", id, enterpriseID).First(&item).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		deleted = true
+		if item.FileID != "" {
+			if err := tx.Where("id = ? AND enterprise_id = ?", item.FileID, enterpriseID).First(&file).Error; err == nil {
+				if err := tx.Delete(&file).Error; err != nil {
+					return err
+				}
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+		}
+		return tx.Delete(&item).Error
+	})
+	return file, deleted, err
 }
 
 // applyAssetFilters 应用素材列表的搜索条件。

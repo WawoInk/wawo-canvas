@@ -199,3 +199,106 @@ func ProxyUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	OK(w, item)
 }
+
+func UploadEnterpriseFile(w http.ResponseWriter, r *http.Request) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	fileType, name, mimeType, content, ok := readEnterpriseFileUpload(w, r)
+	if !ok {
+		return
+	}
+	item, err := service.UploadEnterpriseFile(r.Context(), user, fileType, name, mimeType, bytes.NewReader(content), int64(len(content)))
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, item)
+}
+
+func GetEnterpriseFile(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	item, err := service.GetEnterpriseFile(user, id)
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, item)
+}
+
+func DownloadEnterpriseFile(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	body, item, err := service.DownloadEnterpriseFile(r.Context(), user, id)
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	defer body.Close()
+	w.Header().Set("Content-Type", item.MimeType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, item.OriginalName))
+	_, _ = io.Copy(w, body)
+}
+
+func UpdateEnterpriseFile(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	fileType, name, mimeType, content, ok := readEnterpriseFileUpload(w, r)
+	if !ok {
+		return
+	}
+	item, err := service.UpdateEnterpriseFile(r.Context(), user, id, fileType, name, mimeType, bytes.NewReader(content), int64(len(content)))
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, item)
+}
+
+func DeleteEnterpriseFile(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	if err := service.DeleteEnterpriseFile(r.Context(), user, id); err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, true)
+}
+
+func readEnterpriseFileUpload(w http.ResponseWriter, r *http.Request) (string, string, string, []byte, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, userFileMaxBody+1)
+	if err := r.ParseMultipartForm(userFileMaxBody); err != nil {
+		Fail(w, "文件过大或上传格式不正确")
+		return "", "", "", nil, false
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		Fail(w, "请上传文件")
+		return "", "", "", nil, false
+	}
+	defer file.Close()
+	content, err := io.ReadAll(file)
+	if err != nil {
+		Fail(w, "文件读取失败")
+		return "", "", "", nil, false
+	}
+	return r.FormValue("fileType"), header.Filename, header.Header.Get("Content-Type"), content, true
+}

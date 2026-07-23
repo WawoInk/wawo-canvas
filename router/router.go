@@ -118,6 +118,19 @@ func New() *gin.Engine {
 	v1.DELETE("/enterprise/assets/:id", func(c *gin.Context) {
 		handler.DeleteEnterpriseAsset(c.Writer, c.Request, c.Param("id"))
 	})
+	v1.POST("/enterprise/files", gin.WrapF(handler.UploadEnterpriseFile))
+	v1.GET("/enterprise/files/:id/content", func(c *gin.Context) {
+		handler.DownloadEnterpriseFile(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.GET("/enterprise/files/:id", func(c *gin.Context) {
+		handler.GetEnterpriseFile(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.PUT("/enterprise/files/:id", func(c *gin.Context) {
+		handler.UpdateEnterpriseFile(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.DELETE("/enterprise/files/:id", func(c *gin.Context) {
+		handler.DeleteEnterpriseFile(c.Writer, c.Request, c.Param("id"))
+	})
 	v1.POST("/enterprise/members/:id/credits", func(c *gin.Context) {
 		handler.TransferEnterpriseMemberCredits(c.Writer, c.Request, c.Param("id"))
 	})
