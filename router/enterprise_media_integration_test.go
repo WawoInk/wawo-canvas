@@ -9,11 +9,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"net/url"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/basketikun/infinite-canvas/config"
 	"github.com/basketikun/infinite-canvas/model"
+	"github.com/basketikun/infinite-canvas/repository"
 	"github.com/basketikun/infinite-canvas/router"
 	"github.com/basketikun/infinite-canvas/service"
 	"github.com/google/uuid"
@@ -119,6 +122,37 @@ func TestEnterpriseMediaFilesAndAssetsAreSharedReadOnlyWithMembersThroughHTTP(t 
 	if created.Code != 0 || created.Data.Type != model.AssetTypeImage || created.Data.FileID != uploaded.Data.ID || created.Data.URL == "" || created.Data.EnterpriseID != enterprise.ID || created.Data.Bytes != int64(len("image-v1")) || created.Data.MimeType != "image/png" {
 		t.Fatalf("owner enterprise image asset create = %#v", created)
 	}
+	copied := doJSON[model.Asset](t, http.MethodPost, server.URL+"/api/v1/enterprise/assets/"+created.Data.ID+"/copy", member.Data.Token, nil)
+	if copied.Code != 0 || copied.Data.ID == "" || copied.Data.ID == created.Data.ID || copied.Data.UserID != member.Data.User.ID || copied.Data.EnterpriseID != nil || copied.Data.FileID == "" || copied.Data.FileID == created.Data.FileID || copied.Data.URL == "" || copied.Data.Bytes != created.Data.Bytes || copied.Data.MimeType != created.Data.MimeType {
+		t.Fatalf("member copied enterprise image asset = %#v", copied)
+	}
+	personalCopyFile := doJSON[enterpriseFileView](t, http.MethodGet, server.URL+"/api/v1/files/"+copied.Data.FileID, member.Data.Token, nil)
+	if personalCopyFile.Code != 0 || personalCopyFile.Data.ID != copied.Data.FileID || personalCopyFile.Data.EnterpriseID != "" || personalCopyFile.Data.URL == "" || personalCopyFile.Data.ID == uploaded.Data.ID {
+		t.Fatalf("copied personal image file = %#v", personalCopyFile)
+	}
+	copyStatus, copyContent := doRawRequest(t, http.MethodGet, server.URL+"/api/v1/files/"+copied.Data.FileID+"/content", member.Data.Token, "", nil)
+	if copyStatus != http.StatusOK || string(copyContent) != "image-v1" {
+		t.Fatalf("copied personal image content status=%d content=%q", copyStatus, copyContent)
+	}
+	objectCountBeforeFailure := objectServer.objectCount()
+	objectServer.failNextCopy()
+	failedMediaCopy := doJSON[model.Asset](t, http.MethodPost, server.URL+"/api/v1/enterprise/assets/"+created.Data.ID+"/copy", member.Data.Token, nil)
+	objectServer.clearCopyFailure()
+	if failedMediaCopy.Code != 1 || objectServer.objectCount() != objectCountBeforeFailure {
+		t.Fatalf("failed media copy cleanup = response=%#v objects=%d before=%d", failedMediaCopy, objectServer.objectCount(), objectCountBeforeFailure)
+	}
+
+	restoreAssetInsertFailure := rejectPersonalAssetInsert(t, member.Data.User.ID)
+	objectCountBeforeDBFailure := objectServer.objectCount()
+	dbFailedMediaCopy := doJSON[model.Asset](t, http.MethodPost, server.URL+"/api/v1/enterprise/assets/"+created.Data.ID+"/copy", member.Data.Token, nil)
+	restoreAssetInsertFailure()
+	if dbFailedMediaCopy.Code != 1 || objectServer.objectCount() != objectCountBeforeDBFailure {
+		t.Fatalf("failed media DB write cleanup = response=%#v objects=%d before=%d", dbFailedMediaCopy, objectServer.objectCount(), objectCountBeforeDBFailure)
+	}
+	personalAfterFailures := doJSON[model.AssetList](t, http.MethodGet, server.URL+"/api/v1/assets?pageSize=100", member.Data.Token, nil)
+	if personalAfterFailures.Code != 0 || len(personalAfterFailures.Data.Items) != 1 || personalAfterFailures.Data.Items[0].FileID != copied.Data.FileID {
+		t.Fatalf("failed media copies left personal records = %#v", personalAfterFailures)
+	}
 	preview := doJSON[enterpriseAssetView](t, http.MethodGet, server.URL+"/api/v1/enterprise/assets/"+created.Data.ID, member.Data.Token, nil)
 	if preview.Code != 0 || preview.Data.FileID != uploaded.Data.ID || preview.Data.URL == "" {
 		t.Fatalf("member enterprise image preview = %#v", preview)
@@ -146,6 +180,14 @@ func TestEnterpriseMediaFilesAndAssetsAreSharedReadOnlyWithMembersThroughHTTP(t 
 	})
 	if videoFile.Code != 0 || videoAsset.Code != 0 || videoAsset.Data.Type != model.AssetTypeVideo || videoAsset.Data.URL == "" || bytes.Contains(videoRaw, []byte(`"s3Key"`)) {
 		t.Fatalf("enterprise video file=%#v asset=%#v raw=%s", videoFile, videoAsset, videoRaw)
+	}
+	copiedVideo := doJSON[model.Asset](t, http.MethodPost, server.URL+"/api/v1/enterprise/assets/"+videoAsset.Data.ID+"/copy", owner.Data.Token, nil)
+	if copiedVideo.Code != 0 || copiedVideo.Data.Type != model.AssetTypeVideo || copiedVideo.Data.UserID != owner.Data.User.ID || copiedVideo.Data.FileID == "" || copiedVideo.Data.FileID == videoFile.Data.ID {
+		t.Fatalf("owner copied enterprise video asset = %#v", copiedVideo)
+	}
+	videoCopyStatus, videoCopyContent := doRawRequest(t, http.MethodGet, server.URL+"/api/v1/files/"+copiedVideo.Data.FileID+"/content", owner.Data.Token, "", nil)
+	if videoCopyStatus != http.StatusOK || string(videoCopyContent) != "video-v1" {
+		t.Fatalf("copied personal video content status=%d content=%q", videoCopyStatus, videoCopyContent)
 	}
 	videos := doJSON[enterpriseAssetList](t, http.MethodGet, server.URL+"/api/v1/enterprise/assets?type=video", member.Data.Token, nil)
 	if videos.Code != 0 || videos.Data.Total != 1 || len(videos.Data.Items) != 1 || videos.Data.Items[0].ID != videoAsset.Data.ID {
@@ -207,6 +249,14 @@ func TestEnterpriseMediaFilesAndAssetsAreSharedReadOnlyWithMembersThroughHTTP(t 
 	if missingFile.Code != 1 || missingFile.Msg != "文件不存在或无权访问" {
 		t.Fatalf("deleted enterprise asset file remained readable = %#v", missingFile)
 	}
+	personalCopyAfterSourceDelete := doJSON[enterpriseFileView](t, http.MethodGet, server.URL+"/api/v1/files/"+copied.Data.FileID, member.Data.Token, nil)
+	if personalCopyAfterSourceDelete.Code != 0 || personalCopyAfterSourceDelete.Data.ID != copied.Data.FileID {
+		t.Fatalf("copied personal file disappeared with source asset = %#v", personalCopyAfterSourceDelete)
+	}
+	status, content = doRawRequest(t, http.MethodGet, server.URL+"/api/v1/files/"+copied.Data.FileID+"/content", member.Data.Token, "", nil)
+	if status != http.StatusOK || string(content) != "image-v1" {
+		t.Fatalf("copied personal image after source deletion status=%d content=%q", status, content)
+	}
 
 	banned := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+memberCreated.Data.ID+"/status", owner.Data.Token, map[string]string{"status": "ban"})
 	if banned.Code != 0 || banned.Data.Status != model.UserStatusBan {
@@ -223,6 +273,11 @@ func TestEnterpriseMediaFilesAndAssetsAreSharedReadOnlyWithMembersThroughHTTP(t 
 	disabledOwnerFile := doJSON[enterpriseFileView](t, http.MethodGet, server.URL+"/api/v1/enterprise/files/"+videoFile.Data.ID, owner.Data.Token, nil)
 	if disabledOwnerFile.Code != 1 || disabledOwnerFile.Data.URL != "" {
 		t.Fatalf("disabled enterprise received media URL = %#v", disabledOwnerFile)
+	}
+	doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.ID+"/status", admin.Data.Token, map[string]string{"status": "active"})
+	personalVideoAfterReenable := doJSON[enterpriseFileView](t, http.MethodGet, server.URL+"/api/v1/files/"+copiedVideo.Data.FileID, owner.Data.Token, nil)
+	if personalVideoAfterReenable.Code != 0 || personalVideoAfterReenable.Data.ID != copiedVideo.Data.FileID {
+		t.Fatalf("enterprise disable removed personal video copy = %#v", personalVideoAfterReenable)
 	}
 }
 
@@ -281,38 +336,114 @@ func doRawRequest(t *testing.T, method, endpoint, token, contentType string, bod
 	return resp.StatusCode, content
 }
 
-func newObjectStorageStub(t *testing.T) *httptest.Server {
+type objectStorageStub struct {
+	*httptest.Server
+	mu         sync.Mutex
+	objects    map[string][]byte
+	failCopies int
+}
+
+func newObjectStorageStub(t *testing.T) *objectStorageStub {
 	t.Helper()
-	var mu sync.Mutex
-	objects := map[string][]byte{}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		defer mu.Unlock()
+	stub := &objectStorageStub{objects: map[string][]byte{}}
+	stub.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		stub.mu.Lock()
+		defer stub.mu.Unlock()
 		switch r.Method {
 		case http.MethodPut:
+			if r.Header.Get("X-Amz-Copy-Source") != "" {
+				if stub.failCopies > 0 {
+					stub.failCopies--
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				source := strings.TrimPrefix(r.Header.Get("X-Amz-Copy-Source"), "/")
+				source, _ = url.PathUnescape(source)
+				if !strings.Contains(source, "/") {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				content, ok := stub.objects["/"+source]
+				if !ok {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				stub.objects[r.URL.Path] = append([]byte(nil), content...)
+				w.Header().Set("ETag", `"test-etag"`)
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`<CopyObjectResult><ETag>"test-etag"</ETag></CopyObjectResult>`))
+				return
+			}
 			content, err := io.ReadAll(r.Body)
 			if err != nil {
 				t.Errorf("read object upload: %v", err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
-			objects[r.URL.Path] = content
+			stub.objects[r.URL.Path] = content
 			w.Header().Set("ETag", `"test-etag"`)
 			w.WriteHeader(http.StatusOK)
 		case http.MethodGet:
-			content, ok := objects[r.URL.Path]
+			content, ok := stub.objects[r.URL.Path]
 			if !ok {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
 			_, _ = w.Write(content)
 		case http.MethodDelete:
-			delete(objects, r.URL.Path)
+			delete(stub.objects, r.URL.Path)
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	}))
-	t.Cleanup(server.Close)
-	return server
+	t.Cleanup(stub.Close)
+	return stub
+}
+
+func (stub *objectStorageStub) objectCount() int {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	return len(stub.objects)
+}
+
+func (stub *objectStorageStub) failNextCopy() {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	stub.failCopies = 10
+}
+
+func (stub *objectStorageStub) clearCopyFailure() {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	stub.failCopies = 0
+}
+
+func rejectPersonalAssetInsert(t *testing.T, userID string) func() {
+	t.Helper()
+	db, err := repository.DB()
+	if err != nil {
+		t.Fatalf("get database: %v", err)
+	}
+	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")
+	functionName := "reject_asset_copy_" + suffix
+	triggerName := "reject_asset_copy_trigger_" + suffix
+	if err := db.Exec(fmt.Sprintf(`CREATE FUNCTION %s() RETURNS trigger AS $$
+BEGIN
+	IF NEW.user_id = '%s' AND NEW.enterprise_id IS NULL THEN
+		RAISE EXCEPTION 'test asset copy failure';
+	END IF;
+	RETURN NEW;
+END; $$ LANGUAGE plpgsql`, functionName, userID)).Error; err != nil {
+		t.Fatalf("create asset failure function: %v", err)
+	}
+	if err := db.Exec(fmt.Sprintf("CREATE TRIGGER %s BEFORE INSERT ON assets FOR EACH ROW EXECUTE FUNCTION %s()", triggerName, functionName)).Error; err != nil {
+		t.Fatalf("create asset failure trigger: %v", err)
+	}
+	cleanup := func() {
+		_ = db.Exec(fmt.Sprintf("DROP TRIGGER IF EXISTS %s ON assets", triggerName)).Error
+		_ = db.Exec(fmt.Sprintf("DROP FUNCTION IF EXISTS %s()", functionName)).Error
+	}
+	t.Cleanup(cleanup)
+	return cleanup
 }

@@ -136,6 +136,20 @@ func DeleteEnterpriseAsset(w http.ResponseWriter, r *http.Request, id string) {
 	OK(w, map[string]string{"id": id, "deletedAt": time.Now().Format(time.RFC3339)})
 }
 
+func CopyEnterpriseAsset(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	result, err := service.CopyEnterpriseAsset(r.Context(), user, id)
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, result)
+}
+
 func AdminAssets(w http.ResponseWriter, r *http.Request) {
 	// Admin sees all assets (userID empty), using parseQuery for type/keyword filter.
 	q := parseQuery(r)

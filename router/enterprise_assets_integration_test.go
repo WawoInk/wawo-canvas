@@ -9,6 +9,7 @@ import (
 
 	"github.com/basketikun/infinite-canvas/config"
 	"github.com/basketikun/infinite-canvas/model"
+	"github.com/basketikun/infinite-canvas/repository"
 	"github.com/basketikun/infinite-canvas/router"
 	"github.com/basketikun/infinite-canvas/service"
 	"github.com/google/uuid"
@@ -110,6 +111,11 @@ func TestEnterpriseTextAssetsAreSharedWithinEnterpriseThroughHTTP(t *testing.T) 
 		t.Fatalf("member enterprise asset detail = %#v", viewed)
 	}
 
+	copied := doJSON[model.Asset](t, http.MethodPost, server.URL+"/api/v1/enterprise/assets/"+created.Data.ID+"/copy", member.Data.Token, nil)
+	if copied.Code != 0 || copied.Data.ID == "" || copied.Data.ID == created.Data.ID || copied.Data.UserID != member.Data.User.ID || copied.Data.EnterpriseID != nil || copied.Data.Type != model.AssetTypeText || copied.Data.Content != "更新后的共享文本。" {
+		t.Fatalf("member copied enterprise text asset = %#v", copied)
+	}
+
 	deleted := doJSON[map[string]string](t, http.MethodDelete, server.URL+"/api/v1/enterprise/assets/"+created.Data.ID, owner.Data.Token, nil)
 	if deleted.Code != 0 || deleted.Data["id"] != created.Data.ID {
 		t.Fatalf("deleted enterprise asset = %#v", deleted)
@@ -117,6 +123,21 @@ func TestEnterpriseTextAssetsAreSharedWithinEnterpriseThroughHTTP(t *testing.T) 
 	missing := doJSON[enterpriseAssetView](t, http.MethodGet, server.URL+"/api/v1/enterprise/assets/"+created.Data.ID, member.Data.Token, nil)
 	if missing.Code != 1 || missing.Msg != "素材不存在或无权访问" {
 		t.Fatalf("deleted enterprise asset remained readable = %#v", missing)
+	}
+	personalAfterDelete := doJSON[model.AssetList](t, http.MethodGet, server.URL+"/api/v1/assets?pageSize=100", member.Data.Token, nil)
+	if personalAfterDelete.Code != 0 || len(personalAfterDelete.Data.Items) != 1 || personalAfterDelete.Data.Items[0].ID != copied.Data.ID || personalAfterDelete.Data.Items[0].Content != copied.Data.Content {
+		t.Fatalf("copied personal text asset disappeared with source = %#v", personalAfterDelete)
+	}
+	db, err := repository.DB()
+	if err != nil {
+		t.Fatalf("get database: %v", err)
+	}
+	if err := db.Model(&model.User{}).Where("id = ?", member.Data.User.ID).Updates(map[string]any{"enterprise_id": nil, "enterprise_role": nil}).Error; err != nil {
+		t.Fatalf("leave enterprise: %v", err)
+	}
+	personalAfterLeave := doJSON[model.AssetList](t, http.MethodGet, server.URL+"/api/v1/assets?pageSize=100", member.Data.Token, nil)
+	if personalAfterLeave.Code != 0 || len(personalAfterLeave.Data.Items) != 1 || personalAfterLeave.Data.Items[0].ID != copied.Data.ID {
+		t.Fatalf("copied personal text asset disappeared after leaving enterprise = %#v", personalAfterLeave)
 	}
 }
 
@@ -151,6 +172,14 @@ func TestEnterpriseAssetRolesAndScopeAreEnforcedThroughHTTP(t *testing.T) {
 	created := doJSON[enterpriseAssetView](t, http.MethodPost, server.URL+"/api/v1/enterprise/assets", ownerA.Data.Token, map[string]any{"type": "text", "title": "企业 A 素材", "content": "仅企业 A 可读"})
 	if created.Code != 0 || created.Data.EnterpriseID != enterpriseA.ID || created.Data.CreatorName != "企业 A 负责人" {
 		t.Fatalf("enterprise asset creator = %#v", created)
+	}
+	for label, response := range map[string]apiResponse[model.Asset]{
+		"cross-enterprise copy": doJSON[model.Asset](t, http.MethodPost, server.URL+"/api/v1/enterprise/assets/"+created.Data.ID+"/copy", ownerB.Data.Token, nil),
+		"personal copy":         doJSON[model.Asset](t, http.MethodPost, server.URL+"/api/v1/enterprise/assets/"+created.Data.ID+"/copy", personal.Data.Token, nil),
+	} {
+		if response.Code != 1 || response.Msg != "素材不存在或无权访问" && response.Msg != "无权限访问企业素材库" {
+			t.Fatalf("%s = %#v", label, response)
+		}
 	}
 
 	for label, response := range map[string]apiResponse[enterpriseAssetView]{

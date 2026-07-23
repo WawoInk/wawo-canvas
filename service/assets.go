@@ -185,6 +185,66 @@ func DeleteEnterpriseAsset(current model.AuthUser, id string) error {
 	return nil
 }
 
+func CopyEnterpriseAsset(ctx context.Context, current model.AuthUser, id string) (model.Asset, error) {
+	enterpriseID, err := enterpriseAssetEnterpriseID(current)
+	if err != nil {
+		return model.Asset{}, err
+	}
+	source, ok, err := repository.GetEnterpriseAsset(enterpriseID, id)
+	if err != nil {
+		return model.Asset{}, err
+	}
+	if !ok {
+		return model.Asset{}, safeMessageError{message: "素材不存在或无权访问"}
+	}
+	if source.Type == model.AssetTypeText {
+		source.ID = ""
+		source.UserID = current.ID
+		source.EnterpriseID = nil
+		source.CreatorName = ""
+		source.URL = ""
+		source.FileID = ""
+		source.CreatedAt = ""
+		source.UpdatedAt = ""
+		return SaveAsset(current.ID, source)
+	}
+
+	if source.FileID == "" {
+		return model.Asset{}, safeMessageError{message: "素材不存在或无权访问"}
+	}
+	sourceFile, ok, err := repository.GetEnterpriseFileByID(source.FileID, enterpriseID)
+	if err != nil {
+		return model.Asset{}, err
+	}
+	if !ok {
+		return model.Asset{}, safeMessageError{message: "素材不存在或无权访问"}
+	}
+	if source.Type == model.AssetTypeImage && sourceFile.FileType != "images" || source.Type == model.AssetTypeVideo && sourceFile.FileType != "videos" {
+		return model.Asset{}, safeMessageError{message: "素材不存在或无权访问"}
+	}
+
+	fileID := uuid.NewString()
+	targetKey := userFileKey(fileID, current.ID, nil, sourceFile.FileType, sourceFile.OriginalName)
+	if err := S3Copy(ctx, sourceFile.S3Key, targetKey); err != nil {
+		return model.Asset{}, err
+	}
+	now := time.Now().Format(time.RFC3339)
+	asset := model.Asset{
+		ID: newID("asset"), UserID: current.ID, Title: source.Title, Type: source.Type, Tags: source.Tags, Category: source.Category,
+		Description: source.Description, Content: source.Content, FileID: fileID, Width: source.Width, Height: source.Height,
+		Bytes: sourceFile.Bytes, MimeType: sourceFile.MimeType, CreatedAt: now, UpdatedAt: now,
+	}
+	file := model.UserFile{ID: fileID, UserID: current.ID, FileType: sourceFile.FileType, S3Key: targetKey, OriginalName: sourceFile.OriginalName, MimeType: sourceFile.MimeType, Bytes: sourceFile.Bytes}
+	created, err := repository.CreatePersonalAssetWithFile(file, asset)
+	if err != nil {
+		// ponytail: DB rollback is authoritative; object cleanup remains best effort until a retry queue exists.
+		_ = S3Delete(ctx, targetKey)
+		return model.Asset{}, err
+	}
+	created.URL, _ = S3PresignGet(ctx, targetKey, presignExpiry)
+	return created, nil
+}
+
 func enterpriseAssetEnterpriseID(current model.AuthUser) (string, error) {
 	if current.EnterpriseID == "" || (current.EnterpriseRole != model.EnterpriseRoleOwner && current.EnterpriseRole != model.EnterpriseRoleMember) {
 		return "", safeMessageError{message: "无权限访问企业素材库"}

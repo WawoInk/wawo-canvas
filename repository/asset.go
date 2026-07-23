@@ -158,6 +158,20 @@ func CreateEnterpriseAsset(item model.Asset) (model.Asset, error) {
 	return item, db.Create(&item).Error
 }
 
+func CreatePersonalAssetWithFile(file model.UserFile, asset model.Asset) (model.Asset, error) {
+	db, err := DB()
+	if err != nil {
+		return asset, err
+	}
+	err = db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&file).Error; err != nil {
+			return err
+		}
+		return tx.Create(&asset).Error
+	})
+	return asset, err
+}
+
 func UpdateEnterpriseAsset(item model.Asset) (model.Asset, bool, error) {
 	db, err := DB()
 	if err != nil {

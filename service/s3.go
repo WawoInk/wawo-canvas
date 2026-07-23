@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -57,6 +58,22 @@ func S3Upload(ctx context.Context, key string, reader io.Reader, mimeType string
 		return "", fmt.Errorf("s3 upload: %w", err)
 	}
 	return s3PublicURL(key), nil
+}
+
+func S3Copy(ctx context.Context, sourceKey, targetKey string) error {
+	client, err := S3()
+	if err != nil {
+		return err
+	}
+	_, err = client.CopyObject(ctx, &s3.CopyObjectInput{
+		Bucket:     aws.String(s3Bucket()),
+		CopySource: aws.String(url.PathEscape(s3Bucket() + "/" + sourceKey)),
+		Key:        aws.String(targetKey),
+	})
+	if err != nil {
+		return fmt.Errorf("s3 copy: %w", err)
+	}
+	return nil
 }
 
 // S3PresignPut 生成预签名上传 URL（前端直传 S3）。

@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPost, apiPut, compactApiParams } from "@/services/api/request";
+import type { AssetLibraryItem } from "@/services/api/assets";
 
 export type EnterpriseAssetType = "text" | "image" | "video";
 
@@ -57,6 +58,10 @@ export function updateEnterpriseAsset(token: string, id: string, asset: Enterpri
 
 export function deleteEnterpriseAsset(token: string, id: string) {
     return apiDelete<{ id: string; deletedAt: string }>(`/api/v1/enterprise/assets/${encodeURIComponent(id)}`, token);
+}
+
+export function copyEnterpriseAsset(token: string, id: string) {
+    return apiPost<AssetLibraryItem>(`/api/v1/enterprise/assets/${encodeURIComponent(id)}/copy`, undefined, token);
 }
 
 export function uploadEnterpriseFile(token: string, fileType: EnterpriseFile["fileType"], file: File) {

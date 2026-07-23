@@ -118,6 +118,9 @@ func New() *gin.Engine {
 	v1.DELETE("/enterprise/assets/:id", func(c *gin.Context) {
 		handler.DeleteEnterpriseAsset(c.Writer, c.Request, c.Param("id"))
 	})
+	v1.POST("/enterprise/assets/:id/copy", func(c *gin.Context) {
+		handler.CopyEnterpriseAsset(c.Writer, c.Request, c.Param("id"))
+	})
 	v1.POST("/enterprise/files", gin.WrapF(handler.UploadEnterpriseFile))
 	v1.GET("/enterprise/files/:id/content", func(c *gin.Context) {
 		handler.DownloadEnterpriseFile(c.Writer, c.Request, c.Param("id"))

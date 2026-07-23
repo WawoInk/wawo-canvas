@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, PencilLine, Plus, Search, Trash2, Upload as UploadIcon } from "lucide-react";
+import { Download, FolderPlus, PencilLine, Plus, Search, Trash2, Upload as UploadIcon } from "lucide-react";
 import { saveAs } from "file-saver";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -12,6 +12,7 @@ import { formatBytes } from "@/lib/image-utils";
 import { fetchEnterpriseAccountSummary } from "@/services/api/auth";
 import {
     createEnterpriseAsset,
+    copyEnterpriseAsset,
     deleteEnterpriseAsset,
     deleteEnterpriseFile,
     downloadEnterpriseFile,
@@ -23,6 +24,7 @@ import {
     type EnterpriseAssetType,
 } from "@/services/api/enterprise-assets";
 import { useUserStore } from "@/stores/use-user-store";
+import { useAssetStore } from "@/stores/use-asset-store";
 import { buildEnterpriseAssetInput, type EnterpriseAssetFormDraft, type EnterpriseAssetMedia } from "./enterprise-asset-form";
 import { defaultEnterpriseAssetQuery, enterpriseAssetQueryKey, updateEnterpriseAssetQuery, type EnterpriseAssetQuery } from "./enterprise-asset-query";
 
@@ -36,6 +38,7 @@ export default function EnterpriseAssetsPage() {
     const copyText = useCopyText();
     const token = useUserStore((state) => state.token);
     const user = useUserStore((state) => state.user);
+    const refreshPersonalAssets = useAssetStore((state) => state.refreshFromServer);
     const capabilities = enterpriseCapabilities(user);
     const [query, setQuery] = useState<EnterpriseAssetQuery>(defaultEnterpriseAssetQuery);
     const [keyword, setKeyword] = useState("");
@@ -105,6 +108,14 @@ export default function EnterpriseAssetsPage() {
             message.success("企业素材已删除");
         },
         onError: (error) => message.error(error instanceof Error ? error.message : "删除失败"),
+    });
+    const copyMutation = useMutation({
+        mutationFn: (asset: EnterpriseAsset) => copyEnterpriseAsset(token, asset.id),
+        onSuccess: async (_, asset) => {
+            await refreshPersonalAssets();
+            message.success(`“${asset.title}”已加入我的素材`);
+        },
+        onError: (error) => message.error(error instanceof Error ? error.message : "加入我的素材失败"),
     });
     const downloadMutation = useMutation({
         mutationFn: async (asset: EnterpriseAsset) => {
@@ -231,6 +242,15 @@ export default function EnterpriseAssetsPage() {
                                             <Button type="link" size="small" onClick={() => setPreview(asset)}>
                                                 查看
                                             </Button>
+                                            <Button
+                                                type="link"
+                                                size="small"
+                                                icon={<FolderPlus className="size-4" />}
+                                                loading={copyMutation.isPending && copyMutation.variables?.id === asset.id}
+                                                onClick={() => copyMutation.mutate(asset)}
+                                            >
+                                                加入我的素材
+                                            </Button>
                                             {asset.type !== "text" ? (
                                                 <Button
                                                     type="text"
@@ -321,15 +341,24 @@ export default function EnterpriseAssetsPage() {
                     title={preview?.title || "素材详情"}
                     open={Boolean(preview)}
                     footer={
-                        preview?.type === "text" ? (
-                            <Button type="primary" onClick={() => copyText(preview.content, "素材内容已复制")}>
-                                复制内容
+                        <Space>
+                            {preview?.type === "text" ? (
+                                <Button type="primary" onClick={() => copyText(preview.content, "素材内容已复制")}>
+                                    复制内容
+                                </Button>
+                            ) : (
+                                <Button type="primary" icon={<Download className="size-4" />} loading={downloadMutation.isPending && downloadMutation.variables?.id === preview?.id} onClick={() => preview && downloadMutation.mutate(preview)}>
+                                    下载文件
+                                </Button>
+                            )}
+                            <Button
+                                icon={<FolderPlus className="size-4" />}
+                                loading={copyMutation.isPending && copyMutation.variables?.id === preview?.id}
+                                onClick={() => preview && copyMutation.mutate(preview)}
+                            >
+                                加入我的素材
                             </Button>
-                        ) : (
-                            <Button type="primary" icon={<Download className="size-4" />} loading={downloadMutation.isPending && downloadMutation.variables?.id === preview?.id} onClick={() => preview && downloadMutation.mutate(preview)}>
-                                下载文件
-                            </Button>
-                        )
+                        </Space>
                     }
                     destroyOnHidden
                     onCancel={() => setPreview(null)}

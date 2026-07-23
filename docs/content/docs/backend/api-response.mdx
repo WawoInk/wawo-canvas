@@ -98,6 +98,7 @@ description: 后端统一响应信封与结构化生成错误
 | `POST` | `/api/v1/enterprise/assets` | 主账号新增文本或已上传媒体素材；媒体使用 `fileId` 关联企业文件 |
 | `PUT` | `/api/v1/enterprise/assets/{id}` | 主账号更新本企业素材元数据或媒体关联 |
 | `DELETE` | `/api/v1/enterprise/assets/{id}` | 主账号删除本企业素材及其关联企业文件记录 |
+| `POST` | `/api/v1/enterprise/assets/{id}/copy` | 当前企业主账号或成员将本企业素材复制为自己的个人素材；媒体服务端复制为新的个人文件 |
 | `POST` | `/api/v1/enterprise/files` | 主账号上传图片/视频企业文件，表单字段为 `fileType` 和 `file` |
 | `GET` | `/api/v1/enterprise/files/{id}` | 企业有效账号读取文件元数据和短期预签名 `url` |
 | `GET` | `/api/v1/enterprise/files/{id}/content` | 企业有效账号下载文件内容 |
@@ -105,3 +106,5 @@ description: 后端统一响应信封与结构化生成错误
 | `DELETE` | `/api/v1/enterprise/files/{id}` | 主账号删除企业文件 |
 
 素材和文件响应只返回短期预签名 `url`，不返回原始对象存储 Key。个人 `/api/v1/files` 的列表、详情和上传确认响应也使用 `url` 字段；现有 Canvas 仍通过 `fileId` 重新读取该 URL。文件读取、下载、签名、更新和删除分别执行企业范围与角色校验；企业或成员停用后不再签发新的媒体 URL。请求体中的素材 ID、文件 ID、企业 ID 和创建者 ID均不会改变服务端授权范围。企业素材响应包含 `enterpriseId`、创建者 `userId/creatorName`，但不会写入个人素材同步缓存。
+
+复制接口成功后返回新的个人素材记录。文本只创建个人素材记录；图片和视频通过对象存储服务端复制创建新的个人文件和个人素材，返回的 `fileId` 与企业源文件不同。复制前仍按当前账号推导企业范围，源企业素材删除或源文件失效不会影响已完成的个人副本；对象复制失败或数据库事务回滚时不保留可见个人记录。

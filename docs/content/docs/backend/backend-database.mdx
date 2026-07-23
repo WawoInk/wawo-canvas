@@ -45,6 +45,8 @@ description: 核心数据表和第一方生成任务事务约束
 
 企业媒体按需返回短期预签名 URL，API 不返回原始 S3 Key。企业素材使用独立 API 按需读取，不进入个人素材 Zustand store、IndexedDB 增量同步或 WebDAV 清单；删除企业素材时同步移除其关联企业文件记录。
 
+企业素材复制不复用源 `assets.id` 或 `user_files.id`。文本复制直接创建 `enterprise_id IS NULL` 的个人素材；媒体复制先由对象存储服务端生成个人对象，再在一个 PostgreSQL 事务中写入个人 `user_files` 和 `assets`，两条记录的 `user_id` 都是当前认证账号。事务失败时回滚数据库记录并删除新对象；源企业素材或企业文件删除后，个人副本仍按个人文件和个人素材权限读取。
+
 ## generation_tasks
 
 `generation_tasks` 是第一方生成、兼容生成历史和后台恢复共用的任务事实表。第一方任务使用以下生命周期：
