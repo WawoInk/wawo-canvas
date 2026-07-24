@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { App, Button, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Skeleton, Space, Table, Tag } from "antd";
+import { App, Button, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Skeleton, Space, Table, Tabs, Tag } from "antd";
 import { nanoid } from "nanoid";
 
 import { enterpriseCapabilities } from "@/lib/account-access";
@@ -23,6 +23,7 @@ import {
     type EnterpriseMember,
 } from "@/services/api/auth";
 import { useUserStore } from "@/stores/use-user-store";
+import { AccountLogs } from "./account-logs";
 
 const platformRoleLabels = { guest: "访客", user: "普通用户", admin: "平台管理员" } as const;
 const enterpriseRoleLabels = { owner: "企业主账号", member: "企业成员" } as const;
@@ -48,6 +49,7 @@ export default function AccountPage() {
     const [enterpriseForm] = Form.useForm();
     const [summary, setSummary] = useState<EnterpriseAccountSummary | null>(null);
     const [summaryError, setSummaryError] = useState("");
+    const [activeSection, setActiveSection] = useState("account");
     const [profileSaving, setProfileSaving] = useState(false);
     const [passwordSaving, setPasswordSaving] = useState(false);
     const [enterpriseSaving, setEnterpriseSaving] = useState(false);
@@ -122,7 +124,16 @@ export default function AccountPage() {
                     <h1 className="mt-3 text-3xl font-semibold">账户设置</h1>
                 </header>
 
-                <section className="rounded-2xl border border-border bg-card p-6">
+                <Tabs
+                    activeKey={activeSection}
+                    items={[
+                        { key: "account", label: "账户信息" },
+                        { key: "logs", label: "日志记录" },
+                    ]}
+                    onChange={setActiveSection}
+                />
+
+                <section hidden={activeSection !== "account"} className="rounded-2xl border border-border bg-card p-6">
                     <h2 className="text-lg font-semibold">账户概况</h2>
                     <Descriptions
                         className="mt-5"
@@ -136,7 +147,7 @@ export default function AccountPage() {
                     />
                 </section>
 
-                <section className="rounded-2xl border border-border bg-card p-6">
+                <section hidden={activeSection !== "account"} className="rounded-2xl border border-border bg-card p-6">
                     <h2 className="text-lg font-semibold">个人资料</h2>
                     <Form form={profileForm} layout="vertical" requiredMark={false} initialValues={{ displayName: user.displayName, email: user.email }} onFinish={saveProfile} className="mt-5 max-w-xl">
                         <Form.Item label="昵称" name="displayName">
@@ -151,7 +162,7 @@ export default function AccountPage() {
                     </Form>
                 </section>
 
-                <section className="rounded-2xl border border-border bg-card p-6">
+                <section hidden={activeSection !== "account"} className="rounded-2xl border border-border bg-card p-6">
                     <h2 className="text-lg font-semibold">修改密码</h2>
                     <Form form={passwordForm} layout="vertical" requiredMark={false} onFinish={changePassword} className="mt-5 max-w-xl">
                         <Form.Item label="当前密码" name="currentPassword" extra="通过第三方账号登录且尚未设置本地密码时可留空">
@@ -178,7 +189,7 @@ export default function AccountPage() {
                 </section>
 
                 {capabilities.showSummary ? (
-                    <section className="rounded-2xl border border-border bg-card p-6">
+                    <section hidden={activeSection !== "account"} className="rounded-2xl border border-border bg-card p-6">
                         <h2 className="text-lg font-semibold">企业概况</h2>
                         {!summary && !summaryError ? <Skeleton active paragraph={{ rows: 2 }} className="mt-5" /> : null}
                         {summaryError ? <p className="mt-5 text-sm text-red-500">{summaryError}</p> : null}
@@ -209,12 +220,13 @@ export default function AccountPage() {
                     </section>
                 ) : null}
 
-                {capabilities.canManageMembers ? (
+                {activeSection === "account" && capabilities.canManageMembers ? (
                     <>
                         <EnterpriseMembers onCreated={() => setSummary((current) => (current ? { ...current, memberCount: current.memberCount + 1 } : current))} />
                         <EnterpriseCreditLogs key={user.id} />
                     </>
                 ) : null}
+                {activeSection === "logs" ? <AccountLogs key={user.id} /> : null}
             </div>
         </main>
     );

@@ -48,22 +48,27 @@ export interface GenerationTaskList<T> {
     total: number;
 }
 
+export interface GenerationTaskItem {
+    id: string;
+    taskType: string;
+    source: string;
+    provider: string;
+    model: string;
+    status: string;
+    credits: number;
+    latencyMs: number;
+    upstreamTaskId: string;
+    traceId: string;
+    errorCode?: string;
+    errorMessage?: string;
+    metadata: string;
+    intentKind?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface GenerationTaskDetail {
-    task: {
-        id: string;
-        userId: string;
-        taskType: string;
-        provider: string;
-        model: string;
-        status: string;
-        credits: number;
-        latencyMs: number;
-        upstreamTaskId: string;
-        errorCode: string;
-        errorMessage: string;
-        createdAt: string;
-        updatedAt: string;
-    };
+    task: GenerationTaskItem;
     payload?: {
         requestHeaders: string;
         requestBody: string;
@@ -85,6 +90,10 @@ export async function fetchVideoHistory(page = 1, pageSize = 50, source?: string
 
 export async function fetchImageHistory(page = 1, pageSize = 50, source?: string): Promise<GenerationTaskList<ImageHistoryItem>> {
     return fetchGenerationHistory<ImageHistoryItem>("image", page, pageSize, source);
+}
+
+export async function fetchGenerationTasks(page = 1, pageSize = 10): Promise<GenerationTaskList<GenerationTaskItem>> {
+    return apiGet<GenerationTaskList<GenerationTaskItem>>(`/api/v1/generation-tasks?page=${page}&pageSize=${pageSize}`, undefined, authToken());
 }
 
 export async function fetchGenerationHistory<T>(taskType: string, page = 1, pageSize = 50, source?: string): Promise<GenerationTaskList<T>> {

@@ -80,6 +80,13 @@ export type EnterpriseCreditLogList = {
     total: number;
 };
 
+export type UserCreditLog = Omit<EnterpriseCreditLog, "username" | "displayName">;
+
+export type UserCreditLogList = {
+    items: UserCreditLog[];
+    total: number;
+};
+
 export async function login(payload: AuthPayload) {
     return apiPost<AuthSession>("/api/auth/login", payload);
 }
@@ -114,6 +121,10 @@ export async function fetchEnterpriseMembers(token: string, query: { keyword?: s
 
 export async function fetchEnterpriseCreditLogs(token: string, query: { memberId?: string; keyword?: string; type?: string; page?: number; pageSize?: number } = {}) {
     return apiGet<EnterpriseCreditLogList>("/api/v1/enterprise/credit-logs", compactApiParams(query), token);
+}
+
+export async function fetchUserCreditLogs(token: string, query: { keyword?: string; type?: string; page?: number; pageSize?: number } = {}) {
+    return apiGet<UserCreditLogList>("/api/v1/credit-logs", compactApiParams(query), token);
 }
 
 export async function createEnterpriseMember(token: string, payload: { username: string; password: string; displayName?: string; email?: string }) {
