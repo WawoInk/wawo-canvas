@@ -64,7 +64,7 @@ test("账户日志明确展示用户操作和积分变动", () => {
     assert.match(creditHTML, /调用模型 video-model/);
 });
 
-test("账户设置提供日志记录页签", () => {
+test("企业主账户设置提供账户、日志和企业信息页签", () => {
     const session = {
         token: "token-1",
         user: {
@@ -75,6 +75,10 @@ test("账户设置提供日志记录页签", () => {
             avatarUrl: "",
             role: "user",
             credits: 88,
+            enterpriseId: "enterprise-1",
+            enterpriseName: "测试企业",
+            enterpriseRole: "owner",
+            enterpriseStatus: "active",
             createdAt: "2026-07-24T08:00:00Z",
             updatedAt: "2026-07-24T08:00:00Z",
         },
@@ -88,6 +92,10 @@ test("账户设置提供日志记录页签", () => {
 
     assert.match(html, /账户信息/);
     assert.match(html, /日志记录/);
+    assert.match(html, /企业信息/);
+    assert.match(html, /<section hidden=""[^>]*><h2[^>]*>企业概况<\/h2>/);
+    assert.doesNotMatch(html, /企业成员/);
+    assert.doesNotMatch(html, /企业积分流水/);
 });
 
 test("日志记录提供使用记录和积分记录视图", () => {

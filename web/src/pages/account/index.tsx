@@ -129,6 +129,7 @@ export default function AccountPage() {
                     items={[
                         { key: "account", label: "账户信息" },
                         { key: "logs", label: "日志记录" },
+                        ...(capabilities.showSummary ? [{ key: "enterprise", label: "企业信息" }] : []),
                     ]}
                     onChange={setActiveSection}
                 />
@@ -189,7 +190,7 @@ export default function AccountPage() {
                 </section>
 
                 {capabilities.showSummary ? (
-                    <section hidden={activeSection !== "account"} className="rounded-2xl border border-border bg-card p-6">
+                    <section hidden={activeSection !== "enterprise"} className="rounded-2xl border border-border bg-card p-6">
                         <h2 className="text-lg font-semibold">企业概况</h2>
                         {!summary && !summaryError ? <Skeleton active paragraph={{ rows: 2 }} className="mt-5" /> : null}
                         {summaryError ? <p className="mt-5 text-sm text-red-500">{summaryError}</p> : null}
@@ -220,7 +221,7 @@ export default function AccountPage() {
                     </section>
                 ) : null}
 
-                {activeSection === "account" && capabilities.canManageMembers ? (
+                {activeSection === "enterprise" && capabilities.canManageMembers ? (
                     <>
                         <EnterpriseMembers onCreated={() => setSummary((current) => (current ? { ...current, memberCount: current.memberCount + 1 } : current))} />
                         <EnterpriseCreditLogs key={user.id} />
