@@ -444,7 +444,6 @@ function TextContent({ node, theme, isEditingContent, textareaRef, mentionRefere
                     style={textStyle}
                     value={node.metadata?.content || ""}
                     references={mentionReferences}
-                    highlightLabels={false}
                     onChange={(value) => onContentChange(node.id, value)}
                     onBlur={onStopEditing}
                     onKeyDown={(event) => {

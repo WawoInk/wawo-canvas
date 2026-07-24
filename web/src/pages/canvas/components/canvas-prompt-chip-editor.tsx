@@ -21,6 +21,7 @@ type Props = {
 };
 
 type MentionState = { query: string };
+const CARET_PLACEHOLDER = "\uFEFF";
 
 export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, className, style, placeholder }: Props) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
@@ -43,7 +44,10 @@ export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, 
         if (!editor) return;
         const referencesChanged = referenceKeyRef.current !== referenceKey;
         referenceKeyRef.current = referenceKey;
-        if (!referencesChanged && serializeEditor(editor) === value) return;
+        if (!referencesChanged && serializeEditor(editor) === value) {
+            ensureTrailingCaretNode(editor);
+            return;
+        }
         const focused = document.activeElement === editor;
         editor.replaceChildren();
         parsePromptTokens(value, activeReferences).forEach((token) => {
@@ -53,6 +57,7 @@ export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, 
                 editor.append(reference ? createChip(reference, theme) : document.createTextNode(token.label));
             }
         });
+        ensureTrailingCaretNode(editor);
         if (focused) placeCaretAtEnd(editor);
     }, [activeReferences, referenceById, referenceKey, theme, value]);
 
@@ -69,6 +74,7 @@ export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, 
     const syncFromEditor = () => {
         const editor = editorRef.current;
         if (!editor) return;
+        ensureTrailingCaretNode(editor);
         onChange(serializeEditor(editor));
         syncMention();
     };
@@ -77,6 +83,7 @@ export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, 
         const selection = window.getSelection();
         if (!editor || !selection?.rangeCount) return;
         const range = selection.getRangeAt(0);
+        if (range.startContainer !== editor && !editor.contains(range.startContainer)) return;
         selectActiveMention(range);
         document.execCommand("insertHTML", false, `${createChip(reference, theme).outerHTML} `);
         closeMention();
@@ -130,6 +137,12 @@ export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, 
                 onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
                     event.stopPropagation();
                     if (event.isComposing || composingRef.current) return;
+                    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
+                        event.preventDefault();
+                        closeMention();
+                        selectEditorContents(editorRef.current);
+                        return;
+                    }
                     if (mention && candidates.length) {
                         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                             event.preventDefault();
@@ -228,12 +241,43 @@ function ReferencePreview({ reference }: { reference: CanvasResourceReference })
 }
 
 function serializeEditor(editor: HTMLElement) {
+    return serializeNodes(editor.childNodes).replace(/\uFEFF/g, "");
+}
+
+function serializeNodes(nodes: NodeListOf<ChildNode>) {
     let result = "";
-    editor.childNodes.forEach((node) => {
-        if (node.nodeType === Node.TEXT_NODE) result += node.textContent || "";
-        else if (node instanceof HTMLElement) result += node.dataset.promptLabel || (node.tagName === "BR" ? "\n" : serializeEditor(node));
+    let seenNode = false;
+    let previousWasBlock = false;
+    nodes.forEach((node) => {
+        const block = node instanceof HTMLElement && (node.tagName === "DIV" || node.tagName === "P");
+        if (block) {
+            if (seenNode && (previousWasBlock || !result.endsWith("\n"))) result += "\n";
+            if (!isPlaceholderBlock(node)) result += serializeNodes(node.childNodes);
+            seenNode = true;
+            previousWasBlock = true;
+            return;
+        }
+        const content = serializeInlineNode(node);
+        if (!content.replace(/\uFEFF/g, "")) return;
+        if (seenNode && previousWasBlock) result += "\n";
+        result += content;
+        seenNode = true;
+        previousWasBlock = false;
     });
-    return result.replace(/\uFEFF/g, "");
+    return result;
+}
+
+function serializeInlineNode(node: ChildNode) {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
+    if (!(node instanceof HTMLElement)) return "";
+    if (node.dataset.promptLabel) return node.dataset.promptLabel;
+    if (node.tagName === "BR") return "\n";
+    return serializeNodes(node.childNodes);
+}
+
+function isPlaceholderBlock(element: HTMLElement) {
+    const children = Array.from(element.childNodes).filter((node) => !(node.nodeType === Node.TEXT_NODE && !(node.textContent || "").replace(/\uFEFF/g, "")));
+    return children.length === 1 && children[0] instanceof HTMLElement && children[0].tagName === "BR";
 }
 
 function selectActiveMention(range: Range) {
@@ -246,25 +290,47 @@ function deleteAdjacentChip(key: string) {
     const selection = window.getSelection();
     if (!selection?.rangeCount || !selection.isCollapsed) return false;
     const range = selection.getRangeAt(0);
-    const previous = key === "Backspace";
-    const container = range.startContainer;
-    const offset = range.startOffset;
-    let node: Node | null;
-    if (container.nodeType === Node.TEXT_NODE) {
-        const text = container.textContent || "";
-        if ((previous && text.slice(0, offset).trim()) || (!previous && text.slice(offset).trim())) return false;
-        node = previous ? container.previousSibling : container.nextSibling;
-    } else node = container.childNodes[previous ? offset - 1 : offset] || null;
-    while (node?.nodeType === Node.TEXT_NODE && !(node.textContent || "").trim()) node = previous ? node.previousSibling : node.nextSibling;
-    if (!(node instanceof HTMLElement) || !node.dataset.promptLabel) return false;
-    if (container.nodeType === Node.TEXT_NODE) {
-        if (previous) range.setStartBefore(node);
-        else range.setEndAfter(node);
-    } else range.selectNode(node);
+    const target = adjacentChipNode(range, key);
+    if (!target) return false;
+    range.selectNode(target);
     selection.removeAllRanges();
     selection.addRange(range);
-    document.execCommand("delete");
-    return true;
+    return document.execCommand("delete");
+}
+
+function adjacentChipNode(range: Range, key: string) {
+    const container = range.startContainer;
+    const offset = range.startOffset;
+    const previous = key === "Backspace";
+    if (container.nodeType === Node.TEXT_NODE) {
+        const text = container.textContent || "";
+        const before = text.slice(0, offset).replace(/\uFEFF/g, "");
+        const after = text.slice(offset).replace(/\uFEFF/g, "");
+        if ((previous && before) || (!previous && after)) return null;
+        return findChipSibling(container, previous);
+    }
+    const children = Array.from(container.childNodes);
+    return findChipSibling(children[previous ? offset - 1 : offset] || container, previous, true);
+}
+
+function findChipSibling(node: Node, previous: boolean, includeSelf = false): HTMLElement | null {
+    let current: Node | null = includeSelf ? node : previous ? node.previousSibling : node.nextSibling;
+    while (current && current.nodeType === Node.TEXT_NODE && !(current.textContent || "").trim()) current = previous ? current.previousSibling : current.nextSibling;
+    return current instanceof HTMLElement && current.dataset.promptLabel ? current : null;
+}
+
+function ensureTrailingCaretNode(editor: HTMLElement) {
+    const last = editor.lastChild;
+    if (last instanceof HTMLElement && last.dataset.promptLabel) editor.append(document.createTextNode(CARET_PLACEHOLDER));
+}
+
+function selectEditorContents(editor: HTMLElement | null) {
+    if (!editor) return;
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
 }
 
 function textBeforeCaret() {

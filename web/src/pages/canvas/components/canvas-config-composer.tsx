@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, KeyboardEvent, MouseEvent, PointerEvent } from "react";
+import type { ClipboardEvent, CSSProperties, KeyboardEvent, MouseEvent, PointerEvent } from "react";
 import { Button, Image } from "antd";
 import { FileText, Image as ImageIcon, Music2, Video, X } from "lucide-react";
 
@@ -23,6 +23,7 @@ type MentionState = {
 };
 
 export const CONFIG_REFERENCE_PATTERN = /@\[node:([^\]]+)\]/g;
+const CARET_PLACEHOLDER = "\uFEFF";
 
 export function CanvasConfigComposer({ value, inputs, onChange, onClose }: CanvasConfigComposerProps) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
@@ -53,11 +54,13 @@ export function CanvasConfigComposer({ value, inputs, onChange, onClose }: Canva
             const input = referenceById.get(token.nodeId);
             if (input) editor.append(createReferenceChip(input, inputs, theme, setImagePreview));
         });
+        ensureTrailingCaretNode(editor);
     }, [inputs, referenceById, theme, tokens]);
 
     const syncFromEditor = () => {
         const editor = editorRef.current;
         if (!editor) return;
+        ensureTrailingCaretNode(editor);
         const next = serializeEditor(editor);
         onChange(next);
         syncMention();
@@ -87,7 +90,7 @@ export function CanvasConfigComposer({ value, inputs, onChange, onClose }: Canva
         const space = document.createTextNode(" ");
         const selection = window.getSelection();
         const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
-        if (range) {
+        if (range && (range.startContainer === editor || editor.contains(range.startContainer))) {
             range.insertNode(space);
             range.insertNode(chip);
             range.setStartAfter(space);
@@ -100,6 +103,12 @@ export function CanvasConfigComposer({ value, inputs, onChange, onClose }: Canva
         }
         closeMention();
         onChange(serializeEditor(editor));
+    };
+
+    const pastePlainText = (event: ClipboardEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
+        requestAnimationFrame(syncFromEditor);
     };
 
     const stopCanvasInteraction = (event: PointerEvent | MouseEvent) => event.stopPropagation();
@@ -142,8 +151,16 @@ export function CanvasConfigComposer({ value, inputs, onChange, onClose }: Canva
                         composingRef.current = false;
                         syncFromEditor();
                     }}
+                    onPaste={pastePlainText}
                     onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
                         event.stopPropagation();
+                        if (event.isComposing || composingRef.current) return;
+                        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
+                            event.preventDefault();
+                            closeMention();
+                            selectEditorContents(editorRef.current);
+                            return;
+                        }
                         if (mention && candidates.length) {
                             if (event.key === "ArrowDown") {
                                 event.preventDefault();
@@ -279,15 +296,39 @@ function serializeEditor(editor: HTMLElement) {
 
 function serializeNodes(nodes: NodeListOf<ChildNode>) {
     let result = "";
+    let seenNode = false;
+    let previousWasBlock = false;
     nodes.forEach((node) => {
-        if (node.nodeType === Node.TEXT_NODE) result += node.textContent || "";
-        if (!(node instanceof HTMLElement)) return;
-        const nodeId = node.dataset.referenceNodeId;
-        if (nodeId) result += `@[node:${nodeId}]`;
-        else if (node.tagName === "BR") result += "\n";
-        else result += serializeNodes(node.childNodes);
+        const block = node instanceof HTMLElement && (node.tagName === "DIV" || node.tagName === "P");
+        if (block) {
+            if (seenNode && (previousWasBlock || !result.endsWith("\n"))) result += "\n";
+            if (!isPlaceholderBlock(node)) result += serializeNodes(node.childNodes);
+            seenNode = true;
+            previousWasBlock = true;
+            return;
+        }
+        const content = serializeInlineNode(node);
+        if (!content.replace(/\uFEFF/g, "")) return;
+        if (seenNode && previousWasBlock) result += "\n";
+        result += content;
+        seenNode = true;
+        previousWasBlock = false;
     });
     return result;
+}
+
+function serializeInlineNode(node: ChildNode) {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
+    if (!(node instanceof HTMLElement)) return "";
+    const nodeId = node.dataset.referenceNodeId;
+    if (nodeId) return `@[node:${nodeId}]`;
+    if (node.tagName === "BR") return "\n";
+    return serializeNodes(node.childNodes);
+}
+
+function isPlaceholderBlock(element: HTMLElement) {
+    const children = Array.from(element.childNodes).filter((node) => !(node.nodeType === Node.TEXT_NODE && !(node.textContent || "").replace(/\uFEFF/g, "")));
+    return children.length === 1 && children[0] instanceof HTMLElement && children[0].tagName === "BR";
 }
 
 function removeActiveMention() {
@@ -307,9 +348,9 @@ function deleteAdjacentReference(key: string) {
     const range = selection.getRangeAt(0);
     const target = adjacentReferenceNode(range, key);
     if (!target) return false;
-    const nextCaretNode = document.createTextNode("");
+    const nextCaretNode = document.createTextNode(CARET_PLACEHOLDER);
     target.replaceWith(nextCaretNode);
-    range.setStart(nextCaretNode, 0);
+    range.setStart(nextCaretNode, nextCaretNode.data.length);
     range.collapse(true);
     selection.removeAllRanges();
     selection.addRange(range);
@@ -322,7 +363,9 @@ function adjacentReferenceNode(range: Range, key: string) {
     const previous = key === "Backspace";
     if (container.nodeType === Node.TEXT_NODE) {
         const text = container.textContent || "";
-        if ((previous && offset > 0) || (!previous && offset < text.length)) return null;
+        const before = text.slice(0, offset).replace(/\uFEFF/g, "");
+        const after = text.slice(offset).replace(/\uFEFF/g, "");
+        if ((previous && before) || (!previous && after)) return null;
         return findReferenceSibling(container, previous);
     }
     const children = Array.from(container.childNodes);
@@ -333,6 +376,20 @@ function findReferenceSibling(node: Node, previous: boolean, includeSelf = false
     let current: Node | null = includeSelf ? node : previous ? node.previousSibling : node.nextSibling;
     while (current && current.nodeType === Node.TEXT_NODE && !(current.textContent || "").trim()) current = previous ? current.previousSibling : current.nextSibling;
     return current instanceof HTMLElement && current.dataset.referenceNodeId ? current : null;
+}
+
+function ensureTrailingCaretNode(editor: HTMLElement) {
+    const last = editor.lastChild;
+    if (last instanceof HTMLElement && last.dataset.referenceNodeId) editor.append(document.createTextNode(CARET_PLACEHOLDER));
+}
+
+function selectEditorContents(editor: HTMLElement | null) {
+    if (!editor) return;
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
 }
 
 function textBeforeCaret() {
