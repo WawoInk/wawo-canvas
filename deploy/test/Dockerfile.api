@@ -1,0 +1,5 @@
+FROM alpine:3.20
+RUN apk add --no-cache postgresql-client
+COPY deploy/test/fixture-api/server /app/server
+EXPOSE 8088
+CMD ["/app/server"]

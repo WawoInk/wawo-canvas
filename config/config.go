@@ -4,26 +4,28 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"strings"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	Port                string `env:"PORT" envDefault:"8080"`
-	AdminUsername       string `env:"ADMIN_USERNAME" envDefault:"admin"`
-	AdminPassword       string `env:"ADMIN_PASSWORD" envDefault:"infinite-canvas"`
-	JWTSecret           string `env:"JWT_SECRET" envDefault:"infinite-canvas"`
-	JWTExpireHours      int    `env:"JWT_EXPIRE_HOURS" envDefault:"168"`
-	DatabaseDSN         string `env:"DATABASE_DSN" envDefault:"postgres://localhost:5432/infinite-canvas?sslmode=disable"`
-	PublicBaseURL       string `env:"PUBLIC_BASE_URL"`
-	LinuxDoAuthorizeURL string `env:"LINUX_DO_AUTHORIZE_URL" envDefault:"https://connect.linux.do/oauth2/authorize"`
-	LinuxDoTokenURL     string `env:"LINUX_DO_TOKEN_URL" envDefault:"https://connect.linux.do/oauth2/token"`
-	LinuxDoUserInfoURL  string `env:"LINUX_DO_USERINFO_URL" envDefault:"https://connect.linux.do/api/user"`
-	AmazonS3URL         string `env:"AMAZON_S3_URL"`
-	AmazonRegion        string `env:"AMAZON_REGION" envDefault:"ap-southeast-1"`
-	AmazonS3AccessKey   string `env:"AMAZON_S3_ACCESS_KEY"`
-	AmazonS3SecretKey   string `env:"AMAZON_S3_SECRET_KEY"`
+	Port                string        `env:"PORT" envDefault:"8080"`
+	ShutdownTimeout     time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"30s"`
+	AdminUsername       string        `env:"ADMIN_USERNAME" envDefault:"admin"`
+	AdminPassword       string        `env:"ADMIN_PASSWORD" envDefault:"infinite-canvas"`
+	JWTSecret           string        `env:"JWT_SECRET" envDefault:"infinite-canvas"`
+	JWTExpireHours      int           `env:"JWT_EXPIRE_HOURS" envDefault:"168"`
+	DatabaseDSN         string        `env:"DATABASE_DSN" envDefault:"postgres://localhost:5432/infinite-canvas?sslmode=disable"`
+	PublicBaseURL       string        `env:"PUBLIC_BASE_URL"`
+	LinuxDoAuthorizeURL string        `env:"LINUX_DO_AUTHORIZE_URL" envDefault:"https://connect.linux.do/oauth2/authorize"`
+	LinuxDoTokenURL     string        `env:"LINUX_DO_TOKEN_URL" envDefault:"https://connect.linux.do/oauth2/token"`
+	LinuxDoUserInfoURL  string        `env:"LINUX_DO_USERINFO_URL" envDefault:"https://connect.linux.do/api/user"`
+	AmazonS3URL         string        `env:"AMAZON_S3_URL"`
+	AmazonRegion        string        `env:"AMAZON_REGION" envDefault:"ap-southeast-1"`
+	AmazonS3AccessKey   string        `env:"AMAZON_S3_ACCESS_KEY"`
+	AmazonS3SecretKey   string        `env:"AMAZON_S3_SECRET_KEY"`
 }
 
 var Cfg Config

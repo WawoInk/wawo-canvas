@@ -1,0 +1,6 @@
+FROM caddy:2-alpine
+ARG BUILD_SHA
+RUN mkdir -p /usr/share/nginx/html \
+    && printf '<!doctype html><html><head><meta name="build-version" content="%s"></head><body>%s</body></html>\n' "$BUILD_SHA" "$BUILD_SHA" > /usr/share/nginx/html/index.html \
+    && printf '%s\n' "$BUILD_SHA" > /usr/share/nginx/html/build-version.txt
+EXPOSE 3000

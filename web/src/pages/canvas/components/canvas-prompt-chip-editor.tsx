@@ -136,7 +136,7 @@ export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, 
                 }}
                 onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
                     event.stopPropagation();
-                    if (event.isComposing || composingRef.current) return;
+                    if (event.nativeEvent.isComposing || composingRef.current) return;
                     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
                         event.preventDefault();
                         closeMention();

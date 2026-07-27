@@ -66,9 +66,28 @@ jobs:
         working-directory: web
         run: bun run format:check
 
+      - name: Session continuity tests
+        working-directory: web
+        run: bun test test/session-monitor.test.ts test/user-session-hydration.test.ts
+
+  deploy-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check CD contract
+        run: deploy/test/cd-workflow.test.sh
+
+      - name: Test production-shaped blue-green deployment
+        run: deploy/test/blue-green.test.sh
+
   # --- Build & push ARM images ---
   build:
-    needs: [go-check, web-lint]
+    needs: [go-check, web-lint, deploy-check]
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4

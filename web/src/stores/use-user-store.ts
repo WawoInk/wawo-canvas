@@ -41,7 +41,7 @@ export const useUserStore = create<UserStore>()(
                     }
                     set({ user, isReady: true, isLoading: false });
                 } catch {
-                    set({ token: "", user: null, isReady: true, isLoading: false });
+                    set({ isReady: true, isLoading: false });
                 }
             },
             login: async (payload) => {
@@ -69,7 +69,7 @@ export const useUserStore = create<UserStore>()(
         }),
         {
             name: AUTH_TOKEN_KEY,
-            partialize: (state) => ({ token: state.token }),
+            partialize: (state) => ({ token: state.token, user: state.user }),
             onRehydrateStorage: () => (state) => {
                 if (state) state.isReady = false;
             },

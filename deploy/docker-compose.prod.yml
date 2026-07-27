@@ -1,3 +1,5 @@
+name: ${COMPOSE_PROJECT_NAME:-infinite-canvas}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -13,33 +15,100 @@ services:
       interval: 3s
       retries: 10
 
-  api:
-    image: infinite-canvas-api:latest
+  edge:
+    image: caddy:2-alpine
+    command: ["caddy", "run", "--config", "/etc/caddy/deploy/active.Caddyfile", "--adapter", "caddyfile"]
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./state/caddy:/etc/caddy/deploy
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:2019/config/ >/dev/null"]
+      interval: ${HEALTH_INTERVAL:-2s}
+      timeout: 2s
+      retries: ${HEALTH_RETRIES:-20}
+
+  api-blue:
+    image: ${API_IMAGE_REPO:-ghcr.io/eldenpdx/infinite-canvas-api}:${BLUE_SHA:-unused}
+    profiles: ["blue"]
     depends_on:
       postgres:
         condition: service_healthy
     env_file:
       - .env
     environment:
-      - PORT=8088
+      PORT: "8088"
+      DEPLOY_SHA: ${BLUE_SHA:-unused}
+      SHUTDOWN_TIMEOUT: ${SHUTDOWN_TIMEOUT:-30s}
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+    stop_grace_period: ${API_STOP_GRACE_PERIOD:-40s}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8088/api/health | grep -qx ok"]
+      interval: ${HEALTH_INTERVAL:-2s}
+      timeout: 2s
+      retries: ${HEALTH_RETRIES:-30}
 
-  web:
-    image: infinite-canvas:latest
-    ports:
-      - "80:80"
-      - "443:443"
+  web-blue:
+    image: ${WEB_IMAGE_REPO:-ghcr.io/eldenpdx/infinite-canvas}:${BLUE_SHA:-unused}
+    profiles: ["blue"]
     depends_on:
-      - api
+      api-blue:
+        condition: service_healthy
+    environment:
+      API_UPSTREAM: api-blue:8088
+    volumes:
+      - ./slot.Caddyfile:/etc/caddy/Caddyfile:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/build-version.txt >/dev/null"]
+      interval: ${HEALTH_INTERVAL:-2s}
+      timeout: 2s
+      retries: ${HEALTH_RETRIES:-20}
+
+  api-green:
+    image: ${API_IMAGE_REPO:-ghcr.io/eldenpdx/infinite-canvas-api}:${GREEN_SHA:-unused}
+    profiles: ["green"]
+    depends_on:
+      postgres:
+        condition: service_healthy
     env_file:
       - .env
+    environment:
+      PORT: "8088"
+      DEPLOY_SHA: ${GREEN_SHA:-unused}
+      SHUTDOWN_TIMEOUT: ${SHUTDOWN_TIMEOUT:-30s}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
+      - ./data:/app/data
     restart: unless-stopped
+    stop_grace_period: ${API_STOP_GRACE_PERIOD:-40s}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8088/api/health | grep -qx ok"]
+      interval: ${HEALTH_INTERVAL:-2s}
+      timeout: 2s
+      retries: ${HEALTH_RETRIES:-30}
+
+  web-green:
+    image: ${WEB_IMAGE_REPO:-ghcr.io/eldenpdx/infinite-canvas}:${GREEN_SHA:-unused}
+    profiles: ["green"]
+    depends_on:
+      api-green:
+        condition: service_healthy
+    environment:
+      API_UPSTREAM: api-green:8088
+    volumes:
+      - ./slot.Caddyfile:/etc/caddy/Caddyfile:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/build-version.txt >/dev/null"]
+      interval: ${HEALTH_INTERVAL:-2s}
+      timeout: 2s
+      retries: ${HEALTH_RETRIES:-20}
 
 volumes:
   pgdata:

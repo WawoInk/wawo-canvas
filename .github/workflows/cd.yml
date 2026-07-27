@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       site:
-        description: '选择部署动作'
+        description: "选择部署动作"
         required: true
         type: choice
         options:
@@ -24,184 +24,215 @@ jobs:
     if: github.ref == 'refs/heads/main'
     name: Deploy (${{ inputs.site }})
     runs-on: ubuntu-latest
+    env:
+      ACTION: ${{ inputs.site }}
+      TARGET_SHA: ${{ github.sha }}
+      PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL || secrets.PUBLIC_BASE_URL || 'https://canvan.ai' }}
+      DEPLOY_ROOT: /opt/infinite-canvas
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compute lowercase GHCR path
-        id: ghcr
+      - name: Configuration — validate required production values
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          DATABASE_DSN: ${{ secrets.DATABASE_DSN }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
         run: |
-          owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
-          echo "owner=${owner}" >> "$GITHUB_OUTPUT"
-          echo "api=ghcr.io/${owner}/infinite-canvas-api:${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          echo "web=ghcr.io/${owner}/infinite-canvas:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          set -Eeuo pipefail
+          for name in SSH_HOST SSH_USER SSH_KEY GHCR_TOKEN ADMIN_USERNAME ADMIN_PASSWORD DATABASE_DSN POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB; do
+            [[ -n "${!name}" ]] || { echo "::error::$name is required"; exit 1; }
+          done
+          trimmed=$(printf '%s' "$JWT_SECRET" | tr -d '[:space:]')
+          [[ -n "$trimmed" && "$trimmed" != "infinite-canvas" ]] || {
+            echo "::error::JWT_SECRET must be explicit, non-empty, and non-default"
+            exit 1
+          }
 
-      # ═══════════════════════════════════════════════════════════════
-      # deploy
-      # ═══════════════════════════════════════════════════════════════
-
-      - name: deploy — sync deploy assets
-        if: inputs.site == 'deploy'
+      - name: Image check — resolve immutable GHCR images
+        id: images
         run: |
-          HOST="${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
-          KEY="$HOME/.ssh/deploy-key"
+          set -Eeuo pipefail
+          owner=$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          echo "owner=$owner" >> "$GITHUB_OUTPUT"
+          echo "api_repo=ghcr.io/$owner/infinite-canvas-api" >> "$GITHUB_OUTPUT"
+          echo "web_repo=ghcr.io/$owner/infinite-canvas" >> "$GITHUB_OUTPUT"
+          echo "api=ghcr.io/$owner/infinite-canvas-api:$TARGET_SHA" >> "$GITHUB_OUTPUT"
+          echo "web=ghcr.io/$owner/infinite-canvas:$TARGET_SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Image check — fail before server changes when deploy images are missing
+        if: env.ACTION == 'deploy'
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          API_IMAGE: ${{ steps.images.outputs.api }}
+          WEB_IMAGE: ${{ steps.images.outputs.web }}
+        run: |
+          set -Eeuo pipefail
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u '${{ steps.images.outputs.owner }}' --password-stdin
+          docker manifest inspect "$API_IMAGE" >/dev/null
+          docker manifest inspect "$WEB_IMAGE" >/dev/null
+
+      - name: Configuration sync — prepare SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -Eeuo pipefail
           mkdir -p "$HOME/.ssh"
-          echo "${{ secrets.SSH_KEY }}" > "$KEY"
-          chmod 600 "$KEY"
+          printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/deploy-key"
+          chmod 600 "$HOME/.ssh/deploy-key"
+          ssh -i "$HOME/.ssh/deploy-key" -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" "mkdir -p '$DEPLOY_ROOT/state' '$DEPLOY_ROOT/data' && chmod 700 '$DEPLOY_ROOT/state'"
 
-          ssh -i "$KEY" -o StrictHostKeyChecking=accept-new "$HOST" "mkdir -p /opt/infinite-canvas"
-          scp -i "$KEY" -o StrictHostKeyChecking=accept-new \
-            deploy/docker-compose.prod.yml \
-            deploy/Caddyfile \
-            "$HOST:/opt/infinite-canvas/"
-
-      - name: deploy — generate .env from secrets and sync
-        if: inputs.site == 'deploy'
+      - name: Authentication — capture the current production JWT
+        id: auth
+        env:
+          AUTH_USERNAME: ${{ secrets.DEPLOY_AUTH_USERNAME || secrets.ADMIN_USERNAME }}
+          AUTH_PASSWORD: ${{ secrets.DEPLOY_AUTH_PASSWORD || secrets.ADMIN_PASSWORD }}
         run: |
-          HOST="${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
-          KEY="$HOME/.ssh/deploy-key"
-
-          cat > /tmp/infinite-canvas.env <<'ENVEOF'
-          ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
-          ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
-          JWT_EXPIRE_HOURS=${{ secrets.JWT_EXPIRE_HOURS }}
-          PORT=8088
-          PUBLIC_BASE_URL=${{ vars.PUBLIC_BASE_URL || secrets.PUBLIC_BASE_URL || 'https://canvan.ai' }}
-          DATABASE_DSN=${{ secrets.DATABASE_DSN }}
-          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
-          AMAZON_S3_URL=${{ secrets.AMAZON_S3_URL }}
-          AMAZON_REGION=${{ secrets.AMAZON_REGION }}
-          AMAZON_S3_ACCESS_KEY=${{ secrets.AMAZON_S3_ACCESS_KEY }}
-          AMAZON_S3_SECRET_KEY=${{ secrets.AMAZON_S3_SECRET_KEY }}
-          LINUX_DO_CLIENT_ID=${{ secrets.LINUX_DO_CLIENT_ID }}
-          LINUX_DO_CLIENT_SECRET=${{ secrets.LINUX_DO_CLIENT_SECRET }}
-          ENVEOF
-
-          scp -i "$KEY" -o StrictHostKeyChecking=accept-new \
-            /tmp/infinite-canvas.env "$HOST:/opt/infinite-canvas/.env"
-          ssh -i "$KEY" -o StrictHostKeyChecking=accept-new "$HOST" "chmod 600 /opt/infinite-canvas/.env"
-          rm -f /tmp/infinite-canvas.env
-
-      - name: deploy — pull, tag, restart
-        if: inputs.site == 'deploy'
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            set -e
-            DEPLOY_API="${{ steps.ghcr.outputs.api }}"
-            DEPLOY_WEB="${{ steps.ghcr.outputs.web }}"
-            cd /opt/infinite-canvas
-
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u eldenpdx --password-stdin
-
-            docker pull "$DEPLOY_API"
-            docker pull "$DEPLOY_WEB"
-
-            # Save rollback
-            if docker image inspect infinite-canvas-api:latest >/dev/null 2>&1; then
-              docker tag infinite-canvas-api:latest infinite-canvas-api:rollback
-              echo "Saved rollback image: infinite-canvas-api:rollback"
-            fi
-            if docker image inspect infinite-canvas:latest >/dev/null 2>&1; then
-              docker tag infinite-canvas:latest infinite-canvas:rollback
-              echo "Saved rollback image: infinite-canvas:rollback"
-            fi
-
-            # Tag this commit as the local runtime image
-            docker tag "$DEPLOY_API" infinite-canvas-api:latest
-            docker tag "$DEPLOY_WEB" infinite-canvas:latest
-
-            docker compose -f docker-compose.prod.yml down
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
-            docker image prune -f
-
-      - name: deploy — health check
-        if: inputs.site == 'deploy'
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            set -e
-            EXPECTED_VERSION="${{ github.sha }}"
-            PUBLIC_BASE_URL="${{ vars.PUBLIC_BASE_URL || secrets.PUBLIC_BASE_URL || 'https://canvan.ai' }}"
-            case "$PUBLIC_BASE_URL" in
-              http://*|https://*) ;;
-              *) PUBLIC_BASE_URL="https://$PUBLIC_BASE_URL" ;;
-            esac
-            PUBLIC_BASE_URL="${PUBLIC_BASE_URL%/}"
-            echo "Checking public deployment at $PUBLIC_BASE_URL"
-            for i in $(seq 1 30); do
-              local_version=$(curl --connect-timeout 3 --max-time 10 -fsS http://127.0.0.1/build-version.txt 2>/dev/null || true)
-              api_health=$(curl --connect-timeout 3 --max-time 10 -fsS http://127.0.0.1/api/health 2>/dev/null || true)
-              public_api_health=$(curl -L --connect-timeout 3 --max-time 10 -fsS -H 'Cache-Control: no-cache' "$PUBLIC_BASE_URL/api/health" 2>/dev/null || true)
-              public_html=$(curl -L --connect-timeout 3 --max-time 10 -fsS -H 'Cache-Control: no-cache' "$PUBLIC_BASE_URL/" 2>/dev/null || true)
-              public_version=$(curl -L --connect-timeout 3 --max-time 10 -fsS -H 'Cache-Control: no-cache' "$PUBLIC_BASE_URL/build-version.txt" 2>/dev/null || true)
-              if [ "$local_version" = "$EXPECTED_VERSION" ] \
-                && [ "$api_health" = "ok" ] \
-                && [ "$public_api_health" = "ok" ] \
-                && [ "$public_version" = "$EXPECTED_VERSION" ] \
-                && printf '%s' "$public_html" | grep -Fq "content=\"$EXPECTED_VERSION\""; then
-                echo "✓ Frontend $EXPECTED_VERSION and API are live after ${i}s"
-                exit 0
-              fi
-              echo "Attempt $i/30: local='$local_version', public='$public_version', local_api='$api_health', public_api='$public_api_health'"
-              sleep 2
-            done
-            echo "✗ Deployed frontend version is not live. Recent logs:"
-            cd /opt/infinite-canvas
-            docker compose -f docker-compose.prod.yml logs --tail=50
+          set -Eeuo pipefail
+          case "$PUBLIC_BASE_URL" in
+            http://*|https://*) ;;
+            *) PUBLIC_BASE_URL="https://$PUBLIC_BASE_URL" ;;
+          esac
+          PUBLIC_BASE_URL=${PUBLIC_BASE_URL%/}
+          payload=$(jq -n --arg username "$AUTH_USERNAME" --arg password "$AUTH_PASSWORD" '{username:$username,password:$password}')
+          umask 077
+          : > /tmp/deploy.jwt
+          : > /tmp/deploy-user-id
+          response=
+          token=
+          user_id=
+          if response=$(curl -L --connect-timeout 5 --max-time 20 -fsS -H 'Content-Type: application/json' --data "$payload" "$PUBLIC_BASE_URL/api/auth/login" 2>/dev/null); then
+            token=$(jq -er '.data.token | select(length > 0)' <<< "$response" 2>/dev/null || true)
+            user_id=$(jq -er '.data.user.id | select(length > 0)' <<< "$response" 2>/dev/null || true)
+          fi
+          if [[ -n "$token" && -n "$user_id" ]]; then
+            echo "::add-mask::$token"
+            printf '%s' "$token" > /tmp/deploy.jwt
+            printf '%s' "$user_id" > /tmp/deploy-user-id
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$ACTION" == deploy ]]; then
+            echo "::error::Unable to capture the current production JWT"
             exit 1
+          else
+            echo "::warning::Current login is unavailable; rollback will proceed without authentication continuity checks"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      # ═══════════════════════════════════════════════════════════════
-      # rollback
-      # ═══════════════════════════════════════════════════════════════
+      - name: Configuration sync — upload deployment assets and environment
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_EXPIRE_HOURS: ${{ secrets.JWT_EXPIRE_HOURS }}
+          DATABASE_DSN: ${{ secrets.DATABASE_DSN }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          AMAZON_S3_URL: ${{ secrets.AMAZON_S3_URL }}
+          AMAZON_REGION: ${{ secrets.AMAZON_REGION }}
+          AMAZON_S3_ACCESS_KEY: ${{ secrets.AMAZON_S3_ACCESS_KEY }}
+          AMAZON_S3_SECRET_KEY: ${{ secrets.AMAZON_S3_SECRET_KEY }}
+          LINUX_DO_CLIENT_ID: ${{ secrets.LINUX_DO_CLIENT_ID }}
+          LINUX_DO_CLIENT_SECRET: ${{ secrets.LINUX_DO_CLIENT_SECRET }}
+          CADDY_SITE_ADDRESS: ${{ vars.CADDY_SITE_ADDRESS || ':80' }}
+          DRAIN_SECONDS: ${{ vars.DRAIN_SECONDS || '30' }}
+          SHUTDOWN_TIMEOUT: ${{ vars.SHUTDOWN_TIMEOUT || '30s' }}
+          API_STOP_GRACE_PERIOD: ${{ vars.API_STOP_GRACE_PERIOD || '40s' }}
+          API_IMAGE_REPO: ${{ steps.images.outputs.api_repo }}
+          WEB_IMAGE_REPO: ${{ steps.images.outputs.web_repo }}
+        run: |
+          set -Eeuo pipefail
+          key="$HOME/.ssh/deploy-key"
+          host="$SSH_USER@$SSH_HOST"
+          dotenv_line() {
+            local escaped=${2//\'/\\\'}
+            printf "%s='%s'\n" "$1" "$escaped"
+          }
+          {
+            dotenv_line ADMIN_USERNAME "$ADMIN_USERNAME"
+            dotenv_line ADMIN_PASSWORD "$ADMIN_PASSWORD"
+            dotenv_line JWT_SECRET "$JWT_SECRET"
+            dotenv_line JWT_EXPIRE_HOURS "${JWT_EXPIRE_HOURS:-168}"
+            dotenv_line PORT 8088
+            dotenv_line PUBLIC_BASE_URL "$PUBLIC_BASE_URL"
+            dotenv_line DATABASE_DSN "$DATABASE_DSN"
+            dotenv_line POSTGRES_USER "$POSTGRES_USER"
+            dotenv_line POSTGRES_PASSWORD "$POSTGRES_PASSWORD"
+            dotenv_line POSTGRES_DB "$POSTGRES_DB"
+            dotenv_line AMAZON_S3_URL "$AMAZON_S3_URL"
+            dotenv_line AMAZON_REGION "${AMAZON_REGION:-ap-southeast-1}"
+            dotenv_line AMAZON_S3_ACCESS_KEY "$AMAZON_S3_ACCESS_KEY"
+            dotenv_line AMAZON_S3_SECRET_KEY "$AMAZON_S3_SECRET_KEY"
+            dotenv_line LINUX_DO_CLIENT_ID "$LINUX_DO_CLIENT_ID"
+            dotenv_line LINUX_DO_CLIENT_SECRET "$LINUX_DO_CLIENT_SECRET"
+            dotenv_line CADDY_SITE_ADDRESS "$CADDY_SITE_ADDRESS"
+            dotenv_line DRAIN_SECONDS "$DRAIN_SECONDS"
+            dotenv_line SHUTDOWN_TIMEOUT "$SHUTDOWN_TIMEOUT"
+            dotenv_line API_STOP_GRACE_PERIOD "$API_STOP_GRACE_PERIOD"
+            dotenv_line API_IMAGE_REPO "$API_IMAGE_REPO"
+            dotenv_line WEB_IMAGE_REPO "$WEB_IMAGE_REPO"
+            dotenv_line PULL_IMAGES 1
+          } > /tmp/infinite-canvas.env
+          scp -i "$key" -o StrictHostKeyChecking=accept-new \
+            deploy/docker-compose.prod.yml deploy/blue-green.sh \
+            "$host:$DEPLOY_ROOT/"
+          scp -i "$key" -o StrictHostKeyChecking=accept-new \
+            deploy/slot.Caddyfile "$host:$DEPLOY_ROOT/slot.Caddyfile"
+          scp -i "$key" -o StrictHostKeyChecking=accept-new \
+            /tmp/infinite-canvas.env /tmp/deploy.jwt /tmp/deploy-user-id \
+            "$host:$DEPLOY_ROOT/"
+          ssh -i "$key" -o StrictHostKeyChecking=accept-new "$host" \
+            "mv '$DEPLOY_ROOT/infinite-canvas.env' '$DEPLOY_ROOT/.env'; mv '$DEPLOY_ROOT/deploy.jwt' '$DEPLOY_ROOT/state/deploy.jwt'; mv '$DEPLOY_ROOT/deploy-user-id' '$DEPLOY_ROOT/state/deploy-user-id'; chmod 600 '$DEPLOY_ROOT/.env' '$DEPLOY_ROOT/state/deploy.jwt' '$DEPLOY_ROOT/state/deploy-user-id'; chmod +x '$DEPLOY_ROOT/blue-green.sh'"
+          rm -f /tmp/infinite-canvas.env /tmp/deploy.jwt /tmp/deploy-user-id
 
-      - name: rollback — tag rollback as latest and restart
-        if: inputs.site == 'rollback'
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            set -e
-            cd /opt/infinite-canvas
+      - name: Image check — authenticate the production host to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -Eeuo pipefail
+          printf '%s' "$GHCR_TOKEN" | ssh -i "$HOME/.ssh/deploy-key" -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" \
+            "docker login ghcr.io -u '${{ steps.images.outputs.owner }}' --password-stdin"
 
-            for img in infinite-canvas-api infinite-canvas; do
-              if ! docker image inspect ${img}:rollback >/dev/null 2>&1; then
-                echo "✗ No rollback image found (${img}:rollback missing)"
-                exit 1
-              fi
-              docker tag ${img}:rollback ${img}:latest
-            done
+      - name: Deploy — prewarm, switch, verify, drain, and clean up
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -Eeuo pipefail
+          host="$SSH_USER@$SSH_HOST"
+          key="$HOME/.ssh/deploy-key"
+          if [[ "$ACTION" == deploy ]]; then
+            command="./blue-green.sh deploy '$TARGET_SHA'"
+          elif [[ '${{ steps.auth.outputs.available }}' == true ]]; then
+            command="./blue-green.sh rollback"
+          else
+            command="ALLOW_MISSING_AUTH=1 ./blue-green.sh rollback"
+          fi
+          ssh -i "$key" -o StrictHostKeyChecking=accept-new "$host" \
+            "cd '$DEPLOY_ROOT' && trap 'rm -f state/deploy.jwt state/deploy-user-id' EXIT; $command"
 
-            docker compose -f docker-compose.prod.yml down
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
-
-      - name: rollback — health check
-        if: inputs.site == 'rollback'
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            set -e
-            for i in $(seq 1 30); do
-              if curl -sf http://127.0.0.1/api/health >/dev/null 2>&1; then
-                echo "✓ Rollback healthy after ${i}s"
-                exit 0
-              fi
-              echo "Attempt $i/30: waiting..."
-              sleep 2
-            done
-            echo "✗ Rollback health check timeout."
-            exit 1
+      - name: Cleanup — remove temporary authentication files
+        if: always()
+        continue-on-error: true
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          rm -f /tmp/deploy.jwt /tmp/deploy-user-id /tmp/infinite-canvas.env
+          if [[ -f "$HOME/.ssh/deploy-key" ]]; then
+            ssh -i "$HOME/.ssh/deploy-key" -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" \
+              "rm -f '$DEPLOY_ROOT/state/deploy.jwt' '$DEPLOY_ROOT/state/deploy-user-id'"
+          fi

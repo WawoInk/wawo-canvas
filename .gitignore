@@ -10,3 +10,4 @@ data/
 .idea
 dist/
 .claude/artifacts/
+/deploy/test/fixture-api/server

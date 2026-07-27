@@ -154,7 +154,7 @@ export function CanvasConfigComposer({ value, inputs, onChange, onClose }: Canva
                     onPaste={pastePlainText}
                     onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
                         event.stopPropagation();
-                        if (event.isComposing || composingRef.current) return;
+                        if (event.nativeEvent.isComposing || composingRef.current) return;
                         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
                             event.preventDefault();
                             closeMention();

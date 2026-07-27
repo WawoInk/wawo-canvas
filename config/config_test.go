@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"testing"
+	"time"
+)
 
 func TestLoadDefaultsDatabaseDSN(t *testing.T) {
 	Cfg = Config{}
@@ -22,5 +26,38 @@ func TestLoadAutoGeneratesJWTSecret(t *testing.T) {
 	_ = Load()
 	if Cfg.JWTSecret == "" || Cfg.JWTSecret == "infinite-canvas" {
 		t.Fatalf("JWTSecret should be auto-generated, got %q", Cfg.JWTSecret)
+	}
+}
+
+func TestLoadShutdownTimeout(t *testing.T) {
+	previous, existed := os.LookupEnv("SHUTDOWN_TIMEOUT")
+	if err := os.Unsetenv("SHUTDOWN_TIMEOUT"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if existed {
+			_ = os.Setenv("SHUTDOWN_TIMEOUT", previous)
+		} else {
+			_ = os.Unsetenv("SHUTDOWN_TIMEOUT")
+		}
+	})
+
+	Cfg = Config{}
+	if err := Load(); err != nil {
+		t.Fatal(err)
+	}
+	if Cfg.ShutdownTimeout != 30*time.Second {
+		t.Fatalf("default ShutdownTimeout = %s", Cfg.ShutdownTimeout)
+	}
+
+	if err := os.Setenv("SHUTDOWN_TIMEOUT", "250ms"); err != nil {
+		t.Fatal(err)
+	}
+	Cfg = Config{}
+	if err := Load(); err != nil {
+		t.Fatal(err)
+	}
+	if Cfg.ShutdownTimeout != 250*time.Millisecond {
+		t.Fatalf("configured ShutdownTimeout = %s", Cfg.ShutdownTimeout)
 	}
 }

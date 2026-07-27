@@ -1,13 +1,13 @@
 ---
 title: Docker 部署
-description: 使用 Docker Compose 部署无限画布
+description: 使用 Docker Compose 运行和发布无限画布
 ---
 
 # Docker 部署
 
-如果你希望在自己的机器或服务器上运行项目，可以直接使用 Docker Compose。
+## 本地运行
 
-## 使用发布镜像
+主应用由 Web、Go API 和 PostgreSQL 组成：
 
 ```bash
 git clone git@github.com:basketikun/infinite-canvas.git
@@ -15,25 +15,87 @@ cd infinite-canvas
 docker compose up -d
 ```
 
-启动后访问：
-
-```text
-http://localhost:3000
-```
-
-## 本地构建镜像
-
-如果需要基于当前源码构建镜像：
+启动后访问 `http://localhost:3000`。需要基于当前源码构建开发镜像时：
 
 ```bash
 docker compose -f docker-compose.local.yml up -d --build
 ```
 
+PostgreSQL 保存账号和服务端业务数据，后端持久文件位于挂载的 `data/`。Canvas Project、我的素材和 AI API Key 仍以浏览器本地数据为主，不要把普通 Docker 部署理解为完整云同步。
+
+## 生产拓扑
+
+生产 CD 使用 `deploy/` 下的 Compose、`slot.Caddyfile` 和脚本：
+
+- `edge`：始终运行的边缘 Caddy，唯一绑定宿主机 80/443。
+- `postgres`：单例 PostgreSQL，普通 deploy/rollback 不停止、不重建。
+- `blue`、`green`：两个固定发布槽位，每个槽位包含配对的 Web 与 API。
+- `data/`：两个 API 共同挂载的持久数据目录。
+- `state/deployment.env`：原子记录活动槽位、当前 Git SHA、上一成功 Git SHA和各槽位 SHA。
+
+槽位 Web/API 只在内部 Docker 网络可访问。边缘 Caddy 将完整请求流量交给活动槽位 Web，槽位 Web 再把 `/api/*` 转发给同槽位 API，因此 Web 与 API 通过一次 Caddy reload 一起切换。
+
+## 发布配置
+
+生产环境必须显式配置非空、非默认的 `JWT_SECRET`。blue 与 green 读取同一份 `.env`、数据库 DSN、JWT 密钥和持久目录；否则旧版本签发的 JWT 无法通过目标槽位 readiness。
+
+Actions 需要可登录普通 `/api/auth/login` 的 `DEPLOY_AUTH_USERNAME` / `DEPLOY_AUTH_PASSWORD`；未单独配置时使用管理员账号。它们只用于发布期间取得短期 JWT，临时文件会在工作流结束时删除。
+
+常用部署变量：
+
+```dotenv
+PUBLIC_BASE_URL=https://example.com
+CADDY_SITE_ADDRESS=example.com
+DRAIN_SECONDS=30
+SHUTDOWN_TIMEOUT=30s
+API_STOP_GRACE_PERIOD=40s
+```
+
+`API_STOP_GRACE_PERIOD` 必须大于 `SHUTDOWN_TIMEOUT`。API 收到 SIGTERM/SIGINT 后停止接受新连接，在 shutdown timeout 内等待已有请求；超时会强制结束并输出可诊断日志。
+
+边缘 Caddy 管理接口只监听容器内部网络，不映射宿主机公网端口。
+edge 只挂载 `state/caddy/`，不会接收 API 的 JWT、数据库、管理员或对象存储环境变量，也不能读取发布验收使用的临时 bearer token。
+
+## 手动发布
+
+GitHub Actions 的 `CD (Deploy)` 仅支持手动选择：
+
+- `deploy`：发布触发工作流的准确 Git SHA。
+- `rollback`：读取 `state/deployment.env` 中记录的上一成功 Git SHA。
+
+正常 rollback 仍会先获取当前 JWT 并验证登录态连续性；如果当前版本的登录/API 已损坏，工作流会给出警告并进入紧急回滚，只执行版本、health 和数据库路径验证，避免故障版本阻塞恢复。
+
+部署顺序如下：
+
+1. 在服务器变更前检查目标 Web/API SHA 镜像存在，并校验生产 JWT 配置。
+2. 从当前公网版本登录，保存 JWT 与用户 ID，作为认证连续性验收输入。
+3. 选择非活动槽位，拉取并启动准确 SHA 镜像。
+4. 从槽位内部检查版本文件、HTML SHA、API health、数据库支持的设置读取和旧 JWT。
+5. 生成完整 edge candidate 配置并执行 Caddy 配置验证。
+6. 一次平滑 reload 原子切换 Web/API，再从稳定公网入口重复版本、API、数据库和 JWT 验证。
+7. 公网验证成功后原子更新部署状态，等待排空窗口，再依次停止旧 API 与旧 Web。
+8. 旧槽位停止且回滚 SHA 已记录后，清理无引用镜像。
+
+切流前失败会输出目标槽位日志并停止目标槽位，当前公网版本不变。切流后公网验证失败会立即恢复旧 Caddy 配置、验证旧版本和 JWT，再停止失败槽位。
+
+重复 deploy 当前 SHA 只执行公网验收，不创建新槽位、不修改数据卷。rollback 在旧槽位已停止时会先按上一准确 SHA 重新启动并完成同一套 readiness。
+
+首次从旧单槽位 Compose 迁移时，脚本先在内部预热 blue 并验证旧 JWT，然后在启动 edge 前停止占用公网端口的旧 Web；成功后才停止旧 API，PostgreSQL 容器和数据卷保持不变。由于两个容器不能同时绑定同一宿主机端口，这次初始化存在一次短暂端口接管；后续 blue/green deploy/rollback 不再停止 edge，不经过这个步骤。
+
+## 验收
+
+生产形态验收使用真实 Docker 网络和边缘 Caddy：
+
+```bash
+deploy/test/cd-workflow.test.sh
+deploy/test/blue-green.test.sh
+```
+
+验收覆盖旧单槽位迁移、准确 SHA 预热、持续公网请求、登录态连续性、慢请求排空、成功 deploy/rollback、幂等重试、镜像缺失、健康失败、数据库探针失败、JWT 不兼容、Caddy 配置无效和公网失败自动回切。
+
 ## 文档站镜像
 
-文档站位于 `docs/` 目录，按带服务端能力的 Next.js standalone 应用单独构建，不打进主应用镜像。
-
-使用发布镜像：
+文档站位于 `docs/`，作为独立 Next.js standalone 应用运行：
 
 ```bash
 cd docs
@@ -43,10 +105,5 @@ docker compose up -d
 基于当前源码本地构建：
 
 ```bash
-cd docs
 docker compose -f docker-compose.local.yml up -d --build
 ```
-
-## 数据说明
-
-当前主应用镜像只启动 Next.js。画布、我的素材、生成记录和 AI API Key 默认保存在浏览器本地；第三方提示词由 Next.js route 拉取后缓存在运行实例内存里，不需要额外挂载数据目录。

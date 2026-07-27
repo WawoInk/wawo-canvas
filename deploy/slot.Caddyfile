@@ -1,13 +1,13 @@
 {
+    admin off
     auto_https off
 }
 
-:80 {
-
+:3000 {
     encode zstd gzip
 
     handle /api/* {
-        reverse_proxy api:8088
+        reverse_proxy {$API_UPSTREAM}
     }
 
     handle {

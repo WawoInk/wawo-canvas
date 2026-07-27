@@ -68,6 +68,11 @@ test("buildNodeConfig maps media metadata to effective config", () => {
     assert.equal(config.audioInstructions, "calm");
 });
 
+test("buildNodeConfig defaults canvas video audio generation off", () => {
+    const config = buildNodeConfig(defaults, defaults, node(), "video");
+    assert.equal(config.videoGenerateAudio, "false");
+});
+
 test("config patches map setting keys to node metadata", () => {
     assert.deepEqual(videoConfigPatch("videoSeconds", "10"), { seconds: "10" });
     assert.deepEqual(videoConfigPatch("videoGenerateAudio", "false"), { generateAudio: "false" });

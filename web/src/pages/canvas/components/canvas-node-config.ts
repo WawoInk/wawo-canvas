@@ -13,7 +13,7 @@ export function buildNodeConfig(globalConfig: AiConfig, defaults: AiConfig, node
         background: metadata?.background ?? globalConfig.background ?? defaults.background,
         videoSeconds: metadata?.seconds || globalConfig.videoSeconds || defaults.videoSeconds,
         vquality: metadata?.vquality || globalConfig.vquality || defaults.vquality,
-        videoGenerateAudio: metadata?.generateAudio || globalConfig.videoGenerateAudio || defaults.videoGenerateAudio,
+        videoGenerateAudio: metadata?.generateAudio || (mode === "video" ? "false" : globalConfig.videoGenerateAudio || defaults.videoGenerateAudio),
         videoWatermark: metadata?.watermark || globalConfig.videoWatermark || defaults.videoWatermark,
         videoNegativePrompt: metadata?.negativePrompt ?? globalConfig.videoNegativePrompt ?? defaults.videoNegativePrompt,
         audioVoice: metadata?.audioVoice || globalConfig.audioVoice || defaults.audioVoice,
