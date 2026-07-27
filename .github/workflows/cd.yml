@@ -10,6 +10,11 @@ on:
         options:
           - deploy
           - rollback
+      reset_sessions:
+        description: "轮换 JWT_SECRET，并允许本次部署重置现有登录会话"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -26,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ACTION: ${{ inputs.site }}
+      RESET_SESSIONS: ${{ inputs.reset_sessions && '1' || '0' }}
       TARGET_SHA: ${{ github.sha }}
       PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL || secrets.PUBLIC_BASE_URL || 'https://canvan.ai' }}
       DEPLOY_ROOT: /opt/infinite-canvas
@@ -50,9 +56,13 @@ jobs:
           for name in SSH_HOST SSH_USER SSH_KEY GHCR_TOKEN ADMIN_USERNAME ADMIN_PASSWORD DATABASE_DSN POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB; do
             [[ -n "${!name}" ]] || { echo "::error::$name is required"; exit 1; }
           done
+          [[ "$RESET_SESSIONS" == 0 || "$ACTION" == deploy ]] || {
+            echo "::error::reset_sessions is only valid for deploy"
+            exit 1
+          }
           trimmed=$(printf '%s' "$JWT_SECRET" | tr -d '[:space:]')
           [[ -n "$trimmed" && "$trimmed" != "infinite-canvas" ]] || {
-            echo "::error::JWT_SECRET must be explicit, non-empty, and non-default"
+            echo "::error::JWT_SECRET is empty or still uses the application default; replace it with a random GitHub Actions secret"
             exit 1
           }
 
@@ -107,6 +117,13 @@ jobs:
           umask 077
           : > /tmp/deploy.jwt
           : > /tmp/deploy-user-id
+          : > /tmp/deploy-login.json
+          if [[ "$RESET_SESSIONS" == 1 ]]; then
+            printf '%s' "$payload" > /tmp/deploy-login.json
+            echo "::warning::Existing login sessions will be reset after this deployment"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           response=
           token=
           user_id=
@@ -190,11 +207,11 @@ jobs:
           scp -i "$key" -o StrictHostKeyChecking=accept-new \
             deploy/slot.Caddyfile "$host:$DEPLOY_ROOT/slot.Caddyfile"
           scp -i "$key" -o StrictHostKeyChecking=accept-new \
-            /tmp/infinite-canvas.env /tmp/deploy.jwt /tmp/deploy-user-id \
+            /tmp/infinite-canvas.env /tmp/deploy.jwt /tmp/deploy-user-id /tmp/deploy-login.json \
             "$host:$DEPLOY_ROOT/"
           ssh -i "$key" -o StrictHostKeyChecking=accept-new "$host" \
-            "mv '$DEPLOY_ROOT/infinite-canvas.env' '$DEPLOY_ROOT/.env'; mv '$DEPLOY_ROOT/deploy.jwt' '$DEPLOY_ROOT/state/deploy.jwt'; mv '$DEPLOY_ROOT/deploy-user-id' '$DEPLOY_ROOT/state/deploy-user-id'; chmod 600 '$DEPLOY_ROOT/.env' '$DEPLOY_ROOT/state/deploy.jwt' '$DEPLOY_ROOT/state/deploy-user-id'; chmod +x '$DEPLOY_ROOT/blue-green.sh'"
-          rm -f /tmp/infinite-canvas.env /tmp/deploy.jwt /tmp/deploy-user-id
+            "mv '$DEPLOY_ROOT/infinite-canvas.env' '$DEPLOY_ROOT/.env'; mv '$DEPLOY_ROOT/deploy.jwt' '$DEPLOY_ROOT/state/deploy.jwt'; mv '$DEPLOY_ROOT/deploy-user-id' '$DEPLOY_ROOT/state/deploy-user-id'; mv '$DEPLOY_ROOT/deploy-login.json' '$DEPLOY_ROOT/state/deploy-login.json'; chmod 600 '$DEPLOY_ROOT/.env' '$DEPLOY_ROOT/state/deploy.jwt' '$DEPLOY_ROOT/state/deploy-user-id' '$DEPLOY_ROOT/state/deploy-login.json'; chmod +x '$DEPLOY_ROOT/blue-green.sh'"
+          rm -f /tmp/infinite-canvas.env /tmp/deploy.jwt /tmp/deploy-user-id /tmp/deploy-login.json
 
       - name: Image check — authenticate the production host to GHCR
         env:
@@ -214,7 +231,9 @@ jobs:
           set -Eeuo pipefail
           host="$SSH_USER@$SSH_HOST"
           key="$HOME/.ssh/deploy-key"
-          if [[ "$ACTION" == deploy ]]; then
+          if [[ "$ACTION" == deploy && "$RESET_SESSIONS" == 1 ]]; then
+            command="RESET_SESSIONS=1 ./blue-green.sh deploy '$TARGET_SHA'"
+          elif [[ "$ACTION" == deploy ]]; then
             command="./blue-green.sh deploy '$TARGET_SHA'"
           elif [[ '${{ steps.auth.outputs.available }}' == true ]]; then
             command="./blue-green.sh rollback"
@@ -222,7 +241,7 @@ jobs:
             command="ALLOW_MISSING_AUTH=1 ./blue-green.sh rollback"
           fi
           ssh -i "$key" -o StrictHostKeyChecking=accept-new "$host" \
-            "cd '$DEPLOY_ROOT' && trap 'rm -f state/deploy.jwt state/deploy-user-id' EXIT; $command"
+            "cd '$DEPLOY_ROOT' && trap 'rm -f state/deploy.jwt state/deploy-user-id state/deploy-login.json' EXIT; $command"
 
       - name: Cleanup — remove temporary authentication files
         if: always()
@@ -231,8 +250,8 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
-          rm -f /tmp/deploy.jwt /tmp/deploy-user-id /tmp/infinite-canvas.env
+          rm -f /tmp/deploy.jwt /tmp/deploy-user-id /tmp/deploy-login.json /tmp/infinite-canvas.env
           if [[ -f "$HOME/.ssh/deploy-key" ]]; then
             ssh -i "$HOME/.ssh/deploy-key" -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" \
-              "rm -f '$DEPLOY_ROOT/state/deploy.jwt' '$DEPLOY_ROOT/state/deploy-user-id'"
+              "rm -f '$DEPLOY_ROOT/deploy.jwt' '$DEPLOY_ROOT/deploy-user-id' '$DEPLOY_ROOT/deploy-login.json' '$DEPLOY_ROOT/state/deploy.jwt' '$DEPLOY_ROOT/state/deploy-user-id' '$DEPLOY_ROOT/state/deploy-login.json'"
           fi

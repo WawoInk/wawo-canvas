@@ -228,6 +228,35 @@ assert_public_a() {
     )
 }
 
+sed 's/^JWT_SECRET=.*/JWT_SECRET=deploy-test-rotated-secret/' "$workspace/.env" > "$workspace/.env.tmp"
+mv "$workspace/.env.tmp" "$workspace/.env"
+printf '%s' '{"username":"admin","password":"password"}' > "$workspace/state/deploy-login.json"
+if (cd "$workspace" && ./blue-green.sh prewarm b); then
+    echo "JWT secret rotation unexpectedly preserved the old token" >&2
+    exit 1
+fi
+assert_public_a
+
+old_token=$token
+(
+    cd "$workspace"
+    RESET_SESSIONS=1 DRAIN_SECONDS=0 ./blue-green.sh deploy b
+)
+if curl -fsS -H "Authorization: Bearer $old_token" "$base_url/api/auth/me" | grep -Fq "\"id\":\"$user_id\""; then
+    echo "old token unexpectedly survived JWT secret rotation" >&2
+    exit 1
+fi
+login=$(curl -fsS -X POST "$base_url/api/auth/login")
+token=$(sed -n 's/.*"token":"\([^"]*\)".*/\1/p' <<< "$login")
+[[ -n "$token" && "$token" != "$old_token" ]]
+printf '%s' "$token" > "$workspace/state/deploy.jwt"
+curl -fsS -H "Authorization: Bearer $token" "$base_url/api/auth/me" | grep -Fq "\"id\":\"$user_id\""
+(
+    cd "$workspace"
+    DRAIN_SECONDS=0 ./blue-green.sh rollback
+)
+assert_public_a
+
 if (cd "$workspace" && ./blue-green.sh prewarm missing); then
     echo "missing images unexpectedly passed readiness" >&2
     exit 1

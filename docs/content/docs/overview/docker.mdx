@@ -41,6 +41,8 @@ PostgreSQL 保存账号和服务端业务数据，后端持久文件位于挂载
 
 Actions 需要可登录普通 `/api/auth/login` 的 `DEPLOY_AUTH_USERNAME` / `DEPLOY_AUTH_PASSWORD`；未单独配置时使用管理员账号。它们只用于发布期间取得短期 JWT，临时文件会在工作流结束时删除。
 
+如果 GitHub Actions 中的 `JWT_SECRET` 仍是应用默认值，日志会把该 Secret 及脚本中的同值字面量统一显示为 `***`。应先把它替换为随机值；首次轮换或后续主动换密钥时，在 `deploy` 中勾选 `reset_sessions`。该选项会明确放弃旧 JWT 连续性，使现有登录失效，但目标槽位必须在切流前完成一次新登录和 `/api/auth/me` 验证。
+
 常用部署变量：
 
 ```dotenv
@@ -63,14 +65,16 @@ GitHub Actions 的 `CD (Deploy)` 仅支持手动选择：
 - `deploy`：发布触发工作流的准确 Git SHA。
 - `rollback`：读取 `state/deployment.env` 中记录的上一成功 Git SHA。
 
+`reset_sessions` 默认关闭且仅适用于 `deploy`。普通发布继续强制验证旧 JWT；只有轮换 `JWT_SECRET` 时才应开启。
+
 正常 rollback 仍会先获取当前 JWT 并验证登录态连续性；如果当前版本的登录/API 已损坏，工作流会给出警告并进入紧急回滚，只执行版本、health 和数据库路径验证，避免故障版本阻塞恢复。
 
 部署顺序如下：
 
 1. 在服务器变更前检查目标 Web/API SHA 镜像存在，并校验生产 JWT 配置。
-2. 从当前公网版本登录，保存 JWT 与用户 ID，作为认证连续性验收输入。
+2. 普通发布从当前公网版本登录并保存 JWT 与用户 ID；会话重置发布则生成一次性登录载荷。
 3. 选择非活动槽位，拉取并启动准确 SHA 镜像。
-4. 从槽位内部检查版本文件、HTML SHA、API health、数据库支持的设置读取和旧 JWT。
+4. 从槽位内部检查版本文件、HTML SHA、API health、数据库支持的设置读取，并验证旧 JWT 或新登录。
 5. 生成完整 edge candidate 配置并执行 Caddy 配置验证。
 6. 一次平滑 reload 原子切换 Web/API，再从稳定公网入口重复版本、API、数据库和 JWT 验证。
 7. 公网验证成功后原子更新部署状态，等待排空窗口，再依次停止旧 API 与旧 Web。
@@ -80,7 +84,7 @@ GitHub Actions 的 `CD (Deploy)` 仅支持手动选择：
 
 重复 deploy 当前 SHA 只执行公网验收，不创建新槽位、不修改数据卷。rollback 在旧槽位已停止时会先按上一准确 SHA 重新启动并完成同一套 readiness。
 
-首次从旧单槽位 Compose 迁移时，脚本先在内部预热 blue 并验证旧 JWT，然后在启动 edge 前停止占用公网端口的旧 Web；成功后才停止旧 API，PostgreSQL 容器和数据卷保持不变。由于两个容器不能同时绑定同一宿主机端口，这次初始化存在一次短暂端口接管；后续 blue/green deploy/rollback 不再停止 edge，不经过这个步骤。
+首次从旧单槽位 Compose 迁移时，脚本先在内部预热 blue。已有固定 JWT 密钥时验证旧 JWT；旧环境使用默认或临时密钥时，需要配置新的随机 Secret 并勾选 `reset_sessions`，改为验证新登录。随后脚本在启动 edge 前停止占用公网端口的旧 Web；成功后才停止旧 API，PostgreSQL 容器和数据卷保持不变。由于两个容器不能同时绑定同一宿主机端口，这次初始化存在一次短暂端口接管；后续 blue/green deploy/rollback 不再停止 edge，不经过这个步骤。
 
 ## 验收
 
@@ -91,7 +95,7 @@ deploy/test/cd-workflow.test.sh
 deploy/test/blue-green.test.sh
 ```
 
-验收覆盖旧单槽位迁移、准确 SHA 预热、持续公网请求、登录态连续性、慢请求排空、成功 deploy/rollback、幂等重试、镜像缺失、健康失败、数据库探针失败、JWT 不兼容、Caddy 配置无效和公网失败自动回切。
+验收覆盖旧单槽位迁移、准确 SHA 预热、持续公网请求、登录态连续性、显式 JWT 密钥轮换与会话重置、慢请求排空、成功 deploy/rollback、幂等重试、镜像缺失、健康失败、数据库探针失败、JWT 不兼容、Caddy 配置无效和公网失败自动回切。
 
 ## 文档站镜像
 

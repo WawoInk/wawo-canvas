@@ -112,7 +112,9 @@ load_state() {
 load_auth_context() {
     AUTH_TOKEN=
     EXPECTED_USER_ID=
-    if [[ -s "$state_dir/deploy.jwt" && -s "$state_dir/deploy-user-id" ]]; then
+    if [[ "$reset_sessions" == 1 ]]; then
+        [[ -s "$state_dir/deploy-login.json" ]] || fail "deployment login payload is required when resetting sessions"
+    elif [[ -s "$state_dir/deploy.jwt" && -s "$state_dir/deploy-user-id" ]]; then
         AUTH_TOKEN=$(< "$state_dir/deploy.jwt")
         EXPECTED_USER_ID=$(< "$state_dir/deploy-user-id")
     elif [[ -n "$CURRENT_SHA" && "${ALLOW_MISSING_AUTH:-0}" != 1 ]]; then
@@ -195,6 +197,22 @@ slot_get() {
     fi
 }
 
+verify_reset_login() {
+    local slot=$1 payload response token user_id user
+    payload=$(<"$state_dir/deploy-login.json")
+    response=$(compose exec -T "web-$slot" wget -qO- \
+        --header "Content-Type: application/json" \
+        --post-data "$payload" \
+        http://127.0.0.1:3000/api/auth/login) || return 1
+    token=$(sed -n 's/.*"token":"\([^"]*\)".*/\1/p' <<< "$response")
+    user_id=$(sed -n 's/.*"user":{"id":"\([^"]*\)".*/\1/p' <<< "$response")
+    [[ -n "$token" && -n "$user_id" ]] || return 1
+    user=$(compose exec -T "web-$slot" wget -qO- \
+        --header "Authorization: Bearer $token" \
+        http://127.0.0.1:3000/api/auth/me) || return 1
+    grep -Fq "\"id\":\"$user_id\"" <<< "$user"
+}
+
 verify_internal() {
     local slot=$1 sha=$2 version html health settings user
     version=$(slot_get "$slot" /build-version.txt)
@@ -208,6 +226,8 @@ verify_internal() {
     if [[ -n "$AUTH_TOKEN" ]]; then
         user=$(slot_get "$slot" /api/auth/me)
         grep -Fq "\"id\":\"$EXPECTED_USER_ID\"" <<< "$user" || fail "$slot rejected the existing JWT"
+    elif [[ "$reset_sessions" == 1 ]]; then
+        verify_reset_login "$slot" || fail "$slot failed fresh login after JWT secret rotation"
     fi
 }
 
@@ -343,7 +363,7 @@ prewarm_slot() {
     compose --profile "$slot" up -d --no-deps "web-$slot"
     wait_healthy "web-$slot"
 
-    stage internal-readiness "verify $slot version, API, database access, and existing JWT"
+    stage internal-readiness "verify $slot version, API, database access, and authentication"
     verify_internal "$slot" "$sha"
 }
 
@@ -383,9 +403,11 @@ sha=${2:-}
 [[ -f "$env_file" ]] || fail "$env_file is missing"
 
 stage configuration "validate production configuration"
+reset_sessions=${RESET_SESSIONS:-0}
+[[ "$reset_sessions" == 0 || "$reset_sessions" == 1 ]] || fail "RESET_SESSIONS must be 0 or 1"
 jwt_secret=$(env_value JWT_SECRET)
 trimmed_secret=$(tr -d '[:space:]' <<< "$jwt_secret")
-[[ -n "$trimmed_secret" && "$trimmed_secret" != infinite-canvas ]] || fail "JWT_SECRET must be explicit, non-empty, and non-default"
+[[ -n "$trimmed_secret" && "$trimmed_secret" != infinite-canvas ]] || fail "JWT_SECRET is empty or still uses the application default"
 shutdown_timeout=$(env_value SHUTDOWN_TIMEOUT)
 stop_grace=$(env_value API_STOP_GRACE_PERIOD)
 [[ -n "$shutdown_timeout" ]] || shutdown_timeout=30s
@@ -410,7 +432,9 @@ fi
 [[ "$sha" =~ ^[A-Za-z0-9._-]+$ ]] || fail "invalid Git SHA"
 load_auth_context
 
-if [[ -n "$CURRENT_SHA" && -n "$AUTH_TOKEN" ]]; then
+if [[ "$reset_sessions" == 1 ]]; then
+    stage authentication "session reset requested; verify fresh target login before cutover"
+elif [[ -n "$CURRENT_SHA" && -n "$AUTH_TOKEN" ]]; then
     stage authentication "verify the existing JWT through the stable edge"
     verify_public "$CURRENT_SHA" || fail "existing stable edge verification failed"
 elif [[ -n "$LEGACY_WEB_ID" && -n "$AUTH_TOKEN" ]]; then
