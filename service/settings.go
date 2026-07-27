@@ -110,6 +110,11 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 		if setting.ModelChannel.ModelCosts[i].Credits < 0 {
 			setting.ModelChannel.ModelCosts[i].Credits = 0
 		}
+		for resolution, credits := range setting.ModelChannel.ModelCosts[i].ResolutionCredits {
+			if credits < 0 {
+				setting.ModelChannel.ModelCosts[i].ResolutionCredits[resolution] = 0
+			}
+		}
 	}
 	if setting.ModelChannel.AllowCustomChannel == nil {
 		enabled := true
@@ -228,6 +233,11 @@ func normalizePrivateSetting(setting model.PrivateSetting) model.PrivateSetting 
 			binding.ID = binding.UpstreamModel
 		}
 		binding.ChannelName = strings.TrimSpace(binding.ChannelName)
+		switch binding.BillingMode {
+		case model.BillingModePerCredit, model.BillingModePerSecond, model.BillingModePerCall:
+		default:
+			binding.BillingMode = model.BillingModePerCall
+		}
 	}
 	setting.FileSizeLimits = normalizeFileSizeLimits(setting.FileSizeLimits)
 	return setting

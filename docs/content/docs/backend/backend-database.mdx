@@ -58,6 +58,14 @@ description: 核心数据表和第一方生成任务事务约束
 
 任务通过 `worker_lease_owner` 和 `worker_lease_expires_at` 支持认领、租约续期与重启恢复。`user_id + client_request_id` 对非空请求 ID 建立唯一约束。
 
+视频任务使用 `billing_mode` 和 `billing_rate` 保存创建时的计费快照：
+
+- `per_call`：`credits` 保存每次调用预扣的算力点。
+- `per_second`：`billing_rate` 保存所选分辨率每秒单价，`credits` 保存单价乘任务时长后的预扣算力点。
+- `per_credit`：`billing_rate` 保存每个上游 credit 的算力点单价；任务成功后按上游返回的 `credits` 结算，并将实际平台消耗写入任务 `credits`。
+
+`upstream_credits` 保存供应商响应中的可空 credits。Vidu 未返回该字段时写入 `NULL`；响应审计 JSON 仍显式保留 `"credits": null`，便于使用日志与调用日志区分字段缺失和数值消耗。
+
 ## generation_payloads
 
 `generation_payloads` 保存完整命令和脱敏后的上游请求、响应及原始错误。它与任务一一对应，可按保留策略清理；长期任务摘要仍保存在 `generation_tasks.metadata`。
@@ -81,5 +89,7 @@ description: 核心数据表和第一方生成任务事务约束
 生成生命周期的业务决策位于 `service/`：包括允许的来源状态、归一化错误、是否退款、退款文案以及终态事件内容。
 
 `repository/` 只执行数据库操作。最终状态写入、用户余额返还、`credit_logs` 退款流水和 `generation_task_events` 终态事件在同一 PostgreSQL 事务中完成。并发 callback、poll、cancel 或 timeout 只有一个 compare-and-set 可以提交终态。
+
+按 credits 计费时，用户余额扣减、任务实际算力点与上游 credits 更新、`credit_logs` 消费流水在同一事务中完成；余额不足时全部回滚并将任务收敛为失败。按次和按秒计费继续在任务创建时预扣。
 
 `credit_logs` 对非空 `task_id + type` 建立唯一约束，防止同一任务重复扣费或退款。

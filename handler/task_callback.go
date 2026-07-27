@@ -28,9 +28,10 @@ func HandleTaskCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		ID     string `json:"id"`
-		Status string `json:"status"`
-		Error  *struct {
+		ID      string `json:"id"`
+		Status  string `json:"status"`
+		Credits *int   `json:"credits"`
+		Error   *struct {
 			Code    string `json:"code"`
 			Message string `json:"message"`
 		} `json:"error"`
@@ -55,6 +56,7 @@ func HandleTaskCallback(w http.ResponseWriter, r *http.Request) {
 
 	respBody, _ := json.Marshal(body)
 	result := service.TaskResult{
+		Credits:      body.Credits,
 		ResponseBody: string(respBody),
 	}
 	if body.Error != nil {

@@ -75,7 +75,7 @@ export function AccountUsageLogTable({ items, loading, pagination }: UsageLogTab
             loading={loading}
             dataSource={items}
             pagination={pagination}
-            scroll={{ x: 900 }}
+            scroll={{ x: 1020 }}
             columns={[
                 {
                     title: "操作",
@@ -98,6 +98,7 @@ export function AccountUsageLogTable({ items, loading, pagination }: UsageLogTab
                     },
                 },
                 { title: "积分", dataIndex: "credits", width: 100, render: (value: number) => `${value.toLocaleString()} 积分` },
+                { title: "上游 Credits", dataIndex: "upstreamCredits", width: 120, render: (_, item) => (item.taskType === "video" ? (item.upstreamCredits ?? "null") : "-") },
                 { title: "耗时", dataIndex: "latencyMs", width: 100, render: (value: number) => (value ? `${(value / 1000).toFixed(1)} 秒` : "-") },
                 { title: "时间", dataIndex: "createdAt", width: 180, render: (value: string) => (value ? new Date(value).toLocaleString("zh-CN") : "-") },
             ]}

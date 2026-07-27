@@ -148,6 +148,9 @@ export type AdminGenerationTask = {
     model: string;
     status: string;
     credits: number;
+    upstreamCredits: number | null;
+    billingMode?: "per_credit" | "per_second" | "per_call";
+    billingRate?: number;
     latencyMs: number;
     upstreamTaskId: string;
     traceId: string;
@@ -301,6 +304,7 @@ export type AdminPublicModelChannelSettings = {
 export type AdminModelCost = {
     model: string;
     credits: number;
+    resolutionCredits?: Record<string, number>;
 };
 
 export type AdminPublicSettings = {
@@ -319,6 +323,7 @@ export type AdminGenerationProfileBinding = {
     upstreamModel: string;
     upstreamModels?: string[];
     channelName: string;
+    billingMode: "per_credit" | "per_second" | "per_call";
     /** @deprecated Retained only for rollback-compatible settings round trips. */
     credits?: number;
     enabled: boolean;

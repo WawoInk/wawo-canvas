@@ -114,6 +114,12 @@ export default function AdminGenerationTasksPage() {
             render: (_, item) => <Typography.Text type={item.credits > 0 ? "danger" : "secondary"}>{item.credits > 0 ? `-${item.credits}` : item.credits}</Typography.Text>,
         },
         {
+            title: "上游 Credits",
+            dataIndex: "upstreamCredits",
+            width: 112,
+            render: (_, item) => <Typography.Text type="secondary">{item.taskType === "video" ? (item.upstreamCredits ?? "null") : "-"}</Typography.Text>,
+        },
+        {
             title: "耗时",
             dataIndex: "latencyMs",
             width: 80,
@@ -228,7 +234,7 @@ export default function AdminGenerationTasksPage() {
                     search={false}
                     defaultSize="middle"
                     tableLayout="fixed"
-                    scroll={{ x: 1400 }}
+                    scroll={{ x: 1512 }}
                     cardProps={{ variant: "borderless" }}
                     rowSelection={{
                         selectedRowKeys,
@@ -296,26 +302,31 @@ export default function AdminGenerationTasksPage() {
                                 <Typography.Text>{detail.task.credits}</Typography.Text>
                             </Col>
                             <Col span={6}>
-                                <Typography.Text type="secondary">耗时</Typography.Text>
+                                <Typography.Text type="secondary">上游 Credits</Typography.Text>
                                 <br />
-                                <Typography.Text>{detail.task.latencyMs > 0 ? `${(detail.task.latencyMs / 1000).toFixed(1)}s` : "-"}</Typography.Text>
+                                <Typography.Text>{detail.task.taskType === "video" ? (detail.task.upstreamCredits ?? "null") : "-"}</Typography.Text>
                             </Col>
                         </Row>
                         <Row gutter={24}>
-                            <Col span={8}>
+                            <Col span={6}>
                                 <Typography.Text type="secondary">Provider</Typography.Text>
                                 <br />
                                 <Typography.Text>{detail.task.provider}</Typography.Text>
                             </Col>
-                            <Col span={8}>
+                            <Col span={6}>
                                 <Typography.Text type="secondary">模型</Typography.Text>
                                 <br />
                                 <Typography.Text>{detail.task.model}</Typography.Text>
                             </Col>
-                            <Col span={8}>
+                            <Col span={6}>
                                 <Typography.Text type="secondary">创建时间</Typography.Text>
                                 <br />
                                 <Typography.Text>{detail.task.createdAt ? dayjs(detail.task.createdAt).format("YYYY-MM-DD HH:mm:ss") : "-"}</Typography.Text>
+                            </Col>
+                            <Col span={6}>
+                                <Typography.Text type="secondary">耗时</Typography.Text>
+                                <br />
+                                <Typography.Text>{detail.task.latencyMs > 0 ? `${(detail.task.latencyMs / 1000).toFixed(1)}s` : "-"}</Typography.Text>
                             </Col>
                         </Row>
                         {detail.task.errorMessage && (

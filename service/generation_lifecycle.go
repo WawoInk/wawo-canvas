@@ -151,6 +151,12 @@ func resolveGenerationTask(ctx context.Context, task model.GenerationTask, profi
 		ref.Error = &model.GenerationError{Code: "UPSTREAM_REJECTED", Message: "上游未返回视频结果", Retryable: false}
 	}
 	if ref.Status == model.TaskStatusSucceeded {
+		task, err = chargeGenerationByUpstreamCredits(task, ref, "/api/v1/generations")
+		if err != nil {
+			ref.Status = model.TaskStatusFailed
+			ref.Error = &model.GenerationError{Code: "INSUFFICIENT_CREDITS", Message: "算力点不足", Retryable: false}
+			return arbitrateGenerationTerminal(task, profile.UpstreamModel, ref, source, "", true)
+		}
 		resultJSON, materialized, materializeErr := materializeFirstPartyGenerationResult(ctx, task, ref)
 		if materializeErr != nil || !materialized {
 			return materializeErr
@@ -204,6 +210,11 @@ func arbitrateGenerationTerminalFrom(task model.GenerationTask, modelName string
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	updates := map[string]any{"status": string(ref.Status), "updated_at": now}
+	if ref.Credits == nil {
+		updates["upstream_credits"] = nil
+	} else {
+		updates["upstream_credits"] = *ref.Credits
+	}
 	var creditLog *model.CreditLog
 	if ref.Status == model.TaskStatusFailed {
 		normalized := ref.Error

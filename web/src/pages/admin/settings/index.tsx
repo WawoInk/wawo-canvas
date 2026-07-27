@@ -8,6 +8,7 @@ import { EditorView } from "@uiw/react-codemirror";
 
 import { fetchAdminSettings, fetchChannelModels, saveAdminSettings, testChannelModel, type AdminGenerationProfileBinding, type AdminModelChannel, type AdminModelCost, type AdminSettings } from "@/services/api/admin";
 import { useUserStore } from "@/stores/use-user-store";
+import { modelCostFor, normalizeModelCosts, upsertModelCost, videoBillingRule, type VideoBillingMode } from "./billing-rules";
 
 const CodeMirror = lazy(() => import("@uiw/react-codemirror"));
 const jsonEditorTheme = EditorView.theme({
@@ -55,6 +56,12 @@ const generationProfileOptions = [
     { label: "普通视频（Seedance）", value: "seedance-1-5-pro", durationRange: { min: 4, max: 15 }, resolutionValues: ["480p", "720p", "1080p"] },
     { label: "短剧（Vidu Drama）", value: "vidu-q3-drama", durationRange: { min: 8, max: 12 }, resolutionValues: ["1080p"] },
 ];
+const billingModeOptions: Array<{ label: string; value: VideoBillingMode }> = [
+    { label: "按 credits 计费", value: "per_credit" },
+    { label: "按秒计费", value: "per_second" },
+    { label: "按次计费", value: "per_call" },
+];
+const billingModeLabels = Object.fromEntries(billingModeOptions.map((item) => [item.value, item.label])) as Record<VideoBillingMode, string>;
 
 type SettingsTabKey = "public" | "private";
 type EditorMode = "visual" | "json";
@@ -91,8 +98,19 @@ export default function AdminSettingsPage() {
     const publicModels = Form.useWatch(["public", "modelChannel", "availableModels"], form) || [];
     const effectiveChannels = useMemo(() => (editorMode.private === "json" ? parseTabJson("private", jsonText.private)?.channels || channels : channels), [channels, editorMode.private, jsonText.private]);
     const channelModels = useMemo(() => collectChannelModels(effectiveChannels), [effectiveChannels]);
-    const pricedModels = useMemo(() => uniqueModels([...channelModels, ...publicModels, ...modelCosts.map((item) => item.model)]), [channelModels, publicModels, modelCosts]);
-    const generationProfileBindings = Form.useWatch(["private", "generationProfiles"], { form, preserve: true }) || [];
+    const generationProfileBindings = (Form.useWatch(["private", "generationProfiles"], { form, preserve: true }) || []) as AdminGenerationProfileBinding[];
+    const videoBindingsByID = useMemo(() => new Map(generationProfileBindings.filter((binding) => binding.id).map((binding) => [binding.id, binding])), [generationProfileBindings]);
+    const boundUpstreamModels = useMemo(() => new Set(generationProfileBindings.map((binding) => binding.upstreamModel).filter(Boolean)), [generationProfileBindings]);
+    const pricedModels = useMemo(
+        () =>
+            uniqueModels([
+                ...channelModels.filter((model) => !boundUpstreamModels.has(model)),
+                ...generationProfileBindings.map((binding) => binding.id),
+                ...publicModels.filter((model) => !boundUpstreamModels.has(model)),
+                ...modelCosts.map((item) => item.model).filter((model) => !boundUpstreamModels.has(model)),
+            ]),
+        [boundUpstreamModels, channelModels, generationProfileBindings, modelCosts, publicModels],
+    );
     const channelOptions = useMemo(() => channels.filter((channel) => channel.enabled && channel.name && channel.models.length).map((channel) => ({ label: channel.name, value: channel.name })), [channels]);
     const channelModelsByName = useMemo(() => Object.fromEntries(channels.map((channel) => [channel.name, channel.models || []])), [channels]);
     const channelTableData = useMemo(() => channels.map((channel, index) => ({ ...channel, _index: index, _rowKey: `${index}-${channel.name}-${channel.baseUrl}` })), [channels]);
@@ -315,7 +333,7 @@ export default function AdminSettingsPage() {
     function addGenerationProfile() {
         const profiles = currentGenerationProfiles(form);
         const profileId = generationProfileOptions[0].value;
-        updateGenerationProfiles([...profiles, { id: "", profileId, upstreamModel: "", channelName: "", enabled: true, limitOverrides: {} }]);
+        updateGenerationProfiles([...profiles, { id: "", profileId, upstreamModel: "", channelName: "", billingMode: "per_call", enabled: true, limitOverrides: {} }]);
     }
 
     function updateGenerationProfile(index: number, patch: Partial<AdminGenerationProfileBinding>) {
@@ -329,6 +347,13 @@ export default function AdminSettingsPage() {
         const profiles = currentGenerationProfiles(form);
         profiles.splice(index, 1);
         updateGenerationProfiles(profiles);
+    }
+
+    function setModelPricing(model: string, patch: Partial<Omit<AdminModelCost, "model">>) {
+        const current = normalizeModelCosts((form.getFieldValue(["public", "modelChannel", "modelCosts"]) || []) as AdminModelCost[]);
+        const next = upsertModelCost(current, model, patch);
+        form.setFieldValue(["public", "modelChannel", "modelCosts"], next);
+        setModelCosts(next);
     }
 
     const openTestDialog = (index: number) => {
@@ -528,24 +553,73 @@ export default function AdminSettingsPage() {
                                     </Col>
                                     <Col span={24}>
                                         <Typography.Title level={5}>模型算力点</Typography.Title>
-                                        <Typography.Paragraph type="secondary">实际扣费按渠道中的上游模型名匹配；视频能力绑定 ID 仅用于画布选择。</Typography.Paragraph>
+                                        <Typography.Paragraph type="secondary">普通模型按次计费；视频模型按私有配置中的能力绑定 ID 和计费规则匹配。</Typography.Paragraph>
                                         <Table
                                             rowKey="model"
                                             pagination={false}
                                             size="small"
-                                            dataSource={pricedModels.map((model) => ({ model, credits: modelCostCredits(modelCosts, model) }))}
+                                            dataSource={pricedModels.map((model) => {
+                                                const binding = videoBindingsByID.get(model);
+                                                const profileOption = generationProfileOptions.find((option) => option.value === binding?.profileId) || generationProfileOptions[0];
+                                                return {
+                                                    model,
+                                                    binding,
+                                                    rule: binding ? videoBillingRule(binding, profileOption.resolutionValues) : { mode: "per_call" as const, resolutions: [] },
+                                                    cost: modelCostFor(modelCosts, model, binding?.upstreamModel),
+                                                };
+                                            })}
                                             columns={[
-                                                { title: "模型", dataIndex: "model" },
                                                 {
-                                                    title: "每次调用扣除",
-                                                    dataIndex: "credits",
-                                                    width: 220,
+                                                    title: "模型",
+                                                    dataIndex: "model",
                                                     render: (_, item) => (
-                                                        <Space.Compact className="!w-full">
-                                                            <InputNumber min={0} step={1} precision={0} className="!w-full" value={item.credits} onChange={(value) => setModelCost(form, setModelCosts, item.model, Number(value) || 0)} />
-                                                            <Input style={{ width: 40 }} value="点" disabled />
-                                                        </Space.Compact>
+                                                        <Flex vertical>
+                                                            <Typography.Text>{item.model}</Typography.Text>
+                                                            {item.binding ? <Typography.Text type="secondary">{item.binding.upstreamModel}</Typography.Text> : null}
+                                                        </Flex>
                                                     ),
+                                                },
+                                                {
+                                                    title: "计费规则",
+                                                    width: 140,
+                                                    render: (_, item) => <Tag>{billingModeLabels[item.rule.mode]}</Tag>,
+                                                },
+                                                {
+                                                    title: "定价",
+                                                    width: 620,
+                                                    render: (_, item) =>
+                                                        item.rule.mode === "per_second" ? (
+                                                            <Flex gap={8} wrap>
+                                                                {item.rule.resolutions.map((resolution) => (
+                                                                    <InputNumber
+                                                                        key={resolution}
+                                                                        min={0}
+                                                                        step={1}
+                                                                        precision={0}
+                                                                        addonBefore={resolution}
+                                                                        addonAfter="点/秒"
+                                                                        style={{ width: 190 }}
+                                                                        value={item.cost.resolutionCredits?.[resolution] || 0}
+                                                                        onChange={(value) =>
+                                                                            setModelPricing(item.model, {
+                                                                                resolutionCredits: { ...(item.cost.resolutionCredits || {}), [resolution]: Number(value) || 0 },
+                                                                            })
+                                                                        }
+                                                                    />
+                                                                ))}
+                                                            </Flex>
+                                                        ) : (
+                                                            <InputNumber
+                                                                min={0}
+                                                                step={1}
+                                                                precision={0}
+                                                                addonBefore={item.rule.mode === "per_credit" ? "每 credits" : "每次调用"}
+                                                                addonAfter="点"
+                                                                style={{ width: 240 }}
+                                                                value={item.cost.credits}
+                                                                onChange={(value) => setModelPricing(item.model, { credits: Number(value) || 0 })}
+                                                            />
+                                                        ),
                                                 },
                                             ]}
                                         />
@@ -715,96 +789,125 @@ export default function AdminSettingsPage() {
                                             {generationProfileBindings.map((binding: AdminGenerationProfileBinding, index: number) => {
                                                 const modelOptions = (channelModelsByName[binding.channelName] || []).map((model) => ({ label: model, value: model }));
                                                 const profileOption = generationProfileOptions.find((option) => option.value === binding.profileId) || generationProfileOptions[0];
-                                                const resolutionValues = binding.limitOverrides?.resolutionValues ?? profileOption.resolutionValues;
+                                                const billingRule = videoBillingRule(binding, profileOption.resolutionValues);
                                                 return (
-                                                    <Card key={`${binding.profileId}-${index}`} size="small" styles={{ body: { paddingBottom: 4 } }}>
-                                                        <Row gutter={12} align="middle">
-                                                            <Col xs={24} md={8} xl={4}>
-                                                                <Form.Item label="绑定 ID">
-                                                                    <Input value={binding.id} placeholder="stable-profile-id" onChange={(event) => updateGenerationProfile(index, { id: event.target.value })} />
-                                                                </Form.Item>
-                                                            </Col>
-                                                            <Col xs={24} md={8} xl={5}>
-                                                                <Form.Item label="画布能力">
-                                                                    <Select value={binding.profileId} options={generationProfileOptions} onChange={(profileId) => updateGenerationProfile(index, { profileId, limitOverrides: {} })} />
-                                                                </Form.Item>
-                                                            </Col>
-                                                            <Col xs={24} md={8} xl={4}>
-                                                                <Form.Item label="渠道">
-                                                                    <Select
-                                                                        showSearch
-                                                                        value={binding.channelName || undefined}
-                                                                        placeholder="选择渠道"
-                                                                        options={channelOptions}
-                                                                        onChange={(channelName) => updateGenerationProfile(index, { channelName, upstreamModel: "", upstreamModels: undefined })}
-                                                                    />
-                                                                </Form.Item>
-                                                            </Col>
-                                                            <Col xs={24} md={8} xl={6}>
-                                                                <Form.Item label="上游模型">
-                                                                    <Select
-                                                                        showSearch
-                                                                        value={binding.upstreamModel || undefined}
-                                                                        placeholder={binding.channelName ? "选择模型" : "请先选择渠道"}
-                                                                        disabled={!binding.channelName}
-                                                                        options={modelOptions}
-                                                                        onChange={(upstreamModel) => updateGenerationProfile(index, { upstreamModel, upstreamModels: undefined, ...(!binding.id ? { id: upstreamModel } : {}) })}
-                                                                    />
-                                                                </Form.Item>
-                                                            </Col>
-                                                            <Col xs={12} md={8} xl={3}>
-                                                                <Form.Item label="最大时长">
-                                                                    <InputNumber
-                                                                        min={profileOption.durationRange.min}
-                                                                        max={profileOption.durationRange.max}
-                                                                        step={1}
-                                                                        precision={0}
-                                                                        className="!w-full"
-                                                                        value={binding.limitOverrides?.durationSecondsMax}
-                                                                        placeholder={`${profileOption.durationRange.max}s`}
-                                                                        addonAfter="秒"
-                                                                        onChange={(durationSecondsMax) =>
-                                                                            updateGenerationProfile(index, {
-                                                                                limitOverrides: { ...binding.limitOverrides, durationSecondsMax: durationSecondsMax ?? undefined },
-                                                                            })
-                                                                        }
-                                                                    />
-                                                                </Form.Item>
-                                                            </Col>
-                                                            <Col xs={24} md={12} xl={5}>
-                                                                <Form.Item label="支持分辨率">
-                                                                    <Select
-                                                                        mode="multiple"
-                                                                        value={resolutionValues}
-                                                                        options={profileOption.resolutionValues.map((value) => ({ label: value, value }))}
-                                                                        onChange={(values) => {
-                                                                            if (!values.length) return;
-                                                                            const resolutionOverride = values.length === profileOption.resolutionValues.length ? undefined : values;
-                                                                            updateGenerationProfile(index, {
-                                                                                limitOverrides: { ...binding.limitOverrides, resolutionValues: resolutionOverride },
-                                                                            });
-                                                                        }}
-                                                                    />
-                                                                </Form.Item>
-                                                            </Col>
-                                                            <Col xs={12} md={4} xl={2}>
-                                                                <Form.Item label="启用">
-                                                                    <Switch checked={binding.enabled !== false} onChange={(enabled) => updateGenerationProfile(index, { enabled })} />
-                                                                </Form.Item>
-                                                            </Col>
-                                                            <Col xs={12} md={4} xl={1}>
-                                                                <Form.Item label=" ">
-                                                                    <Button
-                                                                        danger
-                                                                        type="text"
-                                                                        icon={<DeleteOutlined />}
-                                                                        aria-label={`删除${generationProfileOptions.find((option) => option.value === binding.profileId)?.label || "能力"}绑定`}
-                                                                        onClick={() => removeGenerationProfile(index)}
-                                                                    />
-                                                                </Form.Item>
-                                                            </Col>
-                                                        </Row>
-                                                    </Card>
+                                                    <section key={`${binding.profileId}-${index}`} style={{ border: "1px solid var(--ant-color-border)", borderRadius: 6, padding: "12px 12px 4px" }}>
+                                                        <Flex justify="space-between" align="center" gap={12} style={{ marginBottom: 4 }}>
+                                                            <Typography.Text strong>{binding.id || `视频绑定 ${index + 1}`}</Typography.Text>
+                                                            <Space size={8}>
+                                                                <Typography.Text type="secondary">启用</Typography.Text>
+                                                                <Switch checked={binding.enabled !== false} onChange={(enabled) => updateGenerationProfile(index, { enabled })} />
+                                                                <Button
+                                                                    danger
+                                                                    type="text"
+                                                                    icon={<DeleteOutlined />}
+                                                                    aria-label={`删除${generationProfileOptions.find((option) => option.value === binding.profileId)?.label || "能力"}绑定`}
+                                                                    onClick={() => removeGenerationProfile(index)}
+                                                                />
+                                                            </Space>
+                                                        </Flex>
+                                                        <Tabs
+                                                            size="small"
+                                                            items={[
+                                                                {
+                                                                    key: "binding",
+                                                                    label: "能力绑定",
+                                                                    children: (
+                                                                        <Row gutter={12} align="middle">
+                                                                            <Col xs={24} md={8} xl={4}>
+                                                                                <Form.Item label="绑定 ID">
+                                                                                    <Input value={binding.id} placeholder="stable-profile-id" onChange={(event) => updateGenerationProfile(index, { id: event.target.value })} />
+                                                                                </Form.Item>
+                                                                            </Col>
+                                                                            <Col xs={24} md={8} xl={5}>
+                                                                                <Form.Item label="画布能力">
+                                                                                    <Select
+                                                                                        value={binding.profileId}
+                                                                                        options={generationProfileOptions}
+                                                                                        onChange={(profileId) => updateGenerationProfile(index, { profileId, limitOverrides: {} })}
+                                                                                    />
+                                                                                </Form.Item>
+                                                                            </Col>
+                                                                            <Col xs={24} md={8} xl={4}>
+                                                                                <Form.Item label="渠道">
+                                                                                    <Select
+                                                                                        showSearch
+                                                                                        value={binding.channelName || undefined}
+                                                                                        placeholder="选择渠道"
+                                                                                        options={channelOptions}
+                                                                                        onChange={(channelName) => updateGenerationProfile(index, { channelName, upstreamModel: "", upstreamModels: undefined })}
+                                                                                    />
+                                                                                </Form.Item>
+                                                                            </Col>
+                                                                            <Col xs={24} md={8} xl={6}>
+                                                                                <Form.Item label="上游模型">
+                                                                                    <Select
+                                                                                        showSearch
+                                                                                        value={binding.upstreamModel || undefined}
+                                                                                        placeholder={binding.channelName ? "选择模型" : "请先选择渠道"}
+                                                                                        disabled={!binding.channelName}
+                                                                                        options={modelOptions}
+                                                                                        onChange={(upstreamModel) =>
+                                                                                            updateGenerationProfile(index, { upstreamModel, upstreamModels: undefined, ...(!binding.id ? { id: upstreamModel } : {}) })
+                                                                                        }
+                                                                                    />
+                                                                                </Form.Item>
+                                                                            </Col>
+                                                                            <Col xs={12} md={8} xl={3}>
+                                                                                <Form.Item label="最大时长">
+                                                                                    <InputNumber
+                                                                                        min={profileOption.durationRange.min}
+                                                                                        max={profileOption.durationRange.max}
+                                                                                        step={1}
+                                                                                        precision={0}
+                                                                                        className="!w-full"
+                                                                                        value={binding.limitOverrides?.durationSecondsMax}
+                                                                                        placeholder={`${profileOption.durationRange.max}s`}
+                                                                                        addonAfter="秒"
+                                                                                        onChange={(durationSecondsMax) =>
+                                                                                            updateGenerationProfile(index, {
+                                                                                                limitOverrides: { ...binding.limitOverrides, durationSecondsMax: durationSecondsMax ?? undefined },
+                                                                                            })
+                                                                                        }
+                                                                                    />
+                                                                                </Form.Item>
+                                                                            </Col>
+                                                                            <Col xs={24} md={12} xl={5}>
+                                                                                <Form.Item label="支持分辨率">
+                                                                                    <Select
+                                                                                        mode="multiple"
+                                                                                        value={billingRule.resolutions}
+                                                                                        options={profileOption.resolutionValues.map((value) => ({ label: value, value }))}
+                                                                                        onChange={(values) => {
+                                                                                            if (!values.length) return;
+                                                                                            const resolutionOverride = values.length === profileOption.resolutionValues.length ? undefined : values;
+                                                                                            updateGenerationProfile(index, {
+                                                                                                limitOverrides: { ...binding.limitOverrides, resolutionValues: resolutionOverride },
+                                                                                            });
+                                                                                        }}
+                                                                                    />
+                                                                                </Form.Item>
+                                                                            </Col>
+                                                                        </Row>
+                                                                    ),
+                                                                },
+                                                                {
+                                                                    key: "billing",
+                                                                    label: "计费规则",
+                                                                    children: (
+                                                                        <Form.Item label="计费方式" className="mb-3">
+                                                                            <Segmented
+                                                                                block
+                                                                                value={billingRule.mode}
+                                                                                options={billingModeOptions}
+                                                                                onChange={(billingMode) => updateGenerationProfile(index, { billingMode: billingMode as VideoBillingMode })}
+                                                                            />
+                                                                        </Form.Item>
+                                                                    ),
+                                                                },
+                                                            ]}
+                                                        />
+                                                    </section>
                                                 );
                                             })}
                                         </Flex>
@@ -1071,10 +1174,6 @@ function normalizePublicSetting(setting: Partial<AdminSettings["public"]> = {}):
     };
 }
 
-function normalizeModelCosts(items: Partial<AdminSettings["public"]["modelChannel"]["modelCosts"][number]>[]) {
-    return items.filter((item) => item.model).map((item) => ({ model: item.model || "", credits: Math.max(0, Number(item.credits) || 0) }));
-}
-
 function currentGenerationProfiles(form: any) {
     return [...((form.getFieldValue(["private", "generationProfiles"]) || []) as AdminGenerationProfileBinding[])];
 }
@@ -1088,6 +1187,7 @@ function normalizePrivateSetting(setting: Partial<AdminSettings["private"]> = {}
                 profileId: binding.profileId || "",
                 upstreamModel: binding.upstreamModel || (binding.upstreamModels?.length === 1 ? binding.upstreamModels[0] : ""),
                 channelName: binding.channelName || "",
+                billingMode: binding.billingMode || "per_call",
                 ...(binding.credits == null ? {} : { credits: Math.max(0, Number(binding.credits) || 0) }),
                 enabled: binding.enabled !== false,
                 limitOverrides: binding.limitOverrides || {},
@@ -1122,18 +1222,6 @@ function normalizeChannel(item: Partial<AdminModelChannel> = {}): AdminModelChan
         enabled: item.enabled !== false,
         remark: item.remark || "",
     };
-}
-
-function modelCostCredits(items: AdminSettings["public"]["modelChannel"]["modelCosts"], model: string) {
-    return items.find((item) => item.model === model)?.credits || 0;
-}
-
-function setModelCost(form: any, setModelCosts: (items: AdminModelCost[]) => void, model: string, credits: number) {
-    const current = (form.getFieldValue(["public", "modelChannel", "modelCosts"]) || []) as AdminSettings["public"]["modelChannel"]["modelCosts"];
-    const next = current.filter((item) => item.model !== model);
-    next.push({ model, credits: Math.max(0, credits) });
-    form.setFieldValue(["public", "modelChannel", "modelCosts"], next);
-    setModelCosts(next);
 }
 
 function mergeChannelApiKeys(currentChannels: AdminModelChannel[], saved: AdminSettings): AdminSettings {

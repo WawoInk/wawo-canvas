@@ -21,6 +21,7 @@ test("账户日志明确展示用户操作和积分变动", () => {
                     model: "video-model",
                     status: "succeeded",
                     credits: 12,
+                    upstreamCredits: null,
                     latencyMs: 2300,
                     upstreamTaskId: "upstream-1",
                     traceId: "trace-1",
@@ -37,6 +38,7 @@ test("账户日志明确展示用户操作和积分变动", () => {
     assert.match(usageHTML, /无限画布/);
     assert.match(usageHTML, /成功/);
     assert.match(usageHTML, /12/);
+    assert.match(usageHTML, /null/);
 
     const creditHTML = renderToStaticMarkup(
         createElement(AccountCreditLogTable, {

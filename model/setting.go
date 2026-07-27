@@ -29,8 +29,9 @@ func (ch ModelChannel) SupportsCallback() bool {
 
 // ModelCost 模型算力点配置。
 type ModelCost struct {
-	Model   string `json:"model"`
-	Credits int    `json:"credits"`
+	Model             string         `json:"model"`
+	Credits           int            `json:"credits"`
+	ResolutionCredits map[string]int `json:"resolutionCredits,omitempty"`
 }
 
 // PublicModelChannelSetting 公开模型渠道配置。
@@ -70,12 +71,21 @@ type GenerationLimitOverrides struct {
 	ResolutionValues   []string `json:"resolutionValues,omitempty"`
 }
 
+type GenerationBillingMode string
+
+const (
+	BillingModePerCredit GenerationBillingMode = "per_credit"
+	BillingModePerSecond GenerationBillingMode = "per_second"
+	BillingModePerCall   GenerationBillingMode = "per_call"
+)
+
 type GenerationProfileBinding struct {
-	ID             string   `json:"id"`
-	ProfileID      string   `json:"profileId"`
-	UpstreamModel  string   `json:"upstreamModel"`
-	UpstreamModels []string `json:"upstreamModels,omitempty"`
-	ChannelName    string   `json:"channelName"`
+	ID             string                `json:"id"`
+	ProfileID      string                `json:"profileId"`
+	UpstreamModel  string                `json:"upstreamModel"`
+	UpstreamModels []string              `json:"upstreamModels,omitempty"`
+	ChannelName    string                `json:"channelName"`
+	BillingMode    GenerationBillingMode `json:"billingMode"`
 	// LegacyCredits is retained for rollback compatibility; current billing uses public modelCosts.
 	LegacyCredits  *int                     `json:"credits,omitempty"`
 	Enabled        bool                     `json:"enabled"`

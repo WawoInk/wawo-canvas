@@ -11,7 +11,13 @@ import (
 )
 
 func compatibilityProfileForModel(modelName string) (model.GenerationProfile, bool) {
-	for _, profile := range generationProfiles() {
+	profiles := generationProfiles()
+	for _, profile := range profiles {
+		if profile.ID == modelName {
+			return profile, true
+		}
+	}
+	for _, profile := range profiles {
 		if profile.UpstreamModel == modelName {
 			return profile, true
 		}
@@ -51,7 +57,14 @@ func observeCompatibilityTask(ctx context.Context, task model.GenerationTask, pr
 			log.Printf("compatibility generation poll failed: task=%s err=%v", task.ID, err)
 			_ = appendGenerationTaskEvent(task.ID, "retry", sanitizeGenerationAuditJSON(fmt.Sprintf("%q", err.Error())))
 		} else if isTerminalGenerationStatus(ref.Status) {
-			_ = arbitrateGenerationTerminalFrom(task, profile.UpstreamModel, ref, "poll", "", false, []model.TaskStatus{model.TaskStatusRunning})
+			if ref.Status == model.TaskStatusSucceeded {
+				task, err = chargeGenerationByUpstreamCredits(task, ref, "/api/v1/contents/generations/tasks")
+				if err != nil {
+					ref.Status = model.TaskStatusFailed
+					ref.Error = &model.GenerationError{Code: "INSUFFICIENT_CREDITS", Message: "算力点不足", Retryable: false}
+				}
+			}
+			_ = arbitrateGenerationTerminalFrom(task, profile.UpstreamModel, ref, "poll", "", true, []model.TaskStatus{model.TaskStatusRunning})
 			return
 		} else {
 			_ = updateGenerationProgress(task.ID, ref.Status, "poll")

@@ -42,37 +42,40 @@ func EquivalentTaskStatuses(status TaskStatus) []TaskStatus {
 
 // GenerationTask 统一 AI 生成任务元数据。
 type GenerationTask struct {
-	ID                   string     `json:"id" gorm:"primaryKey"`
-	UserID               string     `json:"userId" gorm:"index"`
-	TaskType             TaskType   `json:"taskType" gorm:"index"`
-	Source               string     `json:"source" gorm:"index"`
-	Provider             string     `json:"provider"`
-	Model                string     `json:"model"`
-	Status               TaskStatus `json:"status"`
-	Credits              int        `json:"credits"`
-	LatencyMs            int64      `json:"latencyMs"`
-	UpstreamTaskID       string     `json:"upstreamTaskId" gorm:"index"`
-	CallbackToken        string     `json:"-" gorm:"index"`
-	TraceID              string     `json:"traceId"`
-	ErrorCode            string     `json:"errorCode,omitempty"`
-	ErrorMessage         string     `json:"errorMessage,omitempty"`
-	ErrorRetryable       bool       `json:"errorRetryable,omitempty"`
-	Metadata             string     `json:"metadata" gorm:"type:text"`
-	ClientRequestID      string     `json:"clientRequestId,omitempty" gorm:"index"`
-	CommandHash          string     `json:"commandHash,omitempty"`
-	CommandVersion       int        `json:"commandVersion,omitempty"`
-	IntentKind           string     `json:"intentKind,omitempty" gorm:"index"`
-	ModelProfileID       string     `json:"modelProfileId,omitempty" gorm:"index"`
-	ProfileVersion       int        `json:"modelProfileVersion,omitempty"`
-	AdapterKey           string     `json:"adapterKey,omitempty"`
-	ChannelID            string     `json:"channelId,omitempty"`
-	UpstreamModel        string     `json:"upstreamModel,omitempty"`
-	ResultJSON           string     `json:"-" gorm:"type:text"`
-	QueueAvailableAt     string     `json:"-"`
-	WorkerLeaseOwner     string     `json:"-"`
-	WorkerLeaseExpiresAt string     `json:"-"`
-	CreatedAt            string     `json:"createdAt"`
-	UpdatedAt            string     `json:"updatedAt"`
+	ID                   string                `json:"id" gorm:"primaryKey"`
+	UserID               string                `json:"userId" gorm:"index"`
+	TaskType             TaskType              `json:"taskType" gorm:"index"`
+	Source               string                `json:"source" gorm:"index"`
+	Provider             string                `json:"provider"`
+	Model                string                `json:"model"`
+	Status               TaskStatus            `json:"status"`
+	Credits              int                   `json:"credits"`
+	UpstreamCredits      *int                  `json:"upstreamCredits"`
+	BillingMode          GenerationBillingMode `json:"billingMode,omitempty"`
+	BillingRate          int                   `json:"billingRate,omitempty"`
+	LatencyMs            int64                 `json:"latencyMs"`
+	UpstreamTaskID       string                `json:"upstreamTaskId" gorm:"index"`
+	CallbackToken        string                `json:"-" gorm:"index"`
+	TraceID              string                `json:"traceId"`
+	ErrorCode            string                `json:"errorCode,omitempty"`
+	ErrorMessage         string                `json:"errorMessage,omitempty"`
+	ErrorRetryable       bool                  `json:"errorRetryable,omitempty"`
+	Metadata             string                `json:"metadata" gorm:"type:text"`
+	ClientRequestID      string                `json:"clientRequestId,omitempty" gorm:"index"`
+	CommandHash          string                `json:"commandHash,omitempty"`
+	CommandVersion       int                   `json:"commandVersion,omitempty"`
+	IntentKind           string                `json:"intentKind,omitempty" gorm:"index"`
+	ModelProfileID       string                `json:"modelProfileId,omitempty" gorm:"index"`
+	ProfileVersion       int                   `json:"modelProfileVersion,omitempty"`
+	AdapterKey           string                `json:"adapterKey,omitempty"`
+	ChannelID            string                `json:"channelId,omitempty"`
+	UpstreamModel        string                `json:"upstreamModel,omitempty"`
+	ResultJSON           string                `json:"-" gorm:"type:text"`
+	QueueAvailableAt     string                `json:"-"`
+	WorkerLeaseOwner     string                `json:"-"`
+	WorkerLeaseExpiresAt string                `json:"-"`
+	CreatedAt            string                `json:"createdAt"`
+	UpdatedAt            string                `json:"updatedAt"`
 }
 
 // GenerationPayload 任务请求/响应详情（按需查询，TTL 清理）。

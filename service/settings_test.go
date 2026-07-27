@@ -227,13 +227,31 @@ func TestResolveGenerationProfilesPublishesPublicModelCosts(t *testing.T) {
 	}
 }
 
+func TestResolveGenerationProfilesPublishesPerCallCostByBindingID(t *testing.T) {
+	private := normalizePrivateSetting(model.PrivateSetting{
+		Channels: []model.ModelChannel{{Name: "video", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"vendor-video"}}},
+		GenerationProfiles: []model.GenerationProfileBinding{{
+			ID: "stable-video", ProfileID: "seedance-1-5-pro", UpstreamModel: "vendor-video", ChannelName: "video", BillingMode: model.BillingModePerCall, Enabled: true,
+		}},
+	})
+	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "stable-video", Credits: 7}}}}
+
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, public)
+	if err != nil {
+		t.Fatalf("resolveGenerationProfiles: %v", err)
+	}
+	if len(profiles) != 1 || profiles[0].Credits != 7 {
+		t.Fatalf("profiles = %#v", profiles)
+	}
+}
+
 func TestGenerationProfileBindingMigratesLegacyCredits(t *testing.T) {
 	var private model.PrivateSetting
 	if err := json.Unmarshal([]byte(`{"generationProfiles":[{"id":"stable","profileId":"seedance-1-5-pro","upstreamModel":"vendor-seedance","credits":99,"enabled":true}]}`), &private); err != nil {
 		t.Fatalf("unmarshal legacy setting: %v", err)
 	}
 	settings := normalizeSettings(model.Settings{Private: private})
-	if len(settings.Public.ModelChannel.ModelCosts) != 1 || settings.Public.ModelChannel.ModelCosts[0] != (model.ModelCost{Model: "vendor-seedance", Credits: 99}) {
+	if len(settings.Public.ModelChannel.ModelCosts) != 1 || !reflect.DeepEqual(settings.Public.ModelChannel.ModelCosts[0], model.ModelCost{Model: "vendor-seedance", Credits: 99}) {
 		t.Fatalf("model costs = %#v", settings.Public.ModelChannel.ModelCosts)
 	}
 	encoded, err := json.Marshal(settings.Private)

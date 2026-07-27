@@ -215,7 +215,7 @@ func resolveGenerationProfiles(templates []model.GenerationProfile, private mode
 			return nil, safeMessageError{message: fmt.Sprintf("duplicate generation profile binding %q", profile.ID)}
 		}
 		seen[profile.ID] = true
-		profile.Credits = publicModelCost(public, upstreamModel)
+		profile.Credits = publicModelCost(public, binding.ID, upstreamModel)
 		channels := modelChannelsForModel(private.Channels, profile.UpstreamModel)
 		if binding.ChannelName != "" {
 			channels = channels[:0]
@@ -263,10 +263,12 @@ func resolveGenerationProfiles(templates []model.GenerationProfile, private mode
 	return profiles, nil
 }
 
-func publicModelCost(public model.PublicSetting, modelName string) int {
-	for _, cost := range normalizePublicSetting(public).ModelChannel.ModelCosts {
-		if cost.Model == modelName {
-			return cost.Credits
+func publicModelCost(public model.PublicSetting, modelNames ...string) int {
+	for _, modelName := range modelNames {
+		for _, cost := range normalizePublicSetting(public).ModelChannel.ModelCosts {
+			if cost.Model == modelName {
+				return cost.Credits
+			}
 		}
 	}
 	return 0

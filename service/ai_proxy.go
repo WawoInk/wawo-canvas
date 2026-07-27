@@ -98,6 +98,9 @@ func ProxyAIGetRequest(w http.ResponseWriter, r *http.Request, path string) {
 	if strings.TrimSpace(modelName) == "" {
 		modelName = "grok-imagine-video"
 	}
+	if profile, ok := compatibilityProfileForModel(modelName); ok {
+		modelName = profile.UpstreamModel
+	}
 	channel, err := SelectModelChannel(modelName)
 	if err != nil {
 		proxyAILogf("AI proxy select channel failed: model=%s err=%v", modelName, err)
@@ -562,20 +565,31 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 		proxyFail(w, "未登录或权限不足")
 		return
 	}
-	credits, err := ModelCost(modelName)
+	profile, durable := compatibilityProfileForModel(modelName)
+	upstreamModel := modelName
+	billing := generationBillingPlan{Mode: model.BillingModePerCall}
+	if durable {
+		billing, err = compatibilityGenerationBillingPlanFor(profile, body)
+		upstreamModel = profile.UpstreamModel
+		body = replaceAIRequestModel(body, upstreamModel)
+	} else {
+		billing.Credits, err = ModelCost(modelName)
+		billing.Rate = billing.Credits
+	}
 	if err != nil {
 		proxyAILogf("video task read model cost failed: model=%s err=%v", modelName, err)
 		proxyFail(w, "AI 接口请求失败")
 		return
 	}
-	credits *= readAIRequestCount(body, contentType)
-	channel, err := SelectModelChannel(modelName)
+	billing.Credits *= readAIRequestCount(body, contentType)
+	credits := billing.Credits
+	channel, err := SelectModelChannel(upstreamModel)
 	if err != nil {
 		proxyAILogf("video task select channel failed: model=%s err=%v", modelName, err)
 		proxyFail(w, "AI 接口请求失败")
 		return
 	}
-	resolved := buildOpenAIUpstream(channel, modelName, path, body, contentType)
+	resolved := buildOpenAIUpstream(channel, upstreamModel, path, body, contentType)
 	if resolved.URL == "" {
 		proxyFail(w, "AI 接口请求失败")
 		return
@@ -595,7 +609,7 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 	// ── 兼容任务：记录与预扣必须同一事务 ──
 	taskType := DetermineTaskType(path)
 	provider := DetermineProvider(channel)
-	genTaskID, err := StartCompatibilityTask(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers), DetermineSource(r), credits, path)
+	genTaskID, err := StartCompatibilityTask(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers), DetermineSource(r), billing, path)
 	if err != nil {
 		proxyFailError(w, err)
 		return
@@ -612,7 +626,6 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 			latencyMs := time.Since(startTime).Milliseconds()
 			upstreamTaskID := ExtractUpstreamTaskID(respBody)
 			proxyAILogf("video task created: genTaskID=%s upstreamTaskID=%s latency=%dms", genTaskID, upstreamTaskID, latencyMs)
-			profile, durable := compatibilityProfileForModel(modelName)
 			if upstreamTaskID == "" {
 				if err := RefundUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
 					proxyAILogf("video task missing-id refund failed: task=%s err=%v", genTaskID, err)
@@ -621,7 +634,7 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 				return
 			}
 			if durable {
-				if err := repository.QueueAcceptedCompatibilityTask(genTaskID, upstreamTaskID, channel.Name, profile.AdapterKey, profile.ID, profile.Version, modelName, string(respBody), respHeaders, latencyMs, time.Now().UTC()); err != nil {
+				if err := repository.QueueAcceptedCompatibilityTask(genTaskID, upstreamTaskID, channel.Name, profile.AdapterKey, profile.ID, profile.Version, upstreamModel, string(respBody), respHeaders, latencyMs, time.Now().UTC()); err != nil {
 					proxyAILogf("video task queue durable observation failed: task=%s err=%v", genTaskID, err)
 					if refundErr := RefundUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); refundErr != nil {
 						proxyAILogf("video task queue refund failed: task=%s err=%v", genTaskID, refundErr)
@@ -676,6 +689,9 @@ func ProxyVideoTaskDelete(w http.ResponseWriter, r *http.Request, path string) {
 		proxyFail(w, "缺少模型名称")
 		return
 	}
+	if profile, ok := compatibilityProfileForModel(modelName); ok {
+		modelName = profile.UpstreamModel
+	}
 	channel, err := SelectModelChannel(modelName)
 	if err != nil {
 		proxyAILogf("video task select channel failed: model=%s err=%v", modelName, err)
@@ -713,6 +729,19 @@ func ProxyVideoTaskDelete(w http.ResponseWriter, r *http.Request, path string) {
 		},
 		nil,
 	)
+}
+
+func replaceAIRequestModel(body []byte, modelName string) []byte {
+	var payload map[string]any
+	if json.Unmarshal(body, &payload) != nil {
+		return body
+	}
+	payload["model"] = modelName
+	updated, err := json.Marshal(payload)
+	if err != nil {
+		return body
+	}
+	return updated
 }
 
 // ── Video Task Ownership (thin wrappers around repository) ──────────

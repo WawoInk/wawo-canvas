@@ -13,6 +13,7 @@ export interface VideoHistoryItem {
     model: string;
     upstreamTaskId: string;
     credits: number;
+    upstreamCredits: number | null;
     durationMs: number;
     videoUrl?: string;
     thumbnailUrl?: string;
@@ -56,6 +57,9 @@ export interface GenerationTaskItem {
     model: string;
     status: string;
     credits: number;
+    upstreamCredits: number | null;
+    billingMode?: "per_credit" | "per_second" | "per_call";
+    billingRate?: number;
     latencyMs: number;
     upstreamTaskId: string;
     traceId: string;

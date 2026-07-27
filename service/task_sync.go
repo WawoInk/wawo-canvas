@@ -39,6 +39,7 @@ type TaskSyncConfig struct {
 type TaskResult struct {
 	ErrorCode       string
 	ErrorMessage    string
+	Credits         *int
 	ResponseBody    string
 	ResponseHeaders string
 }
@@ -168,9 +169,10 @@ func queryUpstreamTaskViaHTTP(cfg TaskSyncConfig) (model.TaskStatus, TaskResult)
 		log.Printf("task_sync: read upstream response failed: genTask=%s err=%v", cfg.GenTaskID, readErr)
 	}
 	var result struct {
-		ID     string `json:"id"`
-		Status string `json:"status"`
-		Error  *struct {
+		ID      string `json:"id"`
+		Status  string `json:"status"`
+		Credits *int   `json:"credits"`
+		Error   *struct {
 			Code    string `json:"code"`
 			Message string `json:"message"`
 		} `json:"error"`
@@ -184,7 +186,7 @@ func queryUpstreamTaskViaHTTP(cfg TaskSyncConfig) (model.TaskStatus, TaskResult)
 	}
 
 	status := mapArkStatusToModel(result.Status)
-	taskResult := TaskResult{ResponseBody: string(body)}
+	taskResult := TaskResult{Credits: result.Credits, ResponseBody: string(body)}
 	if result.Error != nil {
 		taskResult.ErrorCode = result.Error.Code
 		taskResult.ErrorMessage = result.Error.Message
@@ -216,11 +218,12 @@ func OnTaskCompleted(genTaskID string, status model.TaskStatus, result TaskResul
 		return
 	}
 	if result.ResponseBody != "" {
-		if err := repository.UpdateGenerationPayload(genTaskID, result.ResponseBody, result.ResponseHeaders); err != nil {
+		responseBody := contentsGenerationAuditBody([]byte(result.ResponseBody), task.Model)
+		if err := repository.UpdateGenerationPayload(genTaskID, responseBody, result.ResponseHeaders); err != nil {
 			log.Printf("task_sync: update payload failed: genTask=%s err=%v", genTaskID, err)
 		}
 	}
-	ref := ProviderTaskRef{ID: task.UpstreamTaskID, Status: status}
+	ref := ProviderTaskRef{ID: task.UpstreamTaskID, Status: status, Credits: result.Credits}
 	if result.ErrorCode != "" {
 		ref.Error = &model.GenerationError{Code: result.ErrorCode, Message: result.ErrorMessage, Retryable: false}
 	}

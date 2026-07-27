@@ -32,6 +32,7 @@ type ProviderTaskRef struct {
 	ID       string
 	Status   model.TaskStatus
 	VideoURL string
+	Credits  *int
 	Shots    []ProviderShot
 	Error    *model.GenerationError
 	Audit    GenerationAudit
@@ -168,20 +169,19 @@ func createContentsGenerationTask(ctx context.Context, client *http.Client, chan
 		ref := ProviderTaskRef{Error: mapGenerationHTTPError(response.StatusCode), Audit: audit}
 		return ref, fmt.Errorf("upstream returned %d", response.StatusCode)
 	}
-	var result struct {
-		ID     string `json:"id"`
-		Status string `json:"status"`
-	}
-	if err := json.Unmarshal(responseBody, &result); err != nil {
+	ref, err := parseContentsGenerationTask(responseBody)
+	if err != nil {
 		audit.RawError = err.Error()
 		return ProviderTaskRef{Error: generationTransportError(), Audit: audit}, err
 	}
-	if result.ID == "" {
+	audit.ResponseBody = ref.Audit.ResponseBody
+	ref.Audit = audit
+	if ref.ID == "" {
 		err := fmt.Errorf("upstream task id is missing")
 		audit.RawError = err.Error()
 		return ProviderTaskRef{Error: &model.GenerationError{Code: "UPSTREAM_REJECTED", Message: "上游返回了无效任务", Retryable: false}, Audit: audit}, err
 	}
-	return ProviderTaskRef{ID: result.ID, Status: mapGenerationStatus(result.Status), Audit: audit}, nil
+	return ref, nil
 }
 
 func generationSetting(req AdapterCreateRequest, key string, fallback any) any {
@@ -243,6 +243,7 @@ func pollContentsGenerationTask(ctx context.Context, client *http.Client, channe
 		return ref, fmt.Errorf("upstream returned %d", response.StatusCode)
 	}
 	ref, err := parseContentsGenerationTask(body)
+	audit.ResponseBody = ref.Audit.ResponseBody
 	ref.Audit = audit
 	return ref, err
 }
@@ -250,7 +251,9 @@ func pollContentsGenerationTask(ctx context.Context, client *http.Client, channe
 func parseContentsGenerationTask(body []byte) (ProviderTaskRef, error) {
 	var result struct {
 		ID      string `json:"id"`
+		Model   string `json:"model"`
 		Status  string `json:"status"`
+		Credits *int   `json:"credits"`
 		Content *struct {
 			VideoURL string `json:"video_url"`
 		} `json:"content"`
@@ -289,7 +292,7 @@ func parseContentsGenerationTask(body []byte) (ProviderTaskRef, error) {
 	if id == "" && result.Task != nil {
 		id = result.Task.Meta.ID
 	}
-	ref := ProviderTaskRef{ID: id, Status: status, Audit: GenerationAudit{ResponseBody: sanitizeGenerationAuditJSON(string(body))}}
+	ref := ProviderTaskRef{ID: id, Status: status, Credits: result.Credits, Audit: GenerationAudit{ResponseBody: contentsGenerationAuditBody(body, result.Model)}}
 	if result.Content != nil {
 		ref.VideoURL = result.Content.VideoURL
 	}
@@ -308,6 +311,21 @@ func parseContentsGenerationTask(body []byte) (ProviderTaskRef, error) {
 		ref.Error = &model.GenerationError{Code: "UPSTREAM_REJECTED", Message: "上游拒绝了生成请求", Retryable: false}
 	}
 	return ref, nil
+}
+
+func contentsGenerationAuditBody(body []byte, modelName string) string {
+	if !strings.Contains(strings.ToLower(modelName), "vidu") {
+		return sanitizeGenerationAuditJSON(string(body))
+	}
+	var value map[string]any
+	if json.Unmarshal(body, &value) != nil {
+		return sanitizeGenerationAuditJSON(string(body))
+	}
+	if _, ok := value["credits"]; !ok {
+		value["credits"] = nil
+	}
+	normalized, _ := json.Marshal(value)
+	return sanitizeGenerationAuditJSON(string(normalized))
 }
 
 func generationTransportError() *model.GenerationError {

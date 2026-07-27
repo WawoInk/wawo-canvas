@@ -24,6 +24,26 @@ func TestGenerationProfilesAreValid(t *testing.T) {
 	}
 }
 
+func TestViduAdapterRecordsUpstreamCreditsIncludingExplicitNull(t *testing.T) {
+	adapter := NewViduShortDramaV1Adapter(nil)
+	withCredits, err := adapter.ParseCallback(context.Background(), []byte(`{"id":"vidu-credits","model":"vidu_hq_t2v-oversea","status":"succeeded","content":{"video_url":"https://example.com/video.mp4"},"credits":18}`))
+	if err != nil || withCredits.Credits == nil || *withCredits.Credits != 18 {
+		t.Fatalf("with credits = %#v, err = %v", withCredits, err)
+	}
+
+	withoutCredits, err := adapter.ParseCallback(context.Background(), []byte(`{"id":"vidu-no-credits","model":"vidu_hq_t2v-oversea","status":"succeeded","content":{"video_url":"https://example.com/video.mp4"}}`))
+	if err != nil || withoutCredits.Credits != nil {
+		t.Fatalf("without credits = %#v, err = %v", withoutCredits, err)
+	}
+	var audit map[string]any
+	if err := json.Unmarshal([]byte(withoutCredits.Audit.ResponseBody), &audit); err != nil {
+		t.Fatalf("decode audit: %v", err)
+	}
+	if credits, exists := audit["credits"]; !exists || credits != nil {
+		t.Fatalf("audit credits = %#v, exists = %v; audit = %#v", credits, exists, audit)
+	}
+}
+
 func TestCreateGenerationRejectsForeignMedia(t *testing.T) {
 	previousProfiles := generationProfiles
 	defer func() { generationProfiles = previousProfiles }()
@@ -210,6 +230,161 @@ func TestCreateGenerationUsesOperationalBindingRouteAndPublicPrice(t *testing.T)
 	user, ok, err := repository.GetUserByID(userID)
 	if err != nil || !ok || user.Credits != 7 {
 		t.Fatalf("user = %#v, ok = %v, err = %v", user, ok, err)
+	}
+}
+
+func TestCreateGenerationChargesVideoBindingByResolutionAndSeconds(t *testing.T) {
+	previousProfiles := generationProfiles
+	previousChannel := generationChannel
+	previousRouteChannel := generationRouteChannel
+	previousDispatch := generationDispatch
+	previousSettings, err := repository.GetSettings()
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	defer func() {
+		generationProfiles = previousProfiles
+		generationChannel = previousChannel
+		generationRouteChannel = previousRouteChannel
+		generationDispatch = previousDispatch
+		_, _ = repository.SaveSettings(previousSettings, time.Now().UTC().Format(time.RFC3339Nano))
+	}()
+
+	key := uuid.NewString()
+	profileID := "second-profile-" + key
+	upstreamModel := "second-model-" + key
+	channelName := "second-channel-" + key
+	profile := model.GenerationProfile{
+		ID: profileID, Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: upstreamModel, ChannelName: channelName,
+		Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities(),
+	}
+	generationProfiles = func() []model.GenerationProfile { return []model.GenerationProfile{profile} }
+	generationChannel = func(string) (model.ModelChannel, error) { return model.ModelChannel{}, errors.New("random route used") }
+	generationRouteChannel = func(string, string) (model.ModelChannel, error) {
+		return model.ModelChannel{Name: channelName, Protocol: "xvanai", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{upstreamModel}}, nil
+	}
+	generationDispatch = func(context.Context, string) {}
+
+	settings := previousSettings
+	settings.Private.GenerationProfiles = append(settings.Private.GenerationProfiles, model.GenerationProfileBinding{
+		ID: profileID, ProfileID: "seedance-1-5-pro", UpstreamModel: upstreamModel, ChannelName: channelName, BillingMode: model.BillingModePerSecond, Enabled: true,
+	})
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{
+		Model: profileID, ResolutionCredits: map[string]int{"720p": 2},
+	})
+	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatalf("save settings: %v", err)
+	}
+
+	userID := "second-user-" + key
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := repository.SaveUser(model.User{ID: userID, Username: "second-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: 100, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatalf("save user: %v", err)
+	}
+	task, err := CreateGeneration(context.Background(), model.AuthUser{ID: userID}, model.GenerationCommand{
+		CommandVersion: 1, ClientRequestID: "request-second-" + key, ModelProfileID: profileID, Source: string(model.SourceCanvas),
+		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "six seconds", Settings: model.ScalarSettings{"resolution": "720p", "durationSeconds": 6}},
+	})
+	if err != nil {
+		t.Fatalf("CreateGeneration: %v", err)
+	}
+	stored, err := repository.GetGenerationTaskByID(task.ID)
+	if err != nil || stored.Credits != 12 || stored.BillingMode != model.BillingModePerSecond || stored.BillingRate != 2 {
+		t.Fatalf("stored task = %#v, err = %v", stored, err)
+	}
+	user, ok, err := repository.GetUserByID(userID)
+	if err != nil || !ok || user.Credits != 88 {
+		t.Fatalf("user = %#v, ok = %v, err = %v", user, ok, err)
+	}
+}
+
+func TestCreateGenerationChargesViduByUpstreamCreditsAtSuccess(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost {
+			_, _ = w.Write([]byte(`{"id":"vidu-billed","model":"vidu_hq_t2v-oversea","status":"queued"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"vidu-billed","model":"vidu_hq_t2v-oversea","status":"succeeded","content":{"video_url":"https://example.com/video.mp4"},"credits":18}`))
+	}))
+	defer upstream.Close()
+
+	previousProfiles := generationProfiles
+	previousChannel := generationChannel
+	previousRouteChannel := generationRouteChannel
+	previousClient := generationHTTPClient
+	previousPersist := generationPersistVideo
+	previousDispatch := generationDispatch
+	previousPollInterval := generationPollInterval
+	previousSettings, err := repository.GetSettings()
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	defer func() {
+		generationProfiles = previousProfiles
+		generationChannel = previousChannel
+		generationRouteChannel = previousRouteChannel
+		generationHTTPClient = previousClient
+		generationPersistVideo = previousPersist
+		generationDispatch = previousDispatch
+		generationPollInterval = previousPollInterval
+		_, _ = repository.SaveSettings(previousSettings, time.Now().UTC().Format(time.RFC3339Nano))
+	}()
+
+	key := uuid.NewString()
+	profileID := "credit-profile-" + key
+	upstreamModel := "vidu_hq_t2v-oversea-" + key
+	channelName := "credit-channel-" + key
+	profile := model.GenerationProfile{
+		ID: profileID, Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: upstreamModel, ChannelName: channelName,
+		Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities(),
+	}
+	generationProfiles = func() []model.GenerationProfile { return []model.GenerationProfile{profile} }
+	generationChannel = func(string) (model.ModelChannel, error) { return model.ModelChannel{}, errors.New("random route used") }
+	generationRouteChannel = func(string, string) (model.ModelChannel, error) {
+		return model.ModelChannel{Name: channelName, Protocol: "xvanai", BaseURL: upstream.URL, APIKey: "secret", Enabled: true, Models: []string{upstreamModel}}, nil
+	}
+	generationHTTPClient = upstream.Client()
+	generationPersistVideo = func(context.Context, string, string) (*model.UserFile, error) {
+		return &model.UserFile{ID: "credit-file-" + key, MimeType: "video/mp4"}, nil
+	}
+	generationPollInterval = time.Millisecond
+	generationDispatch = func(ctx context.Context, taskID string) {
+		processGenerationTask(ctx, taskID, "credit-worker-"+key)
+	}
+
+	settings := previousSettings
+	settings.Private.GenerationProfiles = append(settings.Private.GenerationProfiles, model.GenerationProfileBinding{
+		ID: profileID, ProfileID: "seedance-1-5-pro", UpstreamModel: upstreamModel, ChannelName: channelName, BillingMode: model.BillingModePerCredit, Enabled: true,
+	})
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: profileID, Credits: 2})
+	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatalf("save settings: %v", err)
+	}
+
+	userID := "credit-user-" + key
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := repository.SaveUser(model.User{ID: userID, Username: "credit-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: 100, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatalf("save user: %v", err)
+	}
+	task, err := CreateGeneration(context.Background(), model.AuthUser{ID: userID}, model.GenerationCommand{
+		CommandVersion: 1, ClientRequestID: "request-credit-" + key, ModelProfileID: profileID, Source: string(model.SourceCanvas),
+		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "credit billed"},
+	})
+	if err != nil {
+		t.Fatalf("CreateGeneration: %v", err)
+	}
+	stored, err := repository.GetGenerationTaskByID(task.ID)
+	if err != nil || stored.Status != model.TaskStatusSucceeded || stored.Credits != 36 || stored.UpstreamCredits == nil || *stored.UpstreamCredits != 18 || stored.BillingMode != model.BillingModePerCredit || stored.BillingRate != 2 {
+		t.Fatalf("stored task = %#v, err = %v", stored, err)
+	}
+	user, ok, err := repository.GetUserByID(userID)
+	if err != nil || !ok || user.Credits != 64 {
+		t.Fatalf("user = %#v, ok = %v, err = %v", user, ok, err)
+	}
+	logs, _, err := repository.ListCreditLogsByUserID(userID, model.Query{PageSize: 20})
+	if err != nil || len(logs) != 1 || logs[0].Type != model.CreditLogTypeAIConsume || logs[0].Amount != -36 || !strings.Contains(logs[0].Extra, `"credits":18`) {
+		t.Fatalf("logs = %#v, err = %v", logs, err)
 	}
 }
 

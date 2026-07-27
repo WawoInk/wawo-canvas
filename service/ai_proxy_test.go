@@ -2,15 +2,18 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/basketikun/infinite-canvas/model"
 	"github.com/basketikun/infinite-canvas/repository"
+	"github.com/google/uuid"
 )
 
 func TestReadAIRequestMultipart(t *testing.T) {
@@ -36,6 +39,97 @@ func TestReadAIRequestMultipart(t *testing.T) {
 	}
 	if got := readAIRequestCount(gotBody, gotContentType); got != 2 {
 		t.Fatalf("count = %d, want 2", got)
+	}
+}
+
+func TestProxyVideoTaskCreateChargesBoundViduByUpstreamCredits(t *testing.T) {
+	requestedModels := make(chan string, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost {
+			var body struct {
+				Model string `json:"model"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			requestedModels <- body.Model
+			_, _ = w.Write([]byte(`{"id":"compat-vidu-billed","model":"vidu_hq_t2v-oversea","status":"queued"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"compat-vidu-billed","model":"vidu_hq_t2v-oversea","status":"succeeded","content":{"video_url":"https://example.com/video.mp4"},"credits":18}`))
+	}))
+	defer upstream.Close()
+
+	previousProfiles := generationProfiles
+	previousRouteChannel := generationRouteChannel
+	previousClient := generationHTTPClient
+	previousPollInterval := generationPollInterval
+	previousSettings, err := repository.GetSettings()
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	defer func() {
+		generationProfiles = previousProfiles
+		generationRouteChannel = previousRouteChannel
+		generationHTTPClient = previousClient
+		generationPollInterval = previousPollInterval
+		_, _ = repository.SaveSettings(previousSettings, time.Now().UTC().Format(time.RFC3339Nano))
+	}()
+
+	key := uuid.NewString()
+	profileID := "compat-credit-profile-" + key
+	upstreamModel := "vidu_hq_t2v-oversea-" + key
+	channelName := "compat-credit-channel-" + key
+	channel := model.ModelChannel{Name: channelName, Protocol: "xvanai", BaseURL: upstream.URL, APIKey: "secret", Enabled: true, Models: []string{upstreamModel}}
+	profile := model.GenerationProfile{
+		ID: profileID, Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: upstreamModel, ChannelName: channelName,
+		Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities(),
+	}
+	generationProfiles = func() []model.GenerationProfile { return []model.GenerationProfile{profile} }
+	generationRouteChannel = func(string, string) (model.ModelChannel, error) { return channel, nil }
+	generationHTTPClient = upstream.Client()
+	generationPollInterval = time.Millisecond
+
+	settings := previousSettings
+	settings.Private.Channels = append(settings.Private.Channels, channel)
+	settings.Private.GenerationProfiles = append(settings.Private.GenerationProfiles, model.GenerationProfileBinding{
+		ID: profileID, ProfileID: "seedance-1-5-pro", UpstreamModel: upstreamModel, ChannelName: channelName, BillingMode: model.BillingModePerCredit, Enabled: true,
+	})
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: profileID, Credits: 2})
+	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatalf("save settings: %v", err)
+	}
+
+	userID := "compat-credit-user-" + key
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := repository.SaveUser(model.User{ID: userID, Username: "compat-credit-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: 100, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatalf("save user: %v", err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/contents/generations/tasks", strings.NewReader(`{"model":"`+profileID+`","content":[{"type":"text","text":"test"}],"resolution":"720p","duration":6}`))
+	request.Header.Set("Content-Type", "application/json")
+	request = request.WithContext(WithUser(request.Context(), model.AuthUser{ID: userID}))
+	response := httptest.NewRecorder()
+	ProxyVideoTaskCreate(response, request)
+
+	taskID := response.Header().Get("X-Generation-Task-Id")
+	if response.Code != http.StatusOK || taskID == "" {
+		t.Fatalf("response = %d %s, taskID = %q", response.Code, response.Body.String(), taskID)
+	}
+	if requestedModel := <-requestedModels; requestedModel != upstreamModel {
+		t.Fatalf("upstream model = %q, want %q", requestedModel, upstreamModel)
+	}
+	if _, err := GetVideoTaskByTaskIDAndUser("compat-vidu-billed", userID); err != nil {
+		t.Fatalf("video task ownership: %v", err)
+	}
+	if !processGenerationTask(context.Background(), taskID, "compat-credit-worker-"+key) {
+		t.Fatal("compatibility task was not claimed")
+	}
+	stored, err := repository.GetGenerationTaskByID(taskID)
+	if err != nil || stored.Model != profileID || stored.UpstreamModel != upstreamModel || stored.Status != model.TaskStatusSucceeded || stored.Credits != 36 || stored.UpstreamCredits == nil || *stored.UpstreamCredits != 18 || stored.BillingMode != model.BillingModePerCredit || stored.BillingRate != 2 {
+		t.Fatalf("stored task = %#v, err = %v", stored, err)
+	}
+	user, ok, err := repository.GetUserByID(userID)
+	if err != nil || !ok || user.Credits != 64 {
+		t.Fatalf("user = %#v, ok = %v, err = %v", user, ok, err)
 	}
 }
 

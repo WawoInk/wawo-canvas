@@ -14,15 +14,15 @@ import (
 // All persistence goes through the repository seam — no raw GORM.
 
 // StartCompatibilityTask atomically creates and charges an asynchronous compatibility task.
-func StartCompatibilityTask(user model.AuthUser, taskType model.TaskType, provider, modelName string, reqBody []byte, reqHeaders, source string, credits int, path string) (string, error) {
+func StartCompatibilityTask(user model.AuthUser, taskType model.TaskType, provider, modelName string, reqBody []byte, reqHeaders, source string, billing generationBillingPlan, path string) (string, error) {
 	id := "gentask-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	task := model.GenerationTask{
 		ID: id, UserID: user.ID, TaskType: taskType, Provider: provider, Model: modelName,
-		Status: model.TaskStatusRunning, Source: source, Credits: credits, CreatedAt: now, UpdatedAt: now,
+		Status: model.TaskStatusRunning, Source: source, Credits: billing.Credits, BillingMode: billing.Mode, BillingRate: billing.Rate, CreatedAt: now, UpdatedAt: now,
 	}
 	payload := model.GenerationPayload{ID: "genpayload-" + uuid.NewString(), RequestHeaders: reqHeaders, RequestBody: string(reqBody), CreatedAt: now}
-	if err := repository.CreateGenerationTaskWithCharge(task, payload, user.ID, modelName, path, credits); err != nil {
+	if err := repository.CreateGenerationTaskWithCharge(task, payload, user.ID, modelName, path, billing.Credits); err != nil {
 		return id, err
 	}
 	return id, nil

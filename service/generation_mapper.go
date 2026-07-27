@@ -11,39 +11,41 @@ import (
 
 // VideoHistoryDTO 视频页历史记录展示模型。
 type VideoHistoryDTO struct {
-	ID             string   `json:"id"`
-	Title          string   `json:"title"`
-	Prompt         string   `json:"prompt"`
-	Status         string   `json:"status"`
-	Model          string   `json:"model"`
-	UpstreamTaskID string   `json:"upstreamTaskId"`
-	Credits        int      `json:"credits"`
-	DurationMs     int64    `json:"durationMs"`
-	VideoURL       string   `json:"videoUrl,omitempty"`
-	ThumbnailURL   string   `json:"thumbnailUrl,omitempty"`
-	FileIDs        []string `json:"fileIds,omitempty"`
-	Size           string   `json:"size,omitempty"`
-	Vquality       string   `json:"vquality,omitempty"`
-	VideoSeconds   string   `json:"videoSeconds,omitempty"`
-	GenAudio       string   `json:"genAudio,omitempty"`
-	Watermark      string   `json:"watermark,omitempty"`
-	ErrorMessage   string   `json:"error,omitempty"`
-	CreatedAt      string   `json:"createdAt"`
+	ID              string   `json:"id"`
+	Title           string   `json:"title"`
+	Prompt          string   `json:"prompt"`
+	Status          string   `json:"status"`
+	Model           string   `json:"model"`
+	UpstreamTaskID  string   `json:"upstreamTaskId"`
+	Credits         int      `json:"credits"`
+	UpstreamCredits *int     `json:"upstreamCredits"`
+	DurationMs      int64    `json:"durationMs"`
+	VideoURL        string   `json:"videoUrl,omitempty"`
+	ThumbnailURL    string   `json:"thumbnailUrl,omitempty"`
+	FileIDs         []string `json:"fileIds,omitempty"`
+	Size            string   `json:"size,omitempty"`
+	Vquality        string   `json:"vquality,omitempty"`
+	VideoSeconds    string   `json:"videoSeconds,omitempty"`
+	GenAudio        string   `json:"genAudio,omitempty"`
+	Watermark       string   `json:"watermark,omitempty"`
+	ErrorMessage    string   `json:"error,omitempty"`
+	CreatedAt       string   `json:"createdAt"`
 }
 
 // ToVideoHistoryDTO 将 Task + Payload 转为视频历史 DTO。
 func ToVideoHistoryDTO(task model.GenerationTask, payload *model.GenerationPayload) VideoHistoryDTO {
 	dto := VideoHistoryDTO{
-		ID:             task.ID,
-		Title:          "视频生成",
-		Prompt:         extractPromptFromPayload(payload),
-		Status:         mapTaskStatus(task.Status),
-		Model:          task.Model,
-		UpstreamTaskID: task.UpstreamTaskID,
-		Credits:        task.Credits,
-		DurationMs:     task.LatencyMs,
-		CreatedAt:      task.CreatedAt,
-		FileIDs:        extractFileIDsFromMetadata(task.Metadata),
+		ID:              task.ID,
+		Title:           "视频生成",
+		Prompt:          extractPromptFromPayload(payload),
+		Status:          mapTaskStatus(task.Status),
+		Model:           task.Model,
+		UpstreamTaskID:  task.UpstreamTaskID,
+		Credits:         task.Credits,
+		UpstreamCredits: task.UpstreamCredits,
+		DurationMs:      task.LatencyMs,
+		CreatedAt:       task.CreatedAt,
+		FileIDs:         extractFileIDsFromMetadata(task.Metadata),
 	}
 	// Extract video config from request payload
 	if payload != nil && payload.RequestBody != "" {

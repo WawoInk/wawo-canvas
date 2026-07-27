@@ -115,10 +115,11 @@ func CreateGeneration(ctx context.Context, user model.AuthUser, command model.Ge
 	if err != nil {
 		return model.FirstPartyGenerationTask{}, err
 	}
-	credits, err := generationCost(profile.UpstreamModel)
+	billing, err := generationBillingPlanFor(profile, command.Intent)
 	if err != nil {
 		return model.FirstPartyGenerationTask{}, err
 	}
+	credits := billing.Credits
 	now := time.Now().UTC().Format(time.RFC3339)
 	taskID := "gentask-" + uuid.NewString()
 	callbackToken := ""
@@ -135,6 +136,8 @@ func CreateGeneration(ctx context.Context, user model.AuthUser, command model.Ge
 		Status:           model.TaskStatusQueued,
 		CallbackToken:    callbackToken,
 		Credits:          credits,
+		BillingMode:      billing.Mode,
+		BillingRate:      billing.Rate,
 		Metadata:         string(summaryBody),
 		ClientRequestID:  command.ClientRequestID,
 		CommandHash:      commandHash,
