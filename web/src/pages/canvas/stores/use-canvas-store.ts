@@ -52,7 +52,11 @@ export type CanvasStore = {
 const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
 const CANVAS_STORE_KEY = "infinite-canvas:canvas_store";
 let switchingAccount = false;
-const scopedStorage = createAccountStorage(localForageStorage, () => useUserStore.getState().user?.id, () => !switchingAccount);
+const scopedStorage = createAccountStorage(
+    localForageStorage,
+    () => useUserStore.getState().user?.id,
+    () => !switchingAccount,
+);
 
 const canvasStorage: PersistStorage<CanvasStore> = {
     getItem: async (name) => {

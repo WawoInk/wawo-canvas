@@ -50,7 +50,11 @@ type AssetStore = {
 
 const ASSET_STORE_KEY = "infinite-canvas:asset_store";
 let switchingAccount = false;
-const scopedStorage = createAccountStorage(localForageStorage, () => useUserStore.getState().user?.id, () => !switchingAccount);
+const scopedStorage = createAccountStorage(
+    localForageStorage,
+    () => useUserStore.getState().user?.id,
+    () => !switchingAccount,
+);
 
 const assetStorage: PersistStorage<AssetStore> = {
     getItem: async (name) => {

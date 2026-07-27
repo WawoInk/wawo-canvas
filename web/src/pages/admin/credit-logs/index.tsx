@@ -49,7 +49,7 @@ export default function AdminCreditLogsPage() {
             title: "操作者 / 关联 ID",
             dataIndex: "relatedId",
             width: 220,
-            render: (_, item) => item.relatedId ? <Typography.Text copyable>{item.relatedId}</Typography.Text> : <Typography.Text type="secondary">-</Typography.Text>,
+            render: (_, item) => (item.relatedId ? <Typography.Text copyable>{item.relatedId}</Typography.Text> : <Typography.Text type="secondary">-</Typography.Text>),
         },
         {
             title: "类型",

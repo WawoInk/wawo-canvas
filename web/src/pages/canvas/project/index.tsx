@@ -446,20 +446,23 @@ function InfiniteCanvasPage() {
         [modal, stopGenerationByRunningId],
     );
 
-    const resumeGenerationQuery = useCallback((nodeId: string) => {
-        const node = nodesRef.current.find((item) => item.id === nodeId);
-        const resume = canvasGenerationResume(node);
-        if (!node || !resume) return;
-        setNodes((prev) => prev.map((item) => (item.id === nodeId ? { ...item, metadata: { ...item.metadata, generationPollingPaused: false } } : item)));
-        if (resume.kind === "image") {
-            void pollCanvasImageNode(nodeId, { id: resume.taskId, model: resume.model || effectiveConfig.imageModel || effectiveConfig.model }, buildSavedImageConfig(effectiveConfig, node.metadata || {}));
-        } else if (resume.kind === "first-party-video") {
-            void pollFirstPartyCanvasVideoNode(nodeId, resume.taskId);
-        } else {
-            const config = buildNodeConfig(effectiveConfig, defaultConfig, node, "video");
-            void pollCanvasVideoNode(nodeId, { id: resume.taskId, model: resume.model || config.model }, config);
-        }
-    }, [effectiveConfig]);
+    const resumeGenerationQuery = useCallback(
+        (nodeId: string) => {
+            const node = nodesRef.current.find((item) => item.id === nodeId);
+            const resume = canvasGenerationResume(node);
+            if (!node || !resume) return;
+            setNodes((prev) => prev.map((item) => (item.id === nodeId ? { ...item, metadata: { ...item.metadata, generationPollingPaused: false } } : item)));
+            if (resume.kind === "image") {
+                void pollCanvasImageNode(nodeId, { id: resume.taskId, model: resume.model || effectiveConfig.imageModel || effectiveConfig.model }, buildSavedImageConfig(effectiveConfig, node.metadata || {}));
+            } else if (resume.kind === "first-party-video") {
+                void pollFirstPartyCanvasVideoNode(nodeId, resume.taskId);
+            } else {
+                const config = buildNodeConfig(effectiveConfig, defaultConfig, node, "video");
+                void pollCanvasVideoNode(nodeId, { id: resume.taskId, model: resume.model || config.model }, config);
+            }
+        },
+        [effectiveConfig],
+    );
 
     const confirmCancelGeneration = useCallback(
         (nodeId: string) => {
@@ -2928,7 +2931,9 @@ function InfiniteCanvasPage() {
                 ]);
                 setSelectedNodeIds(new Set([id]));
             } else {
-                void insertAssistantImage({ id: `asset-${Date.now()}`, prompt: payload.title, dataUrl: payload.dataUrl, storageKey: payload.storageKey, fileId: payload.fileId, width: payload.width, height: payload.height }).catch(() => message.error("素材图片暂时不可用，请刷新后重试"));
+                void insertAssistantImage({ id: `asset-${Date.now()}`, prompt: payload.title, dataUrl: payload.dataUrl, storageKey: payload.storageKey, fileId: payload.fileId, width: payload.width, height: payload.height }).catch(() =>
+                    message.error("素材图片暂时不可用，请刷新后重试"),
+                );
             }
             setAssetPickerOpen(false);
         },
@@ -2936,19 +2941,16 @@ function InfiniteCanvasPage() {
     );
 
     const assistantOpen = assistantMounted && !assistantCollapsed;
-    const focusOverviewNode = useCallback(
-        (nodeId: string) => {
-            const node = nodesRef.current.find((item) => item.id === nodeId);
-            const rect = containerRef.current?.getBoundingClientRect();
-            if (!node || !rect) return;
-            const k = viewportRef.current.k;
-            setSelectedNodeIds(new Set([nodeId]));
-            setSelectedConnectionId(null);
-            setContextMenu(null);
-            setViewport({ x: rect.width / 2 - (node.position.x + node.width / 2) * k, y: rect.height / 2 - (node.position.y + node.height / 2) * k, k });
-        },
-        [],
-    );
+    const focusOverviewNode = useCallback((nodeId: string) => {
+        const node = nodesRef.current.find((item) => item.id === nodeId);
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!node || !rect) return;
+        const k = viewportRef.current.k;
+        setSelectedNodeIds(new Set([nodeId]));
+        setSelectedConnectionId(null);
+        setContextMenu(null);
+        setViewport({ x: rect.width / 2 - (node.position.x + node.width / 2) * k, y: rect.height / 2 - (node.position.y + node.height / 2) * k, k });
+    }, []);
     const openAgent = (mode: CanvasAgentMode = agentMode) => {
         if (agentCloseTimerRef.current) {
             clearTimeout(agentCloseTimerRef.current);

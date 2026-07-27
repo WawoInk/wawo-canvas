@@ -17,14 +17,22 @@ test("refreshes unique media file URLs only while the asset picker is open", () 
 });
 
 test("keeps fileId when inserting an asset into Canvas", () => {
-    assert.deepEqual(
-        assetInsertPayload({ kind: "image", title: "Logo", data: { dataUrl: "https://signed/image", fileId: "file-image-1", width: 120, height: 80 } }),
-        { kind: "image", title: "Logo", dataUrl: "https://signed/image", fileId: "file-image-1", width: 120, height: 80 },
-    );
-    assert.deepEqual(
-        assetInsertPayload({ kind: "video", title: "Intro", data: { url: "https://signed/video", fileId: "file-video-1", width: 1920, height: 1080 } }),
-        { kind: "video", title: "Intro", url: "https://signed/video", fileId: "file-video-1", width: 1920, height: 1080 },
-    );
+    assert.deepEqual(assetInsertPayload({ kind: "image", title: "Logo", data: { dataUrl: "https://signed/image", fileId: "file-image-1", width: 120, height: 80 } }), {
+        kind: "image",
+        title: "Logo",
+        dataUrl: "https://signed/image",
+        fileId: "file-image-1",
+        width: 120,
+        height: 80,
+    });
+    assert.deepEqual(assetInsertPayload({ kind: "video", title: "Intro", data: { url: "https://signed/video", fileId: "file-video-1", width: 1920, height: 1080 } }), {
+        kind: "video",
+        title: "Intro",
+        url: "https://signed/video",
+        fileId: "file-video-1",
+        width: 1920,
+        height: 1080,
+    });
 });
 
 test("uses the first video frame for Assets previews", () => {

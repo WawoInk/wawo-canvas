@@ -89,7 +89,14 @@ export function MyAssetsPanel({ active, compact = false, onInsert }: { active: b
             {visible.length ? (
                 <div className={compact ? "grid grid-cols-2 gap-2" : "grid grid-cols-4 gap-3"}>
                     {visible.map((asset) => (
-                        <PickerCard key={asset.id} title={asset.title} kind={asset.kind} source={asset.kind === "video" ? asset.data.url : asset.coverUrl || (asset.kind === "image" ? asset.data.dataUrl : "")} onClick={() => onInsert(assetInsertPayload(asset))} compact={compact} />
+                        <PickerCard
+                            key={asset.id}
+                            title={asset.title}
+                            kind={asset.kind}
+                            source={asset.kind === "video" ? asset.data.url : asset.coverUrl || (asset.kind === "image" ? asset.data.dataUrl : "")}
+                            onClick={() => onInsert(assetInsertPayload(asset))}
+                            compact={compact}
+                        />
                     ))}
                 </div>
             ) : (

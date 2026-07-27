@@ -38,7 +38,14 @@ export function CanvasOverviewSidebar({ nodes, selectedNodeIds, collapsed, onCol
     if (collapsed)
         return (
             <aside className="relative z-[70] hidden w-10 shrink-0 justify-center border-r pt-3 md:flex" style={{ background: theme.canvas.background, borderColor: theme.toolbar.border }} aria-label="画布总览">
-                <button type="button" className="grid size-8 place-items-center rounded-md transition hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2" style={{ color: theme.node.text }} onClick={() => onCollapsedChange(false)} aria-label="展开总览侧栏" title="展开总览侧栏">
+                <button
+                    type="button"
+                    className="grid size-8 place-items-center rounded-md transition hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2"
+                    style={{ color: theme.node.text }}
+                    onClick={() => onCollapsedChange(false)}
+                    aria-label="展开总览侧栏"
+                    title="展开总览侧栏"
+                >
                     <PanelLeftOpen className="size-4" />
                 </button>
             </aside>
@@ -47,9 +54,19 @@ export function CanvasOverviewSidebar({ nodes, selectedNodeIds, collapsed, onCol
     return (
         <aside data-canvas-no-zoom className="relative z-[70] hidden w-[280px] shrink-0 flex-col border-r md:flex" style={{ background: theme.canvas.background, borderColor: theme.toolbar.border, color: theme.node.text }} aria-label="画布总览">
             <div className="flex h-12 shrink-0 items-center gap-1 border-b px-2" style={{ borderColor: theme.toolbar.border }} role="tablist" aria-label="总览类型">
-                <TabButton active={tab === "canvas"} theme={theme} icon={<Layers3 className="size-3.5" />} onClick={() => setTab("canvas")}>Canvas</TabButton>
-                <TabButton active={tab === "assets"} theme={theme} icon={<Library className="size-3.5" />} onClick={() => setTab("assets")}>Assets</TabButton>
-                <button type="button" className="ml-auto grid size-8 place-items-center rounded-md transition hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2" onClick={() => onCollapsedChange(true)} aria-label="折叠总览侧栏" title="折叠总览侧栏">
+                <TabButton active={tab === "canvas"} theme={theme} icon={<Layers3 className="size-3.5" />} onClick={() => setTab("canvas")}>
+                    Canvas
+                </TabButton>
+                <TabButton active={tab === "assets"} theme={theme} icon={<Library className="size-3.5" />} onClick={() => setTab("assets")}>
+                    Assets
+                </TabButton>
+                <button
+                    type="button"
+                    className="ml-auto grid size-8 place-items-center rounded-md transition hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2"
+                    onClick={() => onCollapsedChange(true)}
+                    aria-label="折叠总览侧栏"
+                    title="折叠总览侧栏"
+                >
                     <PanelLeftClose className="size-4" />
                 </button>
             </div>
@@ -82,7 +99,11 @@ export function CanvasOverviewSidebar({ nodes, selectedNodeIds, collapsed, onCol
                                 </li>
                             ))}
                         </ul>
-                        {!visibleNodes.length ? <div className="py-10 text-center text-xs" style={{ color: theme.node.muted }}>没有匹配节点</div> : null}
+                        {!visibleNodes.length ? (
+                            <div className="py-10 text-center text-xs" style={{ color: theme.node.muted }}>
+                                没有匹配节点
+                            </div>
+                        ) : null}
                     </div>
                 ) : (
                     <MyAssetsPanel active={tab === "assets"} compact onInsert={onInsertAsset} />
@@ -93,7 +114,19 @@ export function CanvasOverviewSidebar({ nodes, selectedNodeIds, collapsed, onCol
 }
 
 function TabButton({ active, theme, icon, onClick, children }: { active: boolean; theme: (typeof canvasThemes)[keyof typeof canvasThemes]; icon: React.ReactNode; onClick: () => void; children: string }) {
-    return <button type="button" role="tab" aria-selected={active} className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition focus-visible:outline-2 focus-visible:outline-offset-1" style={{ background: active ? theme.toolbar.activeBg : "transparent", color: active ? theme.toolbar.activeText : theme.node.muted }} onClick={onClick}>{icon}{children}</button>;
+    return (
+        <button
+            type="button"
+            role="tab"
+            aria-selected={active}
+            className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition focus-visible:outline-2 focus-visible:outline-offset-1"
+            style={{ background: active ? theme.toolbar.activeBg : "transparent", color: active ? theme.toolbar.activeText : theme.node.muted }}
+            onClick={onClick}
+        >
+            {icon}
+            {children}
+        </button>
+    );
 }
 
 function NodePreview({ node, theme }: { node: CanvasNodeData; theme: (typeof canvasThemes)[keyof typeof canvasThemes] }) {

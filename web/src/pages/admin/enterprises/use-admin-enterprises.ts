@@ -26,13 +26,9 @@ export function useAdminEnterprises() {
     const [pageSize, setPageSize] = useState(10);
     const query = useQuery({ queryKey: ["admin", "enterprises", token, keyword, page, pageSize], queryFn: () => fetchAdminEnterprises(token, { keyword, page, pageSize }), enabled: Boolean(token) });
     const mutation = useMutation({
-        mutationFn: (action: (() => Promise<AdminEnterprise>)) => action(),
+        mutationFn: (action: () => Promise<AdminEnterprise>) => action(),
         onSuccess: async () => {
-            await Promise.all([
-                queryClient.invalidateQueries({ queryKey: ["admin", "enterprises"] }),
-                queryClient.invalidateQueries({ queryKey: ["admin", "users"] }),
-                queryClient.invalidateQueries({ queryKey: ["admin", "credit-logs"] }),
-            ]);
+            await Promise.all([queryClient.invalidateQueries({ queryKey: ["admin", "enterprises"] }), queryClient.invalidateQueries({ queryKey: ["admin", "users"] }), queryClient.invalidateQueries({ queryKey: ["admin", "credit-logs"] })]);
         },
         onError: (error) => message.error(error instanceof Error ? error.message : "操作失败"),
     });

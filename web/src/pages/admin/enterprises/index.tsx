@@ -33,8 +33,12 @@ export default function AdminEnterprisesPage() {
             width: 240,
             render: (_, item) => (
                 <Flex vertical style={{ minWidth: 0 }}>
-                    <Typography.Text strong ellipsis>{item.name}</Typography.Text>
-                    <Typography.Text type="secondary" ellipsis>{item.id}</Typography.Text>
+                    <Typography.Text strong ellipsis>
+                        {item.name}
+                    </Typography.Text>
+                    <Typography.Text type="secondary" ellipsis>
+                        {item.id}
+                    </Typography.Text>
                 </Flex>
             ),
         },
@@ -86,8 +90,17 @@ export default function AdminEnterprisesPage() {
                             <Col flex="none">
                                 <Form.Item>
                                     <Space>
-                                        <Button onClick={() => { setKeywordText(""); reset(); }}>重置</Button>
-                                        <Button type="primary" icon={<ReloadOutlined />} onClick={() => search(keywordText)}>查询</Button>
+                                        <Button
+                                            onClick={() => {
+                                                setKeywordText("");
+                                                reset();
+                                            }}
+                                        >
+                                            重置
+                                        </Button>
+                                        <Button type="primary" icon={<ReloadOutlined />} onClick={() => search(keywordText)}>
+                                            查询
+                                        </Button>
                                     </Space>
                                 </Form.Item>
                             </Col>
@@ -103,20 +116,59 @@ export default function AdminEnterprisesPage() {
                     defaultSize="middle"
                     tableLayout="fixed"
                     cardProps={{ variant: "borderless" }}
-                    headerTitle={<Space><Typography.Text strong>企业列表</Typography.Text><Tag>{total} 家</Tag></Space>}
+                    headerTitle={
+                        <Space>
+                            <Typography.Text strong>企业列表</Typography.Text>
+                            <Tag>{total} 家</Tag>
+                        </Space>
+                    }
                     options={{ density: true, setting: true, reload: () => void refresh() }}
-                    toolBarRender={() => [<Button key="add" type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>创建企业</Button>]}
+                    toolBarRender={() => [
+                        <Button key="add" type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>
+                            创建企业
+                        </Button>,
+                    ]}
                     pagination={{ current: page, pageSize, total, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100], showTotal: (value) => `共 ${value} 家`, onChange: changePage }}
                 />
             </Flex>
 
-            <Modal title="创建企业" open={creating} width={620} onCancel={() => setCreating(false)} onOk={async () => { const value = await createForm.validateFields(); await create(value); setCreating(false); createForm.resetFields(); }} okText="创建" cancelText="取消" destroyOnHidden>
+            <Modal
+                title="创建企业"
+                open={creating}
+                width={620}
+                onCancel={() => setCreating(false)}
+                onOk={async () => {
+                    const value = await createForm.validateFields();
+                    await create(value);
+                    setCreating(false);
+                    createForm.resetFields();
+                }}
+                okText="创建"
+                cancelText="取消"
+                destroyOnHidden
+            >
                 <Form form={createForm} layout="vertical" requiredMark={false}>
                     <Row gutter={14}>
-                        <Col span={12}><Form.Item name="name" label="企业名称" rules={[{ required: true, message: "请输入企业名称" }]}><Input /></Form.Item></Col>
-                        <Col span={12}><Form.Item name="ownerDisplayName" label="主账号昵称"><Input /></Form.Item></Col>
-                        <Col span={12}><Form.Item name="ownerUsername" label="主账号用户名" rules={[{ required: true, message: "请输入用户名" }]}><Input autoComplete="off" /></Form.Item></Col>
-                        <Col span={12}><Form.Item name="ownerPassword" label="初始密码" rules={[{ required: true, message: "请输入初始密码" }]}><Input.Password autoComplete="new-password" /></Form.Item></Col>
+                        <Col span={12}>
+                            <Form.Item name="name" label="企业名称" rules={[{ required: true, message: "请输入企业名称" }]}>
+                                <Input />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item name="ownerDisplayName" label="主账号昵称">
+                                <Input />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item name="ownerUsername" label="主账号用户名" rules={[{ required: true, message: "请输入用户名" }]}>
+                                <Input autoComplete="off" />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item name="ownerPassword" label="初始密码" rules={[{ required: true, message: "请输入初始密码" }]}>
+                                <Input.Password autoComplete="new-password" />
+                            </Form.Item>
+                        </Col>
                     </Row>
                 </Form>
             </Modal>
@@ -139,11 +191,13 @@ export default function AdminEnterprisesPage() {
                 cancelText="关闭"
                 destroyOnHidden
             >
-                <Typography.Paragraph type="secondary">当前余额：<Typography.Text strong>{adjusting?.ownerCredits.toLocaleString()}</Typography.Text>。正数增加，负数扣减，扣减后余额不能小于 0。</Typography.Paragraph>
+                <Typography.Paragraph type="secondary">
+                    当前余额：<Typography.Text strong>{adjusting?.ownerCredits.toLocaleString()}</Typography.Text>。正数增加，负数扣减，扣减后余额不能小于 0。
+                </Typography.Paragraph>
                 <Form form={creditForm} layout="vertical" requiredMark={false}>
                     <Row gutter={14}>
                         <Col span={8}>
-                            <Form.Item name="delta" label="调整数量" rules={[{ required: true, message: "请输入调整数量" }, { validator: (_, value) => value === 0 ? Promise.reject(new Error("调整数量不能为 0")) : Promise.resolve() }]}>
+                            <Form.Item name="delta" label="调整数量" rules={[{ required: true, message: "请输入调整数量" }, { validator: (_, value) => (value === 0 ? Promise.reject(new Error("调整数量不能为 0")) : Promise.resolve()) }]}>
                                 <InputNumber precision={0} style={{ width: "100%" }} placeholder="例如 100 或 -50" />
                             </Form.Item>
                         </Col>
@@ -171,10 +225,26 @@ export default function AdminEnterprisesPage() {
                 />
             </Modal>
 
-            <Modal title="重置主账号密码" open={Boolean(resetting)} onCancel={() => setResetting(null)} onOk={async () => { if (!resetting) return; const { password } = await passwordForm.validateFields(); await resetPassword(resetting, password); setResetting(null); passwordForm.resetFields(); }} okText="重置" cancelText="取消" destroyOnHidden>
+            <Modal
+                title="重置主账号密码"
+                open={Boolean(resetting)}
+                onCancel={() => setResetting(null)}
+                onOk={async () => {
+                    if (!resetting) return;
+                    const { password } = await passwordForm.validateFields();
+                    await resetPassword(resetting, password);
+                    setResetting(null);
+                    passwordForm.resetFields();
+                }}
+                okText="重置"
+                cancelText="取消"
+                destroyOnHidden
+            >
                 <Typography.Paragraph type="secondary">重置「{resetting?.ownerName}」的密码后，该账号现有会话会立即失效。</Typography.Paragraph>
                 <Form form={passwordForm} layout="vertical" requiredMark={false}>
-                    <Form.Item name="password" label="新密码" rules={[{ required: true, message: "请输入新密码" }]}><Input.Password autoComplete="new-password" /></Form.Item>
+                    <Form.Item name="password" label="新密码" rules={[{ required: true, message: "请输入新密码" }]}>
+                        <Input.Password autoComplete="new-password" />
+                    </Form.Item>
                 </Form>
             </Modal>
         </main>

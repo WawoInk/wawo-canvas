@@ -202,13 +202,32 @@ function createChip(reference: CanvasResourceReference, theme: (typeof canvasThe
     return chip;
 }
 
-function MentionMenu({ editor, references, activeIndex, theme, onSelect }: { editor: HTMLElement; references: CanvasResourceReference[]; activeIndex: number; theme: (typeof canvasThemes)[keyof typeof canvasThemes]; onSelect: (reference: CanvasResourceReference) => void }) {
+function MentionMenu({
+    editor,
+    references,
+    activeIndex,
+    theme,
+    onSelect,
+}: {
+    editor: HTMLElement;
+    references: CanvasResourceReference[];
+    activeIndex: number;
+    theme: (typeof canvasThemes)[keyof typeof canvasThemes];
+    onSelect: (reference: CanvasResourceReference) => void;
+}) {
     const rect = editor.getBoundingClientRect();
     const top = Math.min(rect.bottom + 6, window.innerHeight - 232);
     const left = Math.min(Math.max(8, rect.left), window.innerWidth - 264);
     const stop = (event: PointerEvent | MouseEvent) => event.stopPropagation();
     return createPortal(
-        <div role="listbox" aria-label="资源" className="fixed z-[120] max-h-56 w-64 overflow-y-auto rounded-xl border p-1 shadow-2xl" style={{ left, top, background: theme.toolbar.panel, borderColor: theme.toolbar.border }} onPointerDown={stop} onMouseDown={stop}>
+        <div
+            role="listbox"
+            aria-label="资源"
+            className="fixed z-[120] max-h-56 w-64 overflow-y-auto rounded-xl border p-1 shadow-2xl"
+            style={{ left, top, background: theme.toolbar.panel, borderColor: theme.toolbar.border }}
+            onPointerDown={stop}
+            onMouseDown={stop}
+        >
             {references.map((reference, index) => (
                 <button
                     key={reference.id}

@@ -124,15 +124,7 @@ export default function AccountPage() {
                     <h1 className="mt-3 text-3xl font-semibold">账户设置</h1>
                 </header>
 
-                <Tabs
-                    activeKey={activeSection}
-                    items={[
-                        { key: "account", label: "账户信息" },
-                        { key: "logs", label: "日志记录" },
-                        ...(capabilities.showSummary ? [{ key: "enterprise", label: "企业信息" }] : []),
-                    ]}
-                    onChange={setActiveSection}
-                />
+                <Tabs activeKey={activeSection} items={[{ key: "account", label: "账户信息" }, { key: "logs", label: "日志记录" }, ...(capabilities.showSummary ? [{ key: "enterprise", label: "企业信息" }] : [])]} onChange={setActiveSection} />
 
                 <section hidden={activeSection !== "account"} className="rounded-2xl border border-border bg-card p-6">
                     <h2 className="text-lg font-semibold">账户概况</h2>

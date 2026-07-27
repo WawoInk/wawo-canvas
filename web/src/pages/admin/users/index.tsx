@@ -76,12 +76,15 @@ export default function AdminUsersPage() {
             title: "企业归属",
             dataIndex: "enterpriseName",
             width: 180,
-            render: (_, item) => item.enterpriseId ? (
-                <Flex vertical gap={2}>
-                    <Typography.Text ellipsis>{item.enterpriseName || item.enterpriseId}</Typography.Text>
-                    <Tag style={{ width: "fit-content", marginInlineEnd: 0 }}>{item.enterpriseRole === "owner" ? "主账号" : "子账号"}</Tag>
-                </Flex>
-            ) : <Typography.Text type="secondary">个人账号</Typography.Text>,
+            render: (_, item) =>
+                item.enterpriseId ? (
+                    <Flex vertical gap={2}>
+                        <Typography.Text ellipsis>{item.enterpriseName || item.enterpriseId}</Typography.Text>
+                        <Tag style={{ width: "fit-content", marginInlineEnd: 0 }}>{item.enterpriseRole === "owner" ? "主账号" : "子账号"}</Tag>
+                    </Flex>
+                ) : (
+                    <Typography.Text type="secondary">个人账号</Typography.Text>
+                ),
         },
         {
             title: "状态",

@@ -242,13 +242,7 @@ export default function EnterpriseAssetsPage() {
                                             <Button type="link" size="small" onClick={() => setPreview(asset)}>
                                                 查看
                                             </Button>
-                                            <Button
-                                                type="link"
-                                                size="small"
-                                                icon={<FolderPlus className="size-4" />}
-                                                loading={copyMutation.isPending && copyMutation.variables?.id === asset.id}
-                                                onClick={() => copyMutation.mutate(asset)}
-                                            >
+                                            <Button type="link" size="small" icon={<FolderPlus className="size-4" />} loading={copyMutation.isPending && copyMutation.variables?.id === asset.id} onClick={() => copyMutation.mutate(asset)}>
                                                 加入我的素材
                                             </Button>
                                             {asset.type !== "text" ? (
@@ -351,11 +345,7 @@ export default function EnterpriseAssetsPage() {
                                     下载文件
                                 </Button>
                             )}
-                            <Button
-                                icon={<FolderPlus className="size-4" />}
-                                loading={copyMutation.isPending && copyMutation.variables?.id === preview?.id}
-                                onClick={() => preview && copyMutation.mutate(preview)}
-                            >
+                            <Button icon={<FolderPlus className="size-4" />} loading={copyMutation.isPending && copyMutation.variables?.id === preview?.id} onClick={() => preview && copyMutation.mutate(preview)}>
                                 加入我的素材
                             </Button>
                         </Space>
