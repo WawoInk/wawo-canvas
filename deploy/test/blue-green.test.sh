@@ -67,6 +67,8 @@ HEALTH_INTERVAL=1s
 HEALTH_RETRIES=3
 VERIFY_ATTEMPTS=3
 VERIFY_INTERVAL=0.1
+AUTH_VERIFY_ATTEMPTS=20
+AUTH_VERIFY_INTERVAL=0.2
 SHUTDOWN_TIMEOUT=2s
 API_STOP_GRACE_PERIOD=5s
 EOF
@@ -99,8 +101,8 @@ if (cd "$workspace" && ./blue-green.sh deploy public-fail); then
 fi
 [[ "$(curl -fsS "$base_url/build-version.txt")" == legacy ]]
 curl -fsS -H "Authorization: Bearer $token" "$base_url/api/auth/me" | grep -Fq "\"id\":\"$user_id\""
-[[ "$(docker ps -q --filter "id=$legacy_api")" == "$legacy_api" ]]
-[[ "$(docker ps -q --filter "id=$legacy_web")" == "$legacy_web" ]]
+[[ "$(docker inspect -f '{{.State.Running}}' "$legacy_api")" == true ]]
+[[ "$(docker inspect -f '{{.State.Running}}' "$legacy_web")" == true ]]
 [[ "$(cd "$workspace" && docker compose --env-file .env --env-file state/deployment.env -f docker-compose.prod.yml ps -q postgres)" == "$legacy_postgres" ]]
 
 (
@@ -118,23 +120,23 @@ curl -fsS -H "Authorization: Bearer $token" "$base_url/api/auth/me" | grep -Fq "
 [[ -z "$(docker ps -q --filter "id=$legacy_web")" ]]
 [[ "$(cd "$workspace" && docker compose --env-file .env --env-file state/deployment.env -f docker-compose.prod.yml ps -q postgres)" == "$legacy_postgres" ]]
 edge_id=$(cd "$workspace" && docker compose --env-file .env --env-file state/deployment.env -f docker-compose.prod.yml ps -q edge)
-if docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$edge_id" | grep -Eq 'JWT_SECRET|DATABASE_DSN|ADMIN_PASSWORD|AMAZON_S3_SECRET_KEY'; then
+edge_env=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$edge_id")
+if grep -Eq 'JWT_SECRET|DATABASE_DSN|ADMIN_PASSWORD|AMAZON_S3_SECRET_KEY' <<< "$edge_env"; then
     echo "edge received production application secrets" >&2
     exit 1
 fi
-docker inspect -f '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}' "$edge_id" | grep -Fq "$workspace/state/caddy -> /etc/caddy/deploy"
-if docker inspect -f '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}' "$edge_id" | grep -Fq "$workspace/state -> /etc/caddy/deploy"; then
+edge_mounts=$(docker inspect -f '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}' "$edge_id")
+grep -Fq "$workspace/state/caddy -> /etc/caddy/deploy" <<< "$edge_mounts"
+if grep -Fq "$workspace/state -> /etc/caddy/deploy" <<< "$edge_mounts"; then
     echo "edge can read deployment JWT or state files" >&2
     exit 1
 fi
 
 printf "POSTGRES_PASSWORD='changed-compose-metadata'\n" >> "$workspace/.env"
 
-(
-    cd "$workspace"
-    [[ -z "$(docker compose --profile blue --env-file .env --env-file state/deployment.env -f docker-compose.prod.yml port web-blue 3000)" ]]
-    [[ -n "$(docker compose --env-file .env --env-file state/deployment.env -f docker-compose.prod.yml port edge 80)" ]]
-)
+web_blue_id=$(cd "$workspace" && docker compose --profile blue --env-file .env --env-file state/deployment.env -f docker-compose.prod.yml ps -q web-blue)
+[[ -z "$(docker port "$web_blue_id" 3000/tcp 2>/dev/null || true)" ]]
+[[ -n "$(docker port "$edge_id" 80/tcp)" ]]
 
 (
     cd "$workspace"

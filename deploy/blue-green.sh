@@ -259,7 +259,7 @@ verify_public_auth() {
         user=
         [[ -z "$AUTH_TOKEN" ]] || user=$(public_get "$base" /api/auth/me 2>/dev/null || true)
         if [[ "$health" == ok ]] && { [[ -z "$AUTH_TOKEN" ]] || grep -Fq "\"id\":\"$EXPECTED_USER_ID\"" <<< "$user"; }; then
-            return
+            return 0
         fi
         sleep "$interval"
     done
@@ -284,7 +284,7 @@ verify_public() {
             && grep -Fq "content=\"$sha\"" <<< "$html" \
             && grep -Fq '"code":0' <<< "$settings" \
             && { [[ -z "$AUTH_TOKEN" ]] || grep -Fq "\"id\":\"$EXPECTED_USER_ID\"" <<< "$user"; }; then
-            return
+            return 0
         fi
         sleep "$interval"
     done
