@@ -372,7 +372,7 @@ func EnterpriseAccountSummary(userID string) (model.EnterpriseAccountSummary, er
 	if enterprise.Status != model.EnterpriseStatusActive {
 		return model.EnterpriseAccountSummary{}, safeMessageError{message: "企业已被禁用"}
 	}
-	return model.EnterpriseAccountSummary{ID: enterprise.ID, Name: enterprise.Name, Status: enterprise.Status, Role: *user.EnterpriseRole, MemberCount: enterprise.MemberCount}, nil
+	return model.EnterpriseAccountSummary{ID: enterprise.ID, Name: enterprise.Name, Status: enterprise.Status, Role: *user.EnterpriseRole, MemberCount: enterprise.MemberCount, DiscountRate: enterprise.DiscountRate}, nil
 }
 
 func RenameAccountEnterprise(userID, name string) (model.EnterpriseAccountSummary, error) {

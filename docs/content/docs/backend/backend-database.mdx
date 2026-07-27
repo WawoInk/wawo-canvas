@@ -9,7 +9,7 @@ description: 核心数据表和第一方生成任务事务约束
 
 ## enterprises 与 users
 
-`enterprises` 保存企业名称、`active/disabled` 状态和唯一主账号 ID。企业和主账号在同一个 PostgreSQL 事务中创建；延迟外键与约束触发器在事务提交时保证主账号存在、属于当前企业且企业身份为 `owner`。
+`enterprises` 保存企业名称、`active/disabled` 状态、唯一主账号 ID 和 `discount_rate` 折扣倍率。倍率默认 `1`，数据库约束范围为 `0.1-1`。企业和主账号在同一个 PostgreSQL 事务中创建；延迟外键与约束触发器在事务提交时保证主账号存在、属于当前企业且企业身份为 `owner`。
 
 `users` 的平台角色仍为 `guest/user/admin`。企业归属使用可空的 `enterprise_id` 和 `enterprise_role` 表达，企业身份只允许 `owner/member`：
 
@@ -33,7 +33,7 @@ description: 核心数据表和第一方生成任务事务约束
 
 企业汇总流水不新增账本表：查询从当前主账号推导 `enterprise_id`，通过 `credit_logs.user_id` 关联当前企业的 `owner/member`，并在数据库查询中完成成员、类型、关键词和分页筛选；其他企业、个人用户和平台管理员的流水不会进入结果。
 
-兼容 AI 代理的 `ai_consume/ai_refund` 也在锁定用户行后，于同一事务更新余额并写入流水；因此生成扣费、退款和企业划拨会按同一用户串行结算，普通资料或登录信息保存不会写回陈旧积分。
+兼容 AI 代理的 `ai_consume/ai_refund` 也在锁定用户行后，于同一事务更新余额并写入流水；因此生成扣费、退款和企业划拨会按同一用户串行结算，普通资料或登录信息保存不会写回陈旧积分。企业主账号和成员按 `ceil(原始积分 × discount_rate)` 扣费，个人用户与平台管理员等价于倍率 `1`；退款按同任务已落账的消费流水原额返还，不受后续倍率调整影响。
 
 ## assets、user_files 与企业共享媒体
 
@@ -63,6 +63,8 @@ description: 核心数据表和第一方生成任务事务约束
 - `per_call`：`credits` 保存每次调用预扣的算力点。
 - `per_second`：`billing_rate` 保存所选分辨率每秒单价，`credits` 保存单价乘任务时长后的预扣算力点。
 - `per_credit`：`billing_rate` 保存每个上游 credit 的算力点单价；任务成功后按上游返回的 `credits` 结算，并将实际平台消耗写入任务 `credits`。
+
+企业折扣应用于上述三种模式计算出的本次总积分，`generation_tasks.credits` 和对应 `credit_logs.amount` 均保存折后实际扣除值；`billing_rate` 继续保存模型原始计费单价。
 
 `upstream_credits` 保存供应商响应中的可空 credits。Vidu 未返回该字段时写入 `NULL`；响应审计 JSON 仍显式保留 `"credits": null`，便于使用日志与调用日志区分字段缺失和数值消耗。
 

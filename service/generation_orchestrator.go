@@ -153,7 +153,7 @@ func CreateGeneration(ctx context.Context, user model.AuthUser, command model.Ge
 		UpdatedAt:        now,
 	}
 	payload := model.GenerationPayload{ID: "genpayload-" + uuid.NewString(), CommandBody: string(body), CreatedAt: now}
-	if err := repository.CreateGenerationTaskWithCharge(task, payload, user.ID, profile.UpstreamModel, "/api/v1/generations", credits); err != nil {
+	if err := repository.CreateGenerationTaskWithCharge(&task, payload, user.ID, profile.UpstreamModel, "/api/v1/generations", credits); err != nil {
 		if existing, found, lookupErr := repository.GetGenerationTaskByClientRequestID(user.ID, command.ClientRequestID); lookupErr == nil && found {
 			if existing.CommandHash == commandHash {
 				return firstPartyTask(existing), nil

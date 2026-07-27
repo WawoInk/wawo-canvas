@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, WalletOutlined } from "@ant-design/icons";
+import { KeyOutlined, PercentageOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, WalletOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { Button, Card, Col, Flex, Form, Input, InputNumber, Modal, Row, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
 import dayjs from "dayjs";
@@ -10,15 +10,17 @@ import type { AdminCreditLog, AdminEnterprise, CreateAdminEnterprise } from "@/s
 import { useAdminEnterprises } from "./use-admin-enterprises";
 
 export default function AdminEnterprisesPage() {
-    const { enterprises, total, keyword, page, pageSize, isLoading, search, reset, changePage, refresh, create, setStatus, setOwnerStatus, resetPassword, adjustCredits, loadCreditLogs } = useAdminEnterprises();
+    const { enterprises, total, keyword, page, pageSize, isLoading, search, reset, changePage, refresh, create, setStatus, setDiscountRate, setOwnerStatus, resetPassword, adjustCredits, loadCreditLogs } = useAdminEnterprises();
     const [keywordText, setKeywordText] = useState(keyword);
     const [creating, setCreating] = useState(false);
     const [resetting, setResetting] = useState<AdminEnterprise | null>(null);
     const [adjusting, setAdjusting] = useState<AdminEnterprise | null>(null);
+    const [discounting, setDiscounting] = useState<AdminEnterprise | null>(null);
     const [creditLogs, setCreditLogs] = useState<AdminCreditLog[]>([]);
     const [createForm] = Form.useForm<CreateAdminEnterprise>();
     const [passwordForm] = Form.useForm<{ password: string }>();
     const [creditForm] = Form.useForm<{ delta: number; reason: string }>();
+    const [discountForm] = Form.useForm<{ discountRate: number }>();
 
     const openCreditAdjustment = async (item: AdminEnterprise) => {
         setAdjusting(item);
@@ -30,7 +32,7 @@ export default function AdminEnterprisesPage() {
         {
             title: "企业",
             dataIndex: "name",
-            width: 240,
+            width: 210,
             render: (_, item) => (
                 <Flex vertical style={{ minWidth: 0 }}>
                     <Typography.Text strong ellipsis>
@@ -42,29 +44,41 @@ export default function AdminEnterprisesPage() {
                 </Flex>
             ),
         },
-        { title: "主账号", dataIndex: "ownerName", width: 220, ellipsis: true },
-        { title: "成员", dataIndex: "memberCount", width: 80, render: (_, item) => `${item.memberCount} 人` },
-        { title: "主账号余额", dataIndex: "ownerCredits", width: 120, render: (_, item) => item.ownerCredits.toLocaleString() },
+        { title: "主账号", dataIndex: "ownerName", width: 170, ellipsis: true },
+        { title: "成员", dataIndex: "memberCount", width: 70, render: (_, item) => `${item.memberCount} 人` },
+        { title: "主账号余额", dataIndex: "ownerCredits", width: 105, render: (_, item) => item.ownerCredits.toLocaleString() },
+        { title: "折扣倍率", dataIndex: "discountRate", width: 90, render: (_, item) => `${item.discountRate} 倍` },
         {
             title: "企业状态",
             dataIndex: "status",
-            width: 110,
+            width: 100,
             render: (_, item) => <Switch size="small" checked={item.status === "active"} checkedChildren="启用" unCheckedChildren="禁用" onChange={(checked) => void setStatus(item, checked)} />,
         },
         {
             title: "主账号状态",
             dataIndex: "ownerStatus",
-            width: 120,
+            width: 110,
             render: (_, item) => <Switch size="small" checked={item.ownerStatus === "active"} checkedChildren="启用" unCheckedChildren="禁用" onChange={(checked) => void setOwnerStatus(item, checked)} />,
         },
-        { title: "创建时间", dataIndex: "createdAt", width: 170, render: (_, item) => <Typography.Text type="secondary">{dayjs(item.createdAt).format("YYYY-MM-DD HH:mm")}</Typography.Text> },
+        { title: "创建时间", dataIndex: "createdAt", width: 155, render: (_, item) => <Typography.Text type="secondary">{dayjs(item.createdAt).format("YYYY-MM-DD HH:mm")}</Typography.Text> },
         {
             title: "操作",
             key: "actions",
-            width: 104,
+            width: 108,
             align: "right",
             render: (_, item) => (
                 <Space size={4}>
+                    <Tooltip title="设置折扣倍率">
+                        <Button
+                            type="text"
+                            size="small"
+                            icon={<PercentageOutlined />}
+                            onClick={() => {
+                                setDiscounting(item);
+                                discountForm.setFieldsValue({ discountRate: item.discountRate });
+                            }}
+                        />
+                    </Tooltip>
                     <Tooltip title="调整主账号积分">
                         <Button type="text" size="small" icon={<WalletOutlined />} onClick={() => void openCreditAdjustment(item)} />
                     </Tooltip>
@@ -115,6 +129,7 @@ export default function AdminEnterprisesPage() {
                     search={false}
                     defaultSize="middle"
                     tableLayout="fixed"
+                    scroll={{ x: 1118 }}
                     cardProps={{ variant: "borderless" }}
                     headerTitle={
                         <Space>
@@ -170,6 +185,29 @@ export default function AdminEnterprisesPage() {
                             </Form.Item>
                         </Col>
                     </Row>
+                </Form>
+            </Modal>
+
+            <Modal
+                title={`设置折扣倍率 · ${discounting?.name || ""}`}
+                open={Boolean(discounting)}
+                confirmLoading={isLoading}
+                onCancel={() => setDiscounting(null)}
+                onOk={async () => {
+                    if (!discounting) return;
+                    const { discountRate } = await discountForm.validateFields();
+                    await setDiscountRate(discounting, discountRate);
+                    setDiscounting(null);
+                    discountForm.resetFields();
+                }}
+                okText="保存"
+                cancelText="取消"
+                destroyOnHidden
+            >
+                <Form form={discountForm} layout="vertical" requiredMark={false}>
+                    <Form.Item name="discountRate" label="折扣倍率" rules={[{ required: true, message: "请输入折扣倍率" }, { type: "number", min: 0.1, max: 1, message: "折扣倍率必须在 0.1 到 1 之间" }]}>
+                        <InputNumber min={0.1} max={1} step={0.1} suffix="倍" style={{ width: "100%" }} />
+                    </Form.Item>
                 </Form>
             </Modal>
 

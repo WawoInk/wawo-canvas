@@ -126,6 +126,14 @@ func UpdateEnterpriseStatus(id string, status model.EnterpriseStatus, updatedAt 
 	return db.Model(&model.Enterprise{}).Where("id = ?", id).Updates(map[string]any{"status": status, "updated_at": updatedAt}).Error
 }
 
+func UpdateEnterpriseDiscountRate(id string, discountRate float64, updatedAt string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	return db.Model(&model.Enterprise{}).Where("id = ?", id).Updates(map[string]any{"discount_rate": discountRate, "updated_at": updatedAt}).Error
+}
+
 func UpdateEnterpriseName(id, ownerID, name, updatedAt string) error {
 	db, err := DB()
 	if err != nil {

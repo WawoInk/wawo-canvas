@@ -151,6 +151,15 @@ func AdminSetEnterpriseStatus(w http.ResponseWriter, r *http.Request, id string)
 	respondEnterprise(w, result, err)
 }
 
+func AdminSetEnterpriseDiscountRate(w http.ResponseWriter, r *http.Request, id string) {
+	var body struct {
+		DiscountRate float64 `json:"discountRate"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	result, err := service.SetEnterpriseDiscountRate(id, body.DiscountRate)
+	respondEnterprise(w, result, err)
+}
+
 func AdminSetEnterpriseOwnerStatus(w http.ResponseWriter, r *http.Request, id string) {
 	var body struct {
 		Status string `json:"status"`

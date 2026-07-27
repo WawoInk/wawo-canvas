@@ -12,13 +12,24 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-func CreateGenerationTaskWithCharge(task model.GenerationTask, payload model.GenerationPayload, userID, modelName, path string, credits int) error {
+func CreateGenerationTaskWithCharge(task *model.GenerationTask, payload model.GenerationPayload, userID, modelName, path string, credits int) error {
 	db, err := DB()
 	if err != nil {
 		return err
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&task).Error; err != nil {
+		if credits > 0 {
+			var user model.User
+			if err := tx.Select("enterprise_id").Where("id = ?", userID).Take(&user).Error; err != nil {
+				return err
+			}
+			credits, err = discountedUserCredits(tx, user, credits)
+			if err != nil {
+				return err
+			}
+			task.Credits = credits
+		}
+		if err := tx.Create(task).Error; err != nil {
 			return err
 		}
 		payload.TaskID = task.ID
@@ -57,6 +68,15 @@ func ChargeGenerationTask(taskID string, credits int, upstreamCredits *int, path
 		if task.Credits > 0 || credits <= 0 {
 			return nil
 		}
+		var userIdentity model.User
+		if err := tx.Select("enterprise_id").Where("id = ?", task.UserID).Take(&userIdentity).Error; err != nil {
+			return err
+		}
+		discounted, err := discountedUserCredits(tx, userIdentity, credits)
+		if err != nil {
+			return err
+		}
+		credits = discounted
 		now := time.Now().UTC().Format(time.RFC3339Nano)
 		result := tx.Model(&model.User{}).Where("id = ? AND credits >= ?", task.UserID, credits).Updates(map[string]any{
 			"credits":    gorm.Expr("credits - ?", credits),

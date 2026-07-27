@@ -44,6 +44,7 @@ export type AdminEnterprise = {
     ownerName: string;
     ownerStatus: "active" | "ban";
     ownerCredits: number;
+    discountRate: number;
     memberCount: number;
     createdAt: string;
     updatedAt: string;
@@ -99,6 +100,10 @@ export async function createAdminEnterprise(token: string, enterprise: CreateAdm
 
 export async function setAdminEnterpriseStatus(token: string, id: string, status: AdminEnterprise["status"]) {
     return apiPost<AdminEnterprise>(`/api/admin/enterprises/${encodeURIComponent(id)}/status`, { status }, token);
+}
+
+export async function setAdminEnterpriseDiscountRate(token: string, id: string, discountRate: number) {
+    return apiPost<AdminEnterprise>(`/api/admin/enterprises/${encodeURIComponent(id)}/discount-rate`, { discountRate }, token);
 }
 
 export async function setAdminEnterpriseOwnerStatus(token: string, id: string, status: AdminEnterprise["ownerStatus"]) {

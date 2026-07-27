@@ -22,12 +22,13 @@ const (
 )
 
 type Enterprise struct {
-	ID        string           `json:"id" gorm:"primaryKey"`
-	Name      string           `json:"name"`
-	Status    EnterpriseStatus `json:"status" gorm:"not null;check:status IN ('active','disabled')"`
-	OwnerID   string           `json:"ownerId" gorm:"not null;uniqueIndex"`
-	CreatedAt string           `json:"createdAt"`
-	UpdatedAt string           `json:"updatedAt"`
+	ID           string           `json:"id" gorm:"primaryKey"`
+	Name         string           `json:"name"`
+	Status       EnterpriseStatus `json:"status" gorm:"not null;check:status IN ('active','disabled')"`
+	OwnerID      string           `json:"ownerId" gorm:"not null;uniqueIndex"`
+	DiscountRate float64          `json:"discountRate" gorm:"not null;default:1;check:chk_enterprises_discount_rate,discount_rate >= 0.1 AND discount_rate <= 1"`
+	CreatedAt    string           `json:"createdAt"`
+	UpdatedAt    string           `json:"updatedAt"`
 }
 
 type EnterpriseView struct {
@@ -44,11 +45,12 @@ type EnterpriseList struct {
 }
 
 type EnterpriseAccountSummary struct {
-	ID          string           `json:"id"`
-	Name        string           `json:"name"`
-	Status      EnterpriseStatus `json:"status"`
-	Role        EnterpriseRole   `json:"role"`
-	MemberCount int              `json:"memberCount"`
+	ID           string           `json:"id"`
+	Name         string           `json:"name"`
+	Status       EnterpriseStatus `json:"status"`
+	Role         EnterpriseRole   `json:"role"`
+	MemberCount  int              `json:"memberCount"`
+	DiscountRate float64          `json:"discountRate"`
 }
 
 // EnterpriseMember 企业成员管理视图。

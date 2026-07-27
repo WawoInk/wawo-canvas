@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -563,6 +564,7 @@ func TestCreateGenerationValidatesNegativePromptBeforeRouting(t *testing.T) {
 
 func TestCreateGenerationRunsMediaSeedanceTask(t *testing.T) {
 	var gotBody map[string]any
+	signedImageURL := "https://cdn.example/uploads/images/user/image.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20260727T000000Z&X-Amz-Expires=43200&X-Amz-Signature=secret"
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
@@ -600,6 +602,9 @@ func TestCreateGenerationRunsMediaSeedanceTask(t *testing.T) {
 	generationHTTPClient = upstream.Client()
 	generationCost = func(string) (int, error) { return 0, nil }
 	generationPresign = func(_ context.Context, key string, _ time.Duration) (string, error) {
+		if strings.HasSuffix(key, "/image.png") {
+			return signedImageURL, nil
+		}
 		return "https://cdn.example/" + key, nil
 	}
 	generationDispatch = func(ctx context.Context, taskID string) {
@@ -625,7 +630,7 @@ func TestCreateGenerationRunsMediaSeedanceTask(t *testing.T) {
 		*item.target = append(*item.target, model.MediaReference{FileID: item.id, SourceNodeID: "node-" + item.fileType, Name: item.fileType})
 	}
 
-	_, err := CreateGeneration(context.Background(), model.AuthUser{ID: userID}, model.GenerationCommand{
+	task, err := CreateGeneration(context.Background(), model.AuthUser{ID: userID}, model.GenerationCommand{
 		CommandVersion: 1, ClientRequestID: "request-media-" + key, ModelProfileID: "seedance-media", Source: string(model.SourceCanvas),
 		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "use media", References: references},
 	})
@@ -658,6 +663,26 @@ func TestCreateGenerationRunsMediaSeedanceTask(t *testing.T) {
 		if item["type"] != media.mediaType || media.role != "" && item["role"] != media.role {
 			t.Fatalf("content[%d] = %#v, want type=%q role=%q", index, item, media.mediaType, media.role)
 		}
+	}
+	imageURL := content[1].(map[string]any)["image_url"].(map[string]any)["url"]
+	if imageURL != signedImageURL {
+		t.Fatalf("upstream image URL = %q, want full presigned URL %q", imageURL, signedImageURL)
+	}
+	payload, err := repository.GetGenerationPayloadByTaskID(task.ID)
+	if err != nil {
+		t.Fatalf("get generation payload: %v", err)
+	}
+	var auditBody map[string]any
+	if err := json.Unmarshal([]byte(payload.RequestBody), &auditBody); err != nil {
+		t.Fatalf("decode request audit: %v", err)
+	}
+	auditURL := auditBody["content"].([]any)[1].(map[string]any)["image_url"].(map[string]any)["url"].(string)
+	parsedAuditURL, err := url.Parse(auditURL)
+	if err != nil {
+		t.Fatalf("parse audited image URL: %v", err)
+	}
+	if parsedAuditURL.Query().Get("X-Amz-Signature") != "[REDACTED]" || strings.Contains(auditURL, "secret") {
+		t.Fatalf("request audit should retain signed URL shape without secrets: %s", auditURL)
 	}
 }
 
@@ -1417,8 +1442,13 @@ func TestViduShortDramaAdapterNormalizesTerminalResultsAndErrors(t *testing.T) {
 	if len(success.Shots) != 1 || success.Shots[0].Index != 1 || success.Shots[0].DurationSeconds != 3.5 || success.Shots[0].Status != "success" {
 		t.Fatalf("shots = %#v", success.Shots)
 	}
-	if strings.Contains(success.Audit.ResponseBody, "X-Amz-Signature") || strings.Contains(success.Audit.ResponseBody, "token=secret") {
+	if strings.Contains(success.Audit.ResponseBody, "=secret") {
 		t.Fatalf("audit leaked signed query: %s", success.Audit.ResponseBody)
+	}
+	for _, marker := range []string{"X-Amz-Signature", "token"} {
+		if !strings.Contains(success.Audit.ResponseBody, marker) {
+			t.Fatalf("audit lost signed URL shape %q: %s", marker, success.Audit.ResponseBody)
+		}
 	}
 
 	failed, err := adapter.Poll(context.Background(), model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"}, "vidu-failed")
@@ -1469,21 +1499,24 @@ func TestGenerationAdapterMapsHTTPFailuresToStableErrors(t *testing.T) {
 func TestGenerationAuditRedactsSecretsAndBodies(t *testing.T) {
 	input := `{"Authorization":"Bearer secret","api_key":"secret-key","x-api-key":"header-secret","callback_secret":"callback-value","image_uri":"data:image/png;base64,AAAA","url":"https://cdn.example/video.mp4?X-Amz-Signature=signed&token=secret","nested":{"callback_url":"https://app.example/hook?secret=callback-value"}}`
 	got := sanitizeGenerationAuditJSON(input)
-	for _, secret := range []string{"Bearer secret", "secret-key", "header-secret", "callback-value", "AAAA", "X-Amz-Signature", "token=secret"} {
+	for _, secret := range []string{"Bearer secret", "secret-key", "header-secret", "callback-value", "AAAA", "signed", "token=secret"} {
 		if strings.Contains(got, secret) {
 			t.Fatalf("audit leaked %q: %s", secret, got)
 		}
 	}
-	for _, marker := range []string{"[REDACTED]", "data:image/png;base64,[REDACTED]", "https://cdn.example/video.mp4"} {
+	for _, marker := range []string{"[REDACTED]", "data:image/png;base64,[REDACTED]", "https://cdn.example/video.mp4", "X-Amz-Signature", "token"} {
 		if !strings.Contains(got, marker) {
 			t.Fatalf("audit missing %q: %s", marker, got)
 		}
 	}
 	embedded := sanitizeGenerationAuditJSON(strconv.Quote(`Get "https://cdn.example/video.mp4?X-Amz-Signature=signed&token=secret": Authorization: Bearer secret`))
-	for _, secret := range []string{"X-Amz-Signature", "token=secret", "Bearer secret"} {
+	for _, secret := range []string{"signed", "token=secret", "Bearer secret"} {
 		if strings.Contains(embedded, secret) {
 			t.Fatalf("embedded audit leaked %q: %s", secret, embedded)
 		}
+	}
+	if !strings.Contains(embedded, "X-Amz-Signature") {
+		t.Fatalf("embedded audit lost signed URL shape: %s", embedded)
 	}
 }
 

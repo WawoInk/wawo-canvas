@@ -196,6 +196,7 @@ export default function AccountPage() {
                                         { key: "role", label: "企业身份", children: enterpriseRoleLabels[summary.role] },
                                         { key: "status", label: "企业状态", children: enterpriseStatusLabels[summary.status] },
                                         { key: "members", label: "成员数量", children: `${summary.memberCount} 人` },
+                                        ...(summary.role === "owner" ? [{ key: "discountRate", label: "折扣倍率", children: `${summary.discountRate} 倍` }] : []),
                                     ]}
                                 />
                                 {capabilities.canRename ? (

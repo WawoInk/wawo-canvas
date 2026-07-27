@@ -22,7 +22,7 @@ func StartCompatibilityTask(user model.AuthUser, taskType model.TaskType, provid
 		Status: model.TaskStatusRunning, Source: source, Credits: billing.Credits, BillingMode: billing.Mode, BillingRate: billing.Rate, CreatedAt: now, UpdatedAt: now,
 	}
 	payload := model.GenerationPayload{ID: "genpayload-" + uuid.NewString(), RequestHeaders: reqHeaders, RequestBody: string(reqBody), CreatedAt: now}
-	if err := repository.CreateGenerationTaskWithCharge(task, payload, user.ID, modelName, path, billing.Credits); err != nil {
+	if err := repository.CreateGenerationTaskWithCharge(&task, payload, user.ID, modelName, path, billing.Credits); err != nil {
 		return id, err
 	}
 	return id, nil
@@ -63,11 +63,10 @@ func LogTaskStart(user model.AuthUser, taskType model.TaskType, provider string,
 }
 
 // LogTaskCreated 更新任务的上游 task ID（异步任务创建成功后，状态仍为 running）。
-func LogTaskCreated(taskID string, upstreamTaskID string, latencyMs int64, credits int) {
+func LogTaskCreated(taskID string, upstreamTaskID string, latencyMs int64, _ int) {
 	now := time.Now().Format(time.RFC3339)
 	updates := map[string]any{
 		"upstream_task_id": upstreamTaskID,
-		"credits":          credits,
 		"latency_ms":       latencyMs,
 		"updated_at":       now,
 	}
@@ -77,11 +76,10 @@ func LogTaskCreated(taskID string, upstreamTaskID string, latencyMs int64, credi
 }
 
 // LogTaskSuccess 更新任务为成功状态，同时保存响应数据到 Payload。
-func LogTaskSuccess(taskID string, respBody []byte, respHeaders string, latencyMs int64, credits int, upstreamTaskID string) {
+func LogTaskSuccess(taskID string, respBody []byte, respHeaders string, latencyMs int64, _ int, upstreamTaskID string) {
 	now := time.Now().Format(time.RFC3339)
 	updates := map[string]any{
 		"status":     string(model.TaskStatusSuccess),
-		"credits":    credits,
 		"latency_ms": latencyMs,
 		"updated_at": now,
 	}
@@ -100,11 +98,10 @@ func LogTaskSuccess(taskID string, respBody []byte, respHeaders string, latencyM
 }
 
 // LogTaskFailure 更新任务为失败状态。
-func LogTaskFailure(taskID string, errCode string, errMsg string, rawError string, latencyMs int64, credits int) {
+func LogTaskFailure(taskID string, errCode string, errMsg string, rawError string, latencyMs int64, _ int) {
 	now := time.Now().Format(time.RFC3339)
 	updates := map[string]any{
 		"status":        string(model.TaskStatusFailed),
-		"credits":       credits,
 		"latency_ms":    latencyMs,
 		"error_code":    errCode,
 		"error_message": errMsg,

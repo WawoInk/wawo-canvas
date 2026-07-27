@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"math"
 	"strings"
 
 	"github.com/basketikun/infinite-canvas/model"
@@ -79,7 +80,7 @@ func CreateEnterprise(input CreateEnterpriseInput) (model.EnterpriseView, error)
 	enterpriseID := newID("enterprise")
 	ownerID := newID("user")
 	ownerRole := model.EnterpriseRoleOwner
-	enterprise := model.Enterprise{ID: enterpriseID, Name: input.Name, Status: model.EnterpriseStatusActive, OwnerID: ownerID, CreatedAt: now, UpdatedAt: now}
+	enterprise := model.Enterprise{ID: enterpriseID, Name: input.Name, Status: model.EnterpriseStatusActive, OwnerID: ownerID, DiscountRate: 1, CreatedAt: now, UpdatedAt: now}
 	owner := model.User{
 		ID: ownerID, Username: input.OwnerUsername, Password: hash, DisplayName: strings.TrimSpace(input.OwnerDisplayName), Role: model.UserRoleUser,
 		AffCode: newAffCode(), Status: model.UserStatusActive, EnterpriseID: &enterpriseID, EnterpriseRole: &ownerRole, SessionVersion: 1, CreatedAt: now, UpdatedAt: now,
@@ -211,6 +212,16 @@ func SetEnterpriseStatus(id string, status model.EnterpriseStatus) (model.Enterp
 		return model.EnterpriseView{}, safeMessageError{message: "企业状态无效"}
 	}
 	if err := repository.UpdateEnterpriseStatus(id, status, now()); err != nil {
+		return model.EnterpriseView{}, err
+	}
+	return repository.GetEnterpriseView(id)
+}
+
+func SetEnterpriseDiscountRate(id string, discountRate float64) (model.EnterpriseView, error) {
+	if math.IsNaN(discountRate) || discountRate < 0.1 || discountRate > 1 {
+		return model.EnterpriseView{}, safeMessageError{message: "折扣倍率必须在 0.1 到 1 之间"}
+	}
+	if err := repository.UpdateEnterpriseDiscountRate(id, discountRate, now()); err != nil {
 		return model.EnterpriseView{}, err
 	}
 	return repository.GetEnterpriseView(id)

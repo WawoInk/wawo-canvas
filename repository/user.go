@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"math"
 	"strings"
 
 	"github.com/basketikun/infinite-canvas/model"
@@ -170,6 +171,20 @@ func ApplyUserCreditLog(userID string, amount int, log model.CreditLog, updatedA
 				return err
 			}
 		}
+		if log.Type == model.CreditLogTypeAIRefund && log.TaskID != "" {
+			var consume model.CreditLog
+			if err := tx.Where("user_id = ? AND task_id = ? AND type = ?", userID, log.TaskID, model.CreditLogTypeAIConsume).Take(&consume).Error; err != nil {
+				return err
+			}
+			amount = -consume.Amount
+		}
+		if log.Type == model.CreditLogTypeAIConsume && amount < 0 {
+			credits, err := discountedUserCredits(tx, user, -amount)
+			if err != nil {
+				return err
+			}
+			amount = -credits
+		}
 		if user.Credits+amount < 0 {
 			return nil
 		}
@@ -181,10 +196,26 @@ func ApplyUserCreditLog(userID string, amount int, log model.CreditLog, updatedA
 		if err := tx.Create(&log).Error; err != nil {
 			return err
 		}
+		if log.TaskID != "" && log.Type == model.CreditLogTypeAIConsume {
+			if err := tx.Model(&model.GenerationTask{}).Where("id = ?", log.TaskID).Update("credits", -amount).Error; err != nil {
+				return err
+			}
+		}
 		applied = true
 		return nil
 	})
 	return user, applied, err
+}
+
+func discountedUserCredits(tx *gorm.DB, user model.User, credits int) (int, error) {
+	if credits <= 0 || user.EnterpriseID == nil {
+		return credits, nil
+	}
+	var enterprise model.Enterprise
+	if err := tx.Select("discount_rate").Where("id = ?", *user.EnterpriseID).Take(&enterprise).Error; err != nil {
+		return 0, err
+	}
+	return int(math.Ceil(float64(credits) * enterprise.DiscountRate)), nil
 }
 
 // SaveCreditLog 保存算力点变更流水。

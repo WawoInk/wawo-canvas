@@ -403,24 +403,36 @@ func redactGenerationAuditString(value string) string {
 		}
 		return "data:[REDACTED]"
 	}
-	parsed, err := url.Parse(value)
-	if err == nil && parsed.IsAbs() && parsed.RawQuery != "" {
-		parsed.RawQuery = ""
-		parsed.ForceQuery = false
-		return parsed.String()
+	if redacted, ok := redactGenerationAuditURL(value); ok {
+		return redacted
 	}
 	value = generationAuditAuthorizationPattern.ReplaceAllString(value, "Authorization: [REDACTED]")
 	return generationAuditURLPattern.ReplaceAllStringFunc(value, func(candidate string) string {
 		trimmed := strings.TrimRight(candidate, ".,;:)")
 		suffix := candidate[len(trimmed):]
-		parsed, err := url.Parse(trimmed)
-		if err != nil || parsed.RawQuery == "" {
-			return candidate
+		if redacted, ok := redactGenerationAuditURL(trimmed); ok {
+			return redacted + suffix
 		}
-		parsed.RawQuery = ""
-		parsed.ForceQuery = false
-		return parsed.String() + suffix
+		return candidate
 	})
+}
+
+func redactGenerationAuditURL(value string) (string, bool) {
+	parsed, err := url.Parse(value)
+	if err != nil || !parsed.IsAbs() || parsed.RawQuery == "" {
+		return value, false
+	}
+	query, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
+		query = url.Values{"redacted": {"[REDACTED]"}}
+	} else {
+		for key := range query {
+			query[key] = []string{"[REDACTED]"}
+		}
+	}
+	parsed.RawQuery = query.Encode()
+	parsed.ForceQuery = false
+	return parsed.String(), true
 }
 
 func mapGenerationStatus(status string) model.TaskStatus {

@@ -19,14 +19,21 @@ import (
 )
 
 type enterpriseView struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Status       string `json:"status"`
-	OwnerID      string `json:"ownerId"`
-	OwnerName    string `json:"ownerName"`
-	OwnerStatus  string `json:"ownerStatus"`
-	MemberCount  int    `json:"memberCount"`
-	OwnerCredits int    `json:"ownerCredits"`
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Status       string  `json:"status"`
+	OwnerID      string  `json:"ownerId"`
+	OwnerName    string  `json:"ownerName"`
+	OwnerStatus  string  `json:"ownerStatus"`
+	MemberCount  int     `json:"memberCount"`
+	OwnerCredits int     `json:"ownerCredits"`
+	DiscountRate float64 `json:"discountRate"`
+}
+
+type enterpriseSummaryView struct {
+	ID           string  `json:"id"`
+	Role         string  `json:"role"`
+	DiscountRate float64 `json:"discountRate"`
 }
 
 func TestEnterpriseOwnerIsEnforcedByDatabase(t *testing.T) {
@@ -94,6 +101,44 @@ func TestAdminCreatesEnterpriseAndOwnerThroughHTTP(t *testing.T) {
 	owner := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerUsername, "password": "owner-test-password"})
 	if owner.Code != 0 || owner.Data.User.Role != model.UserRoleUser {
 		t.Fatalf("owner login response = %#v", owner)
+	}
+}
+
+func TestAdminSetsEnterpriseDiscountRateAndOwnerSeesIt(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "enterprise-discount-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	adminUsername := "enterprise-discount-admin-" + uuid.NewString()
+	if _, err := service.SaveUser(model.User{Username: adminUsername, Role: model.UserRoleAdmin}, "admin-password"); err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	admin := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/admin/login", "", map[string]string{"username": adminUsername, "password": "admin-password"})
+	ownerUsername := "enterprise-discount-owner-" + uuid.NewString()
+	enterprise := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises", admin.Data.Token, map[string]string{
+		"name": "折扣企业", "ownerUsername": ownerUsername, "ownerPassword": "owner-password",
+	})
+	if enterprise.Code != 0 || enterprise.Data.DiscountRate != 1 {
+		t.Fatalf("default discount rate = %#v", enterprise)
+	}
+
+	for _, rate := range []float64{0.09, 1.01} {
+		response := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/discount-rate", admin.Data.Token, map[string]float64{"discountRate": rate})
+		if response.Code != 1 || response.Msg != "折扣倍率必须在 0.1 到 1 之间" {
+			t.Fatalf("discount rate %v response = %#v", rate, response)
+		}
+	}
+
+	updated := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/discount-rate", admin.Data.Token, map[string]float64{"discountRate": 0.5})
+	if updated.Code != 0 || updated.Data.DiscountRate != 0.5 {
+		t.Fatalf("updated discount rate = %#v", updated)
+	}
+	owner := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerUsername, "password": "owner-password"})
+	summary := doJSON[enterpriseSummaryView](t, http.MethodGet, server.URL+"/api/v1/enterprise/summary", owner.Data.Token, nil)
+	if summary.Code != 0 || summary.Data.ID != enterprise.Data.ID || summary.Data.Role != string(model.EnterpriseRoleOwner) || summary.Data.DiscountRate != 0.5 {
+		t.Fatalf("enterprise summary = %#v", summary)
 	}
 }
 

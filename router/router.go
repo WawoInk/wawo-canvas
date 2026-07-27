@@ -182,6 +182,9 @@ func New() *gin.Engine {
 	admin.POST("/enterprises/:id/status", func(c *gin.Context) {
 		handler.AdminSetEnterpriseStatus(c.Writer, c.Request, c.Param("id"))
 	})
+	admin.POST("/enterprises/:id/discount-rate", func(c *gin.Context) {
+		handler.AdminSetEnterpriseDiscountRate(c.Writer, c.Request, c.Param("id"))
+	})
 	admin.POST("/enterprises/:id/owner/status", func(c *gin.Context) {
 		handler.AdminSetEnterpriseOwnerStatus(c.Writer, c.Request, c.Param("id"))
 	})

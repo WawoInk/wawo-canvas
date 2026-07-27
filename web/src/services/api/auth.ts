@@ -36,6 +36,7 @@ export type EnterpriseAccountSummary = {
     status: "active" | "disabled";
     role: "owner" | "member";
     memberCount: number;
+    discountRate: number;
 };
 
 export type EnterpriseMember = {
