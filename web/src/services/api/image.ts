@@ -8,6 +8,7 @@ import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { applyImageBackground, buildAsyncImageEditFormData } from "@/services/api/async-image-edit-form";
 import { imageBackgroundFields } from "@/services/api/image-background";
 import { imageToDataUrl } from "@/services/blob-storage";
+import { queueCreditBalanceRefresh } from "@/services/credit-balance-sync";
 import type { ReferenceImage } from "@/types/image";
 
 export type AiTextMessage = {
@@ -856,6 +857,8 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
         return answer;
     } catch (error) {
         throw new Error(readAxiosError(error, "请求失败"));
+    } finally {
+        if (requestConfig.channelMode === "remote") queueCreditBalanceRefresh();
     }
 }
 
@@ -969,6 +972,8 @@ export async function requestToolResponse(config: AiConfig, messages: ResponseIn
         return await requestChatCompletions(requestConfig, messages, tools, toolChoice, onDelta, options);
     } catch (error) {
         throw new Error(readAxiosError(error, "请求失败"));
+    } finally {
+        if (requestConfig.channelMode === "remote") queueCreditBalanceRefresh();
     }
 }
 

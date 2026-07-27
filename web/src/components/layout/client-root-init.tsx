@@ -11,6 +11,7 @@ import { useAssetStore } from "@/stores/use-asset-store";
 import { syncScheduler } from "@/services/sync-scheduler";
 import { syncClient } from "@/services/sync-client";
 import { fetchCurrentUser } from "@/services/api/auth";
+import { startCreditBalanceSync } from "@/services/credit-balance-sync";
 import { revalidateSession, startSessionMonitor } from "@/services/session-monitor";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
@@ -60,6 +61,7 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         syncScheduler.start();
+        const stopCreditBalanceSync = startCreditBalanceSync();
         const stopSessionMonitor = startSessionMonitor(() => {
             const { token, clearSession } = useUserStore.getState();
             return revalidateSession(token, fetchCurrentUser, () => {
@@ -70,6 +72,7 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
         });
         return () => {
             syncScheduler.stop();
+            stopCreditBalanceSync();
             stopSessionMonitor();
         };
     }, [navigate]);
