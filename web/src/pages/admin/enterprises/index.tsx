@@ -205,7 +205,14 @@ export default function AdminEnterprisesPage() {
                 destroyOnHidden
             >
                 <Form form={discountForm} layout="vertical" requiredMark={false}>
-                    <Form.Item name="discountRate" label="折扣倍率" rules={[{ required: true, message: "请输入折扣倍率" }, { type: "number", min: 0.1, max: 1, message: "折扣倍率必须在 0.1 到 1 之间" }]}>
+                    <Form.Item
+                        name="discountRate"
+                        label="折扣倍率"
+                        rules={[
+                            { required: true, message: "请输入折扣倍率" },
+                            { type: "number", min: 0.1, max: 1, message: "折扣倍率必须在 0.1 到 1 之间" },
+                        ]}
+                    >
                         <InputNumber min={0.1} max={1} step={0.1} suffix="倍" style={{ width: "100%" }} />
                     </Form.Item>
                 </Form>

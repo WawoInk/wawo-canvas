@@ -821,11 +821,7 @@ export default function AdminSettingsPage() {
                                                                             </Col>
                                                                             <Col xs={24} md={8} xl={5}>
                                                                                 <Form.Item label="画布能力">
-                                                                                    <Select
-                                                                                        value={binding.profileId}
-                                                                                        options={generationProfileOptions}
-                                                                                        onChange={(profileId) => updateGenerationProfile(index, { profileId, limitOverrides: {} })}
-                                                                                    />
+                                                                                    <Select value={binding.profileId} options={generationProfileOptions} onChange={(profileId) => updateGenerationProfile(index, { profileId, limitOverrides: {} })} />
                                                                                 </Form.Item>
                                                                             </Col>
                                                                             <Col xs={24} md={8} xl={4}>
@@ -847,9 +843,7 @@ export default function AdminSettingsPage() {
                                                                                         placeholder={binding.channelName ? "选择模型" : "请先选择渠道"}
                                                                                         disabled={!binding.channelName}
                                                                                         options={modelOptions}
-                                                                                        onChange={(upstreamModel) =>
-                                                                                            updateGenerationProfile(index, { upstreamModel, upstreamModels: undefined, ...(!binding.id ? { id: upstreamModel } : {}) })
-                                                                                        }
+                                                                                        onChange={(upstreamModel) => updateGenerationProfile(index, { upstreamModel, upstreamModels: undefined, ...(!binding.id ? { id: upstreamModel } : {}) })}
                                                                                     />
                                                                                 </Form.Item>
                                                                             </Col>

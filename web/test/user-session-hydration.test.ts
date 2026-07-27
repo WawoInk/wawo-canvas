@@ -72,12 +72,11 @@ test("backend generation requests refresh the shared balance after charges and r
             const isCurrentUser = config.url === "/api/auth/me";
             return {
                 config,
-                data:
-                    isCurrentUser
-                        ? { code: 0, data: { ...user, credits }, msg: "" }
-                        : generationStatus === 200
-                          ? { code: 0, data: { id: "generation-1", status: "queued", modelProfileId: "profile-1", intentKind: "video.generate", createdAt: "" }, msg: "" }
-                          : { code: 1, data: null, msg: "上游失败，积分已退回" },
+                data: isCurrentUser
+                    ? { code: 0, data: { ...user, credits }, msg: "" }
+                    : generationStatus === 200
+                      ? { code: 0, data: { id: "generation-1", status: "queued", modelProfileId: "profile-1", intentKind: "video.generate", createdAt: "" }, msg: "" }
+                      : { code: 1, data: null, msg: "上游失败，积分已退回" },
                 headers: {},
                 status: isCurrentUser ? 200 : generationStatus,
                 statusText: isCurrentUser || generationStatus === 200 ? "OK" : "Bad Gateway",
