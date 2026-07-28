@@ -2,6 +2,7 @@
 
 ## Unreleased
 
++ [新增] Codex 项目工作流支持任务前按需加载 `.knowledge`，并在结构性代码变化后由独立 Agent 按需维护知识文档。
 + [新增] 迁移 0.3.0 完整 Go 后端（认证/算力点/后台/Linux.do OAuth/AI 代理/提示词同步）。
 + [新增] 后端 AI 代理支持 Gemini 协议（`protocol: "gemini"`）。
 + [重构] 后端改为 PostgreSQL-only，移除 sqlite/mysql 驱动与 StorageDriver 配置。

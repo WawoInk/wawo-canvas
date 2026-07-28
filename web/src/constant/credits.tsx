@@ -1,6 +1,7 @@
 import type { ComponentProps } from "react";
 import { Zap } from "lucide-react";
 
+import { normalizeResolutionToken } from "@/lib/seedance-video";
 import { modelOptionName } from "@/stores/use-config-store";
 
 export function CreditSymbol({ className, ...props }: ComponentProps<"span">) {
@@ -14,15 +15,19 @@ export function CreditSymbol({ className, ...props }: ComponentProps<"span">) {
 export type ModelCreditCost = {
     model: string;
     credits: number;
+    resolutionCredits?: Record<string, number>;
 };
 
 function modelCreditCost(modelCosts: ModelCreditCost[] | undefined, model: string) {
     const modelName = modelOptionName(model);
-    return modelCosts?.find((item) => item.model === modelName)?.credits || 0;
+    return modelCosts?.find((item) => item.model === modelName);
 }
 
-export function requestCreditCost(options: { channelMode: string; modelCosts?: ModelCreditCost[]; model: string; count?: string | number }) {
+export function requestCreditCost(options: { channelMode: string; modelCosts?: ModelCreditCost[]; model: string; count?: string | number; resolution?: string; duration?: string | number; fallbackCredits?: number }) {
     if (options.channelMode !== "remote") return 0;
+    const cost = modelCreditCost(options.modelCosts, options.model);
+    const resolutionCredits = options.resolution ? cost?.resolutionCredits?.[normalizeResolutionToken(options.resolution)] : undefined;
+    if (resolutionCredits !== undefined) return resolutionCredits * Math.max(0, Math.floor(Number(options.duration)) || 0);
     const count = Math.max(1, Math.floor(Math.abs(Number(options.count)) || 1));
-    return modelCreditCost(options.modelCosts, options.model) * count;
+    return (cost?.credits ?? options.fallbackCredits ?? 0) * count;
 }

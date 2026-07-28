@@ -4,3 +4,22 @@ args = [
     "shadcn@latest",
     "mcp",
 ]
+
+[features]
+hooks = true
+
+[[hooks.UserPromptSubmit]]
+
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = '/bin/sh "$(git rev-parse --show-toplevel)/.codex/hooks/before-task.sh"'
+timeout = 30
+statusMessage = "正在加载项目知识"
+
+[[hooks.Stop]]
+
+[[hooks.Stop.hooks]]
+type = "command"
+command = '/bin/sh "$(git rev-parse --show-toplevel)/.codex/hooks/after-task.sh"'
+timeout = 300
+statusMessage = "正在检查项目知识"

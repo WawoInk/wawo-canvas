@@ -51,10 +51,14 @@ export function CanvasNodePromptPanel({ node, isRunning, canResume = false, onPr
     const unresolvedVideoProfile = mode === "video" && config.channelMode === "remote" && Boolean(config.model) && !profile;
     const profileOptions: ModelPickerOption[] = profiles.map((item) => ({ value: item.id, label: item.displayName }));
     if (unresolvedVideoProfile) profileOptions.unshift({ value: config.model, label: `旧模型：${config.model}（请重新选择）`, disabled: true });
-    const credits =
-        mode === "video" && config.channelMode === "remote"
-            ? profile?.credits || 0
-            : requestCreditCost({ channelMode: config.channelMode, model: config.model, count: mode === "image" ? config.count : 1, modelCosts: publicSettings?.modelChannel.modelCosts });
+    const credits = requestCreditCost({
+        channelMode: config.channelMode,
+        model: config.model,
+        count: mode === "image" ? config.count : 1,
+        modelCosts: publicSettings?.modelChannel.modelCosts,
+        ...(mode === "video" ? { resolution: config.vquality, duration: config.videoSeconds } : {}),
+        fallbackCredits: mode === "video" ? profile?.credits : undefined,
+    });
 
     useEffect(() => {
         if (mode !== "video") return;

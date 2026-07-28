@@ -22,16 +22,17 @@ type VideoSettingsPanelProps = {
     config: AiConfig;
     onConfigChange: (key: "quality" | "vquality" | "size" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark" | "videoNegativePrompt", value: string) => void;
     theme: CanvasTheme;
+    allowAutoDuration?: boolean;
     showTitle?: boolean;
     className?: string;
     errorFieldPath?: string;
 };
 
-export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", errorFieldPath }: VideoSettingsPanelProps) {
-    return <ProfileVideoSettingsPanel config={config} onConfigChange={onConfigChange} theme={theme} showTitle={showTitle} className={className} errorFieldPath={errorFieldPath} />;
+export function VideoSettingsPanel({ config, onConfigChange, theme, allowAutoDuration = true, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", errorFieldPath }: VideoSettingsPanelProps) {
+    return <ProfileVideoSettingsPanel config={config} onConfigChange={onConfigChange} theme={theme} allowAutoDuration={allowAutoDuration} showTitle={showTitle} className={className} errorFieldPath={errorFieldPath} />;
 }
 
-function ProfileVideoSettingsPanel({ config, onConfigChange, theme, showTitle, className, errorFieldPath }: VideoSettingsPanelProps) {
+function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDuration, showTitle, className, errorFieldPath }: VideoSettingsPanelProps) {
     const profileID = config.model || config.videoModel;
     const [profile, setProfile] = useState<GenerationProfile | null>(null);
 
@@ -73,7 +74,9 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, showTitle, c
     const ratioOptions = definitions?.aspectRatio.values?.map((value) => ({ value, label: seedanceRatioOptions.find((item) => item.value === value)?.label || value })) || seedanceRatioOptions;
     const durationDefinition = definitions?.durationSeconds;
     const durationValue = settings.durationSeconds;
-    const durationOptions = seedanceDurationOptions.filter((value) => (value === -1 ? durationDefinition?.allowAuto !== false : !durationDefinition || (value >= (durationDefinition.min ?? value) && value <= (durationDefinition.max ?? value))));
+    const durationOptions = seedanceDurationOptions.filter((value) =>
+        value === -1 ? allowAutoDuration && durationDefinition?.allowAuto !== false : !durationDefinition || (value >= (durationDefinition.min ?? value) && value <= (durationDefinition.max ?? value)),
+    );
     const settingError = (key: string) => (errorFieldPath === `intent.settings.${key}` ? { outline: "2px solid #ef4444", outlineOffset: 4, borderRadius: 12 } : undefined);
 
     return (
@@ -133,7 +136,7 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, showTitle, c
                         </div>
                         <NumberInput
                             value={String(durationValue === "auto" ? -1 : durationValue)}
-                            min={durationDefinition?.allowAuto ? -1 : (durationDefinition?.min ?? 4)}
+                            min={allowAutoDuration && durationDefinition?.allowAuto ? -1 : (durationDefinition?.min ?? 4)}
                             max={durationDefinition?.max ?? 15}
                             theme={theme}
                             onChange={(value) => onConfigChange("videoSeconds", value)}

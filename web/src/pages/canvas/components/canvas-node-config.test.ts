@@ -73,6 +73,11 @@ test("buildNodeConfig defaults canvas video audio generation off", () => {
     assert.equal(config.videoGenerateAudio, "false");
 });
 
+test("buildNodeConfig replaces smart duration with the canvas default", () => {
+    const config = buildNodeConfig({ ...defaults, videoSeconds: "-1" }, defaults, node({ seconds: "-1" }), "video");
+    assert.equal(config.videoSeconds, "6");
+});
+
 test("config patches map setting keys to node metadata", () => {
     assert.deepEqual(videoConfigPatch("videoSeconds", "10"), { seconds: "10" });
     assert.deepEqual(videoConfigPatch("videoGenerateAudio", "false"), { generateAudio: "false" });
