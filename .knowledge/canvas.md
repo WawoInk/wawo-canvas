@@ -15,7 +15,7 @@
   - 生成输入：`web/src/pages/canvas/components/canvas-node-generation.ts`
   - 导入导出：`web/src/pages/canvas/utils/canvas-export.ts`、`export-types.ts`
   - Agent：`canvas-assistant-panel.tsx`、`canvas-local-agent-panel.tsx`、`utils/canvas-agent-ops.ts`
-- **数据流**：页面本地 state -> `useCanvasStore.updateProject` -> IndexedDB Replica -> 防抖 REST CAS -> PostgreSQL；远端 delta 反向合并非 dirty 项目。
+- **数据流**：页面本地 state -> `useCanvasStore.updateProject` -> IndexedDB Replica/dirty outbox -> 立即串行 REST CAS -> PostgreSQL；失败任务指数退避并在联网、页面恢复或重新水合时继续，远端 delta 反向合并非 dirty 项目。
 - **依赖关系**：依赖用户边界、AI 配置、素材/文件、生成 API、sync client、WebDAV、Canvas Agent。
 - **常见修改位置**：
   - 项目持久结构：`types.ts` + Store normalize + 导入导出。
@@ -153,33 +153,34 @@ flowchart TB
 
 1. 浏览器生成项目 ID。
 2. 本地立即插入 `revision=0/localVersion=1/dirty=true` 的 Replica。
-3. 异步 `POST /api/v1/canvas/projects`。
+3. 持久 outbox 立即执行 `POST /api/v1/canvas/projects`。
 4. 成功后写入服务端 revision；若期间又有修改，仍保持 dirty 并安排 update。
-
-当前缺口：首次 POST 失败后项目会长期保持 `revision=0`，普通 update 同步会跳过它，没有可靠的自动重试队列。
+5. 网络或服务端失败会指数退避重试；若 POST 已成功但响应丢失，会通过 GET 恢复服务端 revision，再提交本地最新项目。
 
 ### 更新
 
 1. 项目页调用 `updateProject`。
 2. Store 递增 `localVersion`，设置 `dirty=true`。
-3. subscription 比较业务字段，安排 4 秒防抖。
-4. PUT 发送完整项目和 `expectedRevision`。
-5. 服务端 CAS 成功后返回新 revision。
-6. `acknowledgeProject` 只有在 `localVersion` 未变化时清除 dirty。
+3. subscription 比较业务字段，立即将项目加入按项目串行的后台队列。
+4. PUT 发送完整项目和 `expectedRevision`；进行中产生的新修改会排队并读取最新 Replica。
+5. 网络、HTTP 200 业务失败、408、425、429 和 5xx 使用 500ms 起步、最长 30 秒的指数退避，并在联网或页面重新可见时立即唤醒。
+6. 服务端 CAS 成功后返回新 revision；`acknowledgeProject` 只有在 `localVersion` 未变化时清除 dirty。
+7. 队列本身由持久化的 `dirty` Replica 表达，刷新、崩溃恢复或重新登录后会自动扫描继续。
 
 ### 删除
 
 1. 本地立刻移除项目并加入 Store tombstone。
-2. 异步 DELETE 服务端。
+2. tombstone 立即进入同一后台队列执行 DELETE。
 3. 成功或服务端 404 后确认本地 tombstone。
 4. 服务端删除和 `deleted_records` Canvas tombstone 同事务。
+5. 网络或服务端失败时 tombstone 持久保留并持续重试。
 
 ### 拉取和冲突
 
 - 启动时先水合 IndexedDB，再执行全量项目拉取和 cursor delta。
 - 非 dirty 项目只有在远端 revision 更高时才替换。
 - dirty 项目拒绝远端 update/delete。
-- 409 只提示“本地修改已保留”，不会自动 merge、fork 或覆盖。
+- 409 会采用服务端当前 revision 并重新提交本地最新 Replica；当前产品不做多人字段级 merge，本地最近修改获胜。
 - 当 delta 中存在比 dirty 项目更新的 revision 时，Canvas cursor 不前进，避免永久跳过冲突事实。
 
 ## 账户隔离
@@ -274,8 +275,6 @@ WebDAV：
 ## 已知限制
 
 - 核心项目页承担过多编排职责。
-- 新建项目 POST 失败没有可靠重试。
-- 409 冲突只有保留本地，没有 merge UI。
 - `cleanupImages` 是空实现，Blob 可能累积。
 - Undo/Redo 快照不包含 viewport；视口单独持久化。
 - 旧文档只列图片/文本/config 等较少节点类型，不能作为当前类型来源。

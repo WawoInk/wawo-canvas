@@ -1,80 +1,210 @@
 // ponytail: Canvas-specific replica mechanics stay concrete until another real implementation shares this protocol.
 "use client";
 
-import { message } from "antd";
-import { createCanvasProject, deleteCanvasProject, updateCanvasProject } from "@/services/api/canvas-projects";
+import { createCanvasProject, deleteCanvasProject, fetchCanvasProject, updateCanvasProject } from "@/services/api/canvas-projects";
 import { ApiError } from "@/services/api/request";
 import { syncClient } from "@/services/sync-client";
 import { syncScheduler } from "@/services/sync-scheduler";
 import { useUserStore } from "@/stores/use-user-store";
+import { isCurrentSession } from "@/lib/account-storage";
 import type { CanvasProject, CanvasStore as CanvasStoreType } from "@/pages/canvas/stores/use-canvas-store";
 import { normalizeCanvasProject } from "@/pages/canvas/stores/canvas-replica";
 
-const SYNC_DEBOUNCE_MS = 4000;
-const syncTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const RETRY_BASE_MS = 500;
+const RETRY_MAX_MS = 30_000;
 type StoreAccess = { getState: () => CanvasStoreType };
+type SyncResult = "done" | "again" | "retry" | "pause";
+type QueueEntry = {
+    store: StoreAccess;
+    queued: boolean;
+    retryCount: number;
+    retryTimer?: ReturnType<typeof setTimeout>;
+};
+const syncQueue = new Map<string, QueueEntry>();
+const syncRequests = new Map<string, Promise<SyncResult>>();
 
-async function syncProject(projectId: string, store: StoreAccess) {
+function hasPendingWork(projectId: string, store: StoreAccess) {
     const state = store.getState();
-    const project = state.projects.find((item) => item.id === projectId);
-    if (!project?.dirty || project.revision === 0 || !useUserStore.getState().user?.id) return;
-    const localVersion = project.localVersion;
-    syncScheduler.markActivity();
+    return state.tombstones.includes(projectId) || Boolean(state.projects.find((item) => item.id === projectId)?.dirty);
+}
+
+function setProjectRevision(projectId: string, revision: number, updatedAt: string | undefined, store: StoreAccess) {
+    const state = store.getState();
+    state.replaceProjects(state.projects.map((project) => (project.id === projectId ? { ...project, revision, updatedAt: updatedAt || project.updatedAt, dirty: true } : project)));
+}
+
+function conflictRevision(err: ApiError) {
+    const current = (err.data as { current?: { revision?: unknown; updatedAt?: unknown } } | null)?.current;
+    return {
+        revision: typeof current?.revision === "number" ? current.revision : null,
+        updatedAt: typeof current?.updatedAt === "string" ? current.updatedAt : undefined,
+    };
+}
+
+function retryableSyncError(err: unknown) {
+    if (!(err instanceof ApiError)) return true;
+    return err.status === 200 || err.status === 408 || err.status === 425 || err.status === 429 || err.status >= 500;
+}
+
+async function recoverProjectRevision(projectId: string, store: StoreAccess, session: { token: string; userId: string }) {
     try {
-        const updated = await updateCanvasProject(projectId, { project, expectedRevision: project.revision });
-        store.getState().acknowledgeProject(projectId, localVersion, { revision: updated.revision, updatedAt: updated.updatedAt || project.updatedAt });
-    } catch (err) {
-        if (err instanceof ApiError && err.status === 409) {
-            message.warning("画布存在云端冲突，本地修改已保留");
-            return;
-        }
-        console.warn("canvas: sync project failed", err);
+        const current = await fetchCanvasProject(projectId);
+        const auth = useUserStore.getState();
+        if (!isCurrentSession(session, { token: auth.token, userId: auth.user?.id })) return false;
+        setProjectRevision(projectId, current.revision, current.updatedAt, store);
+        return true;
+    } catch {
+        return false;
     }
 }
 
+async function persistProject(projectId: string, store: StoreAccess): Promise<SyncResult> {
+    const auth = useUserStore.getState();
+    if (!auth.user?.id || !auth.token) return "pause";
+    const session = { token: auth.token, userId: auth.user.id };
+    const state = store.getState();
+    if (state.tombstones.includes(projectId)) {
+        try {
+            await deleteCanvasProject(projectId);
+            const current = useUserStore.getState();
+            if (!isCurrentSession(session, { token: current.token, userId: current.user?.id })) return "pause";
+            store.getState().acknowledgeDelete(projectId);
+            return "done";
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 404) {
+                const current = useUserStore.getState();
+                if (!isCurrentSession(session, { token: current.token, userId: current.user?.id })) return "pause";
+                store.getState().acknowledgeDelete(projectId);
+                return "done";
+            }
+            return retryableSyncError(err) ? "retry" : "pause";
+        }
+    }
+
+    const project = state.projects.find((item) => item.id === projectId);
+    if (!project?.dirty) return "done";
+    const localVersion = project.localVersion;
+    syncScheduler.markActivity();
+    try {
+        const updated =
+            project.revision === 0
+                ? await createCanvasProject(project.title, project)
+                : await updateCanvasProject(projectId, {
+                      project,
+                      expectedRevision: project.revision,
+                  });
+        const current = useUserStore.getState();
+        if (!isCurrentSession(session, { token: current.token, userId: current.user?.id })) return "pause";
+        store.getState().acknowledgeProject(projectId, localVersion, { revision: updated.revision, updatedAt: updated.updatedAt || project.updatedAt });
+        return "done";
+    } catch (err) {
+        if (err instanceof ApiError && err.status === 409) {
+            const current = conflictRevision(err);
+            if (current.revision !== null) {
+                setProjectRevision(projectId, current.revision, current.updatedAt, store);
+                return "again";
+            }
+            return (await recoverProjectRevision(projectId, store, session)) ? "again" : "retry";
+        }
+        if (err instanceof ApiError && err.status === 404 && project.revision > 0) {
+            setProjectRevision(projectId, 0, undefined, store);
+            return "again";
+        }
+        if (project.revision === 0 && (await recoverProjectRevision(projectId, store, session))) return "again";
+        if (retryableSyncError(err)) return "retry";
+        console.warn("canvas: sync paused after a permanent error", err);
+        return "pause";
+    }
+}
+
+function scheduleRetry(projectId: string, entry: QueueEntry) {
+    if (entry.retryTimer) clearTimeout(entry.retryTimer);
+    const delay = Math.min(RETRY_BASE_MS * 2 ** entry.retryCount, RETRY_MAX_MS);
+    entry.retryCount += 1;
+    entry.retryTimer = setTimeout(() => {
+        entry.retryTimer = undefined;
+        entry.queued = true;
+        void drainProjectSync(projectId);
+    }, delay);
+}
+
+async function drainProjectSync(projectId: string) {
+    const entry = syncQueue.get(projectId);
+    if (!entry?.queued || syncRequests.has(projectId)) return;
+    entry.queued = false;
+    const request = persistProject(projectId, entry.store);
+    syncRequests.set(projectId, request);
+    let result: SyncResult = "retry";
+    try {
+        result = await request;
+    } finally {
+        if (syncRequests.get(projectId) === request) syncRequests.delete(projectId);
+    }
+
+    const current = syncQueue.get(projectId);
+    if (!current) return;
+    if (result === "again") {
+        current.queued = true;
+        void drainProjectSync(projectId);
+        return;
+    }
+    if (result === "retry") {
+        if (current.queued) void drainProjectSync(projectId);
+        else scheduleRetry(projectId, current);
+        return;
+    }
+    if (result === "pause") return;
+    current.retryCount = 0;
+    if (current.queued || hasPendingWork(projectId, current.store)) {
+        current.queued = true;
+        void drainProjectSync(projectId);
+        return;
+    }
+    syncQueue.delete(projectId);
+}
+
+function enqueueProjectSync(projectId: string, store: StoreAccess) {
+    const entry = syncQueue.get(projectId) || { store, queued: false, retryCount: 0 };
+    entry.store = store;
+    entry.queued = true;
+    entry.retryCount = 0;
+    if (entry.retryTimer) clearTimeout(entry.retryTimer);
+    entry.retryTimer = undefined;
+    syncQueue.set(projectId, entry);
+    void drainProjectSync(projectId);
+}
+
 export function scheduleBackendSync(projectId: string, store: StoreAccess) {
-    const existing = syncTimers.get(projectId);
-    if (existing) clearTimeout(existing);
-    const timer = setTimeout(() => {
-        syncTimers.delete(projectId);
-        void syncProject(projectId, store);
-    }, SYNC_DEBOUNCE_MS);
-    syncTimers.set(projectId, timer);
+    enqueueProjectSync(projectId, store);
 }
 
 export function flushProjectSync(projectId: string, store: StoreAccess) {
-    const timer = syncTimers.get(projectId);
-    if (timer) clearTimeout(timer);
-    syncTimers.delete(projectId);
-    void syncProject(projectId, store);
+    enqueueProjectSync(projectId, store);
 }
 
 export function fireCreateProject(project: CanvasProject, store: StoreAccess) {
-    if (!useUserStore.getState().user?.id) return;
-    const localVersion = project.localVersion;
-    createCanvasProject(project.title, project)
-        .then((created) => {
-            store.getState().acknowledgeProject(project.id, localVersion, { revision: created.revision, updatedAt: created.updatedAt || project.updatedAt });
-            if (store.getState().projects.find((item) => item.id === project.id)?.dirty) scheduleBackendSync(project.id, store);
-        })
-        .catch((err) => console.warn("canvas: create project failed", err));
+    enqueueProjectSync(project.id, store);
 }
 
 export function fireDeleteProjects(ids: string[], store: StoreAccess) {
-    if (!useUserStore.getState().user?.id) return;
-    for (const id of ids) {
-        const timer = syncTimers.get(id);
-        if (timer) clearTimeout(timer);
-        syncTimers.delete(id);
-        deleteCanvasProject(id)
-            .then(() => store.getState().acknowledgeDelete(id))
-            .catch((err) => {
-                if (err instanceof ApiError && err.status === 404) {
-                    store.getState().acknowledgeDelete(id);
-                    return;
-                }
-                console.warn("canvas: delete project failed", err);
-            });
+    for (const id of ids) enqueueProjectSync(id, store);
+}
+
+export function resumePendingCanvasSync(store: StoreAccess) {
+    const state = store.getState();
+    for (const project of state.projects) {
+        if (project.dirty) enqueueProjectSync(project.id, store);
+    }
+    for (const id of state.tombstones) enqueueProjectSync(id, store);
+}
+
+export function retryPendingCanvasSync() {
+    for (const [projectId, entry] of syncQueue) {
+        if (entry.retryTimer) clearTimeout(entry.retryTimer);
+        entry.retryTimer = undefined;
+        entry.retryCount = 0;
+        entry.queued = true;
+        void drainProjectSync(projectId);
     }
 }
 
@@ -84,7 +214,7 @@ export function registerBeforeUnloadFlush(store: StoreAccess) {
         const token = useUserStore.getState().token;
         if (!useUserStore.getState().user?.id || !token) return;
         for (const project of store.getState().projects) {
-            if (!project.dirty || project.revision === 0) continue;
+            if (!project.dirty || project.revision === 0 || syncRequests.has(project.id)) continue;
             fetch(`/api/v1/canvas/projects/${encodeURIComponent(project.id)}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -162,6 +292,16 @@ export function detectDataChanges(prev: CanvasProject[], curr: CanvasProject[]):
 }
 
 export function clearSyncTimers() {
-    for (const timer of syncTimers.values()) clearTimeout(timer);
-    syncTimers.clear();
+    for (const entry of syncQueue.values()) {
+        if (entry.retryTimer) clearTimeout(entry.retryTimer);
+    }
+    syncQueue.clear();
+    syncRequests.clear();
+}
+
+if (typeof window !== "undefined") {
+    window.addEventListener("online", retryPendingCanvasSync);
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") retryPendingCanvasSync();
+    });
 }

@@ -317,7 +317,7 @@ queued, pending, running, succeeded, success, failed, cancelled
 - start/end time。
 - page/pageSize。
 
-用户任务查询把 `success/succeeded` 视为等价；管理员 JOIN 查询的状态过滤目前更接近精确匹配。
+用户与管理员任务查询都把 `success/succeeded` 视为等价。
 
 ### 增量同步
 

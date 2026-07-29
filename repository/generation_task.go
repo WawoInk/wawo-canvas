@@ -250,7 +250,7 @@ func ListGenerationTasksWithUsername(q model.GenerationTaskQuery) ([]AdminGenera
 		tx = tx.Where("gt.task_type = ?", q.TaskType)
 	}
 	if q.Status != "" {
-		tx = tx.Where("gt.status = ?", q.Status)
+		tx = tx.Where("gt.status IN ?", model.EquivalentTaskStatuses(q.Status))
 	}
 	if q.StartTime != "" {
 		tx = tx.Where("gt.created_at >= ?", q.StartTime)

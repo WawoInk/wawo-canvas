@@ -66,6 +66,7 @@ export default function AdminUsersPage() {
                 </Flex>
             ),
         },
+        { title: "用户 ID", dataIndex: "id", width: 180, ellipsis: true, copyable: true },
         {
             title: "角色",
             dataIndex: "role",
@@ -129,9 +130,9 @@ export default function AdminUsersPage() {
     ];
 
     return (
-        <main style={{ padding: 24 }}>
-            <Flex vertical gap={16}>
-                <Card variant="borderless">
+        <main style={{ maxWidth: "100%", minWidth: 0, overflowX: "hidden", padding: 24 }}>
+            <Flex vertical gap={16} style={{ minWidth: 0, width: "100%" }}>
+                <Card variant="borderless" style={{ minWidth: 0, width: "100%" }}>
                     <Form layout="vertical">
                         <Row gutter={16} align="bottom">
                             <Col flex="360px">
@@ -173,7 +174,9 @@ export default function AdminUsersPage() {
                     loading={isLoading}
                     search={false}
                     defaultSize="middle"
+                    style={{ minWidth: 0, width: "100%" }}
                     tableLayout="fixed"
+                    scroll={{ x: 1326 }}
                     cardProps={{ variant: "borderless" }}
                     headerTitle={
                         <Space>

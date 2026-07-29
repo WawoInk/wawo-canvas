@@ -124,21 +124,23 @@ sequenceDiagram
 ```text
 Create/import in browser
 -> local Replica dirty=true, revision=0
--> async POST with frontend ID
+-> immediate durable outbox POST with frontend ID
 -> acknowledge revision
 -> local edits increment localVersion
--> 4s debounce PUT expectedRevision
+-> immediate project-serialized PUT expectedRevision
 -> server CAS + new revision
 -> acknowledge if localVersion unchanged
+-> retry dirty/tombstone with exponential backoff until acknowledged
 ```
 
 - **输入**：项目 JSON、项目 ID/name、后续编辑 patch。
 - **输出**：浏览器 Replica 和 PostgreSQL `canvas_projects`。
 - **副作用**：IndexedDB 持久化、sync activity、服务端 revision。
 - **失败**：
-  - create POST 失败：本地项目保留，但当前无可靠自动重试。
-  - update 409：本地 dirty 保留，不自动 merge。
-  - 网络失败：下次修改或 unload 可能再尝试。
+  - create POST 失败或响应丢失：本地项目保留，后台重试；若远端已创建则 GET 恢复 revision 后继续 PUT 最新状态。
+  - update 409：采用服务端当前 revision，保留本地业务 JSON 并立即重试，本地最近修改获胜。
+  - 网络或可重试服务端失败：dirty/tombstone 持久保留，500ms 起步指数退避；联网、页面重新可见和重新水合会立即唤醒。
+  - 非重试型 4xx：保留本地 dirty，暂停当前循环，后续用户修改或生命周期唤醒会再次尝试。
 - **核心文件**：Canvas Store、`canvas-sync.ts`、canvas API、canvas service/repository。
 - **依赖**：account boundary、sync scheduler。
 - **常见修改位置**：Replica 语义见 [canvas.md](canvas.md)，不要用“服务端空列表覆盖本地”。

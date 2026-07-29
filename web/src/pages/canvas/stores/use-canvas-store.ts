@@ -9,7 +9,7 @@ import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "../types";
 import { useUserStore } from "@/stores/use-user-store";
 import { syncClient } from "@/services/sync-client";
-import { fireCreateProject, fireDeleteProjects, scheduleBackendSync, flushProjectSync, registerBeforeUnloadFlush, registerSyncDeltaHandler, detectDataChanges, clearSyncTimers, parseProjectJson } from "./canvas-sync";
+import { fireCreateProject, fireDeleteProjects, scheduleBackendSync, flushProjectSync, registerBeforeUnloadFlush, registerSyncDeltaHandler, resumePendingCanvasSync, detectDataChanges, clearSyncTimers, parseProjectJson } from "./canvas-sync";
 import { normalizeCanvasProject } from "./canvas-replica";
 
 export type CanvasProject = {
@@ -264,8 +264,7 @@ export const useCanvasStore = create<CanvasStore>()(
                 useCanvasStore.setState({ hydrated: true });
                 // ponytail: register sync delta handler after store is hydrated
                 registerSyncDeltaHandler({ getState: () => useCanvasStore.getState() });
-                const tombstones = useCanvasStore.getState().tombstones;
-                if (tombstones.length) fireDeleteProjects(tombstones, { getState: () => useCanvasStore.getState() });
+                resumePendingCanvasSync({ getState: () => useCanvasStore.getState() });
                 void useCanvasStore.getState().syncFromBackend();
                 void syncClient.syncDomain("canvas");
             },
@@ -300,7 +299,7 @@ if (typeof window !== "undefined") {
                 const store = useCanvasStore.getState();
                 if (!store.hydrated) useCanvasStore.setState({ hydrated: true });
                 registerSyncDeltaHandler({ getState: () => useCanvasStore.getState() });
-                if (store.tombstones.length) fireDeleteProjects(store.tombstones, { getState: () => useCanvasStore.getState() });
+                resumePendingCanvasSync({ getState: () => useCanvasStore.getState() });
                 void useCanvasStore.getState().syncFromBackend();
                 void syncClient.syncDomain("canvas");
             });
