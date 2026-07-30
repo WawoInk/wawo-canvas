@@ -2651,7 +2651,7 @@ function InfiniteCanvasPage() {
         startGenerationRequest(nodeId, nodeId, nodeId, controller);
         const imageConfig = NODE_DEFAULT_SIZE[CanvasNodeType.Image];
         try {
-            for (let attempt = 0; attempt < 120; attempt += 1) {
+            for (let attempt = 0; attempt < 360; attempt += 1) {
                 const state = await pollAsyncImageTask(config, task, { signal: controller.signal });
                 if (state.status === "succeeded") {
                     const image = state.images[0];
@@ -2770,7 +2770,7 @@ function InfiniteCanvasPage() {
         const controller = new AbortController();
         startGenerationRequest(nodeId, nodeId, nodeId, controller);
         try {
-            for (let attempt = 0; attempt < 120; attempt += 1) {
+            for (let attempt = 0; attempt < 360; attempt += 1) {
                 const state = await pollVideoGenerationTask(config, task, { signal: controller.signal });
                 if (state.status === "completed") {
                     let stored;

@@ -130,6 +130,20 @@ test("reports queued and running before returning a structured terminal task", a
     assert.deepEqual(terminal.error, { code: "INVALID_SETTING", message: "设置无效", retryable: false, fieldPath: "intent.settings.durationSeconds", resourceId: "node-1" });
 });
 
+test("keeps polling through the 30-minute default window", async () => {
+    let polls = 0;
+    const terminal = await pollGenerationTask(
+        async () => {
+            polls += 1;
+            return polls === 360 ? { status: "succeeded" } : { status: "running" };
+        },
+        async () => {},
+    );
+
+    assert.equal(polls, 360);
+    assert.equal(terminal.status, "succeeded");
+});
+
 test("selects the Canvas video submission boundary without remote fallback", () => {
     assert.equal(resolveCanvasVideoSubmission("remote", { id: "seedance-1-5-pro" }), "first-party");
     assert.throws(() => resolveCanvasVideoSubmission("remote", undefined), /不支持第一方 Canvas 视频生成/);

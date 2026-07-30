@@ -8,7 +8,7 @@ export function generationStatusLabel(status?: GenerationTaskStatus) {
     return status === "queued" ? "排队中" : "生成中";
 }
 
-export async function pollGenerationTask<T extends { status: GenerationTaskStatus }>(load: () => Promise<T>, sleep: () => Promise<void>, onStatus?: (task: T) => void, attempts = 120) {
+export async function pollGenerationTask<T extends { status: GenerationTaskStatus }>(load: () => Promise<T>, sleep: () => Promise<void>, onStatus?: (task: T) => void, attempts = 360) {
     for (let attempt = 0; attempt < attempts; attempt += 1) {
         const task = await load();
         onStatus?.(task);
