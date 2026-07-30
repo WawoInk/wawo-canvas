@@ -77,5 +77,5 @@ func chargeGenerationByUpstreamCredits(task model.GenerationTask, ref ProviderTa
 	if ref.Credits != nil {
 		upstreamCredits = max(0, *ref.Credits)
 	}
-	return repository.ChargeGenerationTask(task.ID, upstreamCredits*max(0, task.BillingRate), ref.Credits, path)
+	return repository.ChargeGenerationTask(task.ID, upstreamCredits*max(0, task.BillingRate), ref.Credits, path, DisplayModelName(task.ModelProfileID, task.Model))
 }

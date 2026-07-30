@@ -48,6 +48,7 @@ type GenerationTask struct {
 	Source               string                `json:"source" gorm:"index"`
 	Provider             string                `json:"provider"`
 	Model                string                `json:"model"`
+	ModelDisplayName     string                `json:"modelDisplayName,omitempty" gorm:"-"`
 	Status               TaskStatus            `json:"status"`
 	Credits              int                   `json:"credits"`
 	UpstreamCredits      *int                  `json:"upstreamCredits"`

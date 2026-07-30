@@ -75,7 +75,7 @@ export function AccountUsageLogTable({ items, loading, pagination }: UsageLogTab
             loading={loading}
             dataSource={items}
             pagination={pagination}
-            scroll={{ x: 1020 }}
+            scroll={{ x: 1180 }}
             columns={[
                 {
                     title: "操作",
@@ -88,6 +88,7 @@ export function AccountUsageLogTable({ items, loading, pagination }: UsageLogTab
                     ),
                 },
                 { title: "模型", dataIndex: "model", ellipsis: true, render: (value: string) => value || "-" },
+                { title: "模型展示名", dataIndex: "modelDisplayName", width: 160, ellipsis: true, render: (value: string, item) => value || item.model || "-" },
                 {
                     title: "状态",
                     dataIndex: "status",

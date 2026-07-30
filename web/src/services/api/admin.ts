@@ -151,6 +151,7 @@ export type AdminGenerationTask = {
     taskType: string;
     provider: string;
     model: string;
+    modelDisplayName?: string;
     status: string;
     credits: number;
     upstreamCredits: number | null;
@@ -308,6 +309,7 @@ export type AdminPublicModelChannelSettings = {
 
 export type AdminModelCost = {
     model: string;
+    displayName?: string;
     credits: number;
     resolutionCredits?: Record<string, number>;
 };

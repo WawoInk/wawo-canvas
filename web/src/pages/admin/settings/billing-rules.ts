@@ -2,6 +2,7 @@ export type VideoBillingMode = "per_credit" | "per_second" | "per_call";
 
 export type VideoModelCost = {
     model: string;
+    displayName?: string;
     credits: number;
     resolutionCredits?: Record<string, number>;
 };
@@ -23,6 +24,7 @@ export function normalizeModelCosts(items: Array<Partial<VideoModelCost>>) {
         .filter((item) => item.model)
         .map((item) => ({
             model: item.model || "",
+            ...(item.displayName?.trim() ? { displayName: item.displayName.trim() } : {}),
             credits: Math.max(0, Number(item.credits) || 0),
             ...(item.resolutionCredits
                 ? {

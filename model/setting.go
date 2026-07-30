@@ -30,6 +30,7 @@ func (ch ModelChannel) SupportsCallback() bool {
 // ModelCost 模型算力点配置。
 type ModelCost struct {
 	Model             string         `json:"model"`
+	DisplayName       string         `json:"displayName,omitempty"`
 	Credits           int            `json:"credits"`
 	ResolutionCredits map[string]int `json:"resolutionCredits,omitempty"`
 }

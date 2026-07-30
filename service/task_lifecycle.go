@@ -22,7 +22,7 @@ func StartCompatibilityTask(user model.AuthUser, taskType model.TaskType, provid
 		Status: model.TaskStatusRunning, Source: source, Credits: billing.Credits, BillingMode: billing.Mode, BillingRate: billing.Rate, CreatedAt: now, UpdatedAt: now,
 	}
 	payload := model.GenerationPayload{ID: "genpayload-" + uuid.NewString(), RequestHeaders: reqHeaders, RequestBody: string(reqBody), CreatedAt: now}
-	if err := repository.CreateGenerationTaskWithCharge(&task, payload, user.ID, modelName, path, billing.Credits); err != nil {
+	if err := repository.CreateGenerationTaskWithCharge(&task, payload, user.ID, modelName, path, billing.Credits, DisplayModelName(modelName)); err != nil {
 		return id, err
 	}
 	return id, nil

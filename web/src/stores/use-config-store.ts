@@ -39,6 +39,7 @@ export type AiConfig = {
     videoWatermark: string;
     videoNegativePrompt: string;
     systemPrompt: string;
+    modelDisplayNames?: Record<string, string>;
     models: string[];
     imageModels: string[];
     videoModels: string[];
@@ -97,6 +98,7 @@ export const defaultConfig: AiConfig = {
     videoWatermark: "false",
     videoNegativePrompt: "",
     systemPrompt: "",
+    modelDisplayNames: {},
     models: ["default::gpt-image-2", "default::grok-imagine-video", "default::gpt-5.5", "default::gpt-4o-mini-tts"],
     imageModels: ["default::gpt-image-2"],
     videoModels: ["default::grok-imagine-video"],
@@ -268,6 +270,7 @@ export const useConfigStore = create<ConfigStore>()(
                                 textModels,
                                 audioModels,
                                 systemPrompt: settings.modelChannel.systemPrompt ?? current.systemPrompt,
+                                modelDisplayNames: Object.fromEntries((settings.modelChannel.modelCosts || []).filter((item) => item.model && item.displayName?.trim()).map((item) => [item.model, item.displayName!.trim()])),
                             },
                         });
                     } else if (allowCustomChannel && get().config.channelMode === "remote") {
@@ -373,9 +376,11 @@ export function modelOptionName(value: string) {
 
 export function modelOptionLabel(config: AiConfig, value: string) {
     const decoded = decodeChannelModel(value);
-    if (!decoded) return value;
+    const model = decoded?.model || value;
+    const label = config.channelMode === "remote" ? config.modelDisplayNames?.[model] || model : model;
+    if (!decoded) return label;
     const channel = config.channels.find((item) => item.id === decoded.channelId);
-    return channel ? `${decoded.model}（${channel.name}）` : decoded.model;
+    return channel ? `${label}（${channel.name}）` : label;
 }
 
 export function modelOptionsFromChannels(channels: ModelChannel[]) {

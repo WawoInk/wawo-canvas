@@ -2,7 +2,7 @@ import { apiGet } from "@/services/api/request";
 
 export type PublicModelChannelSettings = {
     availableModels: string[];
-    modelCosts: { model: string; credits: number; resolutionCredits?: Record<string, number> }[];
+    modelCosts: { model: string; displayName?: string; credits: number; resolutionCredits?: Record<string, number> }[];
     defaultModel: string;
     defaultImageModel: string;
     defaultVideoModel: string;

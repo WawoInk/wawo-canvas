@@ -55,6 +55,7 @@ export interface GenerationTaskItem {
     source: string;
     provider: string;
     model: string;
+    modelDisplayName?: string;
     status: string;
     credits: number;
     upstreamCredits: number | null;

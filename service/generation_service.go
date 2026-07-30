@@ -92,6 +92,7 @@ func ListUserTasks(ctx model.AuthUser, q model.GenerationTaskQuery) (model.Gener
 	if err != nil {
 		return model.GenerationTaskList{}, err
 	}
+	setGenerationTaskDisplayNames(tasks)
 	return model.GenerationTaskList{Items: tasks, Total: total}, nil
 }
 
@@ -106,6 +107,10 @@ func AdminListTasksWithUsername(q model.GenerationTaskQuery) (*AdminGenerationTa
 	tasks, total, err := repository.ListGenerationTasksWithUsername(q)
 	if err != nil {
 		return nil, err
+	}
+	public, _ := PublicSettings()
+	for i := range tasks {
+		tasks[i].ModelDisplayName = ResolveModelDisplayName(public, tasks[i].ModelProfileID, tasks[i].Model)
 	}
 	return &AdminGenerationTaskListWithUser{Items: tasks, Total: total}, nil
 }
@@ -139,6 +144,7 @@ func AdminListTasks(q model.GenerationTaskQuery) (model.GenerationTaskList, erro
 	if err != nil {
 		return model.GenerationTaskList{}, err
 	}
+	setGenerationTaskDisplayNames(tasks)
 	return model.GenerationTaskList{Items: tasks, Total: total}, nil
 }
 
@@ -174,25 +180,27 @@ func RecordUserTask(user model.AuthUser, taskType model.TaskType, source string,
 			existing.LatencyMs = latencyMs
 			existing.ErrorMessage = errorMessage
 			existing.UpdatedAt = now
+			existing.ModelDisplayName = DisplayModelName(existing.ModelProfileID, existing.Model)
 			return &existing, nil
 		}
 	}
 
 	id := "gentask-" + uuid.NewString()
 	task := model.GenerationTask{
-		ID:             id,
-		UserID:         user.ID,
-		TaskType:       taskType,
-		Source:         source,
-		Provider:       provider,
-		Model:          modelName,
-		Status:         status,
-		Credits:        credits,
-		LatencyMs:      latencyMs,
-		UpstreamTaskID: upstreamTaskID,
-		ErrorMessage:   errorMessage,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:               id,
+		UserID:           user.ID,
+		TaskType:         taskType,
+		Source:           source,
+		Provider:         provider,
+		Model:            modelName,
+		ModelDisplayName: DisplayModelName(modelName),
+		Status:           status,
+		Credits:          credits,
+		LatencyMs:        latencyMs,
+		UpstreamTaskID:   upstreamTaskID,
+		ErrorMessage:     errorMessage,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 
 	payload := model.GenerationPayload{
@@ -234,6 +242,7 @@ func GetTaskDetail(taskID string, includePayload bool) (model.GenerationTask, *m
 	if err != nil {
 		return model.GenerationTask{}, nil, err
 	}
+	setGenerationTaskDisplayName(&task)
 	if !includePayload {
 		return task, nil, nil
 	}
@@ -250,6 +259,7 @@ func GetUserTaskDetail(taskID string, userID string, includePayload bool) (model
 	if err != nil {
 		return model.GenerationTask{}, nil, err
 	}
+	setGenerationTaskDisplayName(&task)
 	if !includePayload {
 		return task, nil, nil
 	}
@@ -266,6 +276,7 @@ func AdminGetTaskDetail(taskID string, includePayload bool) (model.GenerationTas
 	if err != nil {
 		return model.GenerationTask{}, nil, err
 	}
+	setGenerationTaskDisplayName(&task)
 	if !includePayload {
 		return task, nil, nil
 	}
@@ -274,6 +285,18 @@ func AdminGetTaskDetail(taskID string, includePayload bool) (model.GenerationTas
 		return task, nil, nil
 	}
 	return task, &payload, nil
+}
+
+func setGenerationTaskDisplayNames(tasks []model.GenerationTask) {
+	public, _ := PublicSettings()
+	for i := range tasks {
+		tasks[i].ModelDisplayName = ResolveModelDisplayName(public, tasks[i].ModelProfileID, tasks[i].Model)
+	}
+}
+
+func setGenerationTaskDisplayName(task *model.GenerationTask) {
+	public, _ := PublicSettings()
+	task.ModelDisplayName = ResolveModelDisplayName(public, task.ModelProfileID, task.Model)
 }
 
 // SerializeHeaders 将 http.Header 序列化为 JSON 字符串（用于 Payload 存储）。

@@ -450,13 +450,14 @@ func ConsumeUserCreditsWithTask(userID string, modelName string, credits int, pa
 	if credits <= 0 {
 		return nil
 	}
+	displayName := DisplayModelName(modelName)
 	extra, _ := json.Marshal(map[string]string{"model": modelName, "path": path})
 	stamp := now()
 	_, ok, err := repository.ApplyUserCreditLog(userID, -credits, model.CreditLog{
 		ID:     newID("credit"),
 		TaskID: taskID,
 		Type:   model.CreditLogTypeAIConsume,
-		Remark: "调用模型 " + modelName,
+		Remark: "调用模型 " + displayName,
 		Extra:  string(extra),
 	}, stamp)
 	if err != nil {
@@ -476,13 +477,14 @@ func RefundUserCreditsWithTask(userID string, modelName string, credits int, pat
 	if credits <= 0 {
 		return nil
 	}
+	displayName := DisplayModelName(modelName)
 	extra, _ := json.Marshal(map[string]string{"model": modelName, "path": path})
 	stamp := now()
 	_, ok, err := repository.ApplyUserCreditLog(userID, credits, model.CreditLog{
 		ID:     newID("credit"),
 		TaskID: taskID,
 		Type:   model.CreditLogTypeAIRefund,
-		Remark: "模型调用失败返还 " + modelName,
+		Remark: "模型调用失败返还 " + displayName,
 		Extra:  string(extra),
 	}, stamp)
 	if err != nil {

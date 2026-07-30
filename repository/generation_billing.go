@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-func CreateGenerationTaskWithCharge(task *model.GenerationTask, payload model.GenerationPayload, userID, modelName, path string, credits int) error {
+func CreateGenerationTaskWithCharge(task *model.GenerationTask, payload model.GenerationPayload, userID, modelName, path string, credits int, displayName string) error {
 	db, err := DB()
 	if err != nil {
 		return err
@@ -51,11 +51,14 @@ func CreateGenerationTaskWithCharge(task *model.GenerationTask, payload model.Ge
 		if err := tx.Where("id = ?", userID).First(&user).Error; err != nil {
 			return err
 		}
-		return tx.Create(&model.CreditLog{ID: "credit-" + uuid.NewString(), UserID: userID, TaskID: task.ID, Type: model.CreditLogTypeAIConsume, Amount: -credits, Balance: user.Credits, Remark: "调用模型 " + modelName, Extra: fmt.Sprintf(`{"path":%q}`, path), CreatedAt: now}).Error
+		if displayName == "" {
+			displayName = modelName
+		}
+		return tx.Create(&model.CreditLog{ID: "credit-" + uuid.NewString(), UserID: userID, TaskID: task.ID, Type: model.CreditLogTypeAIConsume, Amount: -credits, Balance: user.Credits, Remark: "调用模型 " + displayName, Extra: fmt.Sprintf(`{"path":%q}`, path), CreatedAt: now}).Error
 	})
 }
 
-func ChargeGenerationTask(taskID string, credits int, upstreamCredits *int, path string) (model.GenerationTask, error) {
+func ChargeGenerationTask(taskID string, credits int, upstreamCredits *int, path, displayName string) (model.GenerationTask, error) {
 	db, err := DB()
 	if err != nil {
 		return model.GenerationTask{}, err
@@ -102,9 +105,12 @@ func ChargeGenerationTask(taskID string, credits int, upstreamCredits *int, path
 			return err
 		}
 		extra, _ := json.Marshal(map[string]any{"path": path, "credits": upstreamCredits})
+		if displayName == "" {
+			displayName = task.Model
+		}
 		if err := tx.Create(&model.CreditLog{
 			ID: "credit-" + uuid.NewString(), UserID: task.UserID, TaskID: task.ID, Type: model.CreditLogTypeAIConsume,
-			Amount: -credits, Balance: user.Credits, Remark: "调用模型 " + task.Model, Extra: string(extra), CreatedAt: now,
+			Amount: -credits, Balance: user.Credits, Remark: "调用模型 " + displayName, Extra: string(extra), CreatedAt: now,
 		}).Error; err != nil {
 			return err
 		}

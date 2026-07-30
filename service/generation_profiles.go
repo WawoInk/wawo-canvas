@@ -183,6 +183,7 @@ func resolveGenerationProfiles(templates []model.GenerationProfile, private mode
 		profiles := []model.GenerationProfile{}
 		for _, profile := range templates {
 			if len(modelChannelsForModel(private.Channels, profile.UpstreamModel)) > 0 {
+				profile.DisplayName = ResolveModelDisplayName(public, profile.ID, profile.UpstreamModel)
 				profile.Credits = publicModelCost(public, profile.UpstreamModel)
 				profiles = append(profiles, profile)
 			}
@@ -210,7 +211,7 @@ func resolveGenerationProfiles(templates []model.GenerationProfile, private mode
 		profile.UpstreamModel = upstreamModel
 		profile.ChannelName = strings.TrimSpace(binding.ChannelName)
 		profile.ID = binding.ID
-		profile.DisplayName = binding.ID
+		profile.DisplayName = ResolveModelDisplayName(public, binding.ID, upstreamModel)
 		if seen[profile.ID] {
 			return nil, safeMessageError{message: fmt.Sprintf("duplicate generation profile binding %q", profile.ID)}
 		}

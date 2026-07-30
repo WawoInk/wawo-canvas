@@ -19,6 +19,7 @@ test("账户日志明确展示用户操作和积分变动", () => {
                     source: "canvas",
                     provider: "openai",
                     model: "video-model",
+                    modelDisplayName: "精品视频模型",
                     status: "succeeded",
                     credits: 12,
                     upstreamCredits: null,
@@ -36,6 +37,8 @@ test("账户日志明确展示用户操作和积分变动", () => {
     );
     assert.match(usageHTML, /生成短剧/);
     assert.match(usageHTML, /无限画布/);
+    assert.match(usageHTML, /模型展示名/);
+    assert.match(usageHTML, /精品视频模型/);
     assert.match(usageHTML, /成功/);
     assert.match(usageHTML, /12/);
     assert.match(usageHTML, /null/);

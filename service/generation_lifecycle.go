@@ -243,7 +243,7 @@ func generationRefundLog(task model.GenerationTask, modelName, now string) *mode
 	}
 	return &model.CreditLog{
 		ID: "credit-" + uuid.NewString(), UserID: task.UserID, TaskID: task.ID, Type: model.CreditLogTypeAIRefund,
-		Amount: task.Credits, Remark: "模型调用失败返还 " + modelName, Extra: `{"path":"/api/v1/generations"}`, CreatedAt: now,
+		Amount: task.Credits, Remark: "模型调用失败返还 " + DisplayModelName(task.ModelProfileID, modelName), Extra: `{"path":"/api/v1/generations"}`, CreatedAt: now,
 	}
 }
 

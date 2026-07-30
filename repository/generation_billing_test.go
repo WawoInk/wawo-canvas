@@ -16,7 +16,7 @@ func TestCreateGenerationTaskWithChargeIsAtomic(t *testing.T) {
 		t.Fatalf("save user: %v", err)
 	}
 	task := model.GenerationTask{ID: "billing-task-" + uuid.NewString(), UserID: userID, TaskType: model.TaskTypeVideo, Status: model.TaskStatusQueued, CreatedAt: now, UpdatedAt: now}
-	if err := CreateGenerationTaskWithCharge(&task, model.GenerationPayload{ID: "billing-payload-" + uuid.NewString(), CreatedAt: now}, userID, "seedance", "/api/v1/generations", 2); err != nil {
+	if err := CreateGenerationTaskWithCharge(&task, model.GenerationPayload{ID: "billing-payload-" + uuid.NewString(), CreatedAt: now}, userID, "seedance", "/api/v1/generations", 2, "Seedance Pro"); err != nil {
 		t.Fatalf("create charged task: %v", err)
 	}
 	updated, ok, err := GetUserByID(userID)
@@ -24,7 +24,7 @@ func TestCreateGenerationTaskWithChargeIsAtomic(t *testing.T) {
 		t.Fatalf("user = %#v ok=%v err=%v", updated, ok, err)
 	}
 	logs, _, err := ListCreditLogsByUserID(userID, model.Query{PageSize: 20})
-	if err != nil || len(logs) != 1 || logs[0].TaskID != task.ID {
+	if err != nil || len(logs) != 1 || logs[0].TaskID != task.ID || logs[0].Remark != "调用模型 Seedance Pro" {
 		t.Fatalf("logs = %#v err=%v", logs, err)
 	}
 }
@@ -46,7 +46,7 @@ func TestCreateGenerationTaskWithChargeAppliesEnterpriseDiscount(t *testing.T) {
 		t.Fatalf("save member: %v", err)
 	}
 	task := model.GenerationTask{ID: "billing-discount-task-" + uuid.NewString(), UserID: userID, TaskType: model.TaskTypeVideo, Status: model.TaskStatusQueued, Credits: 5, CreatedAt: now, UpdatedAt: now}
-	if err := CreateGenerationTaskWithCharge(&task, model.GenerationPayload{ID: "billing-discount-payload-" + uuid.NewString(), CreatedAt: now}, userID, "seedance", "/api/v1/generations", 5); err != nil {
+	if err := CreateGenerationTaskWithCharge(&task, model.GenerationPayload{ID: "billing-discount-payload-" + uuid.NewString(), CreatedAt: now}, userID, "seedance", "/api/v1/generations", 5, "seedance"); err != nil {
 		t.Fatalf("create charged task: %v", err)
 	}
 
@@ -79,7 +79,7 @@ func TestChargeGenerationTaskAppliesEnterpriseDiscount(t *testing.T) {
 		t.Fatalf("create task: %v", err)
 	}
 	upstreamCredits := 5
-	charged, err := ChargeGenerationTask(task.ID, 5, &upstreamCredits, "/api/v1/generations")
+	charged, err := ChargeGenerationTask(task.ID, 5, &upstreamCredits, "/api/v1/generations", task.Model)
 	if err != nil {
 		t.Fatalf("charge task: %v", err)
 	}

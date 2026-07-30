@@ -107,6 +107,7 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 	}
 	for i := range setting.ModelChannel.ModelCosts {
 		setting.ModelChannel.ModelCosts[i].Model = strings.TrimSpace(setting.ModelChannel.ModelCosts[i].Model)
+		setting.ModelChannel.ModelCosts[i].DisplayName = strings.TrimSpace(setting.ModelChannel.ModelCosts[i].DisplayName)
 		if setting.ModelChannel.ModelCosts[i].Credits < 0 {
 			setting.ModelChannel.ModelCosts[i].Credits = 0
 		}
@@ -168,6 +169,31 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 	setting.ModelChannel.DefaultAudioModel = repairDefaultModel(setting.ModelChannel.DefaultAudioModel, setting.ModelChannel.AvailableModels, isAudioModelName)
 	setting.ModelChannel.DefaultModel = repairDefaultModel(setting.ModelChannel.DefaultModel, setting.ModelChannel.AvailableModels, isTextModelName)
 	return setting
+}
+
+func ResolveModelDisplayName(public model.PublicSetting, modelNames ...string) string {
+	for _, modelName := range modelNames {
+		modelName = strings.TrimSpace(modelName)
+		for _, item := range public.ModelChannel.ModelCosts {
+			if strings.TrimSpace(item.Model) == modelName && strings.TrimSpace(item.DisplayName) != "" {
+				return strings.TrimSpace(item.DisplayName)
+			}
+		}
+	}
+	for i := len(modelNames) - 1; i >= 0; i-- {
+		if modelName := strings.TrimSpace(modelNames[i]); modelName != "" {
+			return modelName
+		}
+	}
+	return ""
+}
+
+func DisplayModelName(modelNames ...string) string {
+	public, err := PublicSettings()
+	if err != nil {
+		public = model.PublicSetting{}
+	}
+	return ResolveModelDisplayName(public, modelNames...)
 }
 
 func ModelCost(modelName string) (int, error) {

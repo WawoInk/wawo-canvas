@@ -558,6 +558,7 @@ export default function AdminSettingsPage() {
                                             rowKey="model"
                                             pagination={false}
                                             size="small"
+                                            scroll={{ x: 1120 }}
                                             dataSource={pricedModels.map((model) => {
                                                 const binding = videoBindingsByID.get(model);
                                                 const profileOption = generationProfileOptions.find((option) => option.value === binding?.profileId) || generationProfileOptions[0];
@@ -577,6 +578,17 @@ export default function AdminSettingsPage() {
                                                             <Typography.Text>{item.model}</Typography.Text>
                                                             {item.binding ? <Typography.Text type="secondary">{item.binding.upstreamModel}</Typography.Text> : null}
                                                         </Flex>
+                                                    ),
+                                                },
+                                                {
+                                                    title: "展示名称",
+                                                    width: 220,
+                                                    render: (_, item) => (
+                                                        <Input
+                                                            value={item.cost.displayName || ""}
+                                                            placeholder={item.model}
+                                                            onChange={(event) => setModelPricing(item.model, { displayName: event.target.value, credits: item.cost.credits, resolutionCredits: item.cost.resolutionCredits })}
+                                                        />
                                                     ),
                                                 },
                                                 {

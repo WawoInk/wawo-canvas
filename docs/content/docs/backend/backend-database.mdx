@@ -68,6 +68,8 @@ description: 核心数据表和第一方生成任务事务约束
 
 `upstream_credits` 保存供应商响应中的可空 credits。Vidu 未返回该字段时写入 `NULL`；响应审计 JSON 仍显式保留 `"credits": null`，便于使用日志与调用日志区分字段缺失和数值消耗。
 
+模型展示名保存在 `settings` 的公开 `modelChannel.modelCosts[].displayName` 配置中，不写入 `generation_tasks`。任务 API 在读取时按模型配置动态投影 `modelDisplayName`，未配置时回退实际 `model`；实际模型名继续用于渠道路由和上游请求。新写入的 AI 消费、退款流水备注使用同一展示名规则。
+
 ## generation_payloads
 
 `generation_payloads` 保存完整命令和脱敏后的上游请求、响应及原始错误。它与任务一一对应，可按保留策略清理；长期任务摘要仍保存在 `generation_tasks.metadata`。

@@ -103,6 +103,19 @@ func TestNormalizeSettingsPublishesEnabledChannelModelsAndRepairsDefaults(t *tes
 	}
 }
 
+func TestResolveModelDisplayNameUsesConfiguredNameAndFallsBackToUpstreamModel(t *testing.T) {
+	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{
+		{Model: "public-video", DisplayName: "精品视频模型"},
+	}}}
+
+	if got := ResolveModelDisplayName(public, "public-video", "vendor-video"); got != "精品视频模型" {
+		t.Fatalf("display name = %q, want configured name", got)
+	}
+	if got := ResolveModelDisplayName(public, "missing-profile", "vendor-video"); got != "vendor-video" {
+		t.Fatalf("display name = %q, want upstream fallback", got)
+	}
+}
+
 func TestNormalizeSettingsPreservesExplicitCapabilityModels(t *testing.T) {
 	settings := normalizeSettings(model.Settings{
 		Public: model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{
@@ -150,7 +163,7 @@ func TestResolveGenerationProfilesAppliesOperationalBinding(t *testing.T) {
 			LimitOverrides: model.GenerationLimitOverrides{DurationSecondsMax: &maxDuration},
 		}},
 	})
-	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "upstream-seedance", Credits: 7}}}}
+	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "upstream-seedance", DisplayName: "Seedance 展示", Credits: 7}}}}
 
 	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, public)
 	if err != nil {
@@ -160,7 +173,7 @@ func TestResolveGenerationProfilesAppliesOperationalBinding(t *testing.T) {
 		t.Fatalf("profiles = %#v", profiles)
 	}
 	profile := profiles[0]
-	if profile.ID != "stable-seedance" || profile.UpstreamModel != "upstream-seedance" || profile.ChannelName != "seedance-route" || profile.Credits != 7 {
+	if profile.ID != "stable-seedance" || profile.DisplayName != "Seedance 展示" || profile.UpstreamModel != "upstream-seedance" || profile.ChannelName != "seedance-route" || profile.Credits != 7 {
 		t.Fatalf("profile = %#v", profile)
 	}
 	if max := profile.Capabilities.Settings["durationSeconds"].Max; max == nil || *max != 8 {

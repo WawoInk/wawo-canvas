@@ -34,7 +34,7 @@ export default function AdminGenerationTasksPage() {
     const handleDelete = (item: AdminGenerationTask) => {
         Modal.confirm({
             title: "确认删除",
-            content: `确定删除该条使用日志吗？用户: ${item.username || item.userId}, 模型: ${item.model}`,
+            content: `确定删除该条使用日志吗？用户: ${item.username || item.userId}, 模型: ${item.modelDisplayName || item.model}`,
             okText: "删除",
             okType: "danger",
             cancelText: "取消",
@@ -92,6 +92,13 @@ export default function AdminGenerationTasksPage() {
             dataIndex: "model",
             width: 160,
             ellipsis: true,
+        },
+        {
+            title: "模型展示名",
+            dataIndex: "modelDisplayName",
+            width: 160,
+            ellipsis: true,
+            render: (_, item) => item.modelDisplayName || item.model || "-",
         },
         {
             title: "Provider",
@@ -234,7 +241,7 @@ export default function AdminGenerationTasksPage() {
                     search={false}
                     defaultSize="middle"
                     tableLayout="fixed"
-                    scroll={{ x: 1512 }}
+                    scroll={{ x: 1672 }}
                     cardProps={{ variant: "borderless" }}
                     rowSelection={{
                         selectedRowKeys,
