@@ -18,7 +18,7 @@ test("用户管理列表展示用户 ID", () => {
                 displayName: "管理员用户",
                 avatarUrl: "",
                 role: "admin",
-                credits: 0,
+                credits: "0",
                 affCode: "",
                 affCount: 0,
                 inviterId: "",

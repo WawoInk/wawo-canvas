@@ -50,10 +50,10 @@ type GenerationTask struct {
 	Model                string                `json:"model"`
 	ModelDisplayName     string                `json:"modelDisplayName,omitempty" gorm:"-"`
 	Status               TaskStatus            `json:"status"`
-	Credits              int                   `json:"credits"`
-	UpstreamCredits      *int                  `json:"upstreamCredits"`
+	Credits              Decimal               `json:"credits" gorm:"type:numeric;not null;default:0"`
+	UpstreamCredits      *Decimal              `json:"upstreamCredits" gorm:"type:numeric"`
 	BillingMode          GenerationBillingMode `json:"billingMode,omitempty"`
-	BillingRate          int                   `json:"billingRate,omitempty"`
+	BillingRate          Decimal               `json:"billingRate,omitempty" gorm:"type:numeric"`
 	LatencyMs            int64                 `json:"latencyMs"`
 	UpstreamTaskID       string                `json:"upstreamTaskId" gorm:"index"`
 	CallbackToken        string                `json:"-" gorm:"index"`

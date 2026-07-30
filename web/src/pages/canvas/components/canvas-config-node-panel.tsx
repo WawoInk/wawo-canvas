@@ -9,6 +9,7 @@ import { findGenerationProfile, getGenerationProfiles, type GenerationProfile } 
 import { defaultConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { CreditSymbol, requestCreditCost } from "@/constant/credits";
 import { canvasThemes } from "@/lib/canvas-theme";
+import { formatDecimal } from "@/lib/decimal";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
 import { CanvasAudioSettingsPopover } from "./canvas-audio-settings-popover";
@@ -185,7 +186,7 @@ export function CanvasConfigNodePanel({ node, isRunning, inputSummary, onConfigC
                         <>
                             <span className="inline-flex items-center gap-1">
                                 <CreditSymbol />
-                                {credits.toLocaleString()}
+                                {formatDecimal(credits)}
                             </span>
                             <Play className="size-4" />
                             <span>开始生成</span>

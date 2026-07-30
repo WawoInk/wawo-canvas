@@ -24,7 +24,7 @@ type User struct {
 	DisplayName    string          `json:"displayName"`
 	AvatarURL      string          `json:"avatarUrl"`
 	Role           UserRole        `json:"role"`
-	Credits        int             `json:"credits" gorm:"not null;default:0;check:chk_users_credits_nonnegative,credits >= 0"`
+	Credits        Decimal         `json:"credits" gorm:"type:numeric;not null;default:0;check:chk_users_credits_nonnegative,credits >= 0"`
 	AffCode        string          `json:"affCode" gorm:"uniqueIndex"`
 	AffCount       int             `json:"affCount"`
 	InviterID      string          `json:"inviterId"`
@@ -56,7 +56,7 @@ type AuthUser struct {
 	DisplayName      string           `json:"displayName"`
 	AvatarURL        string           `json:"avatarUrl"`
 	Role             UserRole         `json:"role"`
-	Credits          int              `json:"credits"`
+	Credits          Decimal          `json:"credits"`
 	EnterpriseID     string           `json:"enterpriseId,omitempty"`
 	EnterpriseName   string           `json:"enterpriseName,omitempty"`
 	EnterpriseRole   EnterpriseRole   `json:"enterpriseRole,omitempty"`
@@ -108,8 +108,8 @@ type CreditLog struct {
 	UserID         string        `json:"userId" gorm:"index"`
 	TaskID         string        `json:"taskId" gorm:"index"`
 	Type           CreditLogType `json:"type"`
-	Amount         int           `json:"amount"`
-	Balance        int           `json:"balance"`
+	Amount         Decimal       `json:"amount" gorm:"type:numeric;not null;default:0"`
+	Balance        Decimal       `json:"balance" gorm:"type:numeric;not null;default:0"`
 	RelatedID      string        `json:"relatedId"`
 	CounterpartyID string        `json:"counterpartyId" gorm:"index"`
 	Remark         string        `json:"remark"`

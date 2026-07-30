@@ -6,6 +6,7 @@ import type { TableProps } from "antd";
 
 import { fetchUserCreditLogs, type UserCreditLog } from "@/services/api/auth";
 import { fetchGenerationTasks, type GenerationTaskItem } from "@/services/api/generation-tasks";
+import { compareDecimal, formatDecimal } from "@/lib/decimal";
 import { useUserStore } from "@/stores/use-user-store";
 
 const operationLabels: Record<string, string> = {
@@ -98,7 +99,7 @@ export function AccountUsageLogTable({ items, loading, pagination }: UsageLogTab
                         return <Tag color={status.color}>{status.label}</Tag>;
                     },
                 },
-                { title: "积分", dataIndex: "credits", width: 100, render: (value: number) => `${value.toLocaleString()} 积分` },
+                { title: "积分", dataIndex: "credits", width: 100, render: (value: string) => `${formatDecimal(value)} 积分` },
                 { title: "上游 Credits", dataIndex: "upstreamCredits", width: 120, render: (_, item) => (item.taskType === "video" ? (item.upstreamCredits ?? "null") : "-") },
                 { title: "耗时", dataIndex: "latencyMs", width: 100, render: (value: number) => (value ? `${(value / 1000).toFixed(1)} 秒` : "-") },
                 { title: "时间", dataIndex: "createdAt", width: 180, render: (value: string) => (value ? new Date(value).toLocaleString("zh-CN") : "-") },
@@ -225,8 +226,13 @@ export function AccountCreditLogTable({ items, loading, pagination }: CreditLogT
             scroll={{ x: 900 }}
             columns={[
                 { title: "类型", dataIndex: "type", width: 120, render: (value: string) => <Tag>{creditLogTypeLabels[value] || value || "-"}</Tag> },
-                { title: "变动", dataIndex: "amount", width: 100, render: (value: number) => <span className={value >= 0 ? "text-green-600" : "text-red-500"}>{value > 0 ? `+${value}` : value}</span> },
-                { title: "余额", dataIndex: "balance", width: 100, render: (value: number) => value.toLocaleString() },
+                {
+                    title: "变动",
+                    dataIndex: "amount",
+                    width: 100,
+                    render: (value: string) => <span className={compareDecimal(value, "0") >= 0 ? "text-green-600" : "text-red-500"}>{compareDecimal(value, "0") > 0 ? `+${formatDecimal(value)}` : formatDecimal(value)}</span>,
+                },
+                { title: "余额", dataIndex: "balance", width: 100, render: (value: string) => formatDecimal(value) },
                 { title: "关联任务", width: 220, render: (_, item) => item.taskId || item.relatedId || "-" },
                 { title: "备注", dataIndex: "remark", ellipsis: true, render: (value: string) => value || "-" },
                 { title: "时间", dataIndex: "createdAt", width: 180, render: (value: string) => (value ? new Date(value).toLocaleString("zh-CN") : "-") },

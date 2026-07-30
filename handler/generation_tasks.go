@@ -101,18 +101,18 @@ func RecordGenerationTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var payload struct {
-		TaskType       string `json:"taskType"`
-		Source         string `json:"source"`
-		Provider       string `json:"provider"`
-		Model          string `json:"model"`
-		Status         string `json:"status"`
-		Credits        int    `json:"credits"`
-		LatencyMs      int64  `json:"latencyMs"`
-		UpstreamTaskID string `json:"upstreamTaskId"`
-		Metadata       string `json:"metadata"`
-		RequestBody    string `json:"requestBody"`
-		ResponseBody   string `json:"responseBody"`
-		ErrorMessage   string `json:"errorMessage"`
+		TaskType       string        `json:"taskType"`
+		Source         string        `json:"source"`
+		Provider       string        `json:"provider"`
+		Model          string        `json:"model"`
+		Status         string        `json:"status"`
+		Credits        model.Decimal `json:"credits"`
+		LatencyMs      int64         `json:"latencyMs"`
+		UpstreamTaskID string        `json:"upstreamTaskId"`
+		Metadata       string        `json:"metadata"`
+		RequestBody    string        `json:"requestBody"`
+		ResponseBody   string        `json:"responseBody"`
+		ErrorMessage   string        `json:"errorMessage"`
 	}
 	json.NewDecoder(r.Body).Decode(&payload)
 

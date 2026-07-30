@@ -46,6 +46,10 @@ func DB() (*gorm.DB, error) {
 		if dbErr != nil {
 			return
 		}
+		dbErr = migrateDecimalBillingColumns(db)
+		if dbErr != nil {
+			return
+		}
 		dbErr = db.AutoMigrate(
 			&model.Enterprise{},
 			&model.User{},
@@ -108,6 +112,39 @@ func DB() (*gorm.DB, error) {
 		}
 	})
 	return db, dbErr
+}
+
+func migrateDecimalBillingColumns(db *gorm.DB) error {
+	return db.Exec(`
+		DO $$
+		DECLARE target record;
+		BEGIN
+			FOR target IN SELECT * FROM (VALUES
+				('enterprises', 'discount_rate'),
+				('users', 'credits'),
+				('credit_logs', 'amount'),
+				('credit_logs', 'balance'),
+				('generation_tasks', 'credits'),
+				('generation_tasks', 'upstream_credits'),
+				('generation_tasks', 'billing_rate')
+			) AS billing_columns(table_name, column_name)
+			LOOP
+				IF EXISTS (
+					SELECT 1 FROM information_schema.columns AS columns
+					WHERE columns.table_schema = current_schema()
+						AND columns.table_name = target.table_name
+						AND columns.column_name = target.column_name
+						AND columns.data_type <> 'numeric'
+				) THEN
+					EXECUTE format(
+						'ALTER TABLE %I ALTER COLUMN %I TYPE numeric USING %I::numeric',
+						target.table_name,
+						target.column_name,
+						target.column_name
+					);
+				END IF;
+			END LOOP;
+		END $$`).Error
 }
 
 func ensurePostgresDatabase(dsn string) error {

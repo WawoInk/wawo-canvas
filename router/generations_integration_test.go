@@ -40,7 +40,7 @@ func TestGenerationHTTPSeam(t *testing.T) {
 	defer upstream.Close()
 
 	settings := previousSettings
-	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: "seedance-1-5-pro", Credits: 0})
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: "seedance-1-5-pro", Credits: credit(0)})
 	settings.Public.ModelChannel.VideoModels = append(settings.Public.ModelChannel.VideoModels, "seedance-1-5-pro")
 	settings.Private.Channels = append(settings.Private.Channels, model.ModelChannel{
 		Protocol: "openai", Name: "generation-http-" + uuid.NewString(), BaseURL: upstream.URL, APIKey: "test-secret",

@@ -31,7 +31,7 @@ type saveUserRequest struct {
 }
 
 type adjustUserCreditsRequest struct {
-	Credits int `json:"credits"`
+	Credits model.Decimal `json:"credits"`
 }
 
 type updateAccountProfileRequest struct {

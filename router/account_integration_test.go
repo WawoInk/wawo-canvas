@@ -119,26 +119,26 @@ func TestAccountLogsOnlyExposeCurrentUserThroughHTTP(t *testing.T) {
 	config.Cfg.JWTSecret = "account-logs-test-secret"
 	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
 
-	userA, err := service.SaveUser(model.User{Username: "account-logs-a-" + uuid.NewString(), Credits: 100}, "password-a")
+	userA, err := service.SaveUser(model.User{Username: "account-logs-a-" + uuid.NewString(), Credits: credit(100)}, "password-a")
 	if err != nil {
 		t.Fatalf("create user A: %v", err)
 	}
-	userB, err := service.SaveUser(model.User{Username: "account-logs-b-" + uuid.NewString(), Credits: 100}, "password-b")
+	userB, err := service.SaveUser(model.User{Username: "account-logs-b-" + uuid.NewString(), Credits: credit(100)}, "password-b")
 	if err != nil {
 		t.Fatalf("create user B: %v", err)
 	}
-	taskA, err := service.RecordUserTask(model.PublicUser(userA), model.TaskTypeVideo, string(model.SourceCanvas), "provider-a", "model-a", model.TaskStatusSucceeded, 7, 2300, "upstream-a-"+uuid.NewString(), "{}", "{}", "")
+	taskA, err := service.RecordUserTask(model.PublicUser(userA), model.TaskTypeVideo, string(model.SourceCanvas), "provider-a", "model-a", model.TaskStatusSucceeded, credit(7), 2300, "upstream-a-"+uuid.NewString(), "{}", "{}", "")
 	if err != nil {
 		t.Fatalf("record user A task: %v", err)
 	}
-	taskB, err := service.RecordUserTask(model.PublicUser(userB), model.TaskTypeImage, string(model.SourceImageWorkbench), "provider-b", "model-b", model.TaskStatusSuccess, 11, 1200, "upstream-b-"+uuid.NewString(), "{}", "{}", "")
+	taskB, err := service.RecordUserTask(model.PublicUser(userB), model.TaskTypeImage, string(model.SourceImageWorkbench), "provider-b", "model-b", model.TaskStatusSuccess, credit(11), 1200, "upstream-b-"+uuid.NewString(), "{}", "{}", "")
 	if err != nil {
 		t.Fatalf("record user B task: %v", err)
 	}
-	if err := service.ConsumeUserCreditsWithTask(userA.ID, "model-a", 7, "/v1/generations", taskA.ID); err != nil {
+	if err := service.ConsumeUserCreditsWithTask(userA.ID, "model-a", credit(7), "/v1/generations", taskA.ID); err != nil {
 		t.Fatalf("consume user A credits: %v", err)
 	}
-	if err := service.ConsumeUserCreditsWithTask(userB.ID, "model-b", 11, "/v1/images", taskB.ID); err != nil {
+	if err := service.ConsumeUserCreditsWithTask(userB.ID, "model-b", credit(11), "/v1/images", taskB.ID); err != nil {
 		t.Fatalf("consume user B credits: %v", err)
 	}
 
@@ -150,7 +150,7 @@ func TestAccountLogsOnlyExposeCurrentUserThroughHTTP(t *testing.T) {
 	if tasks.Code != 0 || tasks.Data.Total != 1 || len(tasks.Data.Items) != 1 {
 		t.Fatalf("user A tasks = %#v", tasks)
 	}
-	if task := tasks.Data.Items[0]; task.ID != taskA.ID || task.UserID != userA.ID || task.TaskType != model.TaskTypeVideo || task.Source != string(model.SourceCanvas) || task.Model != "model-a" || task.Credits != 7 {
+	if task := tasks.Data.Items[0]; task.ID != taskA.ID || task.UserID != userA.ID || task.TaskType != model.TaskTypeVideo || task.Source != string(model.SourceCanvas) || task.Model != "model-a" || !task.Credits.Equal(credit(7)) {
 		t.Fatalf("user A task detail = %#v", task)
 	}
 
@@ -158,7 +158,7 @@ func TestAccountLogsOnlyExposeCurrentUserThroughHTTP(t *testing.T) {
 	if credits.Code != 0 || credits.Data.Total != 1 || len(credits.Data.Items) != 1 {
 		t.Fatalf("user A credit logs = %#v", credits)
 	}
-	if log := credits.Data.Items[0]; log.UserID != userA.ID || log.TaskID != taskA.ID || log.Type != model.CreditLogTypeAIConsume || log.Amount != -7 || log.Balance != 93 || log.Remark != "调用模型 model-a" {
+	if log := credits.Data.Items[0]; log.UserID != userA.ID || log.TaskID != taskA.ID || log.Type != model.CreditLogTypeAIConsume || !log.Amount.Equal(credit(-7)) || !log.Balance.Equal(credit(93)) || log.Remark != "调用模型 model-a" {
 		t.Fatalf("user A credit log detail = %#v", log)
 	}
 
@@ -182,22 +182,22 @@ func TestEnterpriseDiscountAppliesToOwnerAndMembersButNotOtherUsers(t *testing.T
 	if err != nil {
 		t.Fatalf("create enterprise: %v", err)
 	}
-	if _, err := service.SetEnterpriseDiscountRate(enterprise.ID, 0.5); err != nil {
+	if _, err := service.SetEnterpriseDiscountRate(enterprise.ID, fractionalCredit("0.5")); err != nil {
 		t.Fatalf("set discount rate: %v", err)
 	}
-	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "discount-test-admin", 20, "测试充值"); err != nil {
+	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "discount-test-admin", credit(20), "测试充值"); err != nil {
 		t.Fatalf("credit owner: %v", err)
 	}
 	memberRole := model.EnterpriseRoleMember
-	member, err := service.SaveUser(model.User{Username: "discount-member-" + uuid.NewString(), Credits: 20, EnterpriseID: &enterprise.ID, EnterpriseRole: &memberRole}, "password")
+	member, err := service.SaveUser(model.User{Username: "discount-member-" + uuid.NewString(), Credits: credit(20), EnterpriseID: &enterprise.ID, EnterpriseRole: &memberRole}, "password")
 	if err != nil {
 		t.Fatalf("create member: %v", err)
 	}
-	personal, err := service.SaveUser(model.User{Username: "discount-personal-" + uuid.NewString(), Credits: 20}, "password")
+	personal, err := service.SaveUser(model.User{Username: "discount-personal-" + uuid.NewString(), Credits: credit(20)}, "password")
 	if err != nil {
 		t.Fatalf("create personal user: %v", err)
 	}
-	admin, err := service.SaveUser(model.User{Username: "discount-admin-" + uuid.NewString(), Role: model.UserRoleAdmin, Credits: 20}, "password")
+	admin, err := service.SaveUser(model.User{Username: "discount-admin-" + uuid.NewString(), Role: model.UserRoleAdmin, Credits: credit(20)}, "password")
 	if err != nil {
 		t.Fatalf("create admin: %v", err)
 	}
@@ -223,28 +223,29 @@ func TestEnterpriseDiscountAppliesToOwnerAndMembersButNotOtherUsers(t *testing.T
 	for _, account := range []struct {
 		label    string
 		session  model.AuthSession
-		expected int
+		expected model.Decimal
 	}{
-		{label: "owner", session: owner, expected: 3},
-		{label: "member", session: memberSession, expected: 3},
-		{label: "personal", session: personalSession, expected: 5},
-		{label: "admin", session: adminSession, expected: 5},
+		{label: "owner", session: owner, expected: fractionalCredit("2.5")},
+		{label: "member", session: memberSession, expected: fractionalCredit("2.5")},
+		{label: "personal", session: personalSession, expected: credit(5)},
+		{label: "admin", session: adminSession, expected: credit(5)},
 	} {
 		taskID, err := service.LogTaskStart(account.session.User, model.TaskTypeImage, "test", "discount-model", []byte(`{}`), "{}", string(model.SourceCanvas), "")
 		if err != nil {
 			t.Fatalf("%s start task: %v", account.label, err)
 		}
-		if err := service.ConsumeUserCreditsWithTask(account.session.User.ID, "discount-model", 5, "/api/v1/images/generations", taskID); err != nil {
+		if err := service.ConsumeUserCreditsWithTask(account.session.User.ID, "discount-model", credit(5), "/api/v1/images/generations", taskID); err != nil {
 			t.Fatalf("%s consume credits: %v", account.label, err)
 		}
-		service.LogTaskSuccess(taskID, []byte(`{}`), "{}", 1, 5, "")
+		service.LogTaskSuccess(taskID, []byte(`{}`), "{}", 1, credit(5), "")
 
 		tasks := doJSON[model.GenerationTaskList](t, http.MethodGet, server.URL+"/api/v1/generation-tasks?page=1&pageSize=20", account.session.Token, nil)
-		if tasks.Code != 0 || tasks.Data.Total != 1 || len(tasks.Data.Items) != 1 || tasks.Data.Items[0].Credits != account.expected {
+		if tasks.Code != 0 || tasks.Data.Total != 1 || len(tasks.Data.Items) != 1 || !tasks.Data.Items[0].Credits.Equal(account.expected) {
 			t.Fatalf("%s usage log = %#v", account.label, tasks)
 		}
 		logs := doJSON[model.CreditLogList](t, http.MethodGet, server.URL+"/api/v1/credit-logs?type=ai_consume&page=1&pageSize=20", account.session.Token, nil)
-		if logs.Code != 0 || logs.Data.Total != 1 || len(logs.Data.Items) != 1 || logs.Data.Items[0].Amount != -account.expected || logs.Data.Items[0].Balance != 20-account.expected {
+		if logs.Code != 0 || logs.Data.Total != 1 || len(logs.Data.Items) != 1 ||
+			!logs.Data.Items[0].Amount.Equal(account.expected.Neg()) || !logs.Data.Items[0].Balance.Equal(credit(20).Sub(account.expected)) {
 			t.Fatalf("%s credit log = %#v", account.label, logs)
 		}
 	}
@@ -259,11 +260,11 @@ func TestEnterpriseDiscountRefundsTheAmountActuallyCharged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create enterprise: %v", err)
 	}
-	if _, err := service.SetEnterpriseDiscountRate(enterprise.ID, 0.5); err != nil {
+	if _, err := service.SetEnterpriseDiscountRate(enterprise.ID, fractionalCredit("0.5")); err != nil {
 		t.Fatalf("set discount rate: %v", err)
 	}
 	memberRole := model.EnterpriseRoleMember
-	member, err := service.SaveUser(model.User{Username: "discount-refund-member-" + uuid.NewString(), Credits: 20, EnterpriseID: &enterprise.ID, EnterpriseRole: &memberRole}, "password")
+	member, err := service.SaveUser(model.User{Username: "discount-refund-member-" + uuid.NewString(), Credits: credit(20), EnterpriseID: &enterprise.ID, EnterpriseRole: &memberRole}, "password")
 	if err != nil {
 		t.Fatalf("create member: %v", err)
 	}
@@ -275,13 +276,13 @@ func TestEnterpriseDiscountRefundsTheAmountActuallyCharged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start task: %v", err)
 	}
-	if err := service.ConsumeUserCreditsWithTask(member.ID, "discount-model", 5, "/api/v1/images/generations", taskID); err != nil {
+	if err := service.ConsumeUserCreditsWithTask(member.ID, "discount-model", credit(5), "/api/v1/images/generations", taskID); err != nil {
 		t.Fatalf("consume credits: %v", err)
 	}
-	if _, err := service.SetEnterpriseDiscountRate(enterprise.ID, 0.2); err != nil {
+	if _, err := service.SetEnterpriseDiscountRate(enterprise.ID, fractionalCredit("0.2")); err != nil {
 		t.Fatalf("change discount rate: %v", err)
 	}
-	if err := service.RefundUserCreditsWithTask(member.ID, "discount-model", 5, "/api/v1/images/generations", taskID); err != nil {
+	if err := service.RefundUserCreditsWithTask(member.ID, "discount-model", credit(5), "/api/v1/images/generations", taskID); err != nil {
 		t.Fatalf("refund credits: %v", err)
 	}
 
@@ -296,7 +297,8 @@ func TestEnterpriseDiscountRefundsTheAmountActuallyCharged(t *testing.T) {
 		byType[log.Type] = log
 	}
 	refund, consume := byType[model.CreditLogTypeAIRefund], byType[model.CreditLogTypeAIConsume]
-	if refund.Amount != 3 || refund.Balance != 20 || consume.Amount != -3 || consume.Balance != 17 {
+	if !refund.Amount.Equal(fractionalCredit("2.5")) || !refund.Balance.Equal(credit(20)) ||
+		!consume.Amount.Equal(fractionalCredit("-2.5")) || !consume.Balance.Equal(fractionalCredit("17.5")) {
 		t.Fatalf("discount charge/refund = %#v", logs.Data.Items)
 	}
 }

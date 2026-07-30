@@ -112,7 +112,7 @@ sequenceDiagram
     S-->>UI: EnterpriseCreditTransfer
 ```
 
-- **输入**：`allocate/reclaim`、正整数 amount、最长受限 request ID。
+- **输入**：`allocate/reclaim`、正数 decimal amount、最长受限 request ID。
 - **输出**：双方最新余额。
 - **失败**：余额不足、重复 request ID 参数冲突、并发竞争、越权。
 - **核心文件**：`service/enterprise.go`、`repository/enterprise.go`、`model/enterprise.go`。

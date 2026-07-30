@@ -95,14 +95,14 @@ func TestProxyVideoTaskCreateChargesBoundViduByUpstreamCredits(t *testing.T) {
 		ID: profileID, ProfileID: "seedance-1-5-pro", UpstreamModel: upstreamModel, ChannelName: channelName, BillingMode: model.BillingModePerCredit, Enabled: true,
 	})
 	settings.Public.ModelChannel.VideoModels = append(settings.Public.ModelChannel.VideoModels, profileID)
-	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: profileID, Credits: 2})
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: profileID, Credits: credit(2)})
 	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		t.Fatalf("save settings: %v", err)
 	}
 
 	userID := "compat-credit-user-" + key
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := repository.SaveUser(model.User{ID: userID, Username: "compat-credit-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: 100, CreatedAt: now, UpdatedAt: now}); err != nil {
+	if _, err := repository.SaveUser(model.User{ID: userID, Username: "compat-credit-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: credit(100), CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatalf("save user: %v", err)
 	}
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/contents/generations/tasks", strings.NewReader(`{"model":"`+profileID+`","content":[{"type":"text","text":"test"}],"resolution":"720p","duration":6}`))
@@ -125,11 +125,13 @@ func TestProxyVideoTaskCreateChargesBoundViduByUpstreamCredits(t *testing.T) {
 		t.Fatal("compatibility task was not claimed")
 	}
 	stored, err := repository.GetGenerationTaskByID(taskID)
-	if err != nil || stored.Model != profileID || stored.UpstreamModel != upstreamModel || stored.Status != model.TaskStatusSucceeded || stored.Credits != 36 || stored.UpstreamCredits == nil || *stored.UpstreamCredits != 18 || stored.BillingMode != model.BillingModePerCredit || stored.BillingRate != 2 {
+	if err != nil || stored.Model != profileID || stored.UpstreamModel != upstreamModel || stored.Status != model.TaskStatusSucceeded ||
+		!stored.Credits.Equal(credit(36)) || stored.UpstreamCredits == nil || !stored.UpstreamCredits.Equal(credit(18)) ||
+		stored.BillingMode != model.BillingModePerCredit || !stored.BillingRate.Equal(credit(2)) {
 		t.Fatalf("stored task = %#v, err = %v", stored, err)
 	}
 	user, ok, err := repository.GetUserByID(userID)
-	if err != nil || !ok || user.Credits != 64 {
+	if err != nil || !ok || !user.Credits.Equal(credit(64)) {
 		t.Fatalf("user = %#v, ok = %v, err = %v", user, ok, err)
 	}
 }

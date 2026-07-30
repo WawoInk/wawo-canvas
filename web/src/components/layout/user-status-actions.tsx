@@ -9,6 +9,7 @@ import { Link } from "react-router-dom";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { CreditSymbol } from "@/constant/credits";
 import { canvasThemes } from "@/lib/canvas-theme";
+import { formatDecimal } from "@/lib/decimal";
 import { useConfigStore } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { useUserStore } from "@/stores/use-user-store";
@@ -31,7 +32,7 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const canvasTheme = canvasThemes[theme];
     const userName = user?.displayName || user?.username || "";
-    const credits = user?.credits ?? 0;
+    const credits = user?.credits ?? "0";
     const avatarUrl = user?.avatarUrl?.trim();
     const avatarText = (userName.trim()[0] || "U").toUpperCase();
     const naturalIconClass = "inline-flex size-7 shrink-0 items-center justify-center text-muted-foreground transition hover:text-foreground [&_svg]:size-4";
@@ -58,7 +59,7 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
                 <Tooltip title="当前算力点余额" placement="bottom">
                     <div className="flex h-8 shrink-0 items-center gap-1.5 px-1.5 text-xs font-medium tabular-nums opacity-75 transition hover:opacity-100" style={{ color: canvasTheme.node.text }}>
                         <CreditSymbol className="text-sm leading-none" />
-                        <span>{credits.toLocaleString()}</span>
+                        <span>{formatDecimal(credits)}</span>
                     </div>
                 </Tooltip>
             ) : null}

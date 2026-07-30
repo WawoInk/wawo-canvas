@@ -264,7 +264,7 @@ func resolveGenerationProfiles(templates []model.GenerationProfile, private mode
 	return profiles, nil
 }
 
-func publicModelCost(public model.PublicSetting, modelNames ...string) int {
+func publicModelCost(public model.PublicSetting, modelNames ...string) model.Decimal {
 	for _, modelName := range modelNames {
 		for _, cost := range normalizePublicSetting(public).ModelChannel.ModelCosts {
 			if cost.Model == modelName {
@@ -272,7 +272,7 @@ func publicModelCost(public model.PublicSetting, modelNames ...string) int {
 			}
 		}
 	}
-	return 0
+	return model.DecimalZero
 }
 
 func AvailableGenerationProfiles() ([]model.GenerationProfile, error) {

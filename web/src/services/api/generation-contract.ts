@@ -47,7 +47,7 @@ export type GenerationProfile = {
     id: string;
     version: number;
     displayName: string;
-    credits: number;
+    credits: DecimalValue;
     adapterKey: string;
     intents: string[];
     capabilities: {
@@ -159,3 +159,4 @@ export function buildVideoGenerationSettings(profile: GenerationProfile, provide
         watermark: typeof provided.watermark === "boolean" ? provided.watermark : Boolean(settings.watermark.default),
     };
 }
+import type { DecimalValue } from "@/lib/decimal";

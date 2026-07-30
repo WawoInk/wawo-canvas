@@ -217,7 +217,7 @@ func TestResolveGenerationProfilesAppliesOperationalBinding(t *testing.T) {
 			LimitOverrides: model.GenerationLimitOverrides{DurationSecondsMax: &maxDuration},
 		}},
 	})
-	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "upstream-seedance", DisplayName: "Seedance 展示", Credits: 7}}}}
+	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "upstream-seedance", DisplayName: "Seedance 展示", Credits: credit(7)}}}}
 
 	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, public)
 	if err != nil {
@@ -227,7 +227,7 @@ func TestResolveGenerationProfilesAppliesOperationalBinding(t *testing.T) {
 		t.Fatalf("profiles = %#v", profiles)
 	}
 	profile := profiles[0]
-	if profile.ID != "stable-seedance" || profile.DisplayName != "Seedance 展示" || profile.UpstreamModel != "upstream-seedance" || profile.ChannelName != "seedance-route" || profile.Credits != 7 {
+	if profile.ID != "stable-seedance" || profile.DisplayName != "Seedance 展示" || profile.UpstreamModel != "upstream-seedance" || profile.ChannelName != "seedance-route" || !profile.Credits.Equal(credit(7)) {
 		t.Fatalf("profile = %#v", profile)
 	}
 	if max := profile.Capabilities.Settings["durationSeconds"].Max; max == nil || *max != 8 {
@@ -283,14 +283,14 @@ func TestResolveGenerationProfilesPublishesPublicModelCosts(t *testing.T) {
 			{ID: "second-price", ProfileID: "seedance-1-5-pro", UpstreamModel: "second-priced", ChannelName: "video", Enabled: true},
 		},
 	})
-	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "priced", Credits: 4}, {Model: "second-priced", Credits: 5}}}}
+	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "priced", Credits: credit(4)}, {Model: "second-priced", Credits: credit(5)}}}}
 
 	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, public)
 	if err != nil {
 		t.Fatalf("resolveGenerationProfiles: %v", err)
 	}
-	if profiles[0].Credits != 4 || profiles[1].Credits != 5 {
-		t.Fatalf("credits = %d/%d, want 4/5", profiles[0].Credits, profiles[1].Credits)
+	if !profiles[0].Credits.Equal(credit(4)) || !profiles[1].Credits.Equal(credit(5)) {
+		t.Fatalf("credits = %s/%s, want 4/5", profiles[0].Credits.String(), profiles[1].Credits.String())
 	}
 }
 
@@ -301,13 +301,13 @@ func TestResolveGenerationProfilesPublishesPerCallCostByBindingID(t *testing.T) 
 			ID: "stable-video", ProfileID: "seedance-1-5-pro", UpstreamModel: "vendor-video", ChannelName: "video", BillingMode: model.BillingModePerCall, Enabled: true,
 		}},
 	})
-	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "stable-video", Credits: 7}}}}
+	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "stable-video", Credits: credit(7)}}}}
 
 	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, public)
 	if err != nil {
 		t.Fatalf("resolveGenerationProfiles: %v", err)
 	}
-	if len(profiles) != 1 || profiles[0].Credits != 7 {
+	if len(profiles) != 1 || !profiles[0].Credits.Equal(credit(7)) {
 		t.Fatalf("profiles = %#v", profiles)
 	}
 }
@@ -318,31 +318,31 @@ func TestGenerationProfileBindingMigratesLegacyCredits(t *testing.T) {
 		t.Fatalf("unmarshal legacy setting: %v", err)
 	}
 	settings := normalizeSettings(model.Settings{Private: private})
-	if len(settings.Public.ModelChannel.ModelCosts) != 1 || !reflect.DeepEqual(settings.Public.ModelChannel.ModelCosts[0], model.ModelCost{Model: "vendor-seedance", Credits: 99}) {
+	if len(settings.Public.ModelChannel.ModelCosts) != 1 || !reflect.DeepEqual(settings.Public.ModelChannel.ModelCosts[0], model.ModelCost{Model: "vendor-seedance", Credits: credit(99)}) {
 		t.Fatalf("model costs = %#v", settings.Public.ModelChannel.ModelCosts)
 	}
 	encoded, err := json.Marshal(settings.Private)
 	if err != nil {
 		t.Fatalf("marshal setting: %v", err)
 	}
-	if !strings.Contains(string(encoded), `"credits":99`) {
+	if !strings.Contains(string(encoded), `"credits":"99"`) {
 		t.Fatalf("legacy credits lost: %s", encoded)
 	}
 }
 
 func TestPublicModelCostOverridesLegacyCredits(t *testing.T) {
-	legacyCredits := 99
+	legacyCredits := credit(99)
 	settings := normalizeSettings(model.Settings{
-		Public:  model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "vendor-seedance", Credits: 5}}}},
+		Public:  model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{{Model: "vendor-seedance", Credits: credit(5)}}}},
 		Private: model.PrivateSetting{GenerationProfiles: []model.GenerationProfileBinding{{UpstreamModel: "vendor-seedance", LegacyCredits: &legacyCredits}}},
 	})
-	if len(settings.Public.ModelChannel.ModelCosts) != 1 || settings.Public.ModelChannel.ModelCosts[0].Credits != 5 {
+	if len(settings.Public.ModelChannel.ModelCosts) != 1 || !settings.Public.ModelChannel.ModelCosts[0].Credits.Equal(credit(5)) {
 		t.Fatalf("model costs = %#v", settings.Public.ModelChannel.ModelCosts)
 	}
 }
 
 func TestConflictingLegacyCreditsRequirePublicCost(t *testing.T) {
-	zero, paid := 0, 99
+	zero, paid := credit(0), credit(99)
 	settings := normalizeSettings(model.Settings{Private: model.PrivateSetting{GenerationProfiles: []model.GenerationProfileBinding{
 		{ID: "free", UpstreamModel: "vendor-seedance", LegacyCredits: &zero},
 		{ID: "paid", UpstreamModel: "vendor-seedance", LegacyCredits: &paid},
@@ -353,11 +353,11 @@ func TestConflictingLegacyCreditsRequirePublicCost(t *testing.T) {
 }
 
 func TestKeepLegacyGenerationCredits(t *testing.T) {
-	credits := 9
+	credits := credit(9)
 	settings := model.Settings{Private: model.PrivateSetting{GenerationProfiles: []model.GenerationProfileBinding{{ID: "stable", UpstreamModel: "new-seedance"}}}}
 	saved := model.Settings{Private: model.PrivateSetting{GenerationProfiles: []model.GenerationProfileBinding{{ID: "stable", UpstreamModel: "vendor-seedance", LegacyCredits: &credits}}}}
 	keepLegacyGenerationCredits(&settings, saved)
-	if got := settings.Private.GenerationProfiles[0].LegacyCredits; got == nil || *got != 9 {
+	if got := settings.Private.GenerationProfiles[0].LegacyCredits; got == nil || !got.Equal(credit(9)) {
 		t.Fatalf("legacy credits = %#v", got)
 	}
 }

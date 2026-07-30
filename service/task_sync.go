@@ -39,7 +39,7 @@ type TaskSyncConfig struct {
 type TaskResult struct {
 	ErrorCode       string
 	ErrorMessage    string
-	Credits         *int
+	Credits         *model.Decimal
 	ResponseBody    string
 	ResponseHeaders string
 }
@@ -169,9 +169,9 @@ func queryUpstreamTaskViaHTTP(cfg TaskSyncConfig) (model.TaskStatus, TaskResult)
 		log.Printf("task_sync: read upstream response failed: genTask=%s err=%v", cfg.GenTaskID, readErr)
 	}
 	var result struct {
-		ID      string `json:"id"`
-		Status  string `json:"status"`
-		Credits *int   `json:"credits"`
+		ID      string         `json:"id"`
+		Status  string         `json:"status"`
+		Credits *model.Decimal `json:"credits"`
 		Error   *struct {
 			Code    string `json:"code"`
 			Message string `json:"message"`

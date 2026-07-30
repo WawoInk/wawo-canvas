@@ -404,7 +404,7 @@ func accountUser(userID string) (model.User, error) {
 	return user, safeMessageError{message: "用户不存在"}
 }
 
-func AdjustUserCredits(id string, credits int) (model.User, error) {
+func AdjustUserCredits(id string, credits model.Decimal) (model.User, error) {
 	user, ok, err := repository.GetUserByID(id)
 	if err != nil || !ok {
 		if err != nil {
@@ -420,12 +420,12 @@ func AdjustUserCredits(id string, credits int) (model.User, error) {
 	if err == nil && !ok {
 		return user, safeMessageError{message: "用户不存在"}
 	}
-	if err == nil && oldCredits != credits {
+	if err == nil && !oldCredits.Equal(credits) {
 		_, err = repository.SaveCreditLog(model.CreditLog{
 			ID:        newID("credit"),
 			UserID:    user.ID,
 			Type:      model.CreditLogTypeAdminAdjust,
-			Amount:    credits - oldCredits,
+			Amount:    credits.Sub(oldCredits),
 			Balance:   credits,
 			Remark:    "后台手动调整",
 			CreatedAt: now(),
@@ -435,25 +435,25 @@ func AdjustUserCredits(id string, credits int) (model.User, error) {
 	return user, err
 }
 
-func ConsumeUserCreditsOnce(userID, modelName string, credits int, path, taskID string) error {
+func ConsumeUserCreditsOnce(userID, modelName string, credits model.Decimal, path, taskID string) error {
 	return ConsumeUserCreditsWithTask(userID, modelName, credits, path, taskID)
 }
 
-func RefundUserCreditsOnce(userID, modelName string, credits int, path, taskID string) error {
+func RefundUserCreditsOnce(userID, modelName string, credits model.Decimal, path, taskID string) error {
 	return RefundUserCreditsWithTask(userID, modelName, credits, path, taskID)
 }
-func ConsumeUserCredits(userID string, modelName string, credits int, path string) error {
+func ConsumeUserCredits(userID string, modelName string, credits model.Decimal, path string) error {
 	return ConsumeUserCreditsWithTask(userID, modelName, credits, path, "")
 }
 
-func ConsumeUserCreditsWithTask(userID string, modelName string, credits int, path string, taskID string) error {
-	if credits <= 0 {
+func ConsumeUserCreditsWithTask(userID string, modelName string, credits model.Decimal, path string, taskID string) error {
+	if !credits.IsPositive() {
 		return nil
 	}
 	displayName := DisplayModelName(modelName)
 	extra, _ := json.Marshal(map[string]string{"model": modelName, "path": path})
 	stamp := now()
-	_, ok, err := repository.ApplyUserCreditLog(userID, -credits, model.CreditLog{
+	_, ok, err := repository.ApplyUserCreditLog(userID, credits.Neg(), model.CreditLog{
 		ID:     newID("credit"),
 		TaskID: taskID,
 		Type:   model.CreditLogTypeAIConsume,
@@ -469,12 +469,12 @@ func ConsumeUserCreditsWithTask(userID string, modelName string, credits int, pa
 	return nil
 }
 
-func RefundUserCredits(userID string, modelName string, credits int, path string) error {
+func RefundUserCredits(userID string, modelName string, credits model.Decimal, path string) error {
 	return RefundUserCreditsWithTask(userID, modelName, credits, path, "")
 }
 
-func RefundUserCreditsWithTask(userID string, modelName string, credits int, path string, taskID string) error {
-	if credits <= 0 {
+func RefundUserCreditsWithTask(userID string, modelName string, credits model.Decimal, path string, taskID string) error {
+	if !credits.IsPositive() {
 		return nil
 	}
 	displayName := DisplayModelName(modelName)

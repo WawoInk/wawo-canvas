@@ -13,7 +13,7 @@ func TestVideoHistoryAcceptsLegacyTaskWithoutFirstPartyFieldsOrPayload(t *testin
 		Model:          "seedance-legacy",
 		Status:         model.TaskStatusSuccess,
 		UpstreamTaskID: "upstream-legacy-1",
-		Credits:        12,
+		Credits:        credit(12),
 		CreatedAt:      "2026-01-01T00:00:00Z",
 	}, nil)
 

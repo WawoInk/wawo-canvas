@@ -32,7 +32,7 @@ type ProviderTaskRef struct {
 	ID       string
 	Status   model.TaskStatus
 	VideoURL string
-	Credits  *int
+	Credits  *model.Decimal
 	Shots    []ProviderShot
 	Error    *model.GenerationError
 	Audit    GenerationAudit
@@ -250,10 +250,10 @@ func pollContentsGenerationTask(ctx context.Context, client *http.Client, channe
 
 func parseContentsGenerationTask(body []byte) (ProviderTaskRef, error) {
 	var result struct {
-		ID      string `json:"id"`
-		Model   string `json:"model"`
-		Status  string `json:"status"`
-		Credits *int   `json:"credits"`
+		ID      string         `json:"id"`
+		Model   string         `json:"model"`
+		Status  string         `json:"status"`
+		Credits *model.Decimal `json:"credits"`
 		Content *struct {
 			VideoURL string `json:"video_url"`
 		} `json:"content"`

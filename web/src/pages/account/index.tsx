@@ -23,6 +23,7 @@ import {
     type EnterpriseMember,
 } from "@/services/api/auth";
 import { useUserStore } from "@/stores/use-user-store";
+import { compareDecimal, formatDecimal } from "@/lib/decimal";
 import { AccountLogs } from "./account-logs";
 
 const platformRoleLabels = { guest: "访客", user: "普通用户", admin: "平台管理员" } as const;
@@ -133,7 +134,7 @@ export default function AccountPage() {
                         column={{ xs: 1, sm: 2 }}
                         items={[
                             { key: "username", label: "用户名", children: user.username },
-                            { key: "credits", label: "当前积分", children: user.credits.toLocaleString() },
+                            { key: "credits", label: "当前积分", children: formatDecimal(user.credits) },
                             { key: "role", label: "平台身份", children: platformRoleLabels[user.role] },
                             { key: "createdAt", label: "注册时间", children: user.createdAt ? new Date(user.createdAt).toLocaleString("zh-CN") : "-" },
                         ]}
@@ -362,8 +363,13 @@ function EnterpriseCreditLogs() {
                         ),
                     },
                     { title: "类型", dataIndex: "type", width: 120, render: (value: EnterpriseCreditLog["type"]) => <Tag>{creditLogTypeLabels[value]}</Tag> },
-                    { title: "变动", dataIndex: "amount", width: 100, render: (value: number) => <span className={value >= 0 ? "text-green-600" : "text-red-500"}>{value > 0 ? `+${value}` : value}</span> },
-                    { title: "余额", dataIndex: "balance", width: 100, render: (value: number) => value.toLocaleString() },
+                    {
+                        title: "变动",
+                        dataIndex: "amount",
+                        width: 100,
+                        render: (value: string) => <span className={compareDecimal(value, "0") >= 0 ? "text-green-600" : "text-red-500"}>{compareDecimal(value, "0") > 0 ? `+${formatDecimal(value)}` : formatDecimal(value)}</span>,
+                    },
+                    { title: "余额", dataIndex: "balance", width: 100, render: (value: string) => formatDecimal(value) },
                     {
                         title: "关联信息",
                         width: 260,
@@ -387,7 +393,7 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
     const token = useUserStore((state) => state.token);
     const [createForm] = Form.useForm();
     const [passwordForm] = Form.useForm();
-    const [creditsForm] = Form.useForm();
+    const [creditsForm] = Form.useForm<{ amount: string }>();
     const [members, setMembers] = useState<EnterpriseMember[]>([]);
     const [total, setTotal] = useState(0);
     const [keyword, setKeyword] = useState("");
@@ -461,7 +467,7 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
         }
     };
 
-    const transferCredits = async ({ amount }: { amount: number }) => {
+    const transferCredits = async ({ amount }: { amount: string }) => {
         if (!creditsTarget) return;
         setSaving(true);
         try {
@@ -526,7 +532,7 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
                         ),
                     },
                     { title: "邮箱", dataIndex: "email", render: (value: string) => value || "-" },
-                    { title: "积分", dataIndex: "credits", render: (value: number) => value.toLocaleString() },
+                    { title: "积分", dataIndex: "credits", render: (value: string) => formatDecimal(value) },
                     { title: "状态", dataIndex: "status", render: (value: EnterpriseMember["status"]) => <Tag color={value === "active" ? "success" : "default"}>{value === "active" ? "正常" : "已禁用"}</Tag> },
                     {
                         title: "操作",
@@ -618,8 +624,8 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
                 }}
             >
                 <Form form={creditsForm} layout="vertical" requiredMark={false} onFinish={transferCredits}>
-                    <Form.Item label="积分数量" name="amount" rules={[{ required: true, type: "integer", min: 1, message: "请输入正整数积分" }]}>
-                        <InputNumber min={1} precision={0} className="w-full" placeholder="请输入正整数积分" />
+                    <Form.Item label="积分数量" name="amount" rules={[{ required: true, message: "请输入积分数量" }, { validator: (_, value) => (compareDecimal(value, "0") > 0 ? Promise.resolve() : Promise.reject(new Error("积分数量必须为正数"))) }]}>
+                        <InputNumber min={0} step="0.01" stringMode className="w-full" placeholder="请输入积分数量" />
                     </Form.Item>
                 </Form>
             </Modal>

@@ -126,7 +126,7 @@ func UpdateEnterpriseStatus(id string, status model.EnterpriseStatus, updatedAt 
 	return db.Model(&model.Enterprise{}).Where("id = ?", id).Updates(map[string]any{"status": status, "updated_at": updatedAt}).Error
 }
 
-func UpdateEnterpriseDiscountRate(id string, discountRate float64, updatedAt string) error {
+func UpdateEnterpriseDiscountRate(id string, discountRate model.Decimal, updatedAt string) error {
 	db, err := DB()
 	if err != nil {
 		return err
@@ -173,7 +173,7 @@ func GetEnterpriseView(id string) (model.EnterpriseView, error) {
 	return item, err
 }
 
-func AdjustEnterpriseOwnerCredits(enterpriseID, actorID string, delta int, reason, updatedAt, logID string) error {
+func AdjustEnterpriseOwnerCredits(enterpriseID, actorID string, delta model.Decimal, reason, updatedAt, logID string) error {
 	db, err := DB()
 	if err != nil {
 		return err
@@ -188,10 +188,10 @@ func AdjustEnterpriseOwnerCredits(enterpriseID, actorID string, delta int, reaso
 		if result.RowsAffected == 0 {
 			return ErrEnterpriseNotFound
 		}
-		if owner.Credits+delta < 0 {
+		if owner.Credits.Add(delta).IsNegative() {
 			return ErrInsufficientCredits
 		}
-		owner.Credits += delta
+		owner.Credits = owner.Credits.Add(delta)
 		if err := tx.Model(&model.User{}).Where("id = ?", owner.ID).Updates(map[string]any{"credits": owner.Credits, "updated_at": updatedAt}).Error; err != nil {
 			return err
 		}
@@ -202,7 +202,7 @@ func AdjustEnterpriseOwnerCredits(enterpriseID, actorID string, delta int, reaso
 	})
 }
 
-func TransferEnterpriseMemberCredits(enterpriseID, ownerID, memberID string, action model.EnterpriseCreditAction, amount int, requestID, updatedAt string) (model.User, model.User, error) {
+func TransferEnterpriseMemberCredits(enterpriseID, ownerID, memberID string, action model.EnterpriseCreditAction, amount model.Decimal, requestID, updatedAt string) (model.User, model.User, error) {
 	db, err := DB()
 	if err != nil {
 		return model.User{}, model.User{}, err
@@ -222,14 +222,14 @@ func TransferEnterpriseMemberCredits(enterpriseID, ownerID, memberID string, act
 			return err
 		}
 
-		logType, ownerDelta, memberDelta, remark := model.CreditLogTypeEnterpriseAllocate, -amount, amount, "企业积分分配"
+		logType, ownerDelta, memberDelta, remark := model.CreditLogTypeEnterpriseAllocate, amount.Neg(), amount, "企业积分分配"
 		if action == model.EnterpriseCreditActionReclaim {
-			logType, ownerDelta, memberDelta, remark = model.CreditLogTypeEnterpriseReclaim, amount, -amount, "企业积分收回"
+			logType, ownerDelta, memberDelta, remark = model.CreditLogTypeEnterpriseReclaim, amount, amount.Neg(), "企业积分收回"
 		}
 		var existing model.CreditLog
 		err := tx.Where("user_id = ? AND type = ? AND related_id = ?", ownerID, logType, requestID).Take(&existing).Error
 		if err == nil {
-			if existing.CounterpartyID != memberID || existing.Amount != ownerDelta {
+			if existing.CounterpartyID != memberID || !existing.Amount.Equal(ownerDelta) {
 				return ErrCreditTransferRequestConflict
 			}
 			return nil
@@ -237,11 +237,11 @@ func TransferEnterpriseMemberCredits(enterpriseID, ownerID, memberID string, act
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		if owner.Credits+ownerDelta < 0 || member.Credits+memberDelta < 0 {
+		if owner.Credits.Add(ownerDelta).IsNegative() || member.Credits.Add(memberDelta).IsNegative() {
 			return ErrInsufficientCredits
 		}
-		owner.Credits += ownerDelta
-		member.Credits += memberDelta
+		owner.Credits = owner.Credits.Add(ownerDelta)
+		member.Credits = member.Credits.Add(memberDelta)
 		if err := tx.Model(&model.User{}).Where("id = ?", owner.ID).Updates(map[string]any{"credits": owner.Credits, "updated_at": updatedAt}).Error; err != nil {
 			return err
 		}

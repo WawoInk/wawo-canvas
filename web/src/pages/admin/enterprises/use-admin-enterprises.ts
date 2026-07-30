@@ -56,10 +56,10 @@ export function useAdminEnterprises() {
         refresh: () => query.refetch(),
         create: (value: CreateAdminEnterprise) => mutation.mutateAsync(() => createAdminEnterprise(token, value)),
         setStatus: (item: AdminEnterprise, active: boolean) => mutation.mutateAsync(() => setAdminEnterpriseStatus(token, item.id, active ? "active" : "disabled")),
-        setDiscountRate: (item: AdminEnterprise, discountRate: number) => mutation.mutateAsync(() => setAdminEnterpriseDiscountRate(token, item.id, discountRate)),
+        setDiscountRate: (item: AdminEnterprise, discountRate: string) => mutation.mutateAsync(() => setAdminEnterpriseDiscountRate(token, item.id, discountRate)),
         setOwnerStatus: (item: AdminEnterprise, active: boolean) => mutation.mutateAsync(() => setAdminEnterpriseOwnerStatus(token, item.id, active ? "active" : "ban")),
         resetPassword: (item: AdminEnterprise, password: string) => mutation.mutateAsync(() => resetAdminEnterpriseOwnerPassword(token, item.id, password)),
-        adjustCredits: (item: AdminEnterprise, delta: number, reason: string) => mutation.mutateAsync(() => adjustAdminEnterpriseCredits(token, item.id, delta, reason)),
+        adjustCredits: (item: AdminEnterprise, delta: string, reason: string) => mutation.mutateAsync(() => adjustAdminEnterpriseCredits(token, item.id, delta, reason)),
         loadCreditLogs: async (ownerId: string) => {
             try {
                 return (await fetchAdminCreditLogs(token, { keyword: ownerId, type: "admin_adjust", pageSize: 20 })).items.filter((item) => item.userId === ownerId);

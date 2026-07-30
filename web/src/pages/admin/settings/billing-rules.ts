@@ -1,10 +1,12 @@
+import { nonNegativeDecimal, type DecimalValue } from "../../../lib/decimal.ts";
+
 export type VideoBillingMode = "per_credit" | "per_second" | "per_call";
 
 export type VideoModelCost = {
     model: string;
     displayName?: string;
-    credits: number;
-    resolutionCredits?: Record<string, number>;
+    credits: DecimalValue;
+    resolutionCredits?: Record<string, DecimalValue>;
 };
 
 type VideoBillingBinding = {
@@ -25,10 +27,10 @@ export function normalizeModelCosts(items: Array<Partial<VideoModelCost>>) {
         .map((item) => ({
             model: item.model || "",
             ...(item.displayName?.trim() ? { displayName: item.displayName.trim() } : {}),
-            credits: Math.max(0, Number(item.credits) || 0),
+            credits: nonNegativeDecimal(item.credits),
             ...(item.resolutionCredits
                 ? {
-                      resolutionCredits: Object.fromEntries(Object.entries(item.resolutionCredits).map(([resolution, credits]) => [resolution, Math.max(0, Number(credits) || 0)])),
+                      resolutionCredits: Object.fromEntries(Object.entries(item.resolutionCredits).map(([resolution, credits]) => [resolution, nonNegativeDecimal(credits)])),
                   }
                 : {}),
         }));
@@ -36,11 +38,11 @@ export function normalizeModelCosts(items: Array<Partial<VideoModelCost>>) {
 
 export function modelCostFor(items: VideoModelCost[], model: string, fallbackModel?: string): VideoModelCost {
     const cost = items.find((item) => item.model === model) || items.find((item) => item.model === fallbackModel);
-    return cost ? { ...cost, model } : { model, credits: 0 };
+    return cost ? { ...cost, model } : { model, credits: "0" };
 }
 
 export function upsertModelCost(items: VideoModelCost[], model: string, patch: Partial<Omit<VideoModelCost, "model">>) {
-    const current = items.find((item) => item.model === model) || { model, credits: 0 };
+    const current = items.find((item) => item.model === model) || { model, credits: "0" };
     const updated = normalizeModelCosts([{ ...current, ...patch, model }])[0];
     return [...items.filter((item) => item.model !== model), updated];
 }

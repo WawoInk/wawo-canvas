@@ -26,7 +26,7 @@ type Enterprise struct {
 	Name         string           `json:"name"`
 	Status       EnterpriseStatus `json:"status" gorm:"not null;check:status IN ('active','disabled')"`
 	OwnerID      string           `json:"ownerId" gorm:"not null;uniqueIndex"`
-	DiscountRate float64          `json:"discountRate" gorm:"not null;default:1;check:chk_enterprises_discount_rate,discount_rate >= 0.1 AND discount_rate <= 1"`
+	DiscountRate Decimal          `json:"discountRate" gorm:"type:numeric;not null;default:1;check:chk_enterprises_discount_rate,discount_rate >= 0.1 AND discount_rate <= 1"`
 	CreatedAt    string           `json:"createdAt"`
 	UpdatedAt    string           `json:"updatedAt"`
 }
@@ -35,7 +35,7 @@ type EnterpriseView struct {
 	Enterprise
 	OwnerName    string     `json:"ownerName"`
 	OwnerStatus  UserStatus `json:"ownerStatus"`
-	OwnerCredits int        `json:"ownerCredits"`
+	OwnerCredits Decimal    `json:"ownerCredits"`
 	MemberCount  int        `json:"memberCount"`
 }
 
@@ -50,7 +50,7 @@ type EnterpriseAccountSummary struct {
 	Status       EnterpriseStatus `json:"status"`
 	Role         EnterpriseRole   `json:"role"`
 	MemberCount  int              `json:"memberCount"`
-	DiscountRate float64          `json:"discountRate"`
+	DiscountRate Decimal          `json:"discountRate"`
 }
 
 // EnterpriseMember 企业成员管理视图。
@@ -60,7 +60,7 @@ type EnterpriseMember struct {
 	Email          string         `json:"email"`
 	DisplayName    string         `json:"displayName"`
 	Status         UserStatus     `json:"status"`
-	Credits        int            `json:"credits"`
+	Credits        Decimal        `json:"credits"`
 	Role           UserRole       `json:"role"`
 	EnterpriseID   string         `json:"enterpriseId"`
 	EnterpriseRole EnterpriseRole `json:"enterpriseRole"`
@@ -76,8 +76,8 @@ type EnterpriseMemberList struct {
 type EnterpriseCreditTransfer struct {
 	RequestID    string                 `json:"requestId"`
 	Action       EnterpriseCreditAction `json:"action"`
-	Amount       int                    `json:"amount"`
-	OwnerCredits int                    `json:"ownerCredits"`
+	Amount       Decimal                `json:"amount"`
+	OwnerCredits Decimal                `json:"ownerCredits"`
 	Member       EnterpriseMember       `json:"member"`
 }
 

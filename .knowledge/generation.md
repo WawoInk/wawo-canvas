@@ -229,10 +229,10 @@ queued -> running -> succeeded | failed | cancelled
 企业 owner/member 使用：
 
 ```text
-ceil(original credits * enterprise.discount_rate)
+original credits * enterprise.discount_rate
 ```
 
-退款按任务实际已扣积分，不按后来修改的折扣重新计算。
+结果保留完整小数精度，不向上取整；退款按任务实际已扣积分，不按后来修改的折扣重新计算。
 
 数据库幂等：
 

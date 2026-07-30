@@ -9,7 +9,7 @@ description: 核心数据表和第一方生成任务事务约束
 
 ## enterprises 与 users
 
-`enterprises` 保存企业名称、`active/disabled` 状态、唯一主账号 ID 和 `discount_rate` 折扣倍率。倍率默认 `1`，数据库约束范围为 `0.1-1`。企业和主账号在同一个 PostgreSQL 事务中创建；延迟外键与约束触发器在事务提交时保证主账号存在、属于当前企业且企业身份为 `owner`。
+`enterprises` 保存企业名称、`active/disabled` 状态、唯一主账号 ID 和 `numeric` 类型的 `discount_rate` 折扣倍率。倍率默认 `1`，数据库约束范围为 `0.1-1`。企业和主账号在同一个 PostgreSQL 事务中创建；延迟外键与约束触发器在事务提交时保证主账号存在、属于当前企业且企业身份为 `owner`。
 
 `users` 的平台角色仍为 `guest/user/admin`。企业归属使用可空的 `enterprise_id` 和 `enterprise_role` 表达，企业身份只允许 `owner/member`：
 
@@ -23,6 +23,8 @@ description: 核心数据表和第一方生成任务事务约束
 
 ## credit_logs 与企业积分
 
+`users.credits`、`credit_logs.amount/balance`、`generation_tasks.credits/upstream_credits/billing_rate` 和 `enterprises.discount_rate` 均使用 PostgreSQL `numeric` 保存完整小数精度。数据库启动初始化会在 `AutoMigrate` 前显式、可重复地把已有非 `numeric` 计费列转换为 `numeric`。
+
 平台管理员调整企业主账号积分时，`users.credits` 更新与一条 `credit_logs` 记录在同一个 PostgreSQL 事务中完成。事务会锁定目标主账号行，按 `delta` 增减余额，并在扣减后余额小于 0 时整体失败，因此并发调整不会覆盖其他请求的结果。
 
 平台调整流水使用 `admin_adjust` 类型：`user_id` 记录目标主账号，`related_id` 记录操作的平台管理员，`amount` 记录增量，`balance` 记录本次变动后的余额，`remark` 记录调整原因。
@@ -33,7 +35,7 @@ description: 核心数据表和第一方生成任务事务约束
 
 企业汇总流水不新增账本表：查询从当前主账号推导 `enterprise_id`，通过 `credit_logs.user_id` 关联当前企业的 `owner/member`，并在数据库查询中完成成员、类型、关键词和分页筛选；其他企业、个人用户和平台管理员的流水不会进入结果。
 
-兼容 AI 代理的 `ai_consume/ai_refund` 也在锁定用户行后，于同一事务更新余额并写入流水；因此生成扣费、退款和企业划拨会按同一用户串行结算，普通资料或登录信息保存不会写回陈旧积分。企业主账号和成员按 `ceil(原始积分 × discount_rate)` 扣费，个人用户与平台管理员等价于倍率 `1`；退款按同任务已落账的消费流水原额返还，不受后续倍率调整影响。
+兼容 AI 代理的 `ai_consume/ai_refund` 也在锁定用户行后，于同一事务更新余额并写入流水；因此生成扣费、退款和企业划拨会按同一用户串行结算，普通资料或登录信息保存不会写回陈旧积分。企业主账号和成员按 `原始积分 × discount_rate` 精确扣费，不再向上取整，例如 `5 × 0.5 = 2.5`；个人用户与平台管理员等价于倍率 `1`。退款按同任务已落账的消费流水原额返还，不受后续倍率调整影响。
 
 ## assets、user_files 与企业共享媒体
 

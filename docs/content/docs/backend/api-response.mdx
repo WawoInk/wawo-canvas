@@ -46,6 +46,8 @@ description: 后端统一响应信封与结构化生成错误
 
 取消、回调等操作错误至少返回稳定的 `data.code`。异步失败通过 `GET /api/v1/generations/{id}` 的任务 `error` 字段返回同一套归一化信息。
 
+积分、价格、折扣倍率和上游 credits 等十进制字段在 JSON 中统一使用字符串，避免 JavaScript `number` 丢失精度；客户端提交这类字段时也应发送十进制字符串，例如 `"2.5"`。
+
 ## 企业基础接口
 
 平台管理员使用现有 Bearer JWT 调用以下接口，响应继续使用统一信封：
@@ -81,7 +83,7 @@ description: 后端统一响应信封与结构化生成错误
 | `POST` | `/api/v1/enterprise/members` | 创建固定为 `user/member`、初始积分为零的子账号 |
 | `POST` | `/api/v1/enterprise/members/{id}/status` | 设置成员 `active/ban` 状态 |
 | `POST` | `/api/v1/enterprise/members/{id}/password` | 重置成员密码并使旧 JWT 失效 |
-| `POST` | `/api/v1/enterprise/members/{id}/credits` | 使用 `{ action, amount, requestId }` 分配或收回成员积分；`action` 为 `allocate/reclaim`，`amount` 必须为正整数 |
+| `POST` | `/api/v1/enterprise/members/{id}/credits` | 使用 `{ action, amount, requestId }` 分配或收回成员积分；`action` 为 `allocate/reclaim`，`amount` 必须为正数 |
 
 积分操作响应同时返回主账号最新积分 `ownerCredits` 和更新后的 `member`。客户端请求 ID 最长 128 字符；相同账号、操作类型和请求 ID 的重试只生效一次，复用请求 ID 但修改成员或数量会被拒绝。
 

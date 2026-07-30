@@ -17,10 +17,11 @@
 1. 使用 `sync.Once` 建立全局 GORM 连接。
 2. 若目标数据库不存在，连接 `postgres` 或 `template1` 并执行 `CREATE DATABASE`。
 3. 创建 `canvas_revision_seq`。
-4. 对 13 个模型执行 `AutoMigrate`。
-5. 清理会破坏新唯一索引的历史重复数据。
-6. 创建部分唯一索引。
-7. 创建企业/用户延迟外键和 enterprise owner 一致性触发器。
+4. 显式把已有计费列转换为 PostgreSQL `numeric`；仅在列存在且类型不是 `numeric` 时执行。
+5. 对 13 个模型执行 `AutoMigrate`。
+6. 清理会破坏新唯一索引的历史重复数据。
+7. 创建部分唯一索引。
+8. 创建企业/用户延迟外键和 enterprise owner 一致性触发器。
 
 `EnsureDefaultAdmin()` 在服务启动时触发数据库访问，因此 schema 通常在 HTTP 监听前完成。
 
@@ -72,7 +73,7 @@ erDiagram
 | `name` | 企业名 |
 | `status` | CHECK `active/disabled` |
 | `owner_id` | 非空、唯一、延迟外键到 users |
-| `discount_rate` | 默认 1，CHECK `0.1 <= value <= 1` |
+| `discount_rate` | `numeric`，默认 1，CHECK `0.1 <= value <= 1` |
 | `created_at/updated_at` | 字符串时间 |
 
 额外约束触发器在事务提交时保证 owner 用户属于该企业且 `enterprise_role='owner'`。
@@ -88,7 +89,7 @@ erDiagram
 - `password/email/display_name/avatar_url`。
 - `role`: `guest/user/admin`。
 - `status`: `active/ban`。
-- `credits` 非负 CHECK。
+- `credits` 使用 `numeric`，并带非负 CHECK。
 - `enterprise_id` 可空，普通索引。
 - `enterprise_role` 可空，`owner/member` CHECK。
 - `session_version` 默认 1。
@@ -110,8 +111,8 @@ erDiagram
 | `user_id` | 流水所属账号 |
 | `task_id` | 生成任务；可空字符串 |
 | `type` | `admin_adjust/ai_consume/ai_refund/enterprise_allocate/enterprise_reclaim` |
-| `amount` | 当前账号视角的正负变动 |
-| `balance` | 变动后余额 |
+| `amount` | `numeric`，当前账号视角的正负变动 |
+| `balance` | `numeric`，变动后余额 |
 | `related_id` | 管理员 ID 或企业 request ID |
 | `counterparty_id` | 划拨对方账号 |
 | `remark/extra` | 说明和扩展数据 |
@@ -187,7 +188,7 @@ private value 包含：
 
 - 身份：`id/user_id/task_type/source/provider/model`。
 - 状态：`status/latency_ms/error_*`。
-- 计费：`credits/upstream_credits/billing_mode/billing_rate`。
+- 计费：`credits/upstream_credits/billing_rate` 使用 `numeric`，另有 `billing_mode`。
 - 上游：`upstream_task_id/callback_token/trace_id`。
 - 幂等：`client_request_id/command_hash/command_version`。
 - 第一方快照：`intent_kind/model_profile_id/profile_version/adapter_key/channel_id/upstream_model`。

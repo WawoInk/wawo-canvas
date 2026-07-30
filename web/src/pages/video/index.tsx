@@ -387,7 +387,7 @@ export default function VideoPage() {
                     provider: "seedance",
                     model: log.model || "unknown",
                     status,
-                    credits: 0,
+                    credits: "0",
                     latencyMs: log.durationMs,
                     upstreamTaskId: log.task?.id || "",
                     source: "video_workbench",

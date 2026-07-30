@@ -63,7 +63,7 @@ func LogTaskStart(user model.AuthUser, taskType model.TaskType, provider string,
 }
 
 // LogTaskCreated 更新任务的上游 task ID（异步任务创建成功后，状态仍为 running）。
-func LogTaskCreated(taskID string, upstreamTaskID string, latencyMs int64, _ int) {
+func LogTaskCreated(taskID string, upstreamTaskID string, latencyMs int64, _ model.Decimal) {
 	now := time.Now().Format(time.RFC3339)
 	updates := map[string]any{
 		"upstream_task_id": upstreamTaskID,
@@ -76,7 +76,7 @@ func LogTaskCreated(taskID string, upstreamTaskID string, latencyMs int64, _ int
 }
 
 // LogTaskSuccess 更新任务为成功状态，同时保存响应数据到 Payload。
-func LogTaskSuccess(taskID string, respBody []byte, respHeaders string, latencyMs int64, _ int, upstreamTaskID string) {
+func LogTaskSuccess(taskID string, respBody []byte, respHeaders string, latencyMs int64, _ model.Decimal, upstreamTaskID string) {
 	now := time.Now().Format(time.RFC3339)
 	updates := map[string]any{
 		"status":     string(model.TaskStatusSuccess),
@@ -98,7 +98,7 @@ func LogTaskSuccess(taskID string, respBody []byte, respHeaders string, latencyM
 }
 
 // LogTaskFailure 更新任务为失败状态。
-func LogTaskFailure(taskID string, errCode string, errMsg string, rawError string, latencyMs int64, _ int) {
+func LogTaskFailure(taskID string, errCode string, errMsg string, rawError string, latencyMs int64, _ model.Decimal) {
 	now := time.Now().Format(time.RFC3339)
 	updates := map[string]any{
 		"status":        string(model.TaskStatusFailed),

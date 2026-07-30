@@ -17,9 +17,9 @@ test("按秒视频按所选分辨率和时长展示总积分", async (t) => {
             model: "seedance-2-0-line-2",
             resolution: "720",
             duration: "6",
-            modelCosts: [{ model: "seedance-2-0-line-2", credits: 0, resolutionCredits: { "720p": 2, "1080p": 4 } }],
+            modelCosts: [{ model: "seedance-2-0-line-2", credits: "0", resolutionCredits: { "720p": "2", "1080p": "4" } }],
         }),
-        12,
+        "12",
     );
-    assert.equal(requestCreditCost({ channelMode: "remote", model: "stable-video", fallbackCredits: 7 }), 7);
+    assert.equal(requestCreditCost({ channelMode: "remote", model: "stable-video", count: 3, fallbackCredits: "0.125" }), "0.375");
 });

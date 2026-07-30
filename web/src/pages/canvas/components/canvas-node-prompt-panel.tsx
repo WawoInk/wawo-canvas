@@ -9,6 +9,7 @@ import { findGenerationProfile, getGenerationProfiles, type GenerationProfile, t
 import { defaultConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { CreditSymbol, requestCreditCost } from "@/constant/credits";
 import { canvasThemes } from "@/lib/canvas-theme";
+import { formatDecimal } from "@/lib/decimal";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
 import { CanvasPromptLibrary } from "./canvas-prompt-library";
@@ -214,7 +215,7 @@ export function CanvasNodePromptPanel({ node, isRunning, canResume = false, onPr
                             <>
                                 <span className="inline-flex items-center gap-1 text-xs font-medium tabular-nums">
                                     <CreditSymbol />
-                                    {credits.toLocaleString()}
+                                    {formatDecimal(credits)}
                                 </span>
                                 <ArrowUp className="size-4" />
                             </>

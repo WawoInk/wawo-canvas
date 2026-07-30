@@ -21,7 +21,7 @@ test("账户日志明确展示用户操作和积分变动", () => {
                     model: "video-model",
                     modelDisplayName: "精品视频模型",
                     status: "succeeded",
-                    credits: 12,
+                    credits: "12.5",
                     upstreamCredits: null,
                     latencyMs: 2300,
                     upstreamTaskId: "upstream-1",
@@ -51,8 +51,8 @@ test("账户日志明确展示用户操作和积分变动", () => {
                     userId: "user-1",
                     taskId: "task-1",
                     type: "ai_consume",
-                    amount: -12,
-                    balance: 88,
+                    amount: "-12.5",
+                    balance: "87.5",
                     relatedId: "",
                     counterpartyId: "",
                     remark: "调用模型 video-model",
@@ -64,8 +64,8 @@ test("账户日志明确展示用户操作和积分变动", () => {
         }),
     );
     assert.match(creditHTML, /模型消费/);
-    assert.match(creditHTML, /-12/);
-    assert.match(creditHTML, /88/);
+    assert.match(creditHTML, /-12.5/);
+    assert.match(creditHTML, /87.5/);
     assert.match(creditHTML, /调用模型 video-model/);
 });
 
@@ -79,7 +79,7 @@ test("企业主账户设置提供账户、日志和企业信息页签", () => {
             displayName: "账户用户",
             avatarUrl: "",
             role: "user",
-            credits: 88,
+            credits: "87.5",
             enterpriseId: "enterprise-1",
             enterpriseName: "测试企业",
             enterpriseRole: "owner",

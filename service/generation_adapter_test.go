@@ -28,7 +28,7 @@ func TestGenerationProfilesAreValid(t *testing.T) {
 func TestViduAdapterRecordsUpstreamCreditsIncludingExplicitNull(t *testing.T) {
 	adapter := NewViduShortDramaV1Adapter(nil)
 	withCredits, err := adapter.ParseCallback(context.Background(), []byte(`{"id":"vidu-credits","model":"vidu_hq_t2v-oversea","status":"succeeded","content":{"video_url":"https://example.com/video.mp4"},"credits":18}`))
-	if err != nil || withCredits.Credits == nil || *withCredits.Credits != 18 {
+	if err != nil || withCredits.Credits == nil || !withCredits.Credits.Equal(credit(18)) {
 		t.Fatalf("with credits = %#v, err = %v", withCredits, err)
 	}
 
@@ -147,7 +147,7 @@ func TestCreateGenerationAppliesProfileSettingsToSeedance(t *testing.T) {
 	}
 	generationRouteChannel = func(string, string) (model.ModelChannel, error) { return generationChannel("") }
 	generationHTTPClient = upstream.Client()
-	generationCost = func(string) (int, error) { return 0, nil }
+	generationCost = func(string) (model.Decimal, error) { return credit(0), nil }
 	generationDispatch = func(ctx context.Context, taskID string) {
 		processGenerationTask(ctx, taskID, "test-worker-"+uuid.NewString())
 	}
@@ -192,12 +192,12 @@ func TestCreateGenerationUsesOperationalBindingRouteAndPublicPrice(t *testing.T)
 		generationDispatch = previousDispatch
 		_, _ = repository.SaveSettings(previousSettings, time.Now().UTC().Format(time.RFC3339Nano))
 	}()
-	profile := model.GenerationProfile{ID: "stable-seedance", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "vendor-seedance", ChannelName: "bound-channel", Credits: 99, Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}
+	profile := model.GenerationProfile{ID: "stable-seedance", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "vendor-seedance", ChannelName: "bound-channel", Credits: credit(99), Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}
 	generationProfiles = func() []model.GenerationProfile { return []model.GenerationProfile{profile} }
 	generationChannel = func(string) (model.ModelChannel, error) { return model.ModelChannel{}, errors.New("random route used") }
 	generationCost = ModelCost
 	settings := previousSettings
-	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: "vendor-seedance", Credits: 3})
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: "vendor-seedance", Credits: credit(3)})
 	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		t.Fatalf("save settings: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestCreateGenerationUsesOperationalBindingRouteAndPublicPrice(t *testing.T)
 	key := uuid.NewString()
 	userID := "user-binding-" + key
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := repository.SaveUser(model.User{ID: userID, Username: "binding-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: 10, CreatedAt: now, UpdatedAt: now}); err != nil {
+	if _, err := repository.SaveUser(model.User{ID: userID, Username: "binding-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: credit(10), CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatalf("save user: %v", err)
 	}
 	task, err := CreateGeneration(context.Background(), model.AuthUser{ID: userID}, model.GenerationCommand{
@@ -225,11 +225,11 @@ func TestCreateGenerationUsesOperationalBindingRouteAndPublicPrice(t *testing.T)
 		t.Fatalf("route = %q/%q, task = %#v", gotName, gotModel, task)
 	}
 	stored, err := repository.GetGenerationTaskByID(task.ID)
-	if err != nil || stored.Credits != 3 {
+	if err != nil || !stored.Credits.Equal(credit(3)) {
 		t.Fatalf("stored task = %#v, err = %v", stored, err)
 	}
 	user, ok, err := repository.GetUserByID(userID)
-	if err != nil || !ok || user.Credits != 7 {
+	if err != nil || !ok || !user.Credits.Equal(credit(7)) {
 		t.Fatalf("user = %#v, ok = %v, err = %v", user, ok, err)
 	}
 }
@@ -271,7 +271,7 @@ func TestCreateGenerationChargesVideoBindingByResolutionAndSeconds(t *testing.T)
 		ID: profileID, ProfileID: "seedance-1-5-pro", UpstreamModel: upstreamModel, ChannelName: channelName, BillingMode: model.BillingModePerSecond, Enabled: true,
 	})
 	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{
-		Model: profileID, ResolutionCredits: map[string]int{"720p": 2},
+		Model: profileID, ResolutionCredits: map[string]model.Decimal{"720p": credit(2)},
 	})
 	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		t.Fatalf("save settings: %v", err)
@@ -279,7 +279,7 @@ func TestCreateGenerationChargesVideoBindingByResolutionAndSeconds(t *testing.T)
 
 	userID := "second-user-" + key
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := repository.SaveUser(model.User{ID: userID, Username: "second-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: 100, CreatedAt: now, UpdatedAt: now}); err != nil {
+	if _, err := repository.SaveUser(model.User{ID: userID, Username: "second-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: credit(100), CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatalf("save user: %v", err)
 	}
 	task, err := CreateGeneration(context.Background(), model.AuthUser{ID: userID}, model.GenerationCommand{
@@ -290,11 +290,11 @@ func TestCreateGenerationChargesVideoBindingByResolutionAndSeconds(t *testing.T)
 		t.Fatalf("CreateGeneration: %v", err)
 	}
 	stored, err := repository.GetGenerationTaskByID(task.ID)
-	if err != nil || stored.Credits != 12 || stored.BillingMode != model.BillingModePerSecond || stored.BillingRate != 2 {
+	if err != nil || !stored.Credits.Equal(credit(12)) || stored.BillingMode != model.BillingModePerSecond || !stored.BillingRate.Equal(credit(2)) {
 		t.Fatalf("stored task = %#v, err = %v", stored, err)
 	}
 	user, ok, err := repository.GetUserByID(userID)
-	if err != nil || !ok || user.Credits != 88 {
+	if err != nil || !ok || !user.Credits.Equal(credit(88)) {
 		t.Fatalf("user = %#v, ok = %v, err = %v", user, ok, err)
 	}
 }
@@ -358,14 +358,14 @@ func TestCreateGenerationChargesViduByUpstreamCreditsAtSuccess(t *testing.T) {
 	settings.Private.GenerationProfiles = append(settings.Private.GenerationProfiles, model.GenerationProfileBinding{
 		ID: profileID, ProfileID: "seedance-1-5-pro", UpstreamModel: upstreamModel, ChannelName: channelName, BillingMode: model.BillingModePerCredit, Enabled: true,
 	})
-	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: profileID, Credits: 2})
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: profileID, Credits: credit(2)})
 	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		t.Fatalf("save settings: %v", err)
 	}
 
 	userID := "credit-user-" + key
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := repository.SaveUser(model.User{ID: userID, Username: "credit-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: 100, CreatedAt: now, UpdatedAt: now}); err != nil {
+	if _, err := repository.SaveUser(model.User{ID: userID, Username: "credit-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: credit(100), CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatalf("save user: %v", err)
 	}
 	task, err := CreateGeneration(context.Background(), model.AuthUser{ID: userID}, model.GenerationCommand{
@@ -376,15 +376,18 @@ func TestCreateGenerationChargesViduByUpstreamCreditsAtSuccess(t *testing.T) {
 		t.Fatalf("CreateGeneration: %v", err)
 	}
 	stored, err := repository.GetGenerationTaskByID(task.ID)
-	if err != nil || stored.Status != model.TaskStatusSucceeded || stored.Credits != 36 || stored.UpstreamCredits == nil || *stored.UpstreamCredits != 18 || stored.BillingMode != model.BillingModePerCredit || stored.BillingRate != 2 {
+	if err != nil || stored.Status != model.TaskStatusSucceeded || !stored.Credits.Equal(credit(36)) ||
+		stored.UpstreamCredits == nil || !stored.UpstreamCredits.Equal(credit(18)) ||
+		stored.BillingMode != model.BillingModePerCredit || !stored.BillingRate.Equal(credit(2)) {
 		t.Fatalf("stored task = %#v, err = %v", stored, err)
 	}
 	user, ok, err := repository.GetUserByID(userID)
-	if err != nil || !ok || user.Credits != 64 {
+	if err != nil || !ok || !user.Credits.Equal(credit(64)) {
 		t.Fatalf("user = %#v, ok = %v, err = %v", user, ok, err)
 	}
 	logs, _, err := repository.ListCreditLogsByUserID(userID, model.Query{PageSize: 20})
-	if err != nil || len(logs) != 1 || logs[0].Type != model.CreditLogTypeAIConsume || logs[0].Amount != -36 || !strings.Contains(logs[0].Extra, `"credits":18`) {
+	if err != nil || len(logs) != 1 || logs[0].Type != model.CreditLogTypeAIConsume ||
+		!logs[0].Amount.Equal(credit(-36)) || !strings.Contains(logs[0].Extra, `"credits":"18"`) {
 		t.Fatalf("logs = %#v, err = %v", logs, err)
 	}
 }
@@ -600,7 +603,7 @@ func TestCreateGenerationRunsMediaSeedanceTask(t *testing.T) {
 	}
 	generationRouteChannel = func(string, string) (model.ModelChannel, error) { return generationChannel("") }
 	generationHTTPClient = upstream.Client()
-	generationCost = func(string) (int, error) { return 0, nil }
+	generationCost = func(string) (model.Decimal, error) { return credit(0), nil }
 	generationPresign = func(_ context.Context, key string, _ time.Duration) (string, error) {
 		if strings.HasSuffix(key, "/image.png") {
 			return signedImageURL, nil
@@ -715,7 +718,7 @@ func TestCreateGenerationRefundsFailedTaskOnce(t *testing.T) {
 	}
 	generationRouteChannel = func(string, string) (model.ModelChannel, error) { return generationChannel("") }
 	generationHTTPClient = upstream.Client()
-	generationCost = func(string) (int, error) { return 2, nil }
+	generationCost = func(string) (model.Decimal, error) { return credit(2), nil }
 	generationDispatch = func(ctx context.Context, taskID string) {
 		processGenerationTask(ctx, taskID, "test-worker-"+uuid.NewString())
 	}
@@ -723,7 +726,7 @@ func TestCreateGenerationRefundsFailedTaskOnce(t *testing.T) {
 	key := uuid.NewString()
 	userID := "user-failed-" + key
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := repository.SaveUser(model.User{ID: userID, Username: "failed-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: 8, CreatedAt: now, UpdatedAt: now}); err != nil {
+	if _, err := repository.SaveUser(model.User{ID: userID, Username: "failed-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: credit(8), CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatalf("save user: %v", err)
 	}
 	_, err := CreateGeneration(context.Background(), model.AuthUser{ID: userID}, model.GenerationCommand{
@@ -734,7 +737,7 @@ func TestCreateGenerationRefundsFailedTaskOnce(t *testing.T) {
 		t.Fatalf("CreateGeneration: %v", err)
 	}
 	user, ok, err := repository.GetUserByID(userID)
-	if err != nil || !ok || user.Credits != 8 {
+	if err != nil || !ok || !user.Credits.Equal(credit(8)) {
 		t.Fatalf("user = %#v ok=%v err=%v", user, ok, err)
 	}
 	logs, _, err := repository.ListCreditLogsByUserID(userID, model.Query{PageSize: 20})
@@ -760,7 +763,7 @@ func TestCreateGenerationDefaultsProduceSameIdempotencyHash(t *testing.T) {
 	generationChannel = func(string) (model.ModelChannel, error) {
 		return model.ModelChannel{Name: "test", Protocol: "openai", BaseURL: "http://127.0.0.1:1", APIKey: "secret", Enabled: true}, nil
 	}
-	generationCost = func(string) (int, error) { return 0, nil }
+	generationCost = func(string) (model.Decimal, error) { return credit(0), nil }
 	generationDispatch = func(context.Context, string) {}
 
 	key := uuid.NewString()
@@ -844,7 +847,7 @@ func TestCreateGenerationReusesIdempotentCommand(t *testing.T) {
 		return model.ModelChannel{Name: "test", Protocol: "openai", BaseURL: upstream.URL, APIKey: "secret", Enabled: true}, nil
 	}
 	generationHTTPClient = upstream.Client()
-	generationCost = func(string) (int, error) { return 0, nil }
+	generationCost = func(string) (model.Decimal, error) { return credit(0), nil }
 	generationRouteChannel = func(string, string) (model.ModelChannel, error) {
 		return model.ModelChannel{Name: "test", Protocol: "openai", BaseURL: upstream.URL, APIKey: "secret", Enabled: true}, nil
 	}
@@ -924,7 +927,7 @@ func TestCreateGenerationRunsPromptOnlySeedanceTask(t *testing.T) {
 		return model.ModelChannel{Name: "test", Protocol: "openai", BaseURL: upstream.URL, APIKey: "secret", Enabled: true}, nil
 	}
 	generationHTTPClient = upstream.Client()
-	generationCost = func(string) (int, error) { return 0, nil }
+	generationCost = func(string) (model.Decimal, error) { return credit(0), nil }
 	generationRouteChannel = func(string, string) (model.ModelChannel, error) {
 		return model.ModelChannel{Name: "test", Protocol: "openai", BaseURL: upstream.URL, APIKey: "secret", Enabled: true}, nil
 	}
@@ -1018,7 +1021,7 @@ func TestCreateGenerationRunsViduShortDramaTask(t *testing.T) {
 	}
 	generationRouteChannel = func(string, string) (model.ModelChannel, error) { return generationChannel("") }
 	generationHTTPClient = upstream.Client()
-	generationCost = func(string) (int, error) { return 0, nil }
+	generationCost = func(string) (model.Decimal, error) { return credit(0), nil }
 	generationPresign = func(_ context.Context, key string, _ time.Duration) (string, error) {
 		return "https://cdn.example/" + key, nil
 	}
@@ -1208,7 +1211,7 @@ func TestCreateGenerationStoresOnlyLongTermCommandSummary(t *testing.T) {
 	generationChannel = func(string) (model.ModelChannel, error) {
 		return model.ModelChannel{Name: "summary-channel", Protocol: "openai", BaseURL: "https://example.com", APIKey: "secret", Enabled: true}, nil
 	}
-	generationCost = func(string) (int, error) { return 0, nil }
+	generationCost = func(string) (model.Decimal, error) { return credit(0), nil }
 	generationDispatch = func(context.Context, string) {}
 
 	userID := "user-summary-" + uuid.NewString()
@@ -1314,7 +1317,7 @@ func TestFirstPartyGenerationPersistsProviderVideoBeforeSuccess(t *testing.T) {
 		return model.ModelChannel{Name: "test", Protocol: "openai", BaseURL: upstream.URL, APIKey: "secret", Enabled: true}, nil
 	}
 	generationHTTPClient = upstream.Client()
-	generationCost = func(string) (int, error) { return 0, nil }
+	generationCost = func(string) (model.Decimal, error) { return credit(0), nil }
 	generationPollInterval = time.Millisecond
 	persistCalls := 0
 	generationPersistVideo = func(ctx context.Context, userID, rawURL string) (*model.UserFile, error) {

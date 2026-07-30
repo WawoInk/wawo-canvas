@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"math"
 	"strings"
 
 	"github.com/basketikun/infinite-canvas/model"
@@ -23,7 +22,7 @@ type CreateEnterpriseMemberInput struct {
 	Email       string
 }
 
-func TransferEnterpriseMemberCredits(current model.AuthUser, id string, action model.EnterpriseCreditAction, amount int, requestID string) (model.EnterpriseCreditTransfer, error) {
+func TransferEnterpriseMemberCredits(current model.AuthUser, id string, action model.EnterpriseCreditAction, amount model.Decimal, requestID string) (model.EnterpriseCreditTransfer, error) {
 	enterpriseID, err := enterpriseOwnerID(current)
 	if err != nil {
 		return model.EnterpriseCreditTransfer{}, err
@@ -32,8 +31,8 @@ func TransferEnterpriseMemberCredits(current model.AuthUser, id string, action m
 	if action != model.EnterpriseCreditActionAllocate && action != model.EnterpriseCreditActionReclaim {
 		return model.EnterpriseCreditTransfer{}, safeMessageError{message: "积分操作无效"}
 	}
-	if amount <= 0 {
-		return model.EnterpriseCreditTransfer{}, safeMessageError{message: "积分数量必须为正整数"}
+	if !amount.IsPositive() {
+		return model.EnterpriseCreditTransfer{}, safeMessageError{message: "积分数量必须为正数"}
 	}
 	if requestID == "" || len(requestID) > 128 {
 		return model.EnterpriseCreditTransfer{}, safeMessageError{message: "请求 ID 无效"}
@@ -80,7 +79,7 @@ func CreateEnterprise(input CreateEnterpriseInput) (model.EnterpriseView, error)
 	enterpriseID := newID("enterprise")
 	ownerID := newID("user")
 	ownerRole := model.EnterpriseRoleOwner
-	enterprise := model.Enterprise{ID: enterpriseID, Name: input.Name, Status: model.EnterpriseStatusActive, OwnerID: ownerID, DiscountRate: 1, CreatedAt: now, UpdatedAt: now}
+	enterprise := model.Enterprise{ID: enterpriseID, Name: input.Name, Status: model.EnterpriseStatusActive, OwnerID: ownerID, DiscountRate: model.NewDecimal(1), CreatedAt: now, UpdatedAt: now}
 	owner := model.User{
 		ID: ownerID, Username: input.OwnerUsername, Password: hash, DisplayName: strings.TrimSpace(input.OwnerDisplayName), Role: model.UserRoleUser,
 		AffCode: newAffCode(), Status: model.UserStatusActive, EnterpriseID: &enterpriseID, EnterpriseRole: &ownerRole, SessionVersion: 1, CreatedAt: now, UpdatedAt: now,
@@ -217,8 +216,8 @@ func SetEnterpriseStatus(id string, status model.EnterpriseStatus) (model.Enterp
 	return repository.GetEnterpriseView(id)
 }
 
-func SetEnterpriseDiscountRate(id string, discountRate float64) (model.EnterpriseView, error) {
-	if math.IsNaN(discountRate) || discountRate < 0.1 || discountRate > 1 {
+func SetEnterpriseDiscountRate(id string, discountRate model.Decimal) (model.EnterpriseView, error) {
+	if discountRate.LessThan(model.MustDecimal("0.1")) || discountRate.GreaterThan(model.NewDecimal(1)) {
 		return model.EnterpriseView{}, safeMessageError{message: "折扣倍率必须在 0.1 到 1 之间"}
 	}
 	if err := repository.UpdateEnterpriseDiscountRate(id, discountRate, now()); err != nil {
@@ -251,9 +250,9 @@ func ResetEnterpriseOwnerPassword(id, password string) (model.EnterpriseView, er
 	return repository.GetEnterpriseView(id)
 }
 
-func AdjustEnterpriseOwnerCredits(id, actorID string, delta int, reason string) (model.EnterpriseView, error) {
+func AdjustEnterpriseOwnerCredits(id, actorID string, delta model.Decimal, reason string) (model.EnterpriseView, error) {
 	reason = strings.TrimSpace(reason)
-	if delta == 0 {
+	if delta.IsZero() {
 		return model.EnterpriseView{}, safeMessageError{message: "调整数量不能为 0"}
 	}
 	if reason == "" {

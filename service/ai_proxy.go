@@ -43,7 +43,7 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		proxyFail(w, "AI 接口请求失败")
 		return
 	}
-	credits *= readAIRequestCount(body, contentType)
+	credits = credits.Mul(model.NewDecimal(int64(readAIRequestCount(body, contentType))))
 	channel, err := SelectModelChannel(modelName)
 	if err != nil {
 		proxyAILogf("AI proxy select channel failed: model=%s err=%v", modelName, err)
@@ -83,7 +83,7 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 	proxyCopyAIResponse(w, request,
 		func() {
 			if err := RefundUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
-				proxyAILogf("AI proxy refund credits failed: user=%s model=%s credits=%d err=%v", user.ID, modelName, credits, err)
+				proxyAILogf("AI proxy refund credits failed: user=%s model=%s credits=%s err=%v", user.ID, modelName, credits.String(), err)
 			}
 		},
 		func(respBody []byte, respHeaders string) {
@@ -593,7 +593,7 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 		proxyFail(w, "AI 接口请求失败")
 		return
 	}
-	billing.Credits *= readAIRequestCount(body, contentType)
+	billing.Credits = billing.Credits.Mul(model.NewDecimal(int64(readAIRequestCount(body, contentType))))
 	credits := billing.Credits
 	channel, err := SelectModelChannel(upstreamModel)
 	if err != nil {
@@ -631,7 +631,7 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 	proxyCopyAIResponse(w, request,
 		func() {
 			if err := RefundUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
-				proxyAILogf("video task refund credits failed: user=%s model=%s credits=%d err=%v", user.ID, modelName, credits, err)
+				proxyAILogf("video task refund credits failed: user=%s model=%s credits=%s err=%v", user.ID, modelName, credits.String(), err)
 			}
 		},
 		func(respBody []byte, respHeaders string) {

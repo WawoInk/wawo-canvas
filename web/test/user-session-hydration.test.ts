@@ -15,7 +15,7 @@ const user = {
     displayName: "Deploy User",
     avatarUrl: "",
     role: "user" as const,
-    credits: 0,
+    credits: "0",
     createdAt: "",
     updatedAt: "",
 };
@@ -62,9 +62,9 @@ test("backend generation requests refresh the shared balance after charges and r
     const originalAdapter = axios.defaults.adapter;
     const requests: string[] = [];
     const stopCreditBalanceSync = startCreditBalanceSync();
-    let credits = 88;
+    let credits = "88.5";
     let generationStatus = 200;
-    useUserStore.setState({ token: "credits-jwt", user: { ...user, credits: 100 }, isReady: true, isLoading: false });
+    useUserStore.setState({ token: "credits-jwt", user: { ...user, credits: "100" }, isReady: true, isLoading: false });
 
     try {
         axios.defaults.adapter = async (config) => {
@@ -94,16 +94,16 @@ test("backend generation requests refresh the shared balance after charges and r
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         assert.deepEqual(requests, ["/api/v1/generations", "/api/auth/me"]);
-        assert.equal(useUserStore.getState().user?.credits, 88);
+        assert.equal(useUserStore.getState().user?.credits, "88.5");
 
         requests.length = 0;
-        credits = 100;
+        credits = "100.25";
         generationStatus = 502;
         await assert.rejects(createGeneration(command), /上游失败/);
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         assert.deepEqual(requests, ["/api/v1/generations", "/api/auth/me"]);
-        assert.equal(useUserStore.getState().user?.credits, 100);
+        assert.equal(useUserStore.getState().user?.credits, "100.25");
     } finally {
         stopCreditBalanceSync();
         axios.defaults.adapter = originalAdapter;
@@ -114,7 +114,7 @@ test("remote text generation refreshes the shared credit balance after the strea
     const originalAdapter = axios.defaults.adapter;
     const originalFetch = globalThis.fetch;
     const requests: string[] = [];
-    useUserStore.setState({ token: "text-credits-jwt", user: { ...user, credits: 100 }, isReady: true, isLoading: false });
+    useUserStore.setState({ token: "text-credits-jwt", user: { ...user, credits: "100" }, isReady: true, isLoading: false });
 
     try {
         globalThis.fetch = (async (input) => {
@@ -129,7 +129,7 @@ test("remote text generation refreshes the shared credit balance after the strea
             requests.push(config.url || "");
             return {
                 config,
-                data: { code: 0, data: { ...user, credits: 91 }, msg: "" },
+                data: { code: 0, data: { ...user, credits: "91.75" }, msg: "" },
                 headers: {},
                 status: 200,
                 statusText: "OK",
@@ -140,7 +140,7 @@ test("remote text generation refreshes the shared credit balance after the strea
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         assert.deepEqual(requests, ["/api/v1/chat/completions", "/api/auth/me"]);
-        assert.equal(useUserStore.getState().user?.credits, 91);
+        assert.equal(useUserStore.getState().user?.credits, "91.75");
     } finally {
         globalThis.fetch = originalFetch;
         axios.defaults.adapter = originalAdapter;

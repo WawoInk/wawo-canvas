@@ -238,7 +238,7 @@ func arbitrateGenerationTerminalFrom(task model.GenerationTask, modelName string
 }
 
 func generationRefundLog(task model.GenerationTask, modelName, now string) *model.CreditLog {
-	if task.Credits <= 0 {
+	if !task.Credits.IsPositive() {
 		return nil
 	}
 	return &model.CreditLog{

@@ -9,6 +9,7 @@ import { EditorView } from "@uiw/react-codemirror";
 import { fetchAdminSettings, fetchChannelModels, saveAdminSettings, testChannelModel, type AdminGenerationProfileBinding, type AdminModelChannel, type AdminModelCost, type AdminSettings } from "@/services/api/admin";
 import { useUserStore } from "@/stores/use-user-store";
 import { modelCostFor, normalizeModelCosts, upsertModelCost, videoBillingRule, type VideoBillingMode } from "./billing-rules";
+import { nonNegativeDecimal } from "@/lib/decimal";
 
 const CodeMirror = lazy(() => import("@uiw/react-codemirror"));
 const jsonEditorTheme = EditorView.theme({
@@ -605,16 +606,16 @@ export default function AdminSettingsPage() {
                                                                 {item.rule.resolutions.map((resolution) => (
                                                                     <InputNumber
                                                                         key={resolution}
-                                                                        min={0}
-                                                                        step={1}
-                                                                        precision={0}
+                                                                        min="0"
+                                                                        step="0.01"
+                                                                        stringMode
                                                                         addonBefore={resolution}
                                                                         addonAfter="点/秒"
                                                                         style={{ width: 190 }}
-                                                                        value={item.cost.resolutionCredits?.[resolution] || 0}
+                                                                        value={item.cost.resolutionCredits?.[resolution] || "0"}
                                                                         onChange={(value) =>
                                                                             setModelPricing(item.model, {
-                                                                                resolutionCredits: { ...(item.cost.resolutionCredits || {}), [resolution]: Number(value) || 0 },
+                                                                                resolutionCredits: { ...(item.cost.resolutionCredits || {}), [resolution]: nonNegativeDecimal(value) },
                                                                             })
                                                                         }
                                                                     />
@@ -622,14 +623,14 @@ export default function AdminSettingsPage() {
                                                             </Flex>
                                                         ) : (
                                                             <InputNumber
-                                                                min={0}
-                                                                step={1}
-                                                                precision={0}
+                                                                min="0"
+                                                                step="0.01"
+                                                                stringMode
                                                                 addonBefore={item.rule.mode === "per_credit" ? "每 credits" : "每次调用"}
                                                                 addonAfter="点"
                                                                 style={{ width: 240 }}
                                                                 value={item.cost.credits}
-                                                                onChange={(value) => setModelPricing(item.model, { credits: Number(value) || 0 })}
+                                                                onChange={(value) => setModelPricing(item.model, { credits: nonNegativeDecimal(value) })}
                                                             />
                                                         ),
                                                 },
@@ -1194,7 +1195,7 @@ function normalizePrivateSetting(setting: Partial<AdminSettings["private"]> = {}
                 upstreamModel: binding.upstreamModel || (binding.upstreamModels?.length === 1 ? binding.upstreamModels[0] : ""),
                 channelName: binding.channelName || "",
                 billingMode: binding.billingMode || "per_call",
-                ...(binding.credits == null ? {} : { credits: Math.max(0, Number(binding.credits) || 0) }),
+                ...(binding.credits == null ? {} : { credits: nonNegativeDecimal(binding.credits) }),
                 enabled: binding.enabled !== false,
                 limitOverrides: binding.limitOverrides || {},
             })) ?? null,

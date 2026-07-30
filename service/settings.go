@@ -62,14 +62,17 @@ func migrateLegacyGenerationCosts(settings *model.Settings) {
 	for _, cost := range settings.Public.ModelChannel.ModelCosts {
 		configured[cost.Model] = true
 	}
-	legacy := map[string]int{}
+	legacy := map[string]model.Decimal{}
 	conflicts := map[string]bool{}
 	for _, binding := range settings.Private.GenerationProfiles {
 		if binding.LegacyCredits == nil || binding.UpstreamModel == "" || configured[binding.UpstreamModel] {
 			continue
 		}
-		credits := max(0, *binding.LegacyCredits)
-		if existing, ok := legacy[binding.UpstreamModel]; ok && existing != credits {
+		credits := *binding.LegacyCredits
+		if credits.IsNegative() {
+			credits = model.DecimalZero
+		}
+		if existing, ok := legacy[binding.UpstreamModel]; ok && !existing.Equal(credits) {
 			conflicts[binding.UpstreamModel] = true
 			continue
 		}
@@ -108,12 +111,12 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 	for i := range setting.ModelChannel.ModelCosts {
 		setting.ModelChannel.ModelCosts[i].Model = strings.TrimSpace(setting.ModelChannel.ModelCosts[i].Model)
 		setting.ModelChannel.ModelCosts[i].DisplayName = strings.TrimSpace(setting.ModelChannel.ModelCosts[i].DisplayName)
-		if setting.ModelChannel.ModelCosts[i].Credits < 0 {
-			setting.ModelChannel.ModelCosts[i].Credits = 0
+		if setting.ModelChannel.ModelCosts[i].Credits.IsNegative() {
+			setting.ModelChannel.ModelCosts[i].Credits = model.DecimalZero
 		}
 		for resolution, credits := range setting.ModelChannel.ModelCosts[i].ResolutionCredits {
-			if credits < 0 {
-				setting.ModelChannel.ModelCosts[i].ResolutionCredits[resolution] = 0
+			if credits.IsNegative() {
+				setting.ModelChannel.ModelCosts[i].ResolutionCredits[resolution] = model.DecimalZero
 			}
 		}
 	}
@@ -199,10 +202,10 @@ func DisplayModelName(modelNames ...string) string {
 	return ResolveModelDisplayName(public, modelNames...)
 }
 
-func ModelCost(modelName string) (int, error) {
+func ModelCost(modelName string) (model.Decimal, error) {
 	settings, err := repository.GetSettings()
 	if err != nil {
-		return 0, err
+		return model.DecimalZero, err
 	}
 	settings = normalizeSettings(settings)
 	modelName = strings.TrimSpace(modelName)
@@ -211,18 +214,24 @@ func ModelCost(modelName string) (int, error) {
 			return item.Credits, nil
 		}
 	}
-	legacyCost := -1
+	var legacyCost *model.Decimal
 	for _, binding := range settings.Private.GenerationProfiles {
 		if binding.UpstreamModel != modelName || binding.LegacyCredits == nil {
 			continue
 		}
-		credits := max(0, *binding.LegacyCredits)
-		if legacyCost >= 0 && legacyCost != credits {
-			return 0, fmt.Errorf("模型 %s 存在冲突的历史扣费，请在公开配置中设置统一算力点", modelName)
+		credits := *binding.LegacyCredits
+		if credits.IsNegative() {
+			credits = model.DecimalZero
 		}
-		legacyCost = credits
+		if legacyCost != nil && !legacyCost.Equal(credits) {
+			return model.DecimalZero, fmt.Errorf("模型 %s 存在冲突的历史扣费，请在公开配置中设置统一算力点", modelName)
+		}
+		legacyCost = &credits
 	}
-	return 0, nil
+	if legacyCost != nil {
+		return *legacyCost, nil
+	}
+	return model.DecimalZero, nil
 }
 
 func generationBindingModels(binding model.GenerationProfileBinding) []string {
@@ -314,7 +323,7 @@ func keepPrivateAuthSecrets(settings *model.Settings, saved model.Settings) {
 }
 
 func keepLegacyGenerationCredits(settings *model.Settings, saved model.Settings) {
-	legacy := map[string]*int{}
+	legacy := map[string]*model.Decimal{}
 	for _, binding := range saved.Private.GenerationProfiles {
 		legacy[binding.ID] = binding.LegacyCredits
 	}

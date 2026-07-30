@@ -110,7 +110,7 @@ func TestSucceededWithoutVideoURLFailsAndSettlesOnce(t *testing.T) {
 		t.Fatalf("stored=%#v err=%v", stored, err)
 	}
 	user, ok, err := repository.GetUserByID(task.UserID)
-	if err != nil || !ok || user.Credits != task.Credits {
+	if err != nil || !ok || !user.Credits.Equal(task.Credits) {
 		t.Fatalf("user=%#v ok=%v err=%v", user, ok, err)
 	}
 	logs, _, err := repository.ListCreditLogsByUserID(task.UserID, model.Query{PageSize: 20})
@@ -150,7 +150,7 @@ func TestSucceededWithMissingPersistedFileIDFailsAndSettlesOnce(t *testing.T) {
 		t.Fatalf("stored=%#v err=%v", stored, err)
 	}
 	user, ok, err := repository.GetUserByID(task.UserID)
-	if err != nil || !ok || user.Credits != task.Credits {
+	if err != nil || !ok || !user.Credits.Equal(task.Credits) {
 		t.Fatalf("user=%#v ok=%v err=%v", user, ok, err)
 	}
 }
@@ -353,17 +353,17 @@ func useLifecycleTestAdapter(profile model.GenerationProfile, adapter lifecycleF
 	}
 }
 
-func createLifecycleTask(t *testing.T, profile model.GenerationProfile, status model.TaskStatus, upstreamID string, credits int) model.GenerationTask {
+func createLifecycleTask(t *testing.T, profile model.GenerationProfile, status model.TaskStatus, upstreamID string, credits int64) model.GenerationTask {
 	t.Helper()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	userID := "lifecycle-user-" + uuid.NewString()
 	if credits > 0 {
-		if _, err := repository.SaveUser(model.User{ID: userID, Username: "lifecycle-" + uuid.NewString(), AffCode: "aff-" + uuid.NewString(), Role: model.UserRoleUser, Credits: 0, CreatedAt: now, UpdatedAt: now}); err != nil {
+		if _, err := repository.SaveUser(model.User{ID: userID, Username: "lifecycle-" + uuid.NewString(), AffCode: "aff-" + uuid.NewString(), Role: model.UserRoleUser, Credits: credit(0), CreatedAt: now, UpdatedAt: now}); err != nil {
 			t.Fatalf("save user: %v", err)
 		}
 	}
 	task := model.GenerationTask{
-		ID: "lifecycle-task-" + uuid.NewString(), UserID: userID, TaskType: model.TaskTypeVideo, Status: status, Credits: credits,
+		ID: "lifecycle-task-" + uuid.NewString(), UserID: userID, TaskType: model.TaskTypeVideo, Status: status, Credits: credit(credits),
 		ModelProfileID: profile.ID, AdapterKey: profile.AdapterKey, UpstreamModel: profile.UpstreamModel, UpstreamTaskID: upstreamID,
 		CallbackToken: "callback-" + uuid.NewString(), IntentKind: string(model.IntentVideoGenerate), CreatedAt: now, UpdatedAt: now,
 	}

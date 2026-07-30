@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPost, compactApiParams } from "@/services/api/request";
+import type { DecimalValue } from "@/lib/decimal";
 import type { Prompt, PromptListResponse } from "@/services/api/prompts";
 
 export type AdminPromptCategory = {
@@ -17,7 +18,7 @@ export type AdminUser = {
     displayName: string;
     avatarUrl: string;
     role: "user" | "admin";
-    credits: number;
+    credits: DecimalValue;
     affCode: string;
     affCount: number;
     inviterId: string;
@@ -43,8 +44,8 @@ export type AdminEnterprise = {
     ownerId: string;
     ownerName: string;
     ownerStatus: "active" | "ban";
-    ownerCredits: number;
-    discountRate: number;
+    ownerCredits: DecimalValue;
+    discountRate: DecimalValue;
     memberCount: number;
     createdAt: string;
     updatedAt: string;
@@ -66,8 +67,8 @@ export type AdminCreditLog = {
     id: string;
     userId: string;
     type: string;
-    amount: number;
-    balance: number;
+    amount: DecimalValue;
+    balance: DecimalValue;
     relatedId: string;
     remark: string;
     extra: string;
@@ -102,7 +103,7 @@ export async function setAdminEnterpriseStatus(token: string, id: string, status
     return apiPost<AdminEnterprise>(`/api/admin/enterprises/${encodeURIComponent(id)}/status`, { status }, token);
 }
 
-export async function setAdminEnterpriseDiscountRate(token: string, id: string, discountRate: number) {
+export async function setAdminEnterpriseDiscountRate(token: string, id: string, discountRate: DecimalValue) {
     return apiPost<AdminEnterprise>(`/api/admin/enterprises/${encodeURIComponent(id)}/discount-rate`, { discountRate }, token);
 }
 
@@ -114,7 +115,7 @@ export async function resetAdminEnterpriseOwnerPassword(token: string, id: strin
     return apiPost<AdminEnterprise>(`/api/admin/enterprises/${encodeURIComponent(id)}/owner/password`, { password }, token);
 }
 
-export async function adjustAdminEnterpriseCredits(token: string, id: string, delta: number, reason: string) {
+export async function adjustAdminEnterpriseCredits(token: string, id: string, delta: DecimalValue, reason: string) {
     return apiPost<AdminEnterprise>(`/api/admin/enterprises/${encodeURIComponent(id)}/credits`, { delta, reason }, token);
 }
 
@@ -122,7 +123,7 @@ export async function saveAdminUser(token: string, user: Partial<AdminUser> & { 
     return apiPost<AdminUser>("/api/admin/users", user, token);
 }
 
-export async function adjustAdminUserCredits(token: string, id: string, credits: number) {
+export async function adjustAdminUserCredits(token: string, id: string, credits: DecimalValue) {
     return apiPost<AdminUser>(`/api/admin/users/${encodeURIComponent(id)}/credits`, { credits }, token);
 }
 
@@ -153,10 +154,10 @@ export type AdminGenerationTask = {
     model: string;
     modelDisplayName?: string;
     status: string;
-    credits: number;
-    upstreamCredits: number | null;
+    credits: DecimalValue;
+    upstreamCredits: DecimalValue | null;
     billingMode?: "per_credit" | "per_second" | "per_call";
-    billingRate?: number;
+    billingRate?: DecimalValue;
     latencyMs: number;
     upstreamTaskId: string;
     traceId: string;
@@ -310,8 +311,8 @@ export type AdminPublicModelChannelSettings = {
 export type AdminModelCost = {
     model: string;
     displayName?: string;
-    credits: number;
-    resolutionCredits?: Record<string, number>;
+    credits: DecimalValue;
+    resolutionCredits?: Record<string, DecimalValue>;
 };
 
 export type AdminPublicSettings = {
@@ -332,7 +333,7 @@ export type AdminGenerationProfileBinding = {
     channelName: string;
     billingMode: "per_credit" | "per_second" | "per_call";
     /** @deprecated Retained only for rollback-compatible settings round trips. */
-    credits?: number;
+    credits?: DecimalValue;
     enabled: boolean;
     limitOverrides: { durationSecondsMax?: number; resolutionValues?: string[] };
 };

@@ -386,7 +386,7 @@ export default function ImagePage() {
                         provider: "openai",
                         model: log.model || "unknown",
                         status,
-                        credits: 0,
+                        credits: "0",
                         latencyMs: log.durationMs,
                         upstreamTaskId: dedupeId,
                         source: "image_workbench",

@@ -9,8 +9,8 @@ import (
 
 type generationBillingPlan struct {
 	Mode    model.GenerationBillingMode
-	Rate    int
-	Credits int
+	Rate    model.Decimal
+	Credits model.Decimal
 }
 
 func generationBillingPlanFor(profile model.GenerationProfile, intent model.GenerationIntent) (generationBillingPlan, error) {
@@ -29,7 +29,10 @@ func generationBillingPlanFor(profile model.GenerationProfile, intent model.Gene
 		}
 		if binding.BillingMode == model.BillingModePerSecond {
 			resolution, _ := intent.Settings["resolution"].(string)
-			rate := max(0, cost.ResolutionCredits[resolution])
+			rate := cost.ResolutionCredits[resolution]
+			if rate.IsNegative() {
+				rate = model.DecimalZero
+			}
 			duration, ok := scalarInteger(intent.Settings["durationSeconds"])
 			if !ok || duration <= 0 {
 				if definition, exists := profile.Capabilities.Settings["durationSeconds"]; exists && definition.Max != nil {
@@ -38,12 +41,13 @@ func generationBillingPlanFor(profile model.GenerationProfile, intent model.Gene
 					duration = 0
 				}
 			}
-			return generationBillingPlan{Mode: binding.BillingMode, Rate: rate, Credits: rate * duration}, nil
+			return generationBillingPlan{Mode: binding.BillingMode, Rate: rate, Credits: rate.Mul(model.NewDecimal(int64(duration)))}, nil
 		}
 		if binding.BillingMode == model.BillingModePerCredit {
-			return generationBillingPlan{Mode: binding.BillingMode, Rate: max(0, cost.Credits)}, nil
+			return generationBillingPlan{Mode: binding.BillingMode, Rate: nonNegativeDecimal(cost.Credits)}, nil
 		}
-		return generationBillingPlan{Mode: model.BillingModePerCall, Rate: max(0, cost.Credits), Credits: max(0, cost.Credits)}, nil
+		credits := nonNegativeDecimal(cost.Credits)
+		return generationBillingPlan{Mode: model.BillingModePerCall, Rate: credits, Credits: credits}, nil
 	}
 	credits, err := generationCost(profile.UpstreamModel)
 	return generationBillingPlan{Mode: model.BillingModePerCall, Rate: credits, Credits: credits}, err
@@ -73,9 +77,16 @@ func chargeGenerationByUpstreamCredits(task model.GenerationTask, ref ProviderTa
 	if task.BillingMode != model.BillingModePerCredit {
 		return task, nil
 	}
-	upstreamCredits := 0
+	upstreamCredits := model.DecimalZero
 	if ref.Credits != nil {
-		upstreamCredits = max(0, *ref.Credits)
+		upstreamCredits = nonNegativeDecimal(*ref.Credits)
 	}
-	return repository.ChargeGenerationTask(task.ID, upstreamCredits*max(0, task.BillingRate), ref.Credits, path, DisplayModelName(task.ModelProfileID, task.Model))
+	return repository.ChargeGenerationTask(task.ID, upstreamCredits.Mul(nonNegativeDecimal(task.BillingRate)), ref.Credits, path, DisplayModelName(task.ModelProfileID, task.Model))
+}
+
+func nonNegativeDecimal(value model.Decimal) model.Decimal {
+	if value.IsNegative() {
+		return model.DecimalZero
+	}
+	return value
 }

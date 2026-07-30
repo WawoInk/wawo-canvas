@@ -7,6 +7,7 @@ import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 
 import type { AdminGenerationTask, AdminGenerationTaskDetailResponse } from "@/services/api/admin";
+import { compareDecimal, formatDecimal } from "@/lib/decimal";
 import { generationTaskStatus } from "./generation-task-status";
 import { useAdminGenerationTasks } from "./use-admin-generation-tasks";
 
@@ -118,7 +119,7 @@ export default function AdminGenerationTasksPage() {
             title: "扣费",
             dataIndex: "credits",
             width: 80,
-            render: (_, item) => <Typography.Text type={item.credits > 0 ? "danger" : "secondary"}>{item.credits > 0 ? `-${item.credits}` : item.credits}</Typography.Text>,
+            render: (_, item) => <Typography.Text type={compareDecimal(item.credits, "0") > 0 ? "danger" : "secondary"}>{compareDecimal(item.credits, "0") > 0 ? `-${formatDecimal(item.credits)}` : formatDecimal(item.credits)}</Typography.Text>,
         },
         {
             title: "上游 Credits",

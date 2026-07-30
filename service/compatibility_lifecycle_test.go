@@ -44,9 +44,9 @@ func TestLegacyViduPollingRecordsUpstreamCreditsIncludingNull(t *testing.T) {
 	for _, testCase := range []struct {
 		name            string
 		response        string
-		upstreamCredits *int
+		upstreamCredits *model.Decimal
 	}{
-		{name: "credits", response: `{"id":"vidu-upstream","model":"vidu_hq_t2v-oversea(文生视频)","status":"succeeded","credits":18}`, upstreamCredits: func() *int { value := 18; return &value }()},
+		{name: "credits", response: `{"id":"vidu-upstream","model":"vidu_hq_t2v-oversea(文生视频)","status":"succeeded","credits":18}`, upstreamCredits: func() *model.Decimal { value := credit(18); return &value }()},
 		{name: "null", response: `{"id":"vidu-upstream","model":"vidu_hq_t2v-oversea(文生视频)","status":"succeeded"}`},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -72,8 +72,8 @@ func TestLegacyViduPollingRecordsUpstreamCreditsIncludingNull(t *testing.T) {
 				if stored.UpstreamCredits != nil {
 					t.Fatalf("upstream credits = %v, want nil", *stored.UpstreamCredits)
 				}
-			} else if stored.UpstreamCredits == nil || *stored.UpstreamCredits != *testCase.upstreamCredits {
-				t.Fatalf("upstream credits = %#v, want %d", stored.UpstreamCredits, *testCase.upstreamCredits)
+			} else if stored.UpstreamCredits == nil || !stored.UpstreamCredits.Equal(*testCase.upstreamCredits) {
+				t.Fatalf("upstream credits = %#v, want %s", stored.UpstreamCredits, testCase.upstreamCredits.String())
 			}
 			payload, err := repository.GetGenerationPayloadByTaskID(task.ID)
 			if err != nil {
@@ -84,7 +84,7 @@ func TestLegacyViduPollingRecordsUpstreamCreditsIncludingNull(t *testing.T) {
 				t.Fatalf("unmarshal response body: %v", err)
 			}
 			credits, ok := audit["credits"]
-			if !ok || (testCase.upstreamCredits == nil && credits != nil) || (testCase.upstreamCredits != nil && credits != float64(*testCase.upstreamCredits)) {
+			if !ok || (testCase.upstreamCredits == nil && credits != nil) || (testCase.upstreamCredits != nil && credits != float64(18)) {
 				t.Fatalf("logged credits = %#v, present=%t", credits, ok)
 			}
 		})

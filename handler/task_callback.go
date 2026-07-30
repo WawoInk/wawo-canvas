@@ -28,9 +28,9 @@ func HandleTaskCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		ID      string `json:"id"`
-		Status  string `json:"status"`
-		Credits *int   `json:"credits"`
+		ID      string         `json:"id"`
+		Status  string         `json:"status"`
+		Credits *model.Decimal `json:"credits"`
 		Error   *struct {
 			Code    string `json:"code"`
 			Message string `json:"message"`

@@ -19,21 +19,21 @@ import (
 )
 
 type enterpriseView struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	Status       string  `json:"status"`
-	OwnerID      string  `json:"ownerId"`
-	OwnerName    string  `json:"ownerName"`
-	OwnerStatus  string  `json:"ownerStatus"`
-	MemberCount  int     `json:"memberCount"`
-	OwnerCredits int     `json:"ownerCredits"`
-	DiscountRate float64 `json:"discountRate"`
+	ID           string        `json:"id"`
+	Name         string        `json:"name"`
+	Status       string        `json:"status"`
+	OwnerID      string        `json:"ownerId"`
+	OwnerName    string        `json:"ownerName"`
+	OwnerStatus  string        `json:"ownerStatus"`
+	MemberCount  int           `json:"memberCount"`
+	OwnerCredits model.Decimal `json:"ownerCredits"`
+	DiscountRate model.Decimal `json:"discountRate"`
 }
 
 type enterpriseSummaryView struct {
-	ID           string  `json:"id"`
-	Role         string  `json:"role"`
-	DiscountRate float64 `json:"discountRate"`
+	ID           string        `json:"id"`
+	Role         string        `json:"role"`
+	DiscountRate model.Decimal `json:"discountRate"`
 }
 
 func TestEnterpriseOwnerIsEnforcedByDatabase(t *testing.T) {
@@ -95,7 +95,7 @@ func TestAdminCreatesEnterpriseAndOwnerThroughHTTP(t *testing.T) {
 	if created.Code != 0 || created.Data.ID == "" || created.Data.Name != "测试企业 A" || created.Data.Status != "active" {
 		t.Fatalf("create enterprise response = %#v", created)
 	}
-	if created.Data.OwnerID == "" || created.Data.OwnerName != ownerUsername || created.Data.OwnerStatus != "active" || created.Data.MemberCount != 0 || created.Data.OwnerCredits != 0 {
+	if created.Data.OwnerID == "" || created.Data.OwnerName != ownerUsername || created.Data.OwnerStatus != "active" || created.Data.MemberCount != 0 || !created.Data.OwnerCredits.IsZero() {
 		t.Fatalf("create owner response = %#v", created.Data)
 	}
 	owner := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerUsername, "password": "owner-test-password"})
@@ -120,7 +120,7 @@ func TestAdminSetsEnterpriseDiscountRateAndOwnerSeesIt(t *testing.T) {
 	enterprise := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises", admin.Data.Token, map[string]string{
 		"name": "折扣企业", "ownerUsername": ownerUsername, "ownerPassword": "owner-password",
 	})
-	if enterprise.Code != 0 || enterprise.Data.DiscountRate != 1 {
+	if enterprise.Code != 0 || !hasCredit(enterprise.Data.DiscountRate, 1) {
 		t.Fatalf("default discount rate = %#v", enterprise)
 	}
 
@@ -132,12 +132,12 @@ func TestAdminSetsEnterpriseDiscountRateAndOwnerSeesIt(t *testing.T) {
 	}
 
 	updated := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/discount-rate", admin.Data.Token, map[string]float64{"discountRate": 0.5})
-	if updated.Code != 0 || updated.Data.DiscountRate != 0.5 {
+	if updated.Code != 0 || !updated.Data.DiscountRate.Equal(fractionalCredit("0.5")) {
 		t.Fatalf("updated discount rate = %#v", updated)
 	}
 	owner := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerUsername, "password": "owner-password"})
 	summary := doJSON[enterpriseSummaryView](t, http.MethodGet, server.URL+"/api/v1/enterprise/summary", owner.Data.Token, nil)
-	if summary.Code != 0 || summary.Data.ID != enterprise.Data.ID || summary.Data.Role != string(model.EnterpriseRoleOwner) || summary.Data.DiscountRate != 0.5 {
+	if summary.Code != 0 || summary.Data.ID != enterprise.Data.ID || summary.Data.Role != string(model.EnterpriseRoleOwner) || !summary.Data.DiscountRate.Equal(fractionalCredit("0.5")) {
 		t.Fatalf("enterprise summary = %#v", summary)
 	}
 }
@@ -258,7 +258,7 @@ type enterpriseMember struct {
 	DisplayName    string               `json:"displayName"`
 	Email          string               `json:"email"`
 	Status         model.UserStatus     `json:"status"`
-	Credits        int                  `json:"credits"`
+	Credits        model.Decimal        `json:"credits"`
 	Role           model.UserRole       `json:"role"`
 	EnterpriseID   string               `json:"enterpriseId"`
 	EnterpriseRole model.EnterpriseRole `json:"enterpriseRole"`
@@ -272,16 +272,16 @@ type enterpriseMemberList struct {
 type enterpriseCreditTransfer struct {
 	RequestID    string           `json:"requestId"`
 	Action       string           `json:"action"`
-	Amount       int              `json:"amount"`
-	OwnerCredits int              `json:"ownerCredits"`
+	Amount       model.Decimal    `json:"amount"`
+	OwnerCredits model.Decimal    `json:"ownerCredits"`
 	Member       enterpriseMember `json:"member"`
 }
 
 type enterpriseCreditLog struct {
 	UserID         string              `gorm:"column:user_id"`
 	Type           model.CreditLogType `gorm:"column:type"`
-	Amount         int                 `gorm:"column:amount"`
-	Balance        int                 `gorm:"column:balance"`
+	Amount         model.Decimal       `gorm:"column:amount"`
+	Balance        model.Decimal       `gorm:"column:balance"`
 	RelatedID      string              `gorm:"column:related_id"`
 	CounterpartyID string              `gorm:"column:counterparty_id"`
 }
@@ -293,8 +293,8 @@ type enterpriseCreditLogView struct {
 	DisplayName    string              `json:"displayName"`
 	TaskID         string              `json:"taskId"`
 	Type           model.CreditLogType `json:"type"`
-	Amount         int                 `json:"amount"`
-	Balance        int                 `json:"balance"`
+	Amount         model.Decimal       `json:"amount"`
+	Balance        model.Decimal       `json:"balance"`
 	RelatedID      string              `json:"relatedId"`
 	CounterpartyID string              `json:"counterpartyId"`
 	Remark         string              `json:"remark"`
@@ -334,7 +334,7 @@ func TestEnterpriseOwnerCreatesAndListsMembersThroughHTTP(t *testing.T) {
 	if created.Code != 0 || created.Data.ID == "" || created.Data.Username != memberUsername || created.Data.DisplayName != "新成员" || created.Data.Email != "member@example.com" {
 		t.Fatalf("create member response = %#v", created)
 	}
-	if created.Data.EnterpriseID != enterprise.ID || created.Data.EnterpriseRole != model.EnterpriseRoleMember || created.Data.Role != model.UserRoleUser || created.Data.Status != model.UserStatusActive || created.Data.Credits != 0 {
+	if created.Data.EnterpriseID != enterprise.ID || created.Data.EnterpriseRole != model.EnterpriseRoleMember || created.Data.Role != model.UserRoleUser || created.Data.Status != model.UserStatusActive || !created.Data.Credits.IsZero() {
 		t.Fatalf("server-controlled member fields = %#v", created.Data)
 	}
 
@@ -343,7 +343,7 @@ func TestEnterpriseOwnerCreatesAndListsMembersThroughHTTP(t *testing.T) {
 		t.Fatalf("member list response = %#v", listed)
 	}
 	login := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": memberUsername, "password": "member-password"})
-	if login.Code != 0 || login.Data.User.ID != created.Data.ID || login.Data.User.EnterpriseRole != model.EnterpriseRoleMember || login.Data.User.Credits != 0 {
+	if login.Code != 0 || login.Data.User.ID != created.Data.ID || login.Data.User.EnterpriseRole != model.EnterpriseRoleMember || !login.Data.User.Credits.IsZero() {
 		t.Fatalf("member login response = %#v", login)
 	}
 }
@@ -481,7 +481,7 @@ func TestEnterpriseOwnerAllocatesAndReclaimsMemberCreditsThroughHTTP(t *testing.
 	if err != nil {
 		t.Fatalf("create enterprise: %v", err)
 	}
-	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "transfer-test-admin", 100, "测试充值"); err != nil {
+	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "transfer-test-admin", credit(100), "测试充值"); err != nil {
 		t.Fatalf("fund owner: %v", err)
 	}
 	server := httptest.NewServer(router.New())
@@ -495,25 +495,25 @@ func TestEnterpriseOwnerAllocatesAndReclaimsMemberCreditsThroughHTTP(t *testing.
 	secondAllocate := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 10, "requestId": secondAllocateID})
 	reclaimID := "reclaim-" + uuid.NewString()
 	reclaim := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "reclaim", "amount": 25, "requestId": reclaimID})
-	if allocate.Code != 0 || allocate.Data.OwnerCredits != 60 || allocate.Data.Member.Credits != 40 || allocate.Data.RequestID != allocateID || allocate.Data.Action != "allocate" || allocate.Data.Amount != 40 {
+	if allocate.Code != 0 || !hasCredit(allocate.Data.OwnerCredits, 60) || !hasCredit(allocate.Data.Member.Credits, 40) || allocate.Data.RequestID != allocateID || allocate.Data.Action != "allocate" || !hasCredit(allocate.Data.Amount, 40) {
 		t.Fatalf("allocate response = %#v", allocate)
 	}
-	if duplicate.Code != 0 || duplicate.Data.OwnerCredits != 60 || duplicate.Data.Member.Credits != 40 {
+	if duplicate.Code != 0 || !hasCredit(duplicate.Data.OwnerCredits, 60) || !hasCredit(duplicate.Data.Member.Credits, 40) {
 		t.Fatalf("duplicate response = %#v", duplicate)
 	}
-	if secondAllocate.Code != 0 || secondAllocate.Data.OwnerCredits != 50 || secondAllocate.Data.Member.Credits != 50 {
+	if secondAllocate.Code != 0 || !hasCredit(secondAllocate.Data.OwnerCredits, 50) || !hasCredit(secondAllocate.Data.Member.Credits, 50) {
 		t.Fatalf("second allocation response = %#v", secondAllocate)
 	}
-	if reclaim.Code != 0 || reclaim.Data.OwnerCredits != 75 || reclaim.Data.Member.Credits != 25 || reclaim.Data.RequestID != reclaimID || reclaim.Data.Action != "reclaim" || reclaim.Data.Amount != 25 {
+	if reclaim.Code != 0 || !hasCredit(reclaim.Data.OwnerCredits, 75) || !hasCredit(reclaim.Data.Member.Credits, 25) || reclaim.Data.RequestID != reclaimID || reclaim.Data.Action != "reclaim" || !hasCredit(reclaim.Data.Amount, 25) {
 		t.Fatalf("reclaim response = %#v", reclaim)
 	}
 
 	storedOwner, ownerOK, err := repository.GetUserByID(owner.Data.User.ID)
-	if err != nil || !ownerOK || storedOwner.Credits != 75 {
+	if err != nil || !ownerOK || !hasCredit(storedOwner.Credits, 75) {
 		t.Fatalf("stored owner = %#v ok=%v err=%v", storedOwner, ownerOK, err)
 	}
 	storedMember, memberOK, err := repository.GetUserByID(member.Data.ID)
-	if err != nil || !memberOK || storedMember.Credits != 25 {
+	if err != nil || !memberOK || !hasCredit(storedMember.Credits, 25) {
 		t.Fatalf("stored member = %#v ok=%v err=%v", storedMember, memberOK, err)
 	}
 	db, err := repository.DB()
@@ -528,15 +528,49 @@ func TestEnterpriseOwnerAllocatesAndReclaimsMemberCreditsThroughHTTP(t *testing.
 		t.Fatalf("transfer logs = %#v", logs)
 	}
 	for _, log := range logs {
-		if log.RelatedID == allocateID && ((log.UserID == owner.Data.User.ID && (log.Amount != -40 || log.Balance != 60 || log.CounterpartyID != member.Data.ID)) || (log.UserID == member.Data.ID && (log.Amount != 40 || log.Balance != 40 || log.CounterpartyID != owner.Data.User.ID))) {
+		if log.RelatedID == allocateID && ((log.UserID == owner.Data.User.ID && (!hasCredit(log.Amount, -40) || !hasCredit(log.Balance, 60) || log.CounterpartyID != member.Data.ID)) || (log.UserID == member.Data.ID && (!hasCredit(log.Amount, 40) || !hasCredit(log.Balance, 40) || log.CounterpartyID != owner.Data.User.ID))) {
 			t.Fatalf("allocate log = %#v", log)
 		}
-		if log.RelatedID == secondAllocateID && ((log.UserID == owner.Data.User.ID && (log.Amount != -10 || log.Balance != 50 || log.CounterpartyID != member.Data.ID)) || (log.UserID == member.Data.ID && (log.Amount != 10 || log.Balance != 50 || log.CounterpartyID != owner.Data.User.ID))) {
+		if log.RelatedID == secondAllocateID && ((log.UserID == owner.Data.User.ID && (!hasCredit(log.Amount, -10) || !hasCredit(log.Balance, 50) || log.CounterpartyID != member.Data.ID)) || (log.UserID == member.Data.ID && (!hasCredit(log.Amount, 10) || !hasCredit(log.Balance, 50) || log.CounterpartyID != owner.Data.User.ID))) {
 			t.Fatalf("second allocate log = %#v", log)
 		}
-		if log.RelatedID == reclaimID && ((log.UserID == owner.Data.User.ID && (log.Amount != 25 || log.Balance != 75 || log.CounterpartyID != member.Data.ID)) || (log.UserID == member.Data.ID && (log.Amount != -25 || log.Balance != 25 || log.CounterpartyID != owner.Data.User.ID))) {
+		if log.RelatedID == reclaimID && ((log.UserID == owner.Data.User.ID && (!hasCredit(log.Amount, 25) || !hasCredit(log.Balance, 75) || log.CounterpartyID != member.Data.ID)) || (log.UserID == member.Data.ID && (!hasCredit(log.Amount, -25) || !hasCredit(log.Balance, 25) || log.CounterpartyID != owner.Data.User.ID))) {
 			t.Fatalf("reclaim log = %#v", log)
 		}
+	}
+}
+
+func TestEnterpriseOwnerTransfersFractionalCreditsThroughHTTP(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "enterprise-fractional-transfer-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	ownerUsername := "fractional-transfer-owner-" + uuid.NewString()
+	enterprise, err := service.CreateEnterprise(service.CreateEnterpriseInput{Name: "小数积分划拨企业", OwnerUsername: ownerUsername, OwnerPassword: "owner-password"})
+	if err != nil {
+		t.Fatalf("create enterprise: %v", err)
+	}
+	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "fractional-transfer-admin", fractionalCredit("1.5"), "测试充值"); err != nil {
+		t.Fatalf("fund owner: %v", err)
+	}
+
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	owner := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerUsername, "password": "owner-password"})
+	member := doJSON[enterpriseMember](t, http.MethodPost, server.URL+"/api/v1/enterprise/members", owner.Data.Token, map[string]string{"username": "fractional-transfer-member-" + uuid.NewString(), "password": "member-password"})
+
+	allocate := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{
+		"action": "allocate", "amount": "0.5", "requestId": "fractional-allocate-" + uuid.NewString(),
+	})
+	if allocate.Code != 0 || !allocate.Data.Amount.Equal(fractionalCredit("0.5")) || !hasCredit(allocate.Data.OwnerCredits, 1) || !allocate.Data.Member.Credits.Equal(fractionalCredit("0.5")) {
+		t.Fatalf("fractional allocation = %#v", allocate)
+	}
+
+	reclaim := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{
+		"action": "reclaim", "amount": "0.25", "requestId": "fractional-reclaim-" + uuid.NewString(),
+	})
+	if reclaim.Code != 0 || !reclaim.Data.Amount.Equal(fractionalCredit("0.25")) || !reclaim.Data.OwnerCredits.Equal(fractionalCredit("1.25")) || !reclaim.Data.Member.Credits.Equal(fractionalCredit("0.25")) {
+		t.Fatalf("fractional reclaim = %#v", reclaim)
 	}
 }
 
@@ -550,25 +584,25 @@ func TestEnterpriseOwnerListsEnterpriseCreditLogsThroughHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create enterprise: %v", err)
 	}
-	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "ledger-admin", 100, "平台充值"); err != nil {
+	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "ledger-admin", credit(100), "平台充值"); err != nil {
 		t.Fatalf("fund owner: %v", err)
 	}
 	otherEnterprise, err := service.CreateEnterprise(service.CreateEnterpriseInput{Name: "其他企业流水", OwnerUsername: "ledger-other-owner-" + uuid.NewString(), OwnerPassword: "owner-password"})
 	if err != nil {
 		t.Fatalf("create other enterprise: %v", err)
 	}
-	if _, err := service.AdjustEnterpriseOwnerCredits(otherEnterprise.ID, "ledger-other-admin", 20, "外部企业流水"); err != nil {
+	if _, err := service.AdjustEnterpriseOwnerCredits(otherEnterprise.ID, "ledger-other-admin", credit(20), "外部企业流水"); err != nil {
 		t.Fatalf("fund other owner: %v", err)
 	}
 	for _, user := range []model.User{
-		{Username: "ledger-personal-" + uuid.NewString(), Credits: 10},
-		{Username: "ledger-admin-" + uuid.NewString(), Role: model.UserRoleAdmin, Credits: 10},
+		{Username: "ledger-personal-" + uuid.NewString(), Credits: credit(10)},
+		{Username: "ledger-admin-" + uuid.NewString(), Role: model.UserRoleAdmin, Credits: credit(10)},
 	} {
 		created, err := service.SaveUser(user, "outside-password")
 		if err != nil {
 			t.Fatalf("create outside user: %v", err)
 		}
-		if err := service.ConsumeUserCreditsWithTask(created.ID, "outside-ledger-model", 1, "/api/v1/images/generations", "outside-ledger-"+uuid.NewString()); err != nil {
+		if err := service.ConsumeUserCreditsWithTask(created.ID, "outside-ledger-model", credit(1), "/api/v1/images/generations", "outside-ledger-"+uuid.NewString()); err != nil {
 			t.Fatalf("charge outside user: %v", err)
 		}
 	}
@@ -585,10 +619,10 @@ func TestEnterpriseOwnerListsEnterpriseCreditLogsThroughHTTP(t *testing.T) {
 		t.Fatalf("allocate credits = %#v", allocate)
 	}
 	taskID := "ledger-task-" + uuid.NewString()
-	if err := service.ConsumeUserCreditsWithTask(member.Data.ID, "ledger-model", 5, "/api/v1/images/generations", taskID); err != nil {
+	if err := service.ConsumeUserCreditsWithTask(member.Data.ID, "ledger-model", credit(5), "/api/v1/images/generations", taskID); err != nil {
 		t.Fatalf("consume member credits: %v", err)
 	}
-	if err := service.RefundUserCreditsWithTask(member.Data.ID, "ledger-model", 5, "/api/v1/images/generations", taskID); err != nil {
+	if err := service.RefundUserCreditsWithTask(member.Data.ID, "ledger-model", credit(5), "/api/v1/images/generations", taskID); err != nil {
 		t.Fatalf("refund member credits: %v", err)
 	}
 	reclaimID := "ledger-reclaim-" + uuid.NewString()
@@ -606,7 +640,7 @@ func TestEnterpriseOwnerListsEnterpriseCreditLogsThroughHTTP(t *testing.T) {
 	for _, log := range logs.Data.Items {
 		types[log.Type]++
 		if log.Type == model.CreditLogTypeAIConsume && log.UserID == member.Data.ID {
-			foundConsume = log.Username == memberUsername && log.DisplayName == "流水成员" && log.Amount == -5 && log.Balance == 35 && log.TaskID == taskID
+			foundConsume = log.Username == memberUsername && log.DisplayName == "流水成员" && hasCredit(log.Amount, -5) && hasCredit(log.Balance, 35) && log.TaskID == taskID
 		}
 	}
 	if !foundConsume || types[model.CreditLogTypeAdminAdjust] != 1 || types[model.CreditLogTypeEnterpriseAllocate] != 2 || types[model.CreditLogTypeEnterpriseReclaim] != 2 || types[model.CreditLogTypeAIConsume] != 1 || types[model.CreditLogTypeAIRefund] != 1 {
@@ -652,7 +686,7 @@ func TestSavingStaleUserDoesNotOverwriteEnterpriseCreditTransfer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create enterprise: %v", err)
 	}
-	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "transfer-stale-admin", 100, "测试充值"); err != nil {
+	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "transfer-stale-admin", credit(100), "测试充值"); err != nil {
 		t.Fatalf("fund owner: %v", err)
 	}
 	server := httptest.NewServer(router.New())
@@ -664,7 +698,7 @@ func TestSavingStaleUserDoesNotOverwriteEnterpriseCreditTransfer(t *testing.T) {
 		t.Fatalf("read stale owner: ok=%v err=%v", ok, err)
 	}
 	transferred := doJSON[enterpriseCreditTransfer](t, http.MethodPost, server.URL+"/api/v1/enterprise/members/"+member.Data.ID+"/credits", owner.Data.Token, map[string]any{"action": "allocate", "amount": 40, "requestId": "stale-" + uuid.NewString()})
-	if transferred.Code != 0 || transferred.Data.OwnerCredits != 60 {
+	if transferred.Code != 0 || !hasCredit(transferred.Data.OwnerCredits, 60) {
 		t.Fatalf("transfer response = %#v", transferred)
 	}
 	staleOwner.LastLoginAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -672,8 +706,8 @@ func TestSavingStaleUserDoesNotOverwriteEnterpriseCreditTransfer(t *testing.T) {
 		t.Fatalf("save stale owner: %v", err)
 	}
 	storedOwner, _, _ := repository.GetUserByID(owner.Data.User.ID)
-	if storedOwner.Credits != 60 {
-		t.Fatalf("stale user save restored credits to %d", storedOwner.Credits)
+	if !hasCredit(storedOwner.Credits, 60) {
+		t.Fatalf("stale user save restored credits to %s", storedOwner.Credits.String())
 	}
 }
 
@@ -687,7 +721,7 @@ func TestEnterpriseCreditTransfersSerializeWithConcurrentTransfersAndGenerationC
 	if err != nil {
 		t.Fatalf("create enterprise: %v", err)
 	}
-	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "transfer-concurrency-admin", 50, "测试充值"); err != nil {
+	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "transfer-concurrency-admin", credit(50), "测试充值"); err != nil {
 		t.Fatalf("fund owner: %v", err)
 	}
 	server := httptest.NewServer(router.New())
@@ -739,16 +773,16 @@ func TestEnterpriseCreditTransfersSerializeWithConcurrentTransfersAndGenerationC
 	}
 
 	storedOwner, _, _ := repository.GetUserByID(owner.Data.User.ID)
-	memberTotal := 0
+	memberTotal := model.DecimalZero
 	for _, item := range members {
 		stored, _, err := repository.GetUserByID(item.ID)
-		if err != nil || stored.Credits < 0 {
+		if err != nil || stored.Credits.IsNegative() {
 			t.Fatalf("stored member = %#v err=%v", stored, err)
 		}
-		memberTotal += stored.Credits
+		memberTotal = memberTotal.Add(stored.Credits)
 	}
-	if storedOwner.Credits != 10 || memberTotal != 40 || storedOwner.Credits+memberTotal != 50 {
-		t.Fatalf("balances after parallel transfers = owner %d members %d", storedOwner.Credits, memberTotal)
+	if !hasCredit(storedOwner.Credits, 10) || !hasCredit(memberTotal, 40) || !hasCredit(storedOwner.Credits.Add(memberTotal), 50) {
+		t.Fatalf("balances after parallel transfers = owner %s members %s", storedOwner.Credits.String(), memberTotal.String())
 	}
 	db, err := repository.DB()
 	if err != nil {
@@ -759,10 +793,10 @@ func TestEnterpriseCreditTransfersSerializeWithConcurrentTransfersAndGenerationC
 		t.Fatalf("successful parallel transfer logs = %#v err=%v", successfulLogs, err)
 	}
 	for _, log := range successfulLogs {
-		if log.UserID == owner.Data.User.ID && (log.Amount != -40 || log.Balance != 10 || log.CounterpartyID != successfulMemberID) {
+		if log.UserID == owner.Data.User.ID && (!hasCredit(log.Amount, -40) || !hasCredit(log.Balance, 10) || log.CounterpartyID != successfulMemberID) {
 			t.Fatalf("successful owner log = %#v", log)
 		}
-		if log.UserID == successfulMemberID && (log.Amount != 40 || log.Balance != 40 || log.CounterpartyID != owner.Data.User.ID) {
+		if log.UserID == successfulMemberID && (!hasCredit(log.Amount, 40) || !hasCredit(log.Balance, 40) || log.CounterpartyID != owner.Data.User.ID) {
 			t.Fatalf("successful member log = %#v", log)
 		}
 	}
@@ -778,7 +812,7 @@ func TestEnterpriseCreditTransfersSerializeWithConcurrentTransfersAndGenerationC
 	start = make(chan struct{})
 	go func() {
 		<-start
-		chargeDone <- service.ConsumeUserCreditsWithTask(successfulMemberID, "并发模型", 20, "/api/v1/images/generations", taskID)
+		chargeDone <- service.ConsumeUserCreditsWithTask(successfulMemberID, "并发模型", credit(20), "/api/v1/images/generations", taskID)
 	}()
 	go func() {
 		<-start
@@ -806,12 +840,13 @@ func TestEnterpriseCreditTransfersSerializeWithConcurrentTransfersAndGenerationC
 	if otherMember.ID == successfulMemberID {
 		otherMember, _, _ = repository.GetUserByID(members[1].ID)
 	}
-	consumed := 0
+	consumed := model.DecimalZero
 	if chargeSucceeded {
-		consumed = 20
+		consumed = credit(20)
 	}
-	if storedOwner.Credits < 0 || chargedMember.Credits < 0 || otherMember.Credits < 0 || storedOwner.Credits+chargedMember.Credits+otherMember.Credits+consumed != 50 {
-		t.Fatalf("balances after charge race = owner %d member %d other %d consumed %d", storedOwner.Credits, chargedMember.Credits, otherMember.Credits, consumed)
+	total := storedOwner.Credits.Add(chargedMember.Credits).Add(otherMember.Credits).Add(consumed)
+	if storedOwner.Credits.IsNegative() || chargedMember.Credits.IsNegative() || otherMember.Credits.IsNegative() || !hasCredit(total, 50) {
+		t.Fatalf("balances after charge race = owner %s member %s other %s consumed %s", storedOwner.Credits.String(), chargedMember.Credits.String(), otherMember.Credits.String(), consumed.String())
 	}
 	var reclaimLogs, consumeLogs int64
 	_ = db.Model(&model.CreditLog{}).Where("related_id = ?", raceID).Count(&reclaimLogs).Error
@@ -834,7 +869,7 @@ func TestEnterpriseCreditTransferValidationInsufficientBalancesAndRollback(t *te
 	if err != nil {
 		t.Fatalf("create enterprise: %v", err)
 	}
-	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "transfer-rollback-admin", 30, "测试充值"); err != nil {
+	if _, err := service.AdjustEnterpriseOwnerCredits(enterprise.ID, "transfer-rollback-admin", credit(30), "测试充值"); err != nil {
 		t.Fatalf("fund owner: %v", err)
 	}
 	server := httptest.NewServer(router.New())
@@ -847,7 +882,7 @@ func TestEnterpriseCreditTransferValidationInsufficientBalancesAndRollback(t *te
 		message string
 	}{
 		{map[string]any{"action": "invalid", "amount": 1, "requestId": "invalid-" + uuid.NewString()}, "积分操作无效"},
-		{map[string]any{"action": "allocate", "amount": 0, "requestId": "zero-" + uuid.NewString()}, "积分数量必须为正整数"},
+		{map[string]any{"action": "allocate", "amount": 0, "requestId": "zero-" + uuid.NewString()}, "积分数量必须为正数"},
 		{map[string]any{"action": "allocate", "amount": 1, "requestId": ""}, "请求 ID 无效"},
 	}
 	for _, item := range invalid {
@@ -891,21 +926,21 @@ func TestEnterpriseCreditTransferValidationInsufficientBalancesAndRollback(t *te
 	storedMember, _, _ := repository.GetUserByID(member.Data.ID)
 	var logs int64
 	_ = db.Model(&model.CreditLog{}).Where("related_id IN ?", []string{allocateID, reclaimID, rollbackID}).Count(&logs).Error
-	if storedOwner.Credits != 30 || storedMember.Credits != 0 || logs != 0 {
-		t.Fatalf("failed transfers changed state = owner %d member %d logs %d", storedOwner.Credits, storedMember.Credits, logs)
+	if !hasCredit(storedOwner.Credits, 30) || !storedMember.Credits.IsZero() || logs != 0 {
+		t.Fatalf("failed transfers changed state = owner %s member %s logs %d", storedOwner.Credits.String(), storedMember.Credits.String(), logs)
 	}
 	if err := db.Model(&model.User{}).Where("id = ?", member.Data.ID).Update("credits", -1).Error; err == nil {
 		t.Fatal("database accepted a negative balance")
 	}
 	storedMember, _, _ = repository.GetUserByID(member.Data.ID)
-	if storedMember.Credits != 0 {
+	if !storedMember.Credits.IsZero() {
 		t.Fatalf("negative update changed member = %#v", storedMember)
 	}
 }
 
 func TestGenerationCreditChargeRollsBackWhenLedgerWriteFails(t *testing.T) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	user := model.User{ID: "transfer-charge-rollback-user-" + uuid.NewString(), Username: "transfer-charge-rollback-" + uuid.NewString(), AffCode: "aff-" + uuid.NewString(), Role: model.UserRoleUser, Credits: 20, CreatedAt: now, UpdatedAt: now}
+	user := model.User{ID: "transfer-charge-rollback-user-" + uuid.NewString(), Username: "transfer-charge-rollback-" + uuid.NewString(), AffCode: "aff-" + uuid.NewString(), Role: model.UserRoleUser, Credits: credit(20), CreatedAt: now, UpdatedAt: now}
 	if _, err := repository.SaveUser(user); err != nil {
 		t.Fatalf("create charged user: %v", err)
 	}
@@ -927,33 +962,33 @@ func TestGenerationCreditChargeRollsBackWhenLedgerWriteFails(t *testing.T) {
 		_ = db.Exec("DROP TRIGGER IF EXISTS " + triggerName + " ON credit_logs").Error
 		_ = db.Exec("DROP FUNCTION IF EXISTS " + functionName + "()").Error
 	})
-	if err := service.ConsumeUserCreditsWithTask(user.ID, "回滚模型", 5, "/api/v1/images/generations", taskID); err == nil {
+	if err := service.ConsumeUserCreditsWithTask(user.ID, "回滚模型", credit(5), "/api/v1/images/generations", taskID); err == nil {
 		t.Fatal("charge succeeded despite forced ledger failure")
 	}
 	stored, _, _ := repository.GetUserByID(user.ID)
 	var logs int64
 	_ = db.Model(&model.CreditLog{}).Where("task_id = ? AND type = ?", taskID, model.CreditLogTypeAIConsume).Count(&logs).Error
-	if stored.Credits != 20 || logs != 0 {
-		t.Fatalf("failed charge changed state = credits %d logs %d", stored.Credits, logs)
+	if !hasCredit(stored.Credits, 20) || logs != 0 {
+		t.Fatalf("failed charge changed state = credits %s logs %d", stored.Credits.String(), logs)
 	}
 	idempotentTaskID := "transfer-charge-idempotent-task-" + uuid.NewString()
-	if err := service.ConsumeUserCreditsOnce(user.ID, "幂等模型", 5, "/api/v1/images/generations", idempotentTaskID); err != nil {
+	if err := service.ConsumeUserCreditsOnce(user.ID, "幂等模型", credit(5), "/api/v1/images/generations", idempotentTaskID); err != nil {
 		t.Fatalf("consume credits: %v", err)
 	}
-	if err := service.ConsumeUserCreditsOnce(user.ID, "幂等模型", 5, "/api/v1/images/generations", idempotentTaskID); err != nil {
+	if err := service.ConsumeUserCreditsOnce(user.ID, "幂等模型", credit(5), "/api/v1/images/generations", idempotentTaskID); err != nil {
 		t.Fatalf("repeat consume credits: %v", err)
 	}
-	if err := service.RefundUserCreditsOnce(user.ID, "幂等模型", 5, "/api/v1/images/generations", idempotentTaskID); err != nil {
+	if err := service.RefundUserCreditsOnce(user.ID, "幂等模型", credit(5), "/api/v1/images/generations", idempotentTaskID); err != nil {
 		t.Fatalf("refund credits: %v", err)
 	}
-	if err := service.RefundUserCreditsOnce(user.ID, "幂等模型", 5, "/api/v1/images/generations", idempotentTaskID); err != nil {
+	if err := service.RefundUserCreditsOnce(user.ID, "幂等模型", credit(5), "/api/v1/images/generations", idempotentTaskID); err != nil {
 		t.Fatalf("repeat refund credits: %v", err)
 	}
 	stored, _, _ = repository.GetUserByID(user.ID)
 	var settledLogs int64
 	_ = db.Model(&model.CreditLog{}).Where("task_id = ?", idempotentTaskID).Count(&settledLogs).Error
-	if stored.Credits != 20 || settledLogs != 2 {
-		t.Fatalf("idempotent charge/refund = credits %d logs %d", stored.Credits, settledLogs)
+	if !hasCredit(stored.Credits, 20) || settledLogs != 2 {
+		t.Fatalf("idempotent charge/refund = credits %s logs %d", stored.Credits.String(), settledLogs)
 	}
 }
 
@@ -998,25 +1033,25 @@ func TestAdminAdjustsEnterpriseOwnerCreditsByDeltaAndRecordsLog(t *testing.T) {
 
 	first := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/credits", admin.Data.Token, map[string]any{"delta": 100, "reason": "首次充值"})
 	second := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/credits", admin.Data.Token, map[string]any{"delta": 50, "reason": "追加充值"})
-	if first.Code != 0 || first.Data.OwnerCredits != 100 || second.Code != 0 || second.Data.OwnerCredits != 150 {
+	if first.Code != 0 || !hasCredit(first.Data.OwnerCredits, 100) || second.Code != 0 || !hasCredit(second.Data.OwnerCredits, 150) {
 		t.Fatalf("delta adjustments = first %#v, second %#v", first, second)
 	}
 
 	doJSON[model.CreditLog](t, http.MethodPost, server.URL+"/api/admin/credit-logs", admin.Data.Token, model.CreditLog{
-		UserID: enterprise.Data.OwnerID, Type: model.CreditLogTypeAIConsume, Amount: -1, Balance: 149, Remark: "测试类型筛选",
+		UserID: enterprise.Data.OwnerID, Type: model.CreditLogTypeAIConsume, Amount: credit(-1), Balance: credit(149), Remark: "测试类型筛选",
 	})
 	logs := doJSON[model.CreditLogList](t, http.MethodGet, server.URL+"/api/admin/credit-logs?keyword="+enterprise.Data.OwnerID+"&type=admin_adjust&pageSize=10", admin.Data.Token, nil)
 	if logs.Code != 0 || logs.Data.Total != 2 || len(logs.Data.Items) != 2 {
 		t.Fatalf("credit logs = %#v", logs)
 	}
-	amounts := map[int]bool{}
+	amounts := map[string]bool{}
 	for _, log := range logs.Data.Items {
 		if log.UserID != enterprise.Data.OwnerID || log.RelatedID != admin.Data.User.ID || log.Type != model.CreditLogTypeAdminAdjust || log.Remark == "" {
 			t.Fatalf("credit log association = %#v", log)
 		}
-		amounts[log.Amount] = true
+		amounts[log.Amount.String()] = true
 	}
-	if !amounts[100] || !amounts[50] {
+	if !amounts["100"] || !amounts["50"] {
 		t.Fatalf("credit log amounts = %#v", logs.Data.Items)
 	}
 }
@@ -1043,7 +1078,7 @@ func TestEnterpriseOwnerCreditsCannotBeOverwrittenThroughUserAdminEndpoint(t *te
 		t.Fatalf("owner overwrite response = %#v", overwrite)
 	}
 	listed := doJSON[enterpriseList](t, http.MethodGet, server.URL+"/api/admin/enterprises?keyword="+enterprise.Data.OwnerName, admin.Data.Token, nil)
-	if listed.Code != 0 || listed.Data.Total != 1 || listed.Data.Items[0].OwnerCredits != 100 {
+	if listed.Code != 0 || listed.Data.Total != 1 || !hasCredit(listed.Data.Items[0].OwnerCredits, 100) {
 		t.Fatalf("owner balance after overwrite = %#v", listed)
 	}
 }
@@ -1077,7 +1112,7 @@ func TestEnterpriseOwnerCreditAdjustmentGuardsAndConcurrency(t *testing.T) {
 	added := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/credits", admin.Data.Token, map[string]any{"delta": 100, "reason": "充值"})
 	deducted := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/credits", admin.Data.Token, map[string]any{"delta": -30, "reason": "人工扣减"})
 	insufficient := doJSON[enterpriseView](t, http.MethodPost, server.URL+"/api/admin/enterprises/"+enterprise.Data.ID+"/credits", admin.Data.Token, map[string]any{"delta": -80, "reason": "余额不足"})
-	if added.Code != 0 || added.Data.OwnerCredits != 100 || deducted.Code != 0 || deducted.Data.OwnerCredits != 70 {
+	if added.Code != 0 || !hasCredit(added.Data.OwnerCredits, 100) || deducted.Code != 0 || !hasCredit(deducted.Data.OwnerCredits, 70) {
 		t.Fatalf("add/deduct responses = added %#v, deducted %#v", added, deducted)
 	}
 	if insufficient.Code != 1 || insufficient.Msg != "主账号余额不足" {
@@ -1110,24 +1145,24 @@ func TestEnterpriseOwnerCreditAdjustmentGuardsAndConcurrency(t *testing.T) {
 
 	listed := doJSON[enterpriseList](t, http.MethodGet, server.URL+"/api/admin/enterprises?keyword="+enterprise.Data.OwnerName, admin.Data.Token, nil)
 	logs := doJSON[model.CreditLogList](t, http.MethodGet, server.URL+"/api/admin/credit-logs?keyword="+enterprise.Data.OwnerID+"&type=admin_adjust&pageSize=10", admin.Data.Token, nil)
-	if listed.Code != 0 || listed.Data.Total != 1 || listed.Data.Items[0].OwnerCredits != 100 {
+	if listed.Code != 0 || listed.Data.Total != 1 || !hasCredit(listed.Data.Items[0].OwnerCredits, 100) {
 		t.Fatalf("final enterprise balance = %#v", listed)
 	}
 	if logs.Code != 0 || logs.Data.Total != 4 || len(logs.Data.Items) != 4 {
 		t.Fatalf("final credit logs = %#v", logs)
 	}
-	amountTotal := 0
+	amountTotal := model.DecimalZero
 	concurrentFinalBalances := 0
 	for _, log := range logs.Data.Items {
-		amountTotal += log.Amount
-		if log.UserID != enterprise.Data.OwnerID || log.RelatedID != admin.Data.User.ID || log.Balance < 0 {
+		amountTotal = amountTotal.Add(log.Amount)
+		if log.UserID != enterprise.Data.OwnerID || log.RelatedID != admin.Data.User.ID || log.Balance.IsNegative() {
 			t.Fatalf("inconsistent credit log = %#v", log)
 		}
-		if (log.Amount == 10 || log.Amount == 20) && log.Balance == 100 {
+		if (hasCredit(log.Amount, 10) || hasCredit(log.Amount, 20)) && hasCredit(log.Balance, 100) {
 			concurrentFinalBalances++
 		}
 	}
-	if amountTotal != 100 || concurrentFinalBalances != 1 {
+	if !hasCredit(amountTotal, 100) || concurrentFinalBalances != 1 {
 		t.Fatalf("credit log totals = %#v", logs.Data.Items)
 	}
 }
@@ -1163,7 +1198,7 @@ func requestEnterpriseCredit(url, token string, delta int, reason string) (apiRe
 type adminUserView struct {
 	ID             string               `json:"id"`
 	Username       string               `json:"username"`
-	Credits        int                  `json:"credits"`
+	Credits        model.Decimal        `json:"credits"`
 	EnterpriseID   string               `json:"enterpriseId"`
 	EnterpriseName string               `json:"enterpriseName"`
 	EnterpriseRole model.EnterpriseRole `json:"enterpriseRole"`
@@ -1197,7 +1232,7 @@ func TestAdminUserListShowsEnterpriseIdentityAndOwnerBalance(t *testing.T) {
 		t.Fatalf("admin user list = %#v", users)
 	}
 	owner := users.Data.Items[0]
-	if owner.ID != enterprise.Data.OwnerID || owner.Credits != 80 || owner.EnterpriseID != enterprise.Data.ID || owner.EnterpriseName != "用户视图企业" || owner.EnterpriseRole != model.EnterpriseRoleOwner {
+	if owner.ID != enterprise.Data.OwnerID || !hasCredit(owner.Credits, 80) || owner.EnterpriseID != enterprise.Data.ID || owner.EnterpriseName != "用户视图企业" || owner.EnterpriseRole != model.EnterpriseRoleOwner {
 		t.Fatalf("enterprise owner user view = %#v", owner)
 	}
 }

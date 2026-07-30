@@ -11,25 +11,25 @@ import (
 
 // VideoHistoryDTO 视频页历史记录展示模型。
 type VideoHistoryDTO struct {
-	ID              string   `json:"id"`
-	Title           string   `json:"title"`
-	Prompt          string   `json:"prompt"`
-	Status          string   `json:"status"`
-	Model           string   `json:"model"`
-	UpstreamTaskID  string   `json:"upstreamTaskId"`
-	Credits         int      `json:"credits"`
-	UpstreamCredits *int     `json:"upstreamCredits"`
-	DurationMs      int64    `json:"durationMs"`
-	VideoURL        string   `json:"videoUrl,omitempty"`
-	ThumbnailURL    string   `json:"thumbnailUrl,omitempty"`
-	FileIDs         []string `json:"fileIds,omitempty"`
-	Size            string   `json:"size,omitempty"`
-	Vquality        string   `json:"vquality,omitempty"`
-	VideoSeconds    string   `json:"videoSeconds,omitempty"`
-	GenAudio        string   `json:"genAudio,omitempty"`
-	Watermark       string   `json:"watermark,omitempty"`
-	ErrorMessage    string   `json:"error,omitempty"`
-	CreatedAt       string   `json:"createdAt"`
+	ID              string         `json:"id"`
+	Title           string         `json:"title"`
+	Prompt          string         `json:"prompt"`
+	Status          string         `json:"status"`
+	Model           string         `json:"model"`
+	UpstreamTaskID  string         `json:"upstreamTaskId"`
+	Credits         model.Decimal  `json:"credits"`
+	UpstreamCredits *model.Decimal `json:"upstreamCredits"`
+	DurationMs      int64          `json:"durationMs"`
+	VideoURL        string         `json:"videoUrl,omitempty"`
+	ThumbnailURL    string         `json:"thumbnailUrl,omitempty"`
+	FileIDs         []string       `json:"fileIds,omitempty"`
+	Size            string         `json:"size,omitempty"`
+	Vquality        string         `json:"vquality,omitempty"`
+	VideoSeconds    string         `json:"videoSeconds,omitempty"`
+	GenAudio        string         `json:"genAudio,omitempty"`
+	Watermark       string         `json:"watermark,omitempty"`
+	ErrorMessage    string         `json:"error,omitempty"`
+	CreatedAt       string         `json:"createdAt"`
 }
 
 // ToVideoHistoryDTO 将 Task + Payload 转为视频历史 DTO。
@@ -90,20 +90,20 @@ func fmtDuration(v float64) string {
 
 // ImageHistoryDTO 图片页历史记录展示模型。
 type ImageHistoryDTO struct {
-	ID           string   `json:"id"`
-	Title        string   `json:"title"`
-	Prompt       string   `json:"prompt"`
-	Status       string   `json:"status"`
-	Model        string   `json:"model"`
-	Credits      int      `json:"credits"`
-	DurationMs   int64    `json:"durationMs"`
-	ImageURLs    []string `json:"imageUrls,omitempty"`
-	FileIDs      []string `json:"fileIds,omitempty"`
-	Quality      string   `json:"quality,omitempty"`
-	Size         string   `json:"size,omitempty"`
-	Count        string   `json:"count,omitempty"`
-	ErrorMessage string   `json:"error,omitempty"`
-	CreatedAt    string   `json:"createdAt"`
+	ID           string        `json:"id"`
+	Title        string        `json:"title"`
+	Prompt       string        `json:"prompt"`
+	Status       string        `json:"status"`
+	Model        string        `json:"model"`
+	Credits      model.Decimal `json:"credits"`
+	DurationMs   int64         `json:"durationMs"`
+	ImageURLs    []string      `json:"imageUrls,omitempty"`
+	FileIDs      []string      `json:"fileIds,omitempty"`
+	Quality      string        `json:"quality,omitempty"`
+	Size         string        `json:"size,omitempty"`
+	Count        string        `json:"count,omitempty"`
+	ErrorMessage string        `json:"error,omitempty"`
+	CreatedAt    string        `json:"createdAt"`
 }
 
 // ToImageHistoryDTO 将 Task + Payload 转为图片历史 DTO。

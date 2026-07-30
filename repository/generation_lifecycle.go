@@ -82,7 +82,7 @@ func TransitionGenerationTaskTerminal(id string, from []model.TaskStatus, update
 		if result.Error != nil || result.RowsAffected == 0 {
 			return result.Error
 		}
-		if creditLog != nil && creditLog.Amount > 0 {
+		if creditLog != nil && creditLog.Amount.IsPositive() {
 			result = tx.Model(&model.User{}).Where("id = ?", creditLog.UserID).Updates(map[string]any{
 				"credits":    gorm.Expr("credits + ?", creditLog.Amount),
 				"updated_at": creditLog.CreatedAt,

@@ -2,7 +2,6 @@ package repository
 
 import (
 	"errors"
-	"math"
 	"strings"
 
 	"github.com/basketikun/infinite-canvas/model"
@@ -93,7 +92,7 @@ func SaveUser(user model.User) (model.User, error) {
 	return user, err
 }
 
-func UpdateUserCredits(id string, credits int, updatedAt string) (model.User, bool, error) {
+func UpdateUserCredits(id string, credits model.Decimal, updatedAt string) (model.User, bool, error) {
 	db, err := DB()
 	if err != nil {
 		return model.User{}, false, err
@@ -106,12 +105,12 @@ func UpdateUserCredits(id string, credits int, updatedAt string) (model.User, bo
 	return user, ok && result.RowsAffected > 0, err
 }
 
-func ConsumeUserCredits(id string, credits int, now string) (model.User, bool, error) {
+func ConsumeUserCredits(id string, credits model.Decimal, now string) (model.User, bool, error) {
 	db, err := DB()
 	if err != nil {
 		return model.User{}, false, err
 	}
-	if credits <= 0 {
+	if !credits.IsPositive() {
 		user, ok, err := GetUserByID(id)
 		return user, ok, err
 	}
@@ -126,12 +125,12 @@ func ConsumeUserCredits(id string, credits int, now string) (model.User, bool, e
 	return user, ok && tx.RowsAffected > 0, err
 }
 
-func RefundUserCredits(id string, credits int, now string) (model.User, bool, error) {
+func RefundUserCredits(id string, credits model.Decimal, now string) (model.User, bool, error) {
 	db, err := DB()
 	if err != nil {
 		return model.User{}, false, err
 	}
-	if credits <= 0 {
+	if !credits.IsPositive() {
 		user, ok, err := GetUserByID(id)
 		return user, ok, err
 	}
@@ -146,7 +145,7 @@ func RefundUserCredits(id string, credits int, now string) (model.User, bool, er
 	return user, ok && tx.RowsAffected > 0, err
 }
 
-func ApplyUserCreditLog(userID string, amount int, log model.CreditLog, updatedAt string) (model.User, bool, error) {
+func ApplyUserCreditLog(userID string, amount model.Decimal, log model.CreditLog, updatedAt string) (model.User, bool, error) {
 	db, err := DB()
 	if err != nil {
 		return model.User{}, false, err
@@ -176,19 +175,19 @@ func ApplyUserCreditLog(userID string, amount int, log model.CreditLog, updatedA
 			if err := tx.Where("user_id = ? AND task_id = ? AND type = ?", userID, log.TaskID, model.CreditLogTypeAIConsume).Take(&consume).Error; err != nil {
 				return err
 			}
-			amount = -consume.Amount
+			amount = consume.Amount.Neg()
 		}
-		if log.Type == model.CreditLogTypeAIConsume && amount < 0 {
-			credits, err := discountedUserCredits(tx, user, -amount)
+		if log.Type == model.CreditLogTypeAIConsume && amount.IsNegative() {
+			credits, err := discountedUserCredits(tx, user, amount.Neg())
 			if err != nil {
 				return err
 			}
-			amount = -credits
+			amount = credits.Neg()
 		}
-		if user.Credits+amount < 0 {
+		if user.Credits.Add(amount).IsNegative() {
 			return nil
 		}
-		user.Credits += amount
+		user.Credits = user.Credits.Add(amount)
 		if err := tx.Model(&model.User{}).Where("id = ?", userID).Updates(map[string]any{"credits": user.Credits, "updated_at": updatedAt}).Error; err != nil {
 			return err
 		}
@@ -197,7 +196,7 @@ func ApplyUserCreditLog(userID string, amount int, log model.CreditLog, updatedA
 			return err
 		}
 		if log.TaskID != "" && log.Type == model.CreditLogTypeAIConsume {
-			if err := tx.Model(&model.GenerationTask{}).Where("id = ?", log.TaskID).Update("credits", -amount).Error; err != nil {
+			if err := tx.Model(&model.GenerationTask{}).Where("id = ?", log.TaskID).Update("credits", amount.Neg()).Error; err != nil {
 				return err
 			}
 		}
@@ -207,15 +206,15 @@ func ApplyUserCreditLog(userID string, amount int, log model.CreditLog, updatedA
 	return user, applied, err
 }
 
-func discountedUserCredits(tx *gorm.DB, user model.User, credits int) (int, error) {
-	if credits <= 0 || user.EnterpriseID == nil {
+func discountedUserCredits(tx *gorm.DB, user model.User, credits model.Decimal) (model.Decimal, error) {
+	if !credits.IsPositive() || user.EnterpriseID == nil {
 		return credits, nil
 	}
 	var enterprise model.Enterprise
 	if err := tx.Select("discount_rate").Where("id = ?", *user.EnterpriseID).Take(&enterprise).Error; err != nil {
-		return 0, err
+		return model.DecimalZero, err
 	}
-	return int(math.Ceil(float64(credits) * enterprise.DiscountRate)), nil
+	return credits.Mul(enterprise.DiscountRate), nil
 }
 
 // SaveCreditLog 保存算力点变更流水。

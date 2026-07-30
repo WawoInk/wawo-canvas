@@ -7,6 +7,7 @@ import dayjs from "dayjs";
 import { useState } from "react";
 
 import type { AdminCreditLog, AdminEnterprise, CreateAdminEnterprise } from "@/services/api/admin";
+import { compareDecimal, formatDecimal } from "@/lib/decimal";
 import { useAdminEnterprises } from "./use-admin-enterprises";
 
 export default function AdminEnterprisesPage() {
@@ -19,8 +20,8 @@ export default function AdminEnterprisesPage() {
     const [creditLogs, setCreditLogs] = useState<AdminCreditLog[]>([]);
     const [createForm] = Form.useForm<CreateAdminEnterprise>();
     const [passwordForm] = Form.useForm<{ password: string }>();
-    const [creditForm] = Form.useForm<{ delta: number; reason: string }>();
-    const [discountForm] = Form.useForm<{ discountRate: number }>();
+    const [creditForm] = Form.useForm<{ delta: string; reason: string }>();
+    const [discountForm] = Form.useForm<{ discountRate: string }>();
 
     const openCreditAdjustment = async (item: AdminEnterprise) => {
         setAdjusting(item);
@@ -46,7 +47,7 @@ export default function AdminEnterprisesPage() {
         },
         { title: "主账号", dataIndex: "ownerName", width: 170, ellipsis: true },
         { title: "成员", dataIndex: "memberCount", width: 70, render: (_, item) => `${item.memberCount} 人` },
-        { title: "主账号余额", dataIndex: "ownerCredits", width: 105, render: (_, item) => item.ownerCredits.toLocaleString() },
+        { title: "主账号余额", dataIndex: "ownerCredits", width: 105, render: (_, item) => formatDecimal(item.ownerCredits) },
         { title: "折扣倍率", dataIndex: "discountRate", width: 90, render: (_, item) => `${item.discountRate} 倍` },
         {
             title: "企业状态",
@@ -210,10 +211,10 @@ export default function AdminEnterprisesPage() {
                         label="折扣倍率"
                         rules={[
                             { required: true, message: "请输入折扣倍率" },
-                            { type: "number", min: 0.1, max: 1, message: "折扣倍率必须在 0.1 到 1 之间" },
+                            { validator: (_, value) => (compareDecimal(value, "0.1") >= 0 && compareDecimal(value, "1") <= 0 ? Promise.resolve() : Promise.reject(new Error("折扣倍率必须在 0.1 到 1 之间"))) },
                         ]}
                     >
-                        <InputNumber min={0.1} max={1} step={0.1} suffix="倍" style={{ width: "100%" }} />
+                        <InputNumber min={0.1} max={1} step="0.01" stringMode suffix="倍" style={{ width: "100%" }} />
                     </Form.Item>
                 </Form>
             </Modal>
@@ -237,13 +238,17 @@ export default function AdminEnterprisesPage() {
                 destroyOnHidden
             >
                 <Typography.Paragraph type="secondary">
-                    当前余额：<Typography.Text strong>{adjusting?.ownerCredits.toLocaleString()}</Typography.Text>。正数增加，负数扣减，扣减后余额不能小于 0。
+                    当前余额：<Typography.Text strong>{formatDecimal(adjusting?.ownerCredits)}</Typography.Text>。正数增加，负数扣减，扣减后余额不能小于 0。
                 </Typography.Paragraph>
                 <Form form={creditForm} layout="vertical" requiredMark={false}>
                     <Row gutter={14}>
                         <Col span={8}>
-                            <Form.Item name="delta" label="调整数量" rules={[{ required: true, message: "请输入调整数量" }, { validator: (_, value) => (value === 0 ? Promise.reject(new Error("调整数量不能为 0")) : Promise.resolve()) }]}>
-                                <InputNumber precision={0} style={{ width: "100%" }} placeholder="例如 100 或 -50" />
+                            <Form.Item
+                                name="delta"
+                                label="调整数量"
+                                rules={[{ required: true, message: "请输入调整数量" }, { validator: (_, value) => (compareDecimal(value, "0") === 0 ? Promise.reject(new Error("调整数量不能为 0")) : Promise.resolve()) }]}
+                            >
+                                <InputNumber step="0.01" stringMode style={{ width: "100%" }} placeholder="例如 100 或 -50.5" />
                             </Form.Item>
                         </Col>
                         <Col span={16}>
@@ -262,8 +267,13 @@ export default function AdminEnterprisesPage() {
                     style={{ marginTop: 12 }}
                     columns={[
                         { title: "时间", dataIndex: "createdAt", width: 160, render: (value: string) => dayjs(value).format("YYYY-MM-DD HH:mm") },
-                        { title: "变动", dataIndex: "amount", width: 90, render: (value: number) => <Typography.Text type={value >= 0 ? "success" : "danger"}>{value > 0 ? `+${value}` : value}</Typography.Text> },
-                        { title: "余额", dataIndex: "balance", width: 90 },
+                        {
+                            title: "变动",
+                            dataIndex: "amount",
+                            width: 90,
+                            render: (value: string) => <Typography.Text type={compareDecimal(value, "0") >= 0 ? "success" : "danger"}>{compareDecimal(value, "0") > 0 ? `+${formatDecimal(value)}` : formatDecimal(value)}</Typography.Text>,
+                        },
+                        { title: "余额", dataIndex: "balance", width: 90, render: (value: string) => formatDecimal(value) },
                         { title: "原因", dataIndex: "remark", ellipsis: true },
                         { title: "操作者", dataIndex: "relatedId", width: 160, ellipsis: true },
                     ]}

@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPost } from "@/services/api/request";
+import type { DecimalValue } from "@/lib/decimal";
 import { useUserStore } from "@/stores/use-user-store";
 
 // ─── DTO Types ──────────────────────────────────────────────────────
@@ -12,8 +13,8 @@ export interface VideoHistoryItem {
     status: GenerationTaskStatus;
     model: string;
     upstreamTaskId: string;
-    credits: number;
-    upstreamCredits: number | null;
+    credits: DecimalValue;
+    upstreamCredits: DecimalValue | null;
     durationMs: number;
     videoUrl?: string;
     thumbnailUrl?: string;
@@ -33,7 +34,7 @@ export interface ImageHistoryItem {
     prompt: string;
     status: GenerationTaskStatus;
     model: string;
-    credits: number;
+    credits: DecimalValue;
     durationMs: number;
     imageUrls?: string[];
     fileIds?: string[];
@@ -57,10 +58,10 @@ export interface GenerationTaskItem {
     model: string;
     modelDisplayName?: string;
     status: string;
-    credits: number;
-    upstreamCredits: number | null;
+    credits: DecimalValue;
+    upstreamCredits: DecimalValue | null;
     billingMode?: "per_credit" | "per_second" | "per_call";
-    billingRate?: number;
+    billingRate?: DecimalValue;
     latencyMs: number;
     upstreamTaskId: string;
     traceId: string;
@@ -131,7 +132,7 @@ export interface RecordGenerationTaskRequest {
     provider: string;
     model: string;
     status: string;
-    credits: number;
+    credits: DecimalValue;
     latencyMs: number;
     upstreamTaskId?: string;
     source?: string;

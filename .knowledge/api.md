@@ -175,6 +175,8 @@ X-Generation-Task-Id: <platform task id>
 
 用户名、平台角色、积分和企业身份不能通过个人资料接口修改。
 
+积分、价格、折扣倍率和上游 credits 等十进制 JSON 字段统一使用字符串；请求也应发送十进制字符串以保留精度。
+
 ## 企业成员与积分
 
 | Method / Path | Auth | 输入 | 输出/权限 |
@@ -184,7 +186,7 @@ X-Generation-Task-Id: <platform task id>
 | `POST /api/v1/enterprise/members` | U | `{username,password,displayName?,email?}` | 新 member，初始积分 0 |
 | `POST /api/v1/enterprise/members/:id/status` | U | `{status:"active"|"ban"}` | 更新成员；owner only |
 | `POST /api/v1/enterprise/members/:id/password` | U | `{password}` | 重置并递增 session version |
-| `POST /api/v1/enterprise/members/:id/credits` | U | `{action:"allocate"|"reclaim",amount,requestId}` | `{requestId,action,amount,ownerCredits,member}` |
+| `POST /api/v1/enterprise/members/:id/credits` | U | `{action:"allocate"|"reclaim",amount:string,requestId}`，amount 为正数 | `{requestId,action,amount,ownerCredits,member}` |
 
 enterprise ID 永远由当前用户推导。跨企业 ID、个人用户 ID 或 owner ID 不会扩大范围。
 

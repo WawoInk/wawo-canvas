@@ -103,7 +103,7 @@ func TransferEnterpriseMemberCredits(w http.ResponseWriter, r *http.Request, id 
 	}
 	var body struct {
 		Action    model.EnterpriseCreditAction `json:"action"`
-		Amount    int                          `json:"amount"`
+		Amount    model.Decimal                `json:"amount"`
 		RequestID string                       `json:"requestId"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
@@ -153,7 +153,7 @@ func AdminSetEnterpriseStatus(w http.ResponseWriter, r *http.Request, id string)
 
 func AdminSetEnterpriseDiscountRate(w http.ResponseWriter, r *http.Request, id string) {
 	var body struct {
-		DiscountRate float64 `json:"discountRate"`
+		DiscountRate model.Decimal `json:"discountRate"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	result, err := service.SetEnterpriseDiscountRate(id, body.DiscountRate)
@@ -185,8 +185,8 @@ func AdminAdjustEnterpriseOwnerCredits(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 	var body struct {
-		Delta  int    `json:"delta"`
-		Reason string `json:"reason"`
+		Delta  model.Decimal `json:"delta"`
+		Reason string        `json:"reason"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	result, err := service.AdjustEnterpriseOwnerCredits(id, user.ID, body.Delta, body.Reason)

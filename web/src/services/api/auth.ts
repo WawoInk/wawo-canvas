@@ -1,4 +1,5 @@
 import { apiGet, apiPost, apiPut, compactApiParams } from "@/services/api/request";
+import type { DecimalValue } from "@/lib/decimal";
 
 export const AUTH_TOKEN_KEY = "infinite-canvas-auth-token-v1";
 
@@ -11,7 +12,7 @@ export type AuthUser = {
     displayName: string;
     avatarUrl: string;
     role: UserRole;
-    credits: number;
+    credits: DecimalValue;
     enterpriseId?: string;
     enterpriseName?: string;
     enterpriseRole?: "owner" | "member";
@@ -36,7 +37,7 @@ export type EnterpriseAccountSummary = {
     status: "active" | "disabled";
     role: "owner" | "member";
     memberCount: number;
-    discountRate: number;
+    discountRate: DecimalValue;
 };
 
 export type EnterpriseMember = {
@@ -45,7 +46,7 @@ export type EnterpriseMember = {
     email: string;
     displayName: string;
     status: "active" | "ban";
-    credits: number;
+    credits: DecimalValue;
     role: "user";
     enterpriseId: string;
     enterpriseRole: "member";
@@ -67,8 +68,8 @@ export type EnterpriseCreditLog = {
     displayName: string;
     taskId: string;
     type: "admin_adjust" | "ai_consume" | "ai_refund" | "enterprise_allocate" | "enterprise_reclaim";
-    amount: number;
-    balance: number;
+    amount: DecimalValue;
+    balance: DecimalValue;
     relatedId: string;
     counterpartyId: string;
     remark: string;
@@ -140,6 +141,6 @@ export async function resetEnterpriseMemberPassword(token: string, id: string, p
     return apiPost<EnterpriseMember>(`/api/v1/enterprise/members/${encodeURIComponent(id)}/password`, { password }, token);
 }
 
-export async function transferEnterpriseMemberCredits(token: string, id: string, payload: { action: EnterpriseCreditAction; amount: number; requestId: string }) {
-    return apiPost<{ requestId: string; action: EnterpriseCreditAction; amount: number; ownerCredits: number; member: EnterpriseMember }>(`/api/v1/enterprise/members/${encodeURIComponent(id)}/credits`, payload, token);
+export async function transferEnterpriseMemberCredits(token: string, id: string, payload: { action: EnterpriseCreditAction; amount: DecimalValue; requestId: string }) {
+    return apiPost<{ requestId: string; action: EnterpriseCreditAction; amount: DecimalValue; ownerCredits: DecimalValue; member: EnterpriseMember }>(`/api/v1/enterprise/members/${encodeURIComponent(id)}/credits`, payload, token);
 }
