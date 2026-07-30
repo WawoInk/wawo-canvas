@@ -71,6 +71,9 @@ func TestNormalizeSettingsPublishesEnabledChannelModelsAndRepairsDefaults(t *tes
 				DefaultTextModel:  "missing-text",
 				DefaultImageModel: "missing-image",
 				DefaultVideoModel: "missing-video",
+				TextModels:        []string{"gpt-5.5"},
+				ImageModels:       []string{"doubao-seedream-5.0-lite"},
+				VideoModels:       []string{"doubao-seedance-2.0-fast"},
 			},
 		},
 		Private: model.PrivateSetting{
@@ -151,6 +154,57 @@ func TestNormalizeSettingsPreservesExplicitCapabilityModels(t *testing.T) {
 				t.Fatalf("models = %#v, want %#v", test.got, test.want)
 			}
 		})
+	}
+}
+
+func TestNormalizeSettingsRequiresExplicitCapabilityModels(t *testing.T) {
+	settings := normalizeSettings(model.Settings{
+		Public: model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{
+			DefaultImageModel: "gpt-image-1",
+			DefaultVideoModel: "seedance-1",
+			DefaultTextModel:  "gpt-5.5",
+			DefaultAudioModel: "gpt-audio-1",
+		}},
+		Private: model.PrivateSetting{Channels: []model.ModelChannel{{Enabled: true, Models: []string{
+			"gpt-5.5", "gpt-image-1", "seedance-1", "gpt-audio-1",
+		}}}},
+	})
+
+	channel := settings.Public.ModelChannel
+	for name, models := range map[string][]string{
+		"text": channel.TextModels, "image": channel.ImageModels, "video": channel.VideoModels, "audio": channel.AudioModels,
+	} {
+		if len(models) != 0 {
+			t.Fatalf("%s models = %#v, want no inferred models", name, models)
+		}
+	}
+	if channel.DefaultTextModel != "" || channel.DefaultImageModel != "" || channel.DefaultVideoModel != "" || channel.DefaultAudioModel != "" {
+		t.Fatalf("defaults = %#v, want empty defaults without explicit capability models", channel)
+	}
+}
+
+func TestPublicModelAllowedUsesCapabilityLists(t *testing.T) {
+	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{
+		ImageModels: []string{"image-public"},
+		VideoModels: []string{"video-public"},
+		TextModels:  []string{"text-public"},
+		AudioModels: []string{"audio-public"},
+	}}
+	for _, test := range []struct {
+		taskType model.TaskType
+		model    string
+		allowed  bool
+	}{
+		{model.TaskTypeImage, "image-public", true},
+		{model.TaskTypeVideo, "video-public", true},
+		{model.TaskTypeChat, "text-public", true},
+		{model.TaskTypeAudio, "audio-public", true},
+		{model.TaskTypeVideo, "video-hidden", false},
+		{model.TaskTypeImage, "video-public", false},
+	} {
+		if got := publicModelAllowed(public, test.taskType, test.model); got != test.allowed {
+			t.Fatalf("publicModelAllowed(%s, %q) = %v, want %v", test.taskType, test.model, got, test.allowed)
+		}
 	}
 }
 

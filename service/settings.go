@@ -131,44 +131,47 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 	} else {
 		setting.ModelChannel.AvailableModels = uniqueModelNames(setting.ModelChannel.AvailableModels)
 	}
-	inferImageModels := setting.ModelChannel.ImageModels == nil
-	inferVideoModels := setting.ModelChannel.VideoModels == nil
-	inferTextModels := setting.ModelChannel.TextModels == nil
-	inferAudioModels := setting.ModelChannel.AudioModels == nil
-	if inferImageModels {
+	if setting.ModelChannel.ImageModels == nil {
 		setting.ModelChannel.ImageModels = []string{}
 	}
-	if inferVideoModels {
+	if setting.ModelChannel.VideoModels == nil {
 		setting.ModelChannel.VideoModels = []string{}
 	}
-	if inferTextModels {
+	if setting.ModelChannel.TextModels == nil {
 		setting.ModelChannel.TextModels = []string{}
 	}
-	if inferAudioModels {
+	if setting.ModelChannel.AudioModels == nil {
 		setting.ModelChannel.AudioModels = []string{}
-	}
-	for _, modelName := range setting.ModelChannel.AvailableModels {
-		switch {
-		case inferImageModels && isImageModelName(modelName):
-			setting.ModelChannel.ImageModels = append(setting.ModelChannel.ImageModels, modelName)
-		case inferVideoModels && isVideoModelName(modelName):
-			setting.ModelChannel.VideoModels = append(setting.ModelChannel.VideoModels, modelName)
-		case inferAudioModels && isAudioModelName(modelName):
-			setting.ModelChannel.AudioModels = append(setting.ModelChannel.AudioModels, modelName)
-		case inferTextModels && isTextModelName(modelName):
-			setting.ModelChannel.TextModels = append(setting.ModelChannel.TextModels, modelName)
-		}
 	}
 	setting.ModelChannel.ImageModels = uniqueModelNames(setting.ModelChannel.ImageModels)
 	setting.ModelChannel.VideoModels = uniqueModelNames(setting.ModelChannel.VideoModels)
 	setting.ModelChannel.TextModels = uniqueModelNames(setting.ModelChannel.TextModels)
 	setting.ModelChannel.AudioModels = uniqueModelNames(setting.ModelChannel.AudioModels)
-	setting.ModelChannel.DefaultTextModel = repairDefaultModel(setting.ModelChannel.DefaultTextModel, setting.ModelChannel.AvailableModels, isTextModelName)
-	setting.ModelChannel.DefaultImageModel = repairDefaultModel(setting.ModelChannel.DefaultImageModel, setting.ModelChannel.AvailableModels, isImageModelName)
-	setting.ModelChannel.DefaultVideoModel = repairDefaultModel(setting.ModelChannel.DefaultVideoModel, setting.ModelChannel.AvailableModels, isVideoModelName)
-	setting.ModelChannel.DefaultAudioModel = repairDefaultModel(setting.ModelChannel.DefaultAudioModel, setting.ModelChannel.AvailableModels, isAudioModelName)
-	setting.ModelChannel.DefaultModel = repairDefaultModel(setting.ModelChannel.DefaultModel, setting.ModelChannel.AvailableModels, isTextModelName)
+	setting.ModelChannel.DefaultTextModel = repairDefaultModel(setting.ModelChannel.DefaultTextModel, setting.ModelChannel.TextModels, isTextModelName)
+	setting.ModelChannel.DefaultImageModel = repairDefaultModel(setting.ModelChannel.DefaultImageModel, setting.ModelChannel.ImageModels, isImageModelName)
+	setting.ModelChannel.DefaultVideoModel = repairDefaultModel(setting.ModelChannel.DefaultVideoModel, setting.ModelChannel.VideoModels, isVideoModelName)
+	setting.ModelChannel.DefaultAudioModel = repairDefaultModel(setting.ModelChannel.DefaultAudioModel, setting.ModelChannel.AudioModels, isAudioModelName)
+	setting.ModelChannel.DefaultModel = repairDefaultModel(setting.ModelChannel.DefaultModel, setting.ModelChannel.TextModels, isTextModelName)
 	return setting
+}
+
+func publicModelAllowed(public model.PublicSetting, taskType model.TaskType, modelName string) bool {
+	models := public.ModelChannel.TextModels
+	switch taskType {
+	case model.TaskTypeImage:
+		models = public.ModelChannel.ImageModels
+	case model.TaskTypeVideo:
+		models = public.ModelChannel.VideoModels
+	case model.TaskTypeAudio:
+		models = public.ModelChannel.AudioModels
+	}
+	modelName = strings.TrimSpace(modelName)
+	for _, allowed := range models {
+		if strings.TrimSpace(allowed) == modelName {
+			return true
+		}
+	}
+	return false
 }
 
 func ResolveModelDisplayName(public model.PublicSetting, modelNames ...string) string {

@@ -238,22 +238,20 @@ export const useConfigStore = create<ConfigStore>()(
                     } = settings.modelChannel;
                     set({ publicSettings: settings });
                     // Only auto-switch to remote when admin has disabled custom channels (forced remote)
-                    if (!allowCustomChannel && availableModels.length) {
-                        const models = availableModels.map((m) => m.trim()).filter(Boolean);
-                        // Use admin-configured per-capability lists when present; fall back to name-based derivation for backward compatibility
-                        const imageModels = remoteImageModels?.length ? remoteImageModels.filter((m) => models.includes(m)) : models.filter(isImageModelName);
-                        const videoModels = remoteVideoModels?.length ? remoteVideoModels.filter((m) => models.includes(m)) : models.filter(isVideoModelName);
-                        const textModels = remoteTextModels?.length ? remoteTextModels.filter((m) => models.includes(m)) : models.filter(isTextModelName);
-                        const audioModels = remoteAudioModels?.length ? remoteAudioModels.filter((m) => models.includes(m)) : models.filter(isAudioModelName);
+                    if (!allowCustomChannel) {
+                        const models = Array.from(new Set(availableModels.map((m) => m.trim()).filter(Boolean)));
+                        const listedModels = (items: string[] = []) => Array.from(new Set(items.map((m) => m.trim()).filter((m) => models.includes(m))));
+                        const imageModels = listedModels(remoteImageModels);
+                        const videoModels = listedModels(remoteVideoModels);
+                        const textModels = listedModels(remoteTextModels);
+                        const audioModels = listedModels(remoteAudioModels);
                         const current = get().config;
-                        // ponytail: admin lists are authoritative; don't preserve user selections that may be stale
-                        const pick = (currentValue: string, defaultVal: string, fallbackModels: string[]) => {
-                            // ponytail: admin default wins over user-persisted — single source of truth
+                        const pick = (currentValue: string, defaultVal: string, allowedModels: string[]) => {
                             const adminDefault = defaultVal?.trim();
-                            if (adminDefault && models.includes(adminDefault)) return adminDefault;
+                            if (adminDefault && allowedModels.includes(adminDefault)) return adminDefault;
                             const persisted = currentValue?.trim();
-                            if (persisted && models.includes(persisted)) return persisted;
-                            return fallbackModels[0] || "";
+                            if (persisted && allowedModels.includes(persisted)) return persisted;
+                            return allowedModels[0] || "";
                         };
                         set({
                             config: {

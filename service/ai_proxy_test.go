@@ -94,6 +94,7 @@ func TestProxyVideoTaskCreateChargesBoundViduByUpstreamCredits(t *testing.T) {
 	settings.Private.GenerationProfiles = append(settings.Private.GenerationProfiles, model.GenerationProfileBinding{
 		ID: profileID, ProfileID: "seedance-1-5-pro", UpstreamModel: upstreamModel, ChannelName: channelName, BillingMode: model.BillingModePerCredit, Enabled: true,
 	})
+	settings.Public.ModelChannel.VideoModels = append(settings.Public.ModelChannel.VideoModels, profileID)
 	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: profileID, Credits: 2})
 	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		t.Fatalf("save settings: %v", err)

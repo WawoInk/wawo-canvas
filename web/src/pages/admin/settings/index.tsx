@@ -509,25 +509,25 @@ export default function AdminSettingsPage() {
                                     </Col>
                                     <Col span={24}>
                                         <Typography.Title level={5}>各能力可选模型</Typography.Title>
-                                        <Typography.Text type="secondary">留空则自动从可用模型按名称推导，保存后所有用户的前台模型下拉仅展示此列表中勾选的模型。</Typography.Text>
+                                        <Typography.Text type="secondary">必须显式勾选；未勾选的模型不会在前台展示，也不能发起平台生成。</Typography.Text>
                                     </Col>
                                     <Col xs={24} md={12}>
-                                        <Form.Item name={["public", "modelChannel", "imageModels"]} label="图片模型可选项" extra="留空则从可用模型自动推导">
+                                        <Form.Item name={["public", "modelChannel", "imageModels"]} label="图片模型可选项" extra="留空时前台无图片模型可选">
                                             <Select mode="multiple" showSearch allowClear placeholder="选择图片模型" options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
                                     <Col xs={24} md={12}>
-                                        <Form.Item name={["public", "modelChannel", "videoModels"]} label="视频模型可选项" extra="留空则从可用模型自动推导">
+                                        <Form.Item name={["public", "modelChannel", "videoModels"]} label="视频模型可选项" extra="留空时前台无视频模型可选">
                                             <Select mode="multiple" showSearch allowClear placeholder="选择视频模型" options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
                                     <Col xs={24} md={12}>
-                                        <Form.Item name={["public", "modelChannel", "textModels"]} label="文本模型可选项" extra="留空则从可用模型自动推导">
+                                        <Form.Item name={["public", "modelChannel", "textModels"]} label="文本模型可选项" extra="留空时前台无文本模型可选">
                                             <Select mode="multiple" showSearch allowClear placeholder="选择文本模型" options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
                                     <Col xs={24} md={12}>
-                                        <Form.Item name={["public", "modelChannel", "audioModels"]} label="音频模型可选项" extra="留空则从可用模型自动推导">
+                                        <Form.Item name={["public", "modelChannel", "audioModels"]} label="音频模型可选项" extra="留空时前台无音频模型可选">
                                             <Select mode="multiple" showSearch allowClear placeholder="选择音频模型" options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>

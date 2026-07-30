@@ -30,6 +30,13 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		proxyFail(w, "未登录或权限不足")
 		return
 	}
+	taskType := DetermineTaskType(path)
+	public, err := PublicSettings()
+	if err != nil || !publicModelAllowed(public, taskType, modelName) {
+		proxyAILogf("AI proxy model not exposed: model=%s taskType=%s err=%v", modelName, taskType, err)
+		proxyFail(w, "模型不可用")
+		return
+	}
 	credits, err := ModelCost(modelName)
 	if err != nil {
 		proxyAILogf("AI proxy read model cost failed: model=%s err=%v", modelName, err)
@@ -61,7 +68,6 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 	}
 
 	// ── 生成任务日志：开始 ──
-	taskType := DetermineTaskType(path)
 	provider := DetermineProvider(channel)
 	source := DetermineSource(r)
 	genTaskID, _ := LogTaskStart(user, taskType, provider, modelName, requestAuditBody(body, contentType), SerializeHeaders(resolved.Headers), source, "")
@@ -563,6 +569,12 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
 		proxyFail(w, "未登录或权限不足")
+		return
+	}
+	public, err := PublicSettings()
+	if err != nil || !publicModelAllowed(public, model.TaskTypeVideo, modelName) {
+		proxyAILogf("video task model not exposed: model=%s err=%v", modelName, err)
+		proxyFail(w, "模型不可用")
 		return
 	}
 	profile, durable := compatibilityProfileForModel(modelName)

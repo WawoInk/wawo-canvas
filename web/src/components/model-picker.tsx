@@ -25,15 +25,18 @@ type ModelPickerProps = {
 export function ModelPicker({ config, value, onChange, capability, className, fullWidth = false, placeholder = "选择模型", onMissingConfig, disabled = false, options: explicitOptions }: ModelPickerProps) {
     const pickerId = useId();
     const [open, setOpen] = useState(false);
-    const options = useMemo<ModelPickerOption[]>(
-        () =>
-            explicitOptions ||
-            Array.from(new Set([...(config.channelMode === "local" && !capability ? [value] : []), ...selectableModelsByCapability(config, capability)].filter((model): model is string => Boolean(model)))).map((model) => ({
-                value: model,
-                label: modelOptionLabel(config, model),
-            })),
-        [capability, config, explicitOptions, value],
-    );
+    const options = useMemo<ModelPickerOption[]>(() => {
+        const selectableModels = selectableModelsByCapability(config, capability);
+        if (explicitOptions) {
+            if (!capability) return explicitOptions;
+            const allowed = new Set(selectableModels);
+            return explicitOptions.filter((option) => allowed.has(option.value));
+        }
+        return Array.from(new Set([...(config.channelMode === "local" && !capability ? [value] : []), ...selectableModels].filter((model): model is string => Boolean(model)))).map((model) => ({
+            value: model,
+            label: modelOptionLabel(config, model),
+        }));
+    }, [capability, config, explicitOptions, value]);
     const current = value || "";
 
     useEffect(() => {

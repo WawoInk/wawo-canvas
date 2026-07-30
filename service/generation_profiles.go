@@ -281,7 +281,13 @@ func AvailableGenerationProfiles() ([]model.GenerationProfile, error) {
 		return nil, err
 	}
 	settings = normalizeSettings(settings)
-	return resolveGenerationProfiles(GenerationProfiles(), settings.Private, settings.Public)
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), settings.Private, settings.Public)
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(profiles, func(profile model.GenerationProfile) bool {
+		return !publicModelAllowed(settings.Public, model.TaskTypeVideo, profile.ID)
+	}), nil
 }
 
 func ValidateStoredGenerationBindings() error {
