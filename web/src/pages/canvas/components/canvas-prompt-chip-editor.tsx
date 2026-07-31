@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ClipboardEvent, KeyboardEvent, MouseEvent, PointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { FileText, Image as ImageIcon, Music2, Video } from "lucide-react";
+import { FileText, Image as ImageIcon, Maximize2, Minimize2, Music2, Video } from "lucide-react";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
@@ -21,6 +21,10 @@ type Props = {
 };
 
 type MentionState = { query: string };
+type EditorSelection = {
+    start: number;
+    end: number;
+};
 const CARET_PLACEHOLDER = "\uFEFF";
 
 export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, className, style, placeholder }: Props) {
@@ -28,8 +32,10 @@ export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, 
     const editorRef = useRef<HTMLDivElement>(null);
     const composingRef = useRef(false);
     const referenceKeyRef = useRef("");
+    const selectionRef = useRef<EditorSelection | null>(null);
     const [mention, setMention] = useState<MentionState | null>(null);
     const [activeIndex, setActiveIndex] = useState(0);
+    const [expanded, setExpanded] = useState(false);
     const activeReferences = useMemo(() => references.filter((item) => item.active), [references]);
     const referenceById = useMemo(() => new Map(activeReferences.map((item) => [item.nodeId, item])), [activeReferences]);
     const referenceKey = activeReferences.map((item) => `${item.nodeId}\0${item.label}\0${item.previewUrl || ""}`).join("\u0001");
@@ -39,27 +45,33 @@ export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, 
         return query ? activeReferences.filter((item) => `${item.label} ${item.title} ${item.kind} ${item.text || ""}`.toLowerCase().includes(query)) : activeReferences;
     }, [activeReferences, mention]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         const editor = editorRef.current;
         if (!editor) return;
+        const savedSelection = selectionRef.current;
         const referencesChanged = referenceKeyRef.current !== referenceKey;
         referenceKeyRef.current = referenceKey;
         if (!referencesChanged && serializeEditor(editor) === value) {
             ensureTrailingCaretNode(editor);
-            return;
+        } else {
+            const focused = document.activeElement === editor;
+            editor.replaceChildren();
+            parsePromptTokens(value, activeReferences).forEach((token) => {
+                if (token.type === "text") editor.append(document.createTextNode(token.value));
+                else {
+                    const reference = referenceById.get(token.nodeId);
+                    editor.append(reference ? createChip(reference, theme) : document.createTextNode(token.label));
+                }
+            });
+            ensureTrailingCaretNode(editor);
+            if (focused && !savedSelection) placeCaretAtEnd(editor);
         }
-        const focused = document.activeElement === editor;
-        editor.replaceChildren();
-        parsePromptTokens(value, activeReferences).forEach((token) => {
-            if (token.type === "text") editor.append(document.createTextNode(token.value));
-            else {
-                const reference = referenceById.get(token.nodeId);
-                editor.append(reference ? createChip(reference, theme) : document.createTextNode(token.label));
-            }
-        });
-        ensureTrailingCaretNode(editor);
-        if (focused) placeCaretAtEnd(editor);
-    }, [activeReferences, referenceById, referenceKey, theme, value]);
+        if (savedSelection) {
+            editor.focus();
+            restoreEditorSelection(editor, savedSelection);
+            selectionRef.current = null;
+        }
+    }, [activeReferences, expanded, referenceById, referenceKey, theme, value]);
 
     const closeMention = () => {
         setMention(null);
@@ -95,8 +107,29 @@ export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, 
         requestAnimationFrame(syncFromEditor);
     };
 
-    return (
-        <div className="relative h-24 w-full">
+    const toggleExpanded = () => {
+        selectionRef.current = captureEditorSelection(editorRef.current) || { start: value.length, end: value.length };
+        closeMention();
+        setExpanded((value) => !value);
+    };
+
+    const editor = (
+        <div
+            data-canvas-no-zoom
+            className={expanded ? "fixed z-[110] overflow-hidden rounded-lg shadow-2xl" : "relative h-24 w-full"}
+            style={
+                expanded
+                    ? {
+                          left: "50%",
+                          top: "50%",
+                          width: "min(960px, calc(100vw - 32px))",
+                          height: "min(720px, calc(100vh - 48px))",
+                          transform: "translate(-50%, -50%)",
+                          background: theme.node.fill,
+                      }
+                    : undefined
+            }
+        >
             {!value ? (
                 <div className="pointer-events-none absolute left-3 top-2 z-10 text-sm opacity-45" style={{ color: theme.node.text, lineHeight: style?.lineHeight }}>
                     {placeholder}
@@ -109,8 +142,8 @@ export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, 
                 aria-multiline="true"
                 contentEditable
                 suppressContentEditableWarning
-                className={`${className || ""} overflow-y-auto whitespace-pre-wrap break-words`}
-                style={style}
+                className={`${className || ""} ${expanded ? "!h-full" : ""} overflow-y-auto whitespace-pre-wrap break-words`}
+                style={{ ...style, paddingRight: "2.75rem", paddingBottom: "2.5rem" }}
                 onInput={() => {
                     if (!composingRef.current) syncFromEditor();
                 }}
@@ -174,8 +207,35 @@ export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, 
                 }}
                 onBlur={() => window.setTimeout(closeMention, 120)}
             />
+            <button
+                type="button"
+                className="absolute bottom-2 right-2 z-20 grid size-8 place-items-center rounded-md border transition hover:opacity-75 focus-visible:outline-2 focus-visible:outline-offset-2"
+                style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
+                title={expanded ? "缩小输入框" : "放大输入框"}
+                aria-label={expanded ? "缩小输入框" : "放大输入框"}
+                onPointerDown={(event) => event.stopPropagation()}
+                onMouseDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }}
+                onClick={(event) => {
+                    event.stopPropagation();
+                    toggleExpanded();
+                }}
+            >
+                {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+            </button>
             {mention && candidates.length && editorRef.current ? <MentionMenu editor={editorRef.current} references={candidates} activeIndex={Math.min(activeIndex, candidates.length - 1)} theme={theme} onSelect={insertReference} /> : null}
         </div>
+    );
+
+    return expanded ? (
+        <>
+            <div className="h-24 w-full" />
+            {createPortal(editor, document.body)}
+        </>
+    ) : (
+        editor
     );
 }
 
@@ -370,4 +430,59 @@ function placeCaretAtEnd(element: HTMLElement) {
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
+}
+
+function captureEditorSelection(editor: HTMLElement | null): EditorSelection | null {
+    const selection = window.getSelection();
+    if (!editor || !selection?.rangeCount) return null;
+    const range = selection.getRangeAt(0);
+    const start = serializedOffset(editor, range.startContainer, range.startOffset);
+    const end = serializedOffset(editor, range.endContainer, range.endOffset);
+    return start === null || end === null ? null : { start, end };
+}
+
+function serializedOffset(editor: HTMLElement, node: Node, offset: number) {
+    if (!editor.contains(node)) return null;
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.setEnd(node, offset);
+    return serializeNodes(range.cloneContents().childNodes).replace(/\uFEFF/g, "").length;
+}
+
+function restoreEditorSelection(editor: HTMLElement, saved: EditorSelection) {
+    const start = pointAtPromptOffset(editor, saved.start);
+    const end = pointAtPromptOffset(editor, saved.end);
+    const range = document.createRange();
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+}
+
+function pointAtPromptOffset(editor: HTMLElement, target: number) {
+    let remaining = Math.max(0, target);
+    for (let index = 0; index < editor.childNodes.length; index += 1) {
+        const node = editor.childNodes[index];
+        if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent || "";
+            const length = text.replace(/\uFEFF/g, "").length;
+            if (remaining <= length) return { node, offset: domTextOffset(text, remaining) };
+            remaining -= length;
+        } else if (node instanceof HTMLElement && node.dataset.promptLabel) {
+            const length = node.dataset.promptLabel.length;
+            if (remaining <= length) return { node: editor, offset: index + (remaining ? 1 : 0) };
+            remaining -= length;
+        }
+    }
+    return { node: editor, offset: editor.childNodes.length };
+}
+
+function domTextOffset(text: string, target: number) {
+    let visible = 0;
+    for (let offset = 0; offset < text.length; offset += 1) {
+        if (text[offset] !== CARET_PLACEHOLDER) visible += 1;
+        if (visible === target) return offset + 1;
+    }
+    return text.length;
 }
