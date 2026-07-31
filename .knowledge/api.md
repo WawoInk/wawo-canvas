@@ -167,7 +167,7 @@ X-Generation-Task-Id: <platform task id>
 
 | Method / Path | Auth | 输入 | 输出 |
 | --- | --- | --- | --- |
-| `GET /api/v1/credit-logs` | U | `keyword/type/page/pageSize` | 当前用户 `CreditLogList` |
+| `GET /api/v1/credit-logs` | U | `keyword/type/start_time/end_time/page/pageSize` | 当前用户 `CreditLogList` |
 | `PUT /api/v1/account/profile` | U | `{displayName,email}` | 更新后的 `AuthUser` |
 | `POST /api/v1/account/password` | U | `{currentPassword,newPassword}` | `true`；旧 JWT 失效 |
 | `PUT /api/v1/account/enterprise` | U | `{name}` | 企业 owner 的 `EnterpriseAccountSummary` |
@@ -182,7 +182,7 @@ X-Generation-Task-Id: <platform task id>
 | Method / Path | Auth | 输入 | 输出/权限 |
 | --- | --- | --- | --- |
 | `GET /api/v1/enterprise/members` | U | `keyword/page/pageSize` | owner 的成员列表 |
-| `GET /api/v1/enterprise/credit-logs` | U | `memberId/type/keyword/page/pageSize` | owner 的企业范围流水 |
+| `GET /api/v1/enterprise/credit-logs` | U | `memberId/type/keyword/start_time/end_time/page/pageSize` | owner 的企业范围流水 |
 | `POST /api/v1/enterprise/members` | U | `{username,password,displayName?,email?}` | 新 member，初始积分 0 |
 | `POST /api/v1/enterprise/members/:id/status` | U | `{status:"active"|"ban"}` | 更新成员；owner only |
 | `POST /api/v1/enterprise/members/:id/password` | U | `{password}` | 重置并递增 session version |

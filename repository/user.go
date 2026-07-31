@@ -240,6 +240,12 @@ func ListCreditLogs(q model.Query) ([]model.CreditLog, int64, error) {
 	if q.Type != "" {
 		tx = tx.Where("type = ?", q.Type)
 	}
+	if q.StartTime != "" {
+		tx = tx.Where("created_at::timestamptz >= ?::timestamptz", q.StartTime)
+	}
+	if q.EndTime != "" {
+		tx = tx.Where("created_at::timestamptz <= ?::timestamptz", q.EndTime)
+	}
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -263,6 +269,12 @@ func ListCreditLogsByUserID(userID string, q model.Query) ([]model.CreditLog, in
 	}
 	if q.Type != "" {
 		tx = tx.Where("type = ?", q.Type)
+	}
+	if q.StartTime != "" {
+		tx = tx.Where("created_at::timestamptz >= ?::timestamptz", q.StartTime)
+	}
+	if q.EndTime != "" {
+		tx = tx.Where("created_at::timestamptz <= ?::timestamptz", q.EndTime)
 	}
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {

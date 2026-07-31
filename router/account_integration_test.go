@@ -7,6 +7,7 @@ import (
 
 	"github.com/basketikun/infinite-canvas/config"
 	"github.com/basketikun/infinite-canvas/model"
+	"github.com/basketikun/infinite-canvas/repository"
 	"github.com/basketikun/infinite-canvas/router"
 	"github.com/basketikun/infinite-canvas/service"
 	"github.com/google/uuid"
@@ -169,6 +170,72 @@ func TestAccountLogsOnlyExposeCurrentUserThroughHTTP(t *testing.T) {
 	otherDetail := doJSON[accountGenerationTaskDetail](t, http.MethodGet, server.URL+"/api/v1/generation-tasks/"+taskB.ID, sessionA.Data.Token, nil)
 	if otherDetail.Code != 1 {
 		t.Fatalf("user A read user B task detail = %#v", otherDetail)
+	}
+}
+
+func TestAccountCreditLogsFilterByDateRangeThroughHTTP(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "account-credit-log-date-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	user, err := service.SaveUser(model.User{Username: "account-credit-date-" + uuid.NewString(), Credits: credit(20)}, "password")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	for _, log := range []model.CreditLog{
+		{ID: "credit-before-" + uuid.NewString(), UserID: user.ID, Type: model.CreditLogTypeAdminAdjust, Amount: credit(10), Balance: credit(10), CreatedAt: "2026-07-01T23:30:00+08:00"},
+		{ID: "credit-inside-" + uuid.NewString(), UserID: user.ID, Type: model.CreditLogTypeAdminAdjust, Amount: credit(10), Balance: credit(20), CreatedAt: "2026-07-02T23:30:00+08:00"},
+	} {
+		if _, err := repository.SaveCreditLog(log); err != nil {
+			t.Fatalf("save credit log: %v", err)
+		}
+	}
+
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	session := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": user.Username, "password": "password"})
+	logs := doJSON[model.CreditLogList](t, http.MethodGet, server.URL+"/api/v1/credit-logs?start_time=2026-07-01T16:00:00.000Z&end_time=2026-07-02T15:59:59.999Z&pageSize=20", session.Data.Token, nil)
+
+	if logs.Code != 0 || logs.Data.Total != 1 || len(logs.Data.Items) != 1 || logs.Data.Items[0].CreatedAt != "2026-07-02T23:30:00+08:00" {
+		t.Fatalf("date filtered credit logs = %#v", logs)
+	}
+}
+
+func TestAccountUsageLogsFilterByDateRangeThroughHTTP(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "account-usage-log-date-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	user, err := service.SaveUser(model.User{Username: "account-usage-date-" + uuid.NewString()}, "password")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	before, err := service.RecordUserTask(model.PublicUser(user), model.TaskTypeImage, string(model.SourceCanvas), "provider", "model", model.TaskStatusSuccess, credit(0), 100, "before-"+uuid.NewString(), "{}", "{}", "")
+	if err != nil {
+		t.Fatalf("record before task: %v", err)
+	}
+	inside, err := service.RecordUserTask(model.PublicUser(user), model.TaskTypeImage, string(model.SourceCanvas), "provider", "model", model.TaskStatusSuccess, credit(0), 100, "inside-"+uuid.NewString(), "{}", "{}", "")
+	if err != nil {
+		t.Fatalf("record inside task: %v", err)
+	}
+	db, err := repository.DB()
+	if err != nil {
+		t.Fatalf("database: %v", err)
+	}
+	if err := db.Model(&model.GenerationTask{}).Where("id = ?", before.ID).Update("created_at", "2026-07-01T23:30:00+08:00").Error; err != nil {
+		t.Fatalf("set before task time: %v", err)
+	}
+	if err := db.Model(&model.GenerationTask{}).Where("id = ?", inside.ID).Update("created_at", "2026-07-02T23:30:00+08:00").Error; err != nil {
+		t.Fatalf("set inside task time: %v", err)
+	}
+
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	session := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": user.Username, "password": "password"})
+	tasks := doJSON[model.GenerationTaskList](t, http.MethodGet, server.URL+"/api/v1/generation-tasks?start_time=2026-07-01T16:00:00.000Z&end_time=2026-07-02T15:59:59.999Z&pageSize=20", session.Data.Token, nil)
+
+	if tasks.Code != 0 || tasks.Data.Total != 1 || len(tasks.Data.Items) != 1 || tasks.Data.Items[0].ID != inside.ID {
+		t.Fatalf("date filtered usage logs = %#v", tasks)
 	}
 }
 

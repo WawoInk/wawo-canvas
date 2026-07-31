@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost } from "@/services/api/request";
+import { apiDelete, apiGet, apiPost, compactApiParams } from "@/services/api/request";
 import type { DecimalValue } from "@/lib/decimal";
 import { useUserStore } from "@/stores/use-user-store";
 
@@ -98,8 +98,8 @@ export async function fetchImageHistory(page = 1, pageSize = 50, source?: string
     return fetchGenerationHistory<ImageHistoryItem>("image", page, pageSize, source);
 }
 
-export async function fetchGenerationTasks(page = 1, pageSize = 10): Promise<GenerationTaskList<GenerationTaskItem>> {
-    return apiGet<GenerationTaskList<GenerationTaskItem>>(`/api/v1/generation-tasks?page=${page}&pageSize=${pageSize}`, undefined, authToken());
+export async function fetchGenerationTasks(query: { start_time?: string; end_time?: string; page?: number; pageSize?: number } = {}): Promise<GenerationTaskList<GenerationTaskItem>> {
+    return apiGet<GenerationTaskList<GenerationTaskItem>>("/api/v1/generation-tasks", compactApiParams(query), authToken());
 }
 
 export async function fetchGenerationHistory<T>(taskType: string, page = 1, pageSize = 50, source?: string): Promise<GenerationTaskList<T>> {

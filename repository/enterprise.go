@@ -92,6 +92,12 @@ func ListEnterpriseCreditLogs(enterpriseID, memberID string, q model.Query) ([]m
 	if q.Type != "" {
 		tx = tx.Where("log.type = ?", q.Type)
 	}
+	if q.StartTime != "" {
+		tx = tx.Where("log.created_at::timestamptz >= ?::timestamptz", q.StartTime)
+	}
+	if q.EndTime != "" {
+		tx = tx.Where("log.created_at::timestamptz <= ?::timestamptz", q.EndTime)
+	}
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {
 		return nil, 0, err

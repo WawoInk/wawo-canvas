@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { App, Button, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Skeleton, Space, Table, Tabs, Tag } from "antd";
+import { App, Button, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Skeleton, Space, Table, Tabs, Tag } from "antd";
+import type { Dayjs } from "dayjs";
+import { Download } from "lucide-react";
 import { nanoid } from "nanoid";
 
 import { enterpriseCapabilities } from "@/lib/account-access";
@@ -24,6 +26,7 @@ import {
 } from "@/services/api/auth";
 import { useUserStore } from "@/stores/use-user-store";
 import { compareDecimal, formatDecimal } from "@/lib/decimal";
+import { downloadCsv, fetchAllPages, type CsvColumn } from "./account-log-export";
 import { AccountLogs } from "./account-logs";
 
 const platformRoleLabels = { guest: "访客", user: "普通用户", admin: "平台管理员" } as const;
@@ -36,6 +39,18 @@ const creditLogTypeLabels = {
     enterprise_allocate: "企业分配",
     enterprise_reclaim: "企业收回",
 } as const;
+const enterpriseCreditCsvColumns: CsvColumn<EnterpriseCreditLog>[] = [
+    { title: "流水 ID", value: (item) => item.id },
+    { title: "成员", value: (item) => item.displayName || item.username },
+    { title: "用户名", value: (item) => item.username },
+    { title: "类型", value: (item) => creditLogTypeLabels[item.type] },
+    { title: "变动", value: (item) => formatDecimal(item.amount) },
+    { title: "余额", value: (item) => formatDecimal(item.balance) },
+    { title: "关联 ID", value: (item) => item.relatedId || item.taskId },
+    { title: "对方 ID", value: (item) => item.counterpartyId },
+    { title: "备注", value: (item) => item.remark },
+    { title: "时间", value: (item) => (item.createdAt ? new Date(item.createdAt).toLocaleString("zh-CN") : "") },
+];
 
 export default function AccountPage() {
     const { message } = App.useApp();
@@ -227,7 +242,7 @@ export default function AccountPage() {
     );
 }
 
-function EnterpriseCreditLogs() {
+export function EnterpriseCreditLogs() {
     const { message } = App.useApp();
     const token = useUserStore((state) => state.token);
     const user = useUserStore((state) => state.user);
@@ -241,7 +256,11 @@ function EnterpriseCreditLogs() {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [loading, setLoading] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const [error, setError] = useState("");
+    const [range, setRange] = useState<[Dayjs, Dayjs] | null>(null);
+    const startTime = range?.[0].startOf("day").toISOString();
+    const endTime = range?.[1].endOf("day").toISOString();
 
     useEffect(() => {
         let current = true;
@@ -261,7 +280,7 @@ function EnterpriseCreditLogs() {
         setError("");
         setLogs([]);
         setTotal(0);
-        void fetchEnterpriseCreditLogs(token, { memberId, type, keyword, page, pageSize })
+        void fetchEnterpriseCreditLogs(token, { memberId, type, keyword, start_time: startTime, end_time: endTime, page, pageSize })
             .then((result) => {
                 if (!current) return;
                 setLogs(result.items);
@@ -278,7 +297,24 @@ function EnterpriseCreditLogs() {
         return () => {
             current = false;
         };
-    }, [keyword, memberId, page, pageSize, token, type, user?.credits, user?.id]);
+    }, [endTime, keyword, memberId, page, pageSize, startTime, token, type, user?.credits, user?.id]);
+
+    const exportLogs = async () => {
+        setExporting(true);
+        try {
+            const rows = await fetchAllPages((nextPage, nextPageSize) => fetchEnterpriseCreditLogs(token, { memberId, type, keyword, start_time: startTime, end_time: endTime, page: nextPage, pageSize: nextPageSize }));
+            if (!rows.length) {
+                message.warning("暂无企业积分流水可导出");
+                return;
+            }
+            downloadCsv("企业积分流水.csv", enterpriseCreditCsvColumns, rows);
+            message.success("企业积分流水已导出");
+        } catch (reason) {
+            message.error(reason instanceof Error ? reason.message : "企业积分流水导出失败");
+        } finally {
+            setExporting(false);
+        }
+    };
 
     return (
         <section className="rounded-2xl border border-border bg-card p-6">
@@ -314,6 +350,15 @@ function EnterpriseCreditLogs() {
                         setPage(1);
                     }}
                 />
+                <DatePicker.RangePicker
+                    value={range}
+                    format="YYYY-MM-DD"
+                    placeholder={["开始日期", "结束日期"]}
+                    onChange={(value) => {
+                        setRange(value as [Dayjs, Dayjs] | null);
+                        setPage(1);
+                    }}
+                />
                 <Input.Search
                     allowClear
                     aria-label="搜索企业积分流水"
@@ -333,6 +378,9 @@ function EnterpriseCreditLogs() {
                         setPage(1);
                     }}
                 />
+                <Button icon={<Download className="size-4" />} loading={exporting} onClick={() => void exportLogs()}>
+                    导出企业积分流水
+                </Button>
             </Space>
             {error ? <p className="mt-4 text-sm text-red-500">{error}</p> : null}
             <Table<EnterpriseCreditLog>

@@ -5,8 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { App } from "antd";
 import { MemoryRouter } from "react-router-dom";
 
-import AccountPage from "../src/pages/account/index.tsx";
-import { AccountCreditLogTable, AccountLogs, AccountUsageLogTable } from "../src/pages/account/account-logs.tsx";
+import AccountPage, { EnterpriseCreditLogs } from "../src/pages/account/index.tsx";
+import { AccountCreditLogs, AccountCreditLogTable, AccountLogs, AccountUsageLogs, AccountUsageLogTable } from "../src/pages/account/account-logs.tsx";
 import { useUserStore } from "../src/stores/use-user-store.ts";
 
 test("账户日志明确展示用户操作和积分变动", () => {
@@ -108,4 +108,25 @@ test("日志记录提供使用记录和积分记录视图", () => {
 
     assert.match(html, /使用记录/);
     assert.match(html, /积分记录/);
+});
+
+test("账户日志按当前视图显示日期筛选和导出按钮", () => {
+    const usageHTML = renderToStaticMarkup(createElement(App, null, createElement(AccountUsageLogs)));
+    const creditHTML = renderToStaticMarkup(createElement(App, null, createElement(AccountCreditLogs)));
+
+    assert.match(usageHTML, /开始日期/);
+    assert.match(usageHTML, /结束日期/);
+    assert.match(usageHTML, /导出使用记录/);
+    assert.match(creditHTML, /开始日期/);
+    assert.match(creditHTML, /结束日期/);
+    assert.match(creditHTML, /导出渲染记录/);
+});
+
+test("企业积分流水展示时间并支持日期筛选和导出", () => {
+    const html = renderToStaticMarkup(createElement(App, null, createElement(EnterpriseCreditLogs)));
+
+    assert.match(html, /时间/);
+    assert.match(html, /开始日期/);
+    assert.match(html, /结束日期/);
+    assert.match(html, /导出企业积分流水/);
 });
