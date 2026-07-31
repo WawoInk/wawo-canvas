@@ -128,10 +128,10 @@ func ListGenerationTasks(q model.GenerationTaskQuery) ([]model.GenerationTask, i
 		tx = tx.Where("status IN ?", model.EquivalentTaskStatuses(q.Status))
 	}
 	if q.StartTime != "" {
-		tx = tx.Where("created_at >= ?", q.StartTime)
+		tx = tx.Where("created_at::timestamptz >= ?::timestamptz", q.StartTime)
 	}
 	if q.EndTime != "" {
-		tx = tx.Where("created_at <= ?", q.EndTime)
+		tx = tx.Where("created_at::timestamptz <= ?::timestamptz", q.EndTime)
 	}
 
 	var total int64
@@ -253,10 +253,10 @@ func ListGenerationTasksWithUsername(q model.GenerationTaskQuery) ([]AdminGenera
 		tx = tx.Where("gt.status IN ?", model.EquivalentTaskStatuses(q.Status))
 	}
 	if q.StartTime != "" {
-		tx = tx.Where("gt.created_at >= ?", q.StartTime)
+		tx = tx.Where("gt.created_at::timestamptz >= ?::timestamptz", q.StartTime)
 	}
 	if q.EndTime != "" {
-		tx = tx.Where("gt.created_at <= ?", q.EndTime)
+		tx = tx.Where("gt.created_at::timestamptz <= ?::timestamptz", q.EndTime)
 	}
 
 	var total int64

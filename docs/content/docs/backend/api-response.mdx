@@ -71,6 +71,7 @@ description: 后端统一响应信封与结构化生成错误
 | --- | --- | --- |
 | `PUT` | `/api/v1/account/profile` | 修改自己的昵称和邮箱 |
 | `POST` | `/api/v1/account/password` | 校验当前密码后修改新密码，并使旧 JWT 失效 |
+| `GET` | `/api/v1/credit-logs` | 按 `keyword/type/start_time/end_time/page/pageSize` 查询当前账号积分流水 |
 | `GET` | `/api/v1/enterprise/summary` | 有效企业账号读取企业名称、角色、状态和成员数；个人账号拒绝访问 |
 | `PUT` | `/api/v1/account/enterprise` | 企业主账号修改本企业名称 |
 
@@ -79,7 +80,7 @@ description: 后端统一响应信封与结构化生成错误
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/api/v1/enterprise/members` | 按 `keyword/page/pageSize` 分页搜索本企业成员 |
-| `GET` | `/api/v1/enterprise/credit-logs` | 主账号按 `memberId/type/keyword/page/pageSize` 查询本企业主账号和当前成员的积分流水 |
+| `GET` | `/api/v1/enterprise/credit-logs` | 主账号按 `memberId/type/keyword/start_time/end_time/page/pageSize` 查询本企业主账号和当前成员的积分流水 |
 | `POST` | `/api/v1/enterprise/members` | 创建固定为 `user/member`、初始积分为零的子账号 |
 | `POST` | `/api/v1/enterprise/members/{id}/status` | 设置成员 `active/ban` 状态 |
 | `POST` | `/api/v1/enterprise/members/{id}/password` | 重置成员密码并使旧 JWT 失效 |
@@ -87,7 +88,7 @@ description: 后端统一响应信封与结构化生成错误
 
 积分操作响应同时返回主账号最新积分 `ownerCredits` 和更新后的 `member`。客户端请求 ID 最长 128 字符；相同账号、操作类型和请求 ID 的重试只生效一次，复用请求 ID 但修改成员或数量会被拒绝。
 
-企业积分流水只接受当前企业主账号查询，企业 ID 始终从认证账号推导；客户端提交 `enterpriseId`、其他企业的 `memberId` 或无关流水 ID 不会扩大范围。列表包含 `admin_adjust`、`enterprise_allocate`、`enterprise_reclaim`、`ai_consume` 和 `ai_refund`，每条记录附带所属账号的 `username/displayName`；子账号继续使用 `/api/v1/credit-logs` 查看自己的个人流水。
+`start_time/end_time` 按闭区间筛选 `createdAt`。企业积分流水只接受当前企业主账号查询，企业 ID 始终从认证账号推导；客户端提交 `enterpriseId`、其他企业的 `memberId` 或无关流水 ID 不会扩大范围。列表包含 `admin_adjust`、`enterprise_allocate`、`enterprise_reclaim`、`ai_consume` 和 `ai_refund`，每条记录附带所属账号的 `username/displayName`；子账号继续使用 `/api/v1/credit-logs` 查看自己的个人流水。
 
 ## 企业素材接口
 

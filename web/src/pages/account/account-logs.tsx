@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Table, Tabs, Tag } from "antd";
+import { App, Button, DatePicker, Space, Table, Tabs, Tag } from "antd";
 import type { TableProps } from "antd";
+import type { Dayjs } from "dayjs";
+import { Download } from "lucide-react";
 
 import { fetchUserCreditLogs, type UserCreditLog } from "@/services/api/auth";
 import { fetchGenerationTasks, type GenerationTaskItem } from "@/services/api/generation-tasks";
 import { compareDecimal, formatDecimal } from "@/lib/decimal";
 import { useUserStore } from "@/stores/use-user-store";
+import { downloadCsv, fetchAllPages, type CsvColumn } from "./account-log-export";
 
 const operationLabels: Record<string, string> = {
     "video.generate": "生成视频",
@@ -38,6 +41,31 @@ const creditLogTypeLabels: Record<string, string> = {
     enterprise_allocate: "企业分配",
     enterprise_reclaim: "企业收回",
 };
+
+type LogDateRange = [Dayjs, Dayjs] | null;
+
+const displayTime = (value: string) => (value ? new Date(value).toLocaleString("zh-CN") : "");
+const usageCsvColumns: CsvColumn<GenerationTaskItem>[] = [
+    { title: "任务 ID", value: (item) => item.id },
+    { title: "操作", value: (item) => operationLabels[item.intentKind || ""] || operationLabels[item.taskType] || item.intentKind || item.taskType },
+    { title: "来源", value: (item) => sourceLabels[item.source] || item.source },
+    { title: "模型", value: (item) => item.model },
+    { title: "模型展示名", value: (item) => item.modelDisplayName || item.model },
+    { title: "状态", value: (item) => statusLabels[item.status]?.label || item.status },
+    { title: "积分", value: (item) => formatDecimal(item.credits) },
+    { title: "上游 Credits", value: (item) => (item.taskType === "video" ? (item.upstreamCredits ?? "null") : "") },
+    { title: "耗时（秒）", value: (item) => (item.latencyMs ? (item.latencyMs / 1000).toFixed(1) : "") },
+    { title: "时间", value: (item) => displayTime(item.createdAt) },
+];
+const creditCsvColumns: CsvColumn<UserCreditLog>[] = [
+    { title: "流水 ID", value: (item) => item.id },
+    { title: "类型", value: (item) => creditLogTypeLabels[item.type] || item.type },
+    { title: "变动", value: (item) => formatDecimal(item.amount) },
+    { title: "余额", value: (item) => formatDecimal(item.balance) },
+    { title: "关联任务", value: (item) => item.taskId || item.relatedId },
+    { title: "备注", value: (item) => item.remark },
+    { title: "时间", value: (item) => displayTime(item.createdAt) },
+];
 
 type UsageLogTableProps = {
     items: GenerationTaskItem[];
@@ -108,7 +136,8 @@ export function AccountUsageLogTable({ items, loading, pagination }: UsageLogTab
     );
 }
 
-function AccountUsageLogs() {
+export function AccountUsageLogs() {
+    const { message } = App.useApp();
     const token = useUserStore((state) => state.token);
     const userId = useUserStore((state) => state.user?.id);
     const [items, setItems] = useState<GenerationTaskItem[]>([]);
@@ -116,13 +145,17 @@ function AccountUsageLogs() {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [loading, setLoading] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const [error, setError] = useState("");
+    const [range, setRange] = useState<LogDateRange>(null);
+    const startTime = range?.[0].startOf("day").toISOString();
+    const endTime = range?.[1].endOf("day").toISOString();
 
     useEffect(() => {
         let current = true;
         setLoading(true);
         setError("");
-        void fetchGenerationTasks(page, pageSize)
+        void fetchGenerationTasks({ start_time: startTime, end_time: endTime, page, pageSize })
             .then((result) => {
                 if (!current) return;
                 setItems(result.items);
@@ -138,10 +171,41 @@ function AccountUsageLogs() {
         return () => {
             current = false;
         };
-    }, [page, pageSize, token, userId]);
+    }, [endTime, page, pageSize, startTime, token, userId]);
+
+    const exportLogs = async () => {
+        setExporting(true);
+        try {
+            const rows = await fetchAllPages((nextPage, nextPageSize) => fetchGenerationTasks({ start_time: startTime, end_time: endTime, page: nextPage, pageSize: nextPageSize }));
+            if (!rows.length) {
+                message.warning("暂无使用记录可导出");
+                return;
+            }
+            downloadCsv("使用记录.csv", usageCsvColumns, rows);
+            message.success("使用记录已导出");
+        } catch (reason) {
+            message.error(reason instanceof Error ? reason.message : "使用记录导出失败");
+        } finally {
+            setExporting(false);
+        }
+    };
 
     return (
         <>
+            <Space wrap className="mb-4">
+                <DatePicker.RangePicker
+                    value={range}
+                    format="YYYY-MM-DD"
+                    placeholder={["开始日期", "结束日期"]}
+                    onChange={(value) => {
+                        setRange(value as LogDateRange);
+                        setPage(1);
+                    }}
+                />
+                <Button icon={<Download className="size-4" />} loading={exporting} onClick={() => void exportLogs()}>
+                    导出使用记录
+                </Button>
+            </Space>
             {error ? <p className="mb-4 text-sm text-red-500">{error}</p> : null}
             <AccountUsageLogTable
                 items={items}
@@ -162,7 +226,8 @@ function AccountUsageLogs() {
     );
 }
 
-function AccountCreditLogs() {
+export function AccountCreditLogs() {
+    const { message } = App.useApp();
     const token = useUserStore((state) => state.token);
     const user = useUserStore((state) => state.user);
     const [items, setItems] = useState<UserCreditLog[]>([]);
@@ -170,13 +235,17 @@ function AccountCreditLogs() {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [loading, setLoading] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const [error, setError] = useState("");
+    const [range, setRange] = useState<LogDateRange>(null);
+    const startTime = range?.[0].startOf("day").toISOString();
+    const endTime = range?.[1].endOf("day").toISOString();
 
     useEffect(() => {
         let current = true;
         setLoading(true);
         setError("");
-        void fetchUserCreditLogs(token, { page, pageSize })
+        void fetchUserCreditLogs(token, { start_time: startTime, end_time: endTime, page, pageSize })
             .then((result) => {
                 if (!current) return;
                 setItems(result.items);
@@ -192,10 +261,41 @@ function AccountCreditLogs() {
         return () => {
             current = false;
         };
-    }, [page, pageSize, token, user?.credits, user?.id]);
+    }, [endTime, page, pageSize, startTime, token, user?.credits, user?.id]);
+
+    const exportLogs = async () => {
+        setExporting(true);
+        try {
+            const rows = await fetchAllPages((nextPage, nextPageSize) => fetchUserCreditLogs(token, { start_time: startTime, end_time: endTime, page: nextPage, pageSize: nextPageSize }));
+            if (!rows.length) {
+                message.warning("暂无积分记录可导出");
+                return;
+            }
+            downloadCsv("积分记录.csv", creditCsvColumns, rows);
+            message.success("积分记录已导出");
+        } catch (reason) {
+            message.error(reason instanceof Error ? reason.message : "积分记录导出失败");
+        } finally {
+            setExporting(false);
+        }
+    };
 
     return (
         <>
+            <Space wrap className="mb-4">
+                <DatePicker.RangePicker
+                    value={range}
+                    format="YYYY-MM-DD"
+                    placeholder={["开始日期", "结束日期"]}
+                    onChange={(value) => {
+                        setRange(value as LogDateRange);
+                        setPage(1);
+                    }}
+                />
+                <Button icon={<Download className="size-4" />} loading={exporting} onClick={() => void exportLogs()}>
+                    导出渲染记录
+                </Button>
+            </Space>
             {error ? <p className="mb-4 text-sm text-red-500">{error}</p> : null}
             <AccountCreditLogTable
                 items={items}

@@ -121,11 +121,11 @@ export async function fetchEnterpriseMembers(token: string, query: { keyword?: s
     return apiGet<EnterpriseMemberList>("/api/v1/enterprise/members", compactApiParams(query), token);
 }
 
-export async function fetchEnterpriseCreditLogs(token: string, query: { memberId?: string; keyword?: string; type?: string; page?: number; pageSize?: number } = {}) {
+export async function fetchEnterpriseCreditLogs(token: string, query: { memberId?: string; keyword?: string; type?: string; start_time?: string; end_time?: string; page?: number; pageSize?: number } = {}) {
     return apiGet<EnterpriseCreditLogList>("/api/v1/enterprise/credit-logs", compactApiParams(query), token);
 }
 
-export async function fetchUserCreditLogs(token: string, query: { keyword?: string; type?: string; page?: number; pageSize?: number } = {}) {
+export async function fetchUserCreditLogs(token: string, query: { keyword?: string; type?: string; start_time?: string; end_time?: string; page?: number; pageSize?: number } = {}) {
     return apiGet<UserCreditLogList>("/api/v1/credit-logs", compactApiParams(query), token);
 }
 

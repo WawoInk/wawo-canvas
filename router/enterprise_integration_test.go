@@ -298,6 +298,7 @@ type enterpriseCreditLogView struct {
 	RelatedID      string              `json:"relatedId"`
 	CounterpartyID string              `json:"counterpartyId"`
 	Remark         string              `json:"remark"`
+	CreatedAt      string              `json:"createdAt"`
 }
 
 type enterpriseCreditLogList struct {
@@ -673,6 +674,35 @@ func TestEnterpriseOwnerListsEnterpriseCreditLogsThroughHTTP(t *testing.T) {
 	forbidden := doJSON[enterpriseCreditLogList](t, http.MethodGet, server.URL+"/api/v1/enterprise/credit-logs", memberSession.Data.Token, nil)
 	if forbidden.Code != 1 || forbidden.Msg != "仅企业主账号可管理成员" {
 		t.Fatalf("member enterprise ledger = %#v", forbidden)
+	}
+}
+
+func TestEnterpriseCreditLogsFilterByDateRangeThroughHTTP(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "enterprise-credit-log-date-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	ownerUsername := "enterprise-credit-date-" + uuid.NewString()
+	enterprise, err := service.CreateEnterprise(service.CreateEnterpriseInput{Name: "企业日期流水", OwnerUsername: ownerUsername, OwnerPassword: "password"})
+	if err != nil {
+		t.Fatalf("create enterprise: %v", err)
+	}
+	for _, log := range []model.CreditLog{
+		{ID: "enterprise-credit-before-" + uuid.NewString(), UserID: enterprise.OwnerID, Type: model.CreditLogTypeAdminAdjust, Amount: credit(10), Balance: credit(10), CreatedAt: "2026-07-01T23:30:00+08:00"},
+		{ID: "enterprise-credit-inside-" + uuid.NewString(), UserID: enterprise.OwnerID, Type: model.CreditLogTypeAdminAdjust, Amount: credit(10), Balance: credit(20), CreatedAt: "2026-07-02T23:30:00+08:00"},
+	} {
+		if _, err := repository.SaveCreditLog(log); err != nil {
+			t.Fatalf("save enterprise credit log: %v", err)
+		}
+	}
+
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	owner := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/auth/login", "", map[string]string{"username": ownerUsername, "password": "password"})
+	logs := doJSON[enterpriseCreditLogList](t, http.MethodGet, server.URL+"/api/v1/enterprise/credit-logs?start_time=2026-07-01T16:00:00.000Z&end_time=2026-07-02T15:59:59.999Z&pageSize=20", owner.Data.Token, nil)
+
+	if logs.Code != 0 || logs.Data.Total != 1 || len(logs.Data.Items) != 1 || logs.Data.Items[0].CreatedAt != "2026-07-02T23:30:00+08:00" {
+		t.Fatalf("date filtered enterprise credit logs = %#v", logs)
 	}
 }
 
