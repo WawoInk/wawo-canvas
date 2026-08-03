@@ -27,6 +27,7 @@ const defaults: AiConfig = {
     videoNegativePrompt: "",
     background: "",
     systemPrompt: "",
+    imageRequestFormats: [],
     models: [],
     imageModels: [],
     videoModels: [],
