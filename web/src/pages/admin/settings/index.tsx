@@ -6,7 +6,7 @@ import { App, Button, Card, Checkbox, Col, Drawer, Flex, Form, Input, InputNumbe
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { EditorView } from "@uiw/react-codemirror";
 
-import { fetchAdminSettings, fetchChannelModels, saveAdminSettings, testChannelModel, type AdminGenerationProfileBinding, type AdminModelChannel, type AdminModelCost, type AdminSettings } from "@/services/api/admin";
+import { fetchAdminSettings, fetchChannelModels, saveAdminSettings, testChannelModel, type AdminGenerationProfileBinding, type AdminImageRequestFormat, type AdminModelChannel, type AdminModelCost, type AdminSettings } from "@/services/api/admin";
 import { useUserStore } from "@/stores/use-user-store";
 import { modelCostFor, normalizeModelCosts, upsertModelCost, videoBillingRule, type VideoBillingMode } from "./billing-rules";
 import { nonNegativeDecimal } from "@/lib/decimal";
@@ -30,6 +30,7 @@ const emptySettings: AdminSettings = {
         modelChannel: {
             availableModels: [],
             modelCosts: [],
+            imageRequestFormats: [],
             defaultModel: "",
             defaultImageModel: "",
             defaultVideoModel: "",
@@ -63,6 +64,10 @@ const billingModeOptions: Array<{ label: string; value: VideoBillingMode }> = [
     { label: "按次计费", value: "per_call" },
 ];
 const billingModeLabels = Object.fromEntries(billingModeOptions.map((item) => [item.value, item.label])) as Record<VideoBillingMode, string>;
+const imageRequestFormatOptions: Array<{ label: string; value: AdminImageRequestFormat["format"] }> = [
+    { label: "application/json", value: "application/json" },
+    { label: "multipart/form-data", value: "multipart/form-data" },
+];
 
 type SettingsTabKey = "public" | "private";
 type EditorMode = "visual" | "json";
@@ -97,6 +102,10 @@ export default function AdminSettingsPage() {
     const [modelCosts, setModelCosts] = useState<AdminModelCost[]>([]);
     const [knownModels, setKnownModels] = useState<string[]>([]);
     const publicModels = Form.useWatch(["public", "modelChannel", "availableModels"], form) || [];
+    const imageModels = Form.useWatch(["public", "modelChannel", "imageModels"], form) || [];
+    const imageRequestFormats = (Form.useWatch(["public", "modelChannel", "imageRequestFormats"], form) || []) as AdminImageRequestFormat[];
+    const configuredImageRequestModels = new Set(imageRequestFormats.map((item) => item?.model).filter(Boolean));
+    const nextImageRequestModel = imageModels.find((model) => !configuredImageRequestModels.has(model));
     const effectiveChannels = useMemo(() => (editorMode.private === "json" ? parseTabJson("private", jsonText.private)?.channels || channels : channels), [channels, editorMode.private, jsonText.private]);
     const channelModels = useMemo(() => collectChannelModels(effectiveChannels), [effectiveChannels]);
     const generationProfileBindings = (Form.useWatch(["private", "generationProfiles"], { form, preserve: true }) || []) as AdminGenerationProfileBinding[];
@@ -531,6 +540,43 @@ export default function AdminSettingsPage() {
                                         <Form.Item name={["public", "modelChannel", "audioModels"]} label="音频模型可选项" extra="留空时前台无音频模型可选">
                                             <Select mode="multiple" showSearch allowClear placeholder="选择音频模型" options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
+                                    </Col>
+                                    <Col span={24}>
+                                        <Typography.Title level={5}>图片请求格式</Typography.Title>
+                                        <Typography.Paragraph type="secondary">仅显式配置的图片模型使用指定协议；未配置模型保持现有默认请求格式。</Typography.Paragraph>
+                                        <Form.List name={["public", "modelChannel", "imageRequestFormats"]}>
+                                            {(fields, { add, remove }) => (
+                                                <Flex vertical gap={8}>
+                                                    {fields.map(({ key, name, ...restField }) => {
+                                                        const currentModel = imageRequestFormats[name]?.model;
+                                                        return (
+                                                            <Row key={key} gutter={8} align="middle">
+                                                                <Col xs={24} md={11}>
+                                                                    <Form.Item {...restField} name={[name, "model"]} rules={[{ required: true, message: "请选择图片模型" }]} style={{ marginBottom: 0 }}>
+                                                                        <Select
+                                                                            showSearch
+                                                                            placeholder="选择图片模型"
+                                                                            options={imageModels.map((model) => ({ label: model, value: model, disabled: configuredImageRequestModels.has(model) && model !== currentModel }))}
+                                                                        />
+                                                                    </Form.Item>
+                                                                </Col>
+                                                                <Col xs={20} md={11}>
+                                                                    <Form.Item {...restField} name={[name, "format"]} rules={[{ required: true, message: "请选择请求格式" }]} style={{ marginBottom: 0 }}>
+                                                                        <Select placeholder="选择请求格式" options={imageRequestFormatOptions} />
+                                                                    </Form.Item>
+                                                                </Col>
+                                                                <Col xs={4} md={2}>
+                                                                    <Button type="text" danger icon={<DeleteOutlined />} aria-label={`删除图片请求格式 ${currentModel || name + 1}`} onClick={() => remove(name)} />
+                                                                </Col>
+                                                            </Row>
+                                                        );
+                                                    })}
+                                                    <Button type="dashed" icon={<PlusOutlined />} disabled={!nextImageRequestModel} onClick={() => nextImageRequestModel && add({ model: nextImageRequestModel, format: "application/json" })}>
+                                                        添加模型
+                                                    </Button>
+                                                </Flex>
+                                            )}
+                                        </Form.List>
                                     </Col>
                                     <Col span={24}>
                                         <Form.Item name={["public", "modelChannel", "systemPrompt"]} label="系统提示词">
@@ -1171,6 +1217,7 @@ function normalizePublicSetting(setting: Partial<AdminSettings["public"]> = {}):
             ...(setting.modelChannel || {}),
             availableModels: setting.modelChannel?.availableModels || [],
             modelCosts: normalizeModelCosts(setting.modelChannel?.modelCosts || []),
+            imageRequestFormats: (setting.modelChannel?.imageRequestFormats || []).filter((item) => item?.model && imageRequestFormatOptions.some((option) => option.value === item.format)),
         },
         auth: {
             allowRegister: setting.auth?.allowRegister !== false,

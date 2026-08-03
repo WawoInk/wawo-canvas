@@ -293,7 +293,7 @@ export function AccountCreditLogs() {
                     }}
                 />
                 <Button icon={<Download className="size-4" />} loading={exporting} onClick={() => void exportLogs()}>
-                    导出渲染记录
+                    导出日志记录
                 </Button>
             </Space>
             {error ? <p className="mb-4 text-sm text-red-500">{error}</p> : null}

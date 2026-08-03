@@ -35,21 +35,27 @@ type ModelCost struct {
 	ResolutionCredits map[string]Decimal `json:"resolutionCredits,omitempty"`
 }
 
+type ImageRequestFormatSetting struct {
+	Model  string `json:"model"`
+	Format string `json:"format"`
+}
+
 // PublicModelChannelSetting 公开模型渠道配置。
 type PublicModelChannelSetting struct {
-	AvailableModels    []string    `json:"availableModels"`
-	ModelCosts         []ModelCost `json:"modelCosts"`
-	DefaultModel       string      `json:"defaultModel"`
-	DefaultImageModel  string      `json:"defaultImageModel"`
-	DefaultVideoModel  string      `json:"defaultVideoModel"`
-	DefaultTextModel   string      `json:"defaultTextModel"`
-	DefaultAudioModel  string      `json:"defaultAudioModel"`
-	ImageModels        []string    `json:"imageModels"`
-	VideoModels        []string    `json:"videoModels"`
-	TextModels         []string    `json:"textModels"`
-	AudioModels        []string    `json:"audioModels"`
-	SystemPrompt       string      `json:"systemPrompt"`
-	AllowCustomChannel *bool       `json:"allowCustomChannel"`
+	AvailableModels     []string                    `json:"availableModels"`
+	ModelCosts          []ModelCost                 `json:"modelCosts"`
+	ImageRequestFormats []ImageRequestFormatSetting `json:"imageRequestFormats"`
+	DefaultModel        string                      `json:"defaultModel"`
+	DefaultImageModel   string                      `json:"defaultImageModel"`
+	DefaultVideoModel   string                      `json:"defaultVideoModel"`
+	DefaultTextModel    string                      `json:"defaultTextModel"`
+	DefaultAudioModel   string                      `json:"defaultAudioModel"`
+	ImageModels         []string                    `json:"imageModels"`
+	VideoModels         []string                    `json:"videoModels"`
+	TextModels          []string                    `json:"textModels"`
+	AudioModels         []string                    `json:"audioModels"`
+	SystemPrompt        string                      `json:"systemPrompt"`
+	AllowCustomChannel  *bool                       `json:"allowCustomChannel"`
 }
 
 // PublicSetting 公开配置。

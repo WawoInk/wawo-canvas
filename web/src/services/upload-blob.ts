@@ -96,6 +96,6 @@ export async function uploadUrlToS3(url: string, fileType: FileType): Promise<Up
     });
     const json = await resp.json();
     if (json.code !== 0) throw new Error(json.msg || "代理上传失败");
-    const meta = fileType.endsWith("images") ? { width: 1024, height: 1024 } : { width: 0, height: 0 };
+    const meta = fileType.endsWith("images") ? await readImageMeta(json.data.url) : { width: 0, height: 0 };
     return { fileId: json.data.id, url: json.data.url, width: meta.width, height: meta.height, bytes: json.data.bytes || 0, mimeType: json.data.mimeType || "application/octet-stream" };
 }

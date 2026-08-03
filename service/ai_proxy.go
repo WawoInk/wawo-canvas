@@ -158,9 +158,9 @@ func buildGeminiUpstream(channel model.ModelChannel, modelName, path string, bod
 		action = "streamGenerateContent"
 	}
 	baseURL := strings.TrimRight(strings.TrimSpace(channel.BaseURL), "/")
-	urlStr := fmt.Sprintf("%s/models/%s:%s?key=%s", baseURL, modelName, action, url.QueryEscape(channel.APIKey))
+	urlStr := fmt.Sprintf("%s/models/%s:%s?key=%s", baseURL, modelName, action, url.QueryEscape(normalizeModelChannelAPIKey(channel.APIKey)))
 	if stream {
-		urlStr = fmt.Sprintf("%s/models/%s:%s?alt=sse&key=%s", baseURL, modelName, action, url.QueryEscape(channel.APIKey))
+		urlStr = fmt.Sprintf("%s/models/%s:%s?alt=sse&key=%s", baseURL, modelName, action, url.QueryEscape(normalizeModelChannelAPIKey(channel.APIKey)))
 	}
 	headers := http.Header{}
 	headers.Set("Content-Type", "application/json")
@@ -197,7 +197,7 @@ func isGeminiStream(path string, body []byte) bool {
 // buildXvanaiUpstream 构造 xvanai 协议上游请求，透传实际请求 path（chat/completions、images/generations、contents/generations/tasks 等）。
 func buildXvanaiUpstream(channel model.ModelChannel, modelName, path string, body []byte, contentType string) upstreamRequest {
 	headers := http.Header{}
-	headers.Set("Authorization", "Bearer "+channel.APIKey)
+	headers.Set("Authorization", modelChannelAuthorization(channel.APIKey))
 	if contentType != "" {
 		headers.Set("Content-Type", contentType)
 	}
@@ -214,7 +214,7 @@ func buildOpenAIUpstream(channel model.ModelChannel, modelName, path string, bod
 		body = addSeedanceMediaRoles(body)
 	}
 	headers := http.Header{}
-	headers.Set("Authorization", "Bearer "+channel.APIKey)
+	headers.Set("Authorization", modelChannelAuthorization(channel.APIKey))
 	if contentType != "" {
 		headers.Set("Content-Type", contentType)
 	}

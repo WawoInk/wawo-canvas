@@ -295,6 +295,7 @@ export type AdminModelChannel = {
 export type AdminPublicModelChannelSettings = {
     availableModels: string[];
     modelCosts: AdminModelCost[];
+    imageRequestFormats: AdminImageRequestFormat[];
     defaultModel: string;
     defaultImageModel: string;
     defaultVideoModel: string;
@@ -306,6 +307,11 @@ export type AdminPublicModelChannelSettings = {
     audioModels: string[];
     systemPrompt: string;
     allowCustomChannel: boolean;
+};
+
+export type AdminImageRequestFormat = {
+    model: string;
+    format: "application/json" | "multipart/form-data";
 };
 
 export type AdminModelCost = {

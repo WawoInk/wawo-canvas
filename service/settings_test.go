@@ -157,6 +157,29 @@ func TestNormalizeSettingsPreservesExplicitCapabilityModels(t *testing.T) {
 	}
 }
 
+func TestNormalizeSettingsKeepsExplicitImageRequestFormatsOnly(t *testing.T) {
+	settings := normalizeSettings(model.Settings{
+		Public: model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{
+			ImageModels: []string{"json-image", "multipart-image"},
+			ImageRequestFormats: []model.ImageRequestFormatSetting{
+				{Model: " json-image ", Format: " application/json "},
+				{Model: "multipart-image", Format: "multipart/form-data"},
+				{Model: "unknown-image", Format: "application/json"},
+				{Model: "json-image", Format: "multipart/form-data"},
+				{Model: "multipart-image", Format: "text/plain"},
+			},
+		}},
+	})
+
+	want := []model.ImageRequestFormatSetting{
+		{Model: "json-image", Format: "application/json"},
+		{Model: "multipart-image", Format: "multipart/form-data"},
+	}
+	if got := settings.Public.ModelChannel.ImageRequestFormats; !reflect.DeepEqual(got, want) {
+		t.Fatalf("image request formats = %#v, want %#v", got, want)
+	}
+}
+
 func TestNormalizeSettingsRequiresExplicitCapabilityModels(t *testing.T) {
 	settings := normalizeSettings(model.Settings{
 		Public: model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{

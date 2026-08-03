@@ -14,7 +14,10 @@ import (
 	"github.com/basketikun/infinite-canvas/service"
 )
 
-const userFileMaxBody = 80 << 20
+const (
+	userFileMaxBody       = 80 << 20
+	proxyDownloadAttempts = 3
+)
 
 // CreateUploadURL POST /api/v1/files/upload-url — 生成预签名上传 URL。
 func CreateUploadURL(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +161,52 @@ func UploadUserFileDirect(w http.ResponseWriter, r *http.Request) {
 	OK(w, item)
 }
 
+func downloadProxyFile(ctx context.Context, rawURL string) ([]byte, string, error) {
+	client := &http.Client{Timeout: 4 * time.Minute}
+	if baseTransport, ok := http.DefaultTransport.(*http.Transport); ok {
+		transport := baseTransport.Clone()
+		transport.TLSHandshakeTimeout = 30 * time.Second
+		client.Transport = transport
+		defer transport.CloseIdleConnections()
+	}
+
+	var lastErr error
+	for attempt := 1; attempt <= proxyDownloadAttempts; attempt++ {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+		if err != nil {
+			return nil, "", err
+		}
+		resp, err := client.Do(request)
+		if err == nil {
+			if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
+				mimeType := resp.Header.Get("Content-Type")
+				data, readErr := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if readErr == nil {
+					return data, mimeType, nil
+				}
+				lastErr = fmt.Errorf("read response: %w", readErr)
+			} else {
+				resp.Body.Close()
+				lastErr = fmt.Errorf("status=%d", resp.StatusCode)
+				if resp.StatusCode != http.StatusRequestTimeout && resp.StatusCode != http.StatusTooManyRequests && resp.StatusCode < http.StatusInternalServerError {
+					return nil, "", lastErr
+				}
+			}
+		} else {
+			lastErr = err
+		}
+		if attempt < proxyDownloadAttempts {
+			select {
+			case <-ctx.Done():
+				return nil, "", ctx.Err()
+			case <-time.After(time.Duration(attempt) * time.Second):
+			}
+		}
+	}
+	return nil, "", lastErr
+}
+
 // ProxyUpload POST /api/v1/files/proxy-upload -- backend proxy: download external URL then upload to S3.
 func ProxyUpload(w http.ResponseWriter, r *http.Request) {
 	user, ok := service.UserFromContext(r.Context())
@@ -177,21 +226,13 @@ func ProxyUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	client := &http.Client{Timeout: 4 * time.Minute}
-	resp, err := client.Get(req.URL)
+	data, mimeType, err := downloadProxyFile(ctx, req.URL)
 	if err != nil {
 		log.Printf("proxy download: %v", err)
 		Fail(w, "下载文件失败")
 		return
 	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("proxy read: %v", err)
-		Fail(w, "读取文件失败")
-		return
-	}
-	item, err := service.UploadUserFile(ctx, user.ID, req.FileType, req.FileName, resp.Header.Get("Content-Type"), bytes.NewReader(data), int64(len(data)))
+	item, err := service.UploadUserFile(ctx, user.ID, req.FileType, req.FileName, mimeType, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		log.Printf("proxy upload: %v", err)
 		Fail(w, err.Error())

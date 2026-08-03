@@ -5,7 +5,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { nanoid } from "nanoid";
 
-import { fetchPublicSettings, type PublicSettings } from "@/services/api/settings";
+import { fetchPublicSettings, type ImageRequestFormatSetting, type PublicSettings } from "@/services/api/settings";
 
 export type ApiCallFormat = "openai" | "gemini" | "xvanai";
 
@@ -40,6 +40,7 @@ export type AiConfig = {
     videoNegativePrompt: string;
     systemPrompt: string;
     modelDisplayNames?: Record<string, string>;
+    imageRequestFormats: ImageRequestFormatSetting[];
     models: string[];
     imageModels: string[];
     videoModels: string[];
@@ -99,6 +100,7 @@ export const defaultConfig: AiConfig = {
     videoNegativePrompt: "",
     systemPrompt: "",
     modelDisplayNames: {},
+    imageRequestFormats: [],
     models: ["default::gpt-image-2", "default::grok-imagine-video", "default::gpt-5.5", "default::gpt-4o-mini-tts"],
     imageModels: ["default::gpt-image-2"],
     videoModels: ["default::grok-imagine-video"],
@@ -235,6 +237,7 @@ export const useConfigStore = create<ConfigStore>()(
                         videoModels: remoteVideoModels,
                         textModels: remoteTextModels,
                         audioModels: remoteAudioModels,
+                        imageRequestFormats,
                     } = settings.modelChannel;
                     set({ publicSettings: settings });
                     // Only auto-switch to remote when admin has disabled custom channels (forced remote)
@@ -269,6 +272,7 @@ export const useConfigStore = create<ConfigStore>()(
                                 audioModels,
                                 systemPrompt: settings.modelChannel.systemPrompt ?? current.systemPrompt,
                                 modelDisplayNames: Object.fromEntries((settings.modelChannel.modelCosts || []).filter((item) => item.model && item.displayName?.trim()).map((item) => [item.model, item.displayName!.trim()])),
+                                imageRequestFormats: Array.isArray(imageRequestFormats) ? imageRequestFormats : [],
                             },
                         });
                     } else if (allowCustomChannel && get().config.channelMode === "remote") {
@@ -314,6 +318,7 @@ export const useConfigStore = create<ConfigStore>()(
                         audioFormat: config.audioFormat || defaultConfig.audioFormat,
                         audioSpeed: config.audioSpeed || defaultConfig.audioSpeed,
                         audioInstructions: config.audioInstructions || "",
+                        imageRequestFormats: Array.isArray(persistedConfig.imageRequestFormats) ? config.imageRequestFormats : [],
                         videoSeconds: config.videoSeconds || "6",
                         vquality: config.vquality || "720",
                         videoGenerateAudio: config.videoGenerateAudio || "true",

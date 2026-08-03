@@ -150,12 +150,32 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 	setting.ModelChannel.VideoModels = uniqueModelNames(setting.ModelChannel.VideoModels)
 	setting.ModelChannel.TextModels = uniqueModelNames(setting.ModelChannel.TextModels)
 	setting.ModelChannel.AudioModels = uniqueModelNames(setting.ModelChannel.AudioModels)
+	setting.ModelChannel.ImageRequestFormats = normalizeImageRequestFormats(setting.ModelChannel.ImageRequestFormats, setting.ModelChannel.ImageModels)
 	setting.ModelChannel.DefaultTextModel = repairDefaultModel(setting.ModelChannel.DefaultTextModel, setting.ModelChannel.TextModels, isTextModelName)
 	setting.ModelChannel.DefaultImageModel = repairDefaultModel(setting.ModelChannel.DefaultImageModel, setting.ModelChannel.ImageModels, isImageModelName)
 	setting.ModelChannel.DefaultVideoModel = repairDefaultModel(setting.ModelChannel.DefaultVideoModel, setting.ModelChannel.VideoModels, isVideoModelName)
 	setting.ModelChannel.DefaultAudioModel = repairDefaultModel(setting.ModelChannel.DefaultAudioModel, setting.ModelChannel.AudioModels, isAudioModelName)
 	setting.ModelChannel.DefaultModel = repairDefaultModel(setting.ModelChannel.DefaultModel, setting.ModelChannel.TextModels, isTextModelName)
 	return setting
+}
+
+func normalizeImageRequestFormats(items []model.ImageRequestFormatSetting, imageModels []string) []model.ImageRequestFormatSetting {
+	allowedModels := map[string]bool{}
+	for _, modelName := range imageModels {
+		allowedModels[modelName] = true
+	}
+	result := make([]model.ImageRequestFormatSetting, 0, len(items))
+	seen := map[string]bool{}
+	for _, item := range items {
+		item.Model = strings.TrimSpace(item.Model)
+		item.Format = strings.TrimSpace(item.Format)
+		if seen[item.Model] || !allowedModels[item.Model] || (item.Format != "application/json" && item.Format != "multipart/form-data") {
+			continue
+		}
+		seen[item.Model] = true
+		result = append(result, item)
+	}
+	return result
 }
 
 func publicModelAllowed(public model.PublicSetting, taskType model.TaskType, modelName string) bool {

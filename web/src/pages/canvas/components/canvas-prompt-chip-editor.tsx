@@ -247,13 +247,22 @@ function createChip(reference: CanvasResourceReference, theme: (typeof canvasThe
     chip.title = reference.title;
     chip.className = "mx-0.5 inline-flex h-6 max-w-40 select-all items-center gap-1 overflow-hidden rounded-md border px-1 align-middle text-xs leading-none";
     Object.assign(chip.style, { background: theme.toolbar.panel, borderColor: theme.node.stroke, color: theme.node.text });
-    if ((reference.kind === "image" || reference.kind === "video") && reference.previewUrl) {
+    if (reference.kind === "image" && reference.previewUrl) {
         const image = document.createElement("img");
         image.src = reference.previewUrl;
         image.alt = "";
         image.className = "size-4 shrink-0 rounded-sm object-cover";
         image.addEventListener("error", () => image.remove());
         chip.append(image);
+    }
+    if (reference.kind === "video" && reference.previewUrl) {
+        const video = document.createElement("video");
+        video.src = reference.previewUrl;
+        video.muted = true;
+        video.preload = "metadata";
+        video.className = "size-4 shrink-0 rounded-sm bg-black object-cover";
+        video.addEventListener("error", () => video.remove());
+        chip.append(video);
     }
     const label = document.createElement("span");
     label.className = "truncate";
@@ -314,7 +323,8 @@ function MentionMenu({
 }
 
 function ReferencePreview({ reference }: { reference: CanvasResourceReference }) {
-    if ((reference.kind === "image" || reference.kind === "video") && reference.previewUrl) return <img src={reference.previewUrl} alt="" className="size-9 rounded-md object-cover" onError={(event) => (event.currentTarget.style.display = "none")} />;
+    if (reference.kind === "image" && reference.previewUrl) return <img src={reference.previewUrl} alt="" className="size-9 rounded-md object-cover" onError={(event) => (event.currentTarget.style.display = "none")} />;
+    if (reference.kind === "video" && reference.previewUrl) return <video src={reference.previewUrl} className="size-9 rounded-md bg-black object-cover" muted preload="metadata" onError={(event) => (event.currentTarget.style.display = "none")} />;
     const Icon = reference.kind === "audio" ? Music2 : reference.kind === "video" ? Video : reference.kind === "image" ? ImageIcon : FileText;
     return <Icon className="size-4 shrink-0" />;
 }

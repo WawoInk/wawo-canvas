@@ -74,7 +74,7 @@ func fetchAdminChannelModels(channel model.ModelChannel) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Set("Authorization", "Bearer "+channel.APIKey)
+	request.Header.Set("Authorization", modelChannelAuthorization(channel.APIKey))
 	response, err := adminModelHTTPClient.Do(request)
 	if err != nil {
 		return nil, safeMessageError{message: "读取模型失败：上游接口无响应或网络不可达"}
@@ -118,7 +118,7 @@ func testAdminChannelModel(channel model.ModelChannel, modelName string) (string
 	if err != nil {
 		return "", err
 	}
-	request.Header.Set("Authorization", "Bearer "+channel.APIKey)
+	request.Header.Set("Authorization", modelChannelAuthorization(channel.APIKey))
 	request.Header.Set("Content-Type", "application/json")
 	response, err := adminModelHTTPClient.Do(request)
 	if err != nil {

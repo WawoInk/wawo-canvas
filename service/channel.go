@@ -81,6 +81,18 @@ func normalizeModelChannelBaseURL(baseURL string) string {
 	return baseURL
 }
 
+func normalizeModelChannelAPIKey(apiKey string) string {
+	apiKey = strings.TrimSpace(apiKey)
+	for len(apiKey) >= len("Bearer ") && strings.EqualFold(apiKey[:len("Bearer ")], "Bearer ") {
+		apiKey = strings.TrimSpace(apiKey[len("Bearer "):])
+	}
+	return apiKey
+}
+
+func modelChannelAuthorization(apiKey string) string {
+	return "Bearer " + normalizeModelChannelAPIKey(apiKey)
+}
+
 func enabledChannelModels(channels []model.ModelChannel) []string {
 	models := []string{}
 	for _, channel := range channels {

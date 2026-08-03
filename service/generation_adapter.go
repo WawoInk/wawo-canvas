@@ -150,7 +150,7 @@ func createContentsGenerationTask(ctx context.Context, client *http.Client, chan
 	if err != nil {
 		return ProviderTaskRef{Audit: audit}, err
 	}
-	request.Header.Set("Authorization", "Bearer "+channel.APIKey)
+	request.Header.Set("Authorization", modelChannelAuthorization(channel.APIKey))
 	request.Header.Set("Content-Type", "application/json")
 	response, err := client.Do(request)
 	if err != nil {
@@ -224,7 +224,7 @@ func pollContentsGenerationTask(ctx context.Context, client *http.Client, channe
 	if err != nil {
 		return ProviderTaskRef{Audit: audit}, err
 	}
-	request.Header.Set("Authorization", "Bearer "+channel.APIKey)
+	request.Header.Set("Authorization", modelChannelAuthorization(channel.APIKey))
 	response, err := client.Do(request)
 	if err != nil {
 		audit.RawError = err.Error()

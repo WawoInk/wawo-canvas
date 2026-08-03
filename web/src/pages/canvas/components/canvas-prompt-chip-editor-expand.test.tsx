@@ -9,6 +9,38 @@ const { act, useState } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { CanvasPromptChipEditor } = await import("./canvas-prompt-chip-editor");
 
+test("video references keep their preview in the mention menu and chip", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    let setPrompt = (_value: string) => {};
+    const previewUrl = "blob:http://localhost/video-preview";
+
+    function Harness() {
+        const [value, setValue] = useState("");
+        setPrompt = setValue;
+        return <CanvasPromptChipEditor value={value} references={[{ id: "video-1", nodeId: "video-1", kind: "video", label: "视频1", title: "参考视频", previewUrl, active: true }]} onChange={setValue} className="h-24 w-full" />;
+    }
+
+    const root = createRoot(container);
+    try {
+        await act(async () => root.render(<Harness />));
+
+        const editor = required(document.querySelector<HTMLElement>('[role="textbox"][aria-label="提示词"]'));
+        const mention = document.createTextNode("@");
+        editor.replaceChildren(mention);
+        setCaret(mention, 1);
+        await act(async () => editor.dispatchEvent(new Event("input", { bubbles: true })));
+
+        assert.equal(required(document.querySelector<HTMLElement>('[role="option"]')).querySelector("video")?.getAttribute("src"), previewUrl);
+
+        await act(async () => setPrompt("视频1"));
+        assert.equal(required(editor.querySelector<HTMLElement>("[data-prompt-label='视频1']")).querySelector("video")?.getAttribute("src"), previewUrl);
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+    }
+});
+
 test("prompt keeps resource-chip caret and content while expanding and shrinking", async () => {
     const container = document.createElement("div");
     document.body.append(container);

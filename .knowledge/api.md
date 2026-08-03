@@ -71,7 +71,7 @@ pageSize
 | `GET /api/auth/linux-do/callback` | P | `code/state` | 建立会话后重定向回 Web | auth handler/service |
 | `GET /api/auth/me` | O | Bearer 可选 | 有效 token 返回 `AuthUser`，否则 `GuestUser` | auth handler |
 | `POST /api/admin/login` | P | `{username,password}` | 仅 admin 的 `AuthSession` | auth handler |
-| `GET /api/settings` | P | 无 | `PublicSetting`，不含后台密钥 | settings handler/service |
+| `GET /api/settings` | P | 无 | `PublicSetting`，不含后台密钥；`modelChannel.imageRequestFormats` 投影显式图片模型请求格式 | settings handler/service |
 | `GET /api/prompts` | O | 通用 Query | `PromptList {items,tags,categories,total}` | prompts handler/service |
 | `GET /api/assets` | O | 通用 Query | 路由可选认证，但 handler 实际要求用户；返回个人 `AssetList` | assets handler |
 | `GET /api/media/references/:id` | P | reference ID | 原始媒体流 | `handler/media_reference.go` |
@@ -276,6 +276,8 @@ Canvas 客户端必须把服务端缺少记录和明确 delete tombstone 区分�
 | `POST /api/admin/settings/channel-test` | A | `{index?,channel,model}` | 测试结果字符串 |
 
 `index` 指已保存渠道；也可提交临时 `channel`。保存空密钥时 service 会尝试保留旧密钥。
+
+公开设置中的 `modelChannel.imageRequestFormats` 为 `{model,format}[]`，`format` 当前只接受 `application/json` 和 `multipart/form-data`。未列出的模型由前端图片请求层保持各操作原有默认格式。
 
 ## 管理员提示词
 

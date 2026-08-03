@@ -2655,7 +2655,7 @@ function InfiniteCanvasPage() {
                 const state = await pollAsyncImageTask(config, task, { signal: controller.signal });
                 if (state.status === "succeeded") {
                     const image = state.images[0];
-                    const uploaded = await uploadBlob(await (await fetch(image.dataUrl)).blob(), "results/images");
+                    const uploaded = image.dataUrl.startsWith("data:") ? await uploadBlob(await (await fetch(image.dataUrl)).blob(), "results/images") : await uploadUrlToS3(image.dataUrl, "results/images");
                     const imageSize = fitNodeSize(uploaded.width, uploaded.height, imageConfig.width, imageConfig.height);
                     setNodes((prev) => {
                         const root = rootId ? prev.find((n) => n.id === rootId) : null;

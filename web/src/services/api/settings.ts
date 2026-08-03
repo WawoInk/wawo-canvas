@@ -1,9 +1,13 @@
 import { apiGet } from "@/services/api/request";
 import type { DecimalValue } from "@/lib/decimal";
 
+export type ImageRequestFormat = "application/json" | "multipart/form-data";
+export type ImageRequestFormatSetting = { model: string; format: ImageRequestFormat };
+
 export type PublicModelChannelSettings = {
     availableModels: string[];
     modelCosts: { model: string; displayName?: string; credits: DecimalValue; resolutionCredits?: Record<string, DecimalValue> }[];
+    imageRequestFormats: ImageRequestFormatSetting[];
     defaultModel: string;
     defaultImageModel: string;
     defaultVideoModel: string;

@@ -154,7 +154,7 @@ func queryUpstreamTaskViaHTTP(cfg TaskSyncConfig) (model.TaskStatus, TaskResult)
 	if err != nil {
 		return model.TaskStatusRunning, TaskResult{}
 	}
-	req.Header.Set("Authorization", "Bearer "+cfg.Channel.APIKey)
+	req.Header.Set("Authorization", modelChannelAuthorization(cfg.Channel.APIKey))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := upstreamHTTPClient.Do(req)

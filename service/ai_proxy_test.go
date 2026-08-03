@@ -258,6 +258,16 @@ func TestBuildOpenAIUpstreamStillBearer(t *testing.T) {
 	}
 }
 
+func TestOpenAIAsyncImageAuthUsesNormalizedChannelKeyForSubmitAndPoll(t *testing.T) {
+	channel := model.ModelChannel{Protocol: "openai", BaseURL: "https://example.com", APIKey: " Bearer sk-upstream "}
+	for _, path := range []string{"/async/images/generations", "/tasks/task-id"} {
+		got := resolveUpstreamRequest(channel, "gpt-image-2-open-1-gen", path, []byte(`{}`), "application/json")
+		if authorization := got.Headers.Get("Authorization"); authorization != "Bearer sk-upstream" {
+			t.Errorf("%s Authorization = %q", path, authorization)
+		}
+	}
+}
+
 func TestBuildArkSeedanceUpstreamAddsMediaRoles(t *testing.T) {
 	body := []byte(`{"model":"seedance-2.0","content":[{"type":"text","text":"test"},{"type":"image_url","image_url":{"url":"https://example.com/image.png"}},{"type":"video_url","video_url":{"url":"https://example.com/video.mp4"}},{"type":"audio_url","audio_url":{"url":"https://example.com/audio.mp3"}}]}`)
 	got := resolveUpstreamRequest(model.ModelChannel{Protocol: "openai", BaseURL: "https://ark.cn-beijing.volces.com/api/plan/v3", APIKey: "secret"}, "seedance-2.0", "/contents/generations/tasks", body, "application/json")

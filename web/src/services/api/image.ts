@@ -3,10 +3,11 @@ import axios from "axios";
 import { buildApiUrl, resolveModelRequestConfig, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 import { nanoid } from "nanoid";
-import { dataUrlToFile } from "@/lib/image-utils";
+import { dataUrlToFile, readFileAsDataUrl } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
-import { applyImageBackground, buildAsyncImageEditFormData } from "@/services/api/async-image-edit-form";
+import { buildAsyncImageEditRequest, resolveImageRequestFormat } from "@/services/api/async-image-edit-form";
 import { imageBackgroundFields } from "@/services/api/image-background";
+import type { ImageRequestFormat } from "@/services/api/settings";
 import { imageToDataUrl } from "@/services/blob-storage";
 import { queueCreditBalanceRefresh } from "@/services/credit-balance-sync";
 import type { ReferenceImage } from "@/types/image";
@@ -264,6 +265,26 @@ function aiHeaders(config: AiConfig, contentType?: string) {
               Authorization: `Bearer ${config.apiKey}`,
               ...(contentType ? { "Content-Type": contentType } : {}),
           };
+}
+
+function configuredImageRequestFormat(config: AiConfig, fallback: ImageRequestFormat) {
+    return config.channelMode === "remote" ? resolveImageRequestFormat(config.imageRequestFormats, config.model, fallback) : fallback;
+}
+
+function imageRequestFormData(fields: Record<string, string | number | undefined>) {
+    const formData = new FormData();
+    for (const [key, value] of Object.entries(fields)) {
+        if (value !== undefined) formData.set(key, String(value));
+    }
+    return formData;
+}
+
+function imageRequestBody(fields: Record<string, string | number | undefined>, format: ImageRequestFormat) {
+    return format === "multipart/form-data" ? imageRequestFormData(fields) : fields;
+}
+
+function imageRequestHeaders(config: AiConfig, format: ImageRequestFormat) {
+    return aiHeaders(config, format === "application/json" ? format : undefined);
 }
 
 function geminiBaseUrl(config: Pick<AiConfig, "baseUrl">) {
@@ -781,23 +802,21 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
     }
     const quality = normalizeQuality(config.quality);
     const requestSize = resolveRequestSize(quality, config.size);
+    const format = configuredImageRequestFormat(requestConfig, "application/json");
+    const body = {
+        model: requestConfig.model,
+        prompt: withSystemPrompt(requestConfig, prompt),
+        n,
+        ...(quality ? { quality } : {}),
+        ...(requestSize ? { size: requestSize } : {}),
+        ...imageBackgroundFields(requestConfig.background),
+        output_format: IMAGE_OUTPUT_FORMAT,
+    };
     try {
-        const response = await axios.post<ImageApiResponse>(
-            aiApiUrl(requestConfig, "/images/generations"),
-            {
-                model: requestConfig.model,
-                prompt: withSystemPrompt(requestConfig, prompt),
-                n,
-                ...(quality ? { quality } : {}),
-                ...(requestSize ? { size: requestSize } : {}),
-                ...imageBackgroundFields(requestConfig.background),
-                output_format: IMAGE_OUTPUT_FORMAT,
-            },
-            {
-                headers: aiHeaders(requestConfig, "application/json"),
-                signal: options?.signal,
-            },
-        );
+        const response = await axios.post<ImageApiResponse>(aiApiUrl(requestConfig, "/images/generations"), imageRequestBody(body, format), {
+            headers: imageRequestHeaders(requestConfig, format),
+            signal: options?.signal,
+        });
         const images = parseImagePayload(response.data);
         return images;
     } catch (error) {
@@ -819,24 +838,37 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     }
     const quality = normalizeQuality(config.quality);
     const requestSize = resolveRequestSize(quality, config.size);
-    const formData = new FormData();
-    formData.set("model", requestConfig.model);
-    formData.set("prompt", withSystemPrompt(requestConfig, requestPrompt));
-    formData.set("n", String(n));
-    formData.set("output_format", IMAGE_OUTPUT_FORMAT);
-    if (quality) {
-        formData.set("quality", quality);
+    const format = configuredImageRequestFormat(requestConfig, "multipart/form-data");
+    const fields = {
+        model: requestConfig.model,
+        prompt: withSystemPrompt(requestConfig, requestPrompt),
+        n,
+        output_format: IMAGE_OUTPUT_FORMAT,
+        ...(quality ? { quality } : {}),
+        ...(requestSize ? { size: requestSize } : {}),
+        ...imageBackgroundFields(requestConfig.background),
+    };
+    let body: Record<string, unknown> | FormData;
+    if (format === "application/json") {
+        const images = await Promise.all(references.map(imageToDataUrl));
+        body = {
+            ...fields,
+            image: images.length === 1 ? images[0] : images,
+            ...(mask ? { mask: await imageToDataUrl(mask) } : {}),
+        };
+    } else {
+        const formData = imageRequestFormData(fields);
+        const files = await Promise.all(references.map(async (image) => dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) })));
+        files.forEach((file) => formData.append("image", file));
+        if (mask) formData.set("mask", dataUrlToFile(mask));
+        body = formData;
     }
-    if (requestSize) {
-        formData.set("size", requestSize);
-    }
-    applyImageBackground(formData, requestConfig.background);
-    const files = await Promise.all(references.map(async (image) => dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) })));
-    files.forEach((file) => formData.append("image", file));
-    if (mask) formData.set("mask", dataUrlToFile(mask));
 
     try {
-        const response = await axios.post<ImageApiResponse>(aiApiUrl(requestConfig, "/images/edits"), formData, { headers: aiHeaders(requestConfig), signal: options?.signal });
+        const response = await axios.post<ImageApiResponse>(aiApiUrl(requestConfig, "/images/edits"), body, {
+            headers: imageRequestHeaders(requestConfig, format),
+            signal: options?.signal,
+        });
         const images = parseImagePayload(response.data);
         return images;
     } catch (error) {
@@ -872,21 +904,21 @@ export async function createAsyncImageTask(config: AiConfig, prompt: string, cou
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
     const quality = normalizeQuality(config.quality);
     const requestSize = resolveRequestSize(quality, config.size);
+    const format = configuredImageRequestFormat(requestConfig, "application/json");
+    const body = {
+        model: requestConfig.model,
+        prompt: withSystemPrompt(requestConfig, prompt),
+        n,
+        ...(quality ? { quality } : {}),
+        ...(requestSize ? { size: requestSize } : {}),
+        ...imageBackgroundFields(requestConfig.background),
+        output_format: IMAGE_OUTPUT_FORMAT,
+    };
 
     try {
-        const response = await axios.post<{ task_id?: string; status?: string; error?: { message?: string } }>(
-            aiApiUrl(requestConfig, "/async/images/generations"),
-            {
-                model: requestConfig.model,
-                prompt: withSystemPrompt(requestConfig, prompt),
-                n,
-                ...(quality ? { quality } : {}),
-                ...(requestSize ? { size: requestSize } : {}),
-                ...imageBackgroundFields(requestConfig.background),
-                output_format: IMAGE_OUTPUT_FORMAT,
-            },
-            { headers: { ...aiHeaders(requestConfig, "application/json"), "X-Source": "canvas" } },
-        );
+        const response = await axios.post<{ task_id?: string; status?: string; error?: { message?: string } }>(aiApiUrl(requestConfig, "/async/images/generations"), imageRequestBody(body, format), {
+            headers: { ...imageRequestHeaders(requestConfig, format), "X-Source": "canvas" },
+        });
         const data = response.data;
         if (data.error?.message) throw new Error(data.error.message);
         if (!data.task_id) throw new Error("图片异步任务创建失败，未返回 task_id");
@@ -900,21 +932,25 @@ export async function createAsyncImageEditTask(config: AiConfig, prompt: string,
     const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
     const requestSize = resolveRequestSize(normalizeQuality(config.quality), config.size);
+    const format = configuredImageRequestFormat(requestConfig, "multipart/form-data");
+    const request = buildAsyncImageEditRequest(
+        {
+            model: requestConfig.model,
+            prompt: withSystemPrompt(requestConfig, prompt),
+            image,
+            n,
+            ...(requestSize ? { size: requestSize } : {}),
+            ...imageBackgroundFields(requestConfig.background),
+            output_format: IMAGE_OUTPUT_FORMAT,
+        },
+        format,
+        format === "application/json" ? await readFileAsDataUrl(image) : "",
+    );
 
     try {
-        const response = await axios.post<{ task_id?: string; status?: string; error?: { message?: string } }>(
-            aiApiUrl(requestConfig, "/async/images/edits"),
-            buildAsyncImageEditFormData({
-                model: requestConfig.model,
-                prompt: withSystemPrompt(requestConfig, prompt),
-                image,
-                n,
-                ...(requestSize ? { size: requestSize } : {}),
-                ...imageBackgroundFields(requestConfig.background),
-                output_format: IMAGE_OUTPUT_FORMAT,
-            }),
-            { headers: { ...aiHeaders(requestConfig), "X-Source": "canvas" } },
-        );
+        const response = await axios.post<{ task_id?: string; status?: string; error?: { message?: string } }>(aiApiUrl(requestConfig, "/async/images/edits"), request.body, {
+            headers: { ...aiHeaders(requestConfig, request.contentType), "X-Source": "canvas" },
+        });
         const data = response.data;
         if (data.error?.message) throw new Error(data.error.message);
         if (!data.task_id) throw new Error("图片异步编辑任务创建失败，未返回 task_id");
