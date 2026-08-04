@@ -34,3 +34,17 @@ While a generated-video commit waits for storage, another accepted Canvas edit m
 4. A failed local write blocks backend retry until a later local write succeeds.
 5. Video success is published only after its file metadata is durable, and concurrent accepted edits are preserved.
 6. A dirty 120-node Replica remains recoverable when a normal PUT is in flight and the page is closed without relying on unload delivery.
+
+## Main Review Follow-up
+
+The single-result convergence loop compares full node-array identity after a shared storage flush. Two different video result operations can each observe the other's new array, reapply their own result into another new array, and continue indefinitely. The follow-up slice will lock down finite convergence and the page's last-published node list before changing the operation.
+
+The red regression confirmed this diagnosis by exhausting a six-write storage budget in 2.29ms. A timeout remains as a secondary guard, but the deterministic failure is repeated non-idempotent writes rather than elapsed time.
+
+## Main Review Follow-up Implementation
+
+Video result application is now idempotent for the fields it owns: display size/position, platform file identity, success status, media metadata, and optional generation task status. If the target node already contains that result, the operation preserves the existing node and array references instead of writing another whole-project snapshot.
+
+The no-change branch still awaits `waitForLocalPersistence()` and rechecks current nodes before returning. This matters when the merged array came from the other concurrent operation: success is not published merely because the desired fields are visible in Store memory; the shared durable write must finish first.
+
+Two operations for different node IDs now converge in at most the initial per-result writes plus one merged write. The later page-style Promise publication contains both results. The existing page assignments can remain unchanged because the regression test exercises their full-array replacement ordering directly.

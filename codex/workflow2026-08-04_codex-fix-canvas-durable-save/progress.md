@@ -63,7 +63,7 @@ None.
 
 ## Next Step
 
-Hand off the local task commit to the main agent.
+Append the reviewed follow-up commit and hand it off to the main agent.
 
 ## Confirmed Test Seams
 
@@ -140,10 +140,26 @@ Hand off the local task commit to the main agent.
 
 ## Final Verification
 
-- `cd web && bun test test/canvas-durable-save.test.ts`: 6 passed.
+- `cd web && bun test test/canvas-durable-save.test.ts`: 7 passed.
 - `cd web && bun test test/canvas-sync.test.ts`: 8 passed.
 - `cd web && bun test test/account-storage.test.ts`: 6 passed.
 - `cd web && bun test src/pages/canvas/stores/canvas-replica.test.mjs`: 3 passed.
 - `cd web && bun test src/pages/canvas/components/canvas-node-generation.test.mjs src/pages/canvas/components/canvas-generation-resume.test.mjs`: 9 passed.
 - `cd web && bun test src/pages/canvas/components/canvas-node-config.test.ts src/pages/canvas/components/canvas-overview.test.mjs src/pages/canvas/utils/canvas-image-edit-source.test.mjs`: 9 passed.
-- Total: 41 passed, 0 failed in the final focused commands.
+- Total: 42 passed, 0 failed in the final focused commands.
+
+## Main Review Follow-up
+
+- Review finding: two concurrent video result commits for different node IDs can repeatedly replace the Store's nodes array and chase each other after the shared local persistence flush.
+- Additional page risk: each polling branch assigns the returned full node list to `nodesRef.current` and `setNodes`; the later return must therefore contain both committed video results.
+- Test seam remains the public `commitCanvasVideoResult` operation with the existing browser storage boundary mock. The new test will cap storage writes and use a timeout so a regression fails deterministically instead of hanging.
+- Red command: `cd web && bun test test/canvas-durable-save.test.ts --test-name-pattern 'concurrent generated video commits'`.
+- Red result: `0 passed, 1 failed`; the operation exceeded six additional browser storage writes in 2.29ms and failed with `storage write limit exceeded`.
+- Confirmed cause: applying an already-present result creates a fresh node and array, so two operations for different node IDs repeatedly interpret each other's array as newer work.
+- Minimal green target: preserve node/array identity when the target already has the requested result, but wait for the shared local persistence queue before returning that array.
+- Green command: `cd web && bun test test/canvas-durable-save.test.ts --test-name-pattern 'concurrent generated video commits'`.
+- Green result: `1 passed, 0 failed` in 2.14ms.
+- Stress command: repeated the focused concurrent test in 20 isolated Bun processes.
+- Stress result: `20/20` passed.
+- Page publication check: the test attaches page-style `.then` publishers to both concurrent operations. The final published full node list contains both video file IDs, so the later `setNodes(committedNodes)` cannot overwrite the other result.
+- Final follow-up verification: 42 focused tests passed across the same six isolated Bun commands; no build was run.

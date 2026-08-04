@@ -48,13 +48,13 @@ Do not run the full build unless explicitly required by a discovered blocker. Th
 - Slice 4 green `cd web && bun test test/canvas-durable-save.test.ts --test-name-pattern 'local durable write failed'`: 1 passed, 0 failed; later successful local mutation resumed backend sync.
 - Slice 5 red `cd web && bun test test/canvas-durable-save.test.ts --test-name-pattern 'preserves a newer accepted'`: 0 passed, 1 failed; the operation returned `初始内容` instead of the newer accepted edit.
 - Slice 5 green `cd web && bun test test/canvas-durable-save.test.ts --test-name-pattern 'preserves a newer accepted'`: 1 passed, 0 failed.
-- Final `cd web && bun test test/canvas-durable-save.test.ts`: 6 passed, 0 failed.
+- Final `cd web && bun test test/canvas-durable-save.test.ts`: 7 passed, 0 failed.
 - Final `cd web && bun test test/canvas-sync.test.ts`: 8 passed, 0 failed.
 - Final `cd web && bun test test/account-storage.test.ts`: 6 passed, 0 failed.
 - Final `cd web && bun test src/pages/canvas/stores/canvas-replica.test.mjs`: 3 passed, 0 failed.
 - Final `cd web && bun test src/pages/canvas/components/canvas-node-generation.test.mjs src/pages/canvas/components/canvas-generation-resume.test.mjs`: 9 passed, 0 failed.
 - Final `cd web && bun test src/pages/canvas/components/canvas-node-config.test.ts src/pages/canvas/components/canvas-overview.test.mjs src/pages/canvas/utils/canvas-image-edit-source.test.mjs`: 9 passed, 0 failed.
-- Final focused total: 41 passed, 0 failed.
+- Final focused total: 42 passed, 0 failed.
 - A combined multi-file attempt produced 28 passes plus one loader error because the existing `canvas-sync.test.ts` global `mock.module("@/services/api/request")` omits exports later generation tests import. Running the same groups in separate Bun processes passed; this task did not change that pre-existing test isolation issue.
 - Per project instruction, no build, deployment, or release command was run.
 
@@ -69,3 +69,13 @@ Do not run the full build unless explicitly required by a discovered blocker. Th
 
 - Existing Bun global module mocks prevent some otherwise passing test files from sharing one process; final verification uses isolated commands.
 - Generic Canvas edits whose callers ignore the durable Promise can still be lost if the browser process terminates before the browser storage API completes. The generated-video success path addressed by this task explicitly awaits durability before publishing success.
+
+## Main Review Follow-up
+
+- Red `cd web && bun test test/canvas-durable-save.test.ts --test-name-pattern 'concurrent generated video commits'`: 0 passed, 1 failed with `storage write limit exceeded` after the bounded write budget was exhausted.
+- Green `cd web && bun test test/canvas-durable-save.test.ts --test-name-pattern 'concurrent generated video commits'`: 1 passed, 0 failed in 2.14ms.
+- The test enforces at most six additional storage writes and a 300ms timeout. Both operations completed within the budget.
+- The focused concurrent test was repeated in 20 isolated Bun processes; all 20 passed.
+- The test uses each Promise's `.then` as the page-style full-array publisher. The final publication contained `file-video-a` and `file-video-b`, and fresh hydration contained both results.
+- Page review: no page edit was required. With idempotent result application, the operation that returns later either produces the merged array or returns the already-merged array after awaiting local persistence; both existing `nodesRef.current = committedNodes` and `setNodes(committedNodes)` assignments therefore preserve both results.
+- Follow-up final suite: 42 passed, 0 failed across the six isolated Bun commands already listed above.

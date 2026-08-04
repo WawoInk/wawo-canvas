@@ -4,6 +4,7 @@ import type { StateStorage } from "zustand/middleware";
 
 const values = new Map<string, string>();
 let writeCount = 0;
+let writeLimit = Number.POSITIVE_INFINITY;
 let blockedWriteNumber = 0;
 let failedWriteNumber = 0;
 let releaseBlockedWrite = () => {};
@@ -14,6 +15,7 @@ const localForageStorage: StateStorage = {
     getItem: async (key) => values.get(key) ?? null,
     setItem: async (key, value) => {
         writeCount += 1;
+        if (writeCount > writeLimit) throw new Error("storage write limit exceeded");
         if (writeCount === failedWriteNumber) throw new Error("storage unavailable");
         if (writeCount === blockedWriteNumber) {
             const gate = new Promise<void>((resolve) => {
@@ -68,6 +70,7 @@ async function resetStore() {
     await Promise.resolve(useCanvasStore.getState().clearProjects() as unknown);
     values.clear();
     writeCount = 0;
+    writeLimit = Number.POSITIVE_INFINITY;
     blockedWriteNumber = 0;
     failedWriteNumber = 0;
     releaseBlockedWrite = () => {};
@@ -300,6 +303,80 @@ test("a generated video durable commit preserves a newer accepted Canvas edit", 
         fileId: "file-video-1",
         status: "success",
     });
+});
+
+test("concurrent generated video commits converge and the last page publication keeps both results", async () => {
+    const videoA = {
+        id: "video-a",
+        type: "video" as const,
+        title: "视频 A",
+        position: { x: 40, y: 60 },
+        width: 480,
+        height: 270,
+        metadata: { status: "loading" as const, generationTaskId: "task-a" },
+    };
+    const videoB = {
+        id: "video-b",
+        type: "video" as const,
+        title: "视频 B",
+        position: { x: 600, y: 60 },
+        width: 480,
+        height: 270,
+        metadata: { status: "loading" as const, generationTaskId: "task-b" },
+    };
+    const initialNodes = [videoA, videoB];
+    await Promise.resolve(useCanvasStore.getState().replaceProjects([{ ...project, nodes: initialNodes }]) as unknown);
+    writeLimit = writeCount + 6;
+
+    const { commitCanvasVideoResult } = await import("../src/pages/canvas/stores/canvas-video-result");
+    let publishedNodes = initialNodes;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("concurrent video commits did not converge")), 300);
+    });
+    const publish = (nodes: typeof initialNodes) => {
+        publishedNodes = nodes;
+        return nodes;
+    };
+
+    try {
+        await Promise.race([
+            Promise.all([
+                commitCanvasVideoResult({
+                    projectId: project.id,
+                    nodeId: videoA.id,
+                    nodes: initialNodes,
+                    display: { width: 640, height: 360 },
+                    file: { url: "https://files.example/video-a.mp4", fileId: "file-video-a", width: 1920, height: 1080, bytes: 2048, mimeType: "video/mp4", durationMs: 6000 },
+                    generationTaskStatus: "succeeded",
+                }).then(publish),
+                commitCanvasVideoResult({
+                    projectId: project.id,
+                    nodeId: videoB.id,
+                    nodes: initialNodes,
+                    display: { width: 640, height: 360 },
+                    file: { url: "https://files.example/video-b.mp4", fileId: "file-video-b", width: 1920, height: 1080, bytes: 4096, mimeType: "video/mp4", durationMs: 8000 },
+                    generationTaskStatus: "succeeded",
+                }).then(publish),
+            ]),
+            timeout,
+        ]);
+
+        expect(publishedNodes.find((node) => node.id === videoA.id)?.metadata).toMatchObject({ fileId: "file-video-a", status: "success" });
+        expect(publishedNodes.find((node) => node.id === videoB.id)?.metadata).toMatchObject({ fileId: "file-video-b", status: "success" });
+
+        useUserStore.setState({ token: "", user: null as never });
+        await Promise.resolve(useCanvasStore.getState().clearProjects() as unknown);
+        useUserStore.setState({ token: "", user: account as never });
+        await useCanvasStore.persist.rehydrate();
+
+        const restoredNodes = useCanvasStore.getState().openProject(project.id)?.nodes || [];
+        expect(restoredNodes.find((node) => node.id === videoA.id)?.metadata?.fileId).toBe("file-video-a");
+        expect(restoredNodes.find((node) => node.id === videoB.id)?.metadata?.fileId).toBe("file-video-b");
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+        writeLimit = Number.POSITIVE_INFINITY;
+    }
 });
 
 test("a 120-node dirty Replica survives immediate close while a normal PUT is in flight", async () => {
