@@ -36,6 +36,9 @@ func New() *gin.Engine {
 
 	v1.GET("/model-profiles", gin.WrapF(handler.ModelProfiles))
 	v1.POST("/generations", gin.WrapF(handler.CreateGeneration))
+	v1.GET("/generations/client-requests/:id", func(c *gin.Context) {
+		handler.GetGenerationByClientRequestID(c.Writer, c.Request, c.Param("id"))
+	})
 	v1.GET("/generations/:id", func(c *gin.Context) {
 		handler.GetGeneration(c.Writer, c.Request, c.Param("id"))
 	})

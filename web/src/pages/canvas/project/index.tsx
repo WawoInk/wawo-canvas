@@ -12,7 +12,7 @@ import { formatNumber } from "@/i18n/formatters";
 import { createAsyncImageTask, createAsyncImageEditTask, pollAsyncImageTask, cancelAsyncImageTask, requestEdit, requestImageQuestion } from "@/services/api/image";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { createVideoGenerationTask, pollVideoGenerationTask, cancelVideoGenerationTask, storeGeneratedVideo } from "@/services/api/video";
-import { cancelGeneration, createGeneration, generationErrorFrom, generationTaskId, getGenerationProfiles, readGeneratedVideoFile, readGenerationError, resolveCanvasVideoSubmission, waitForGeneration } from "@/services/api/generations";
+import { cancelGeneration, createGeneration, GenerationPollingPausedError, generationErrorFrom, generationTaskId, getGenerationProfiles, readGeneratedVideoFile, readGenerationError, resolveCanvasVideoSubmission, waitForGeneration } from "@/services/api/generations";
 import { DOCS_URL } from "@/constant/env";
 import { defaultConfig, modelOptionName, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { resolveImageUrl, uploadImage, getImageBlob, type UploadedImage, resolveMediaUrl, type UploadedFile } from "@/services/blob-storage";
@@ -438,7 +438,7 @@ function InfiniteCanvasPage() {
         });
         setRunningNodeId((current) => (current === runningId ? null : current));
         if (affectedNodeIds.size) {
-            setNodes((prev) => prev.map((node) => (affectedNodeIds.has(node.id) && generationTaskId(node.metadata) ? { ...node, metadata: { ...node.metadata, generationPollingPaused: true } } : node)));
+            setNodes((prev) => prev.map((node) => (affectedNodeIds.has(node.id) && canvasGenerationResume(node) ? { ...node, metadata: { ...node.metadata, generationPollingPaused: true } } : node)));
         }
     }, []);
 
@@ -465,7 +465,7 @@ function InfiniteCanvasPage() {
             if (resume.kind === "image") {
                 void pollCanvasImageNode(nodeId, { id: resume.taskId, model: resume.model || effectiveConfig.imageModel || effectiveConfig.model }, buildSavedImageConfig(effectiveConfig, node.metadata || {}));
             } else if (resume.kind === "first-party-video") {
-                void pollFirstPartyCanvasVideoNode(nodeId, resume.taskId);
+                void pollFirstPartyCanvasVideoNode(nodeId, resume.taskId, undefined, resume.clientRequestId);
             } else {
                 const config = buildNodeConfig(effectiveConfig, defaultConfig, node, "video");
                 void pollCanvasVideoNode(nodeId, { id: resume.taskId, model: resume.model || config.model }, config);
@@ -522,16 +522,16 @@ function InfiniteCanvasPage() {
     // ponytail: extracted restore function shared by both inline and backend-fetch paths
     const resumePendingGenerations = (nodes: CanvasNodeData[]) => {
         for (const node of nodes) {
-            const taskId = generationTaskId(node.metadata);
-            if (node.metadata?.status !== "loading" || !taskId) continue;
-            const task = { id: taskId, model: node.metadata.taskModel || effectiveConfig.imageModel || effectiveConfig.model };
-            if (node.type === CanvasNodeType.Image) {
-                void pollCanvasImageNode(node.id, task, effectiveConfig);
-            } else if (node.type === CanvasNodeType.Video && node.metadata.generationProfileId) {
-                void pollFirstPartyCanvasVideoNode(node.id, taskId);
-            } else if (node.type === CanvasNodeType.Video) {
-                void pollCanvasVideoNode(node.id, task, effectiveConfig);
+            const resume = canvasGenerationResume(node);
+            if (!resume) continue;
+            if (resume.kind === "first-party-video") {
+                void pollFirstPartyCanvasVideoNode(node.id, resume.taskId, undefined, resume.clientRequestId);
+                continue;
             }
+            if (node.metadata?.status !== "loading") continue;
+            const task = { id: resume.taskId, model: resume.model || effectiveConfig.imageModel || effectiveConfig.model };
+            if (resume.kind === "image") void pollCanvasImageNode(node.id, task, effectiveConfig);
+            else void pollCanvasVideoNode(node.id, task, effectiveConfig);
         }
     };
 
@@ -2743,13 +2743,13 @@ function InfiniteCanvasPage() {
         }
     };
 
-    const pollFirstPartyCanvasVideoNode = async (nodeId: string, taskId: string, spec?: { width: number; height: number }) => {
+    const pollFirstPartyCanvasVideoNode = async (nodeId: string, taskId: string, spec?: { width: number; height: number }, clientRequestId = "") => {
         const controller = new AbortController();
         startGenerationRequest(nodeId, nodeId, nodeId, controller);
         try {
             const task = await waitForGeneration(taskId, controller.signal, (current) => {
-                setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, generationTaskId: taskId, generationTaskStatus: current.status, generationPollingPaused: false, status: NODE_STATUS_LOADING } } : node)));
-            });
+                setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, generationTaskId: current.id, generationTaskStatus: current.status, generationPollingPaused: false, status: NODE_STATUS_LOADING } } : node)));
+            }, clientRequestId);
             const file = readGeneratedVideoFile(task.result);
             if (!file) throw new Error(t("canvas.editor.errors.videoResultEmpty"));
             const raw = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
@@ -2784,6 +2784,11 @@ function InfiniteCanvasPage() {
             );
         } catch (error) {
             if (isGenerationCanceled(error)) return;
+            if (error instanceof GenerationPollingPausedError) {
+                message.warning(error.message);
+                setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, metadata: { ...n.metadata, status: NODE_STATUS_ERROR, generationPollingPaused: true, errorDetails: error.message } } : n)));
+                return;
+            }
             const generationError = generationErrorFrom(error);
             const errorDetails = generationError?.message || (error instanceof Error ? error.message : t("canvas.editor.errors.videoGenerationFailed"));
             const location = generationError ? locateGenerationError(generationError) : {};
@@ -2796,7 +2801,8 @@ function InfiniteCanvasPage() {
                               metadata: {
                                   ...n.metadata,
                                   status: NODE_STATUS_ERROR,
-                                  generationTaskStatus: generationError?.code === "GENERATION_CANCELLED" ? "cancelled" : "failed",
+                                  ...(generationError ? { generationTaskStatus: generationError.code === "GENERATION_CANCELLED" ? ("cancelled" as const) : ("failed" as const) } : {}),
+                                  generationPollingPaused: false,
                                   errorDetails,
                                   generationErrorFieldPath: location.fieldPath,
                                   generationErrorResourceId: location.resourceId,
@@ -3123,7 +3129,7 @@ function InfiniteCanvasPage() {
                                     <CanvasNodePromptPanel
                                         node={panelNode}
                                         isRunning={runningNodeId === panelNode.id || (panelNode.metadata?.status === NODE_STATUS_LOADING && !panelNode.metadata.generationPollingPaused)}
-                                        canResume={Boolean(panelNode.metadata?.generationPollingPaused && generationTaskId(panelNode.metadata))}
+                                        canResume={Boolean(panelNode.metadata?.generationPollingPaused && canvasGenerationResume(panelNode))}
                                         mentionReferences={mentionReferencesByNodeId.get(panelNode.id) || []}
                                         onPromptChange={handleNodePromptChange}
                                         onConfigChange={handleConfigNodeChange}
@@ -3714,7 +3720,7 @@ function getInputSummary(inputs: NodeGenerationInput[]) {
 
 function resetInterruptedGeneration(nodes: CanvasNodeData[]) {
     // ponytail: first-party task IDs moved fields; old projects still resume from upstreamTaskId
-    return nodes.map((node) => (node.metadata?.status === "loading" && !generationTaskId(node.metadata) ? { ...node, metadata: { ...node.metadata, status: "error" as const, errorDetails: i18n.t("canvas.editor.errors.generationInterrupted") } } : node));
+    return nodes.map((node) => (node.metadata?.status === "loading" && !generationTaskId(node.metadata) && !node.metadata.generationClientRequestId ? { ...node, metadata: { ...node.metadata, status: "error" as const, errorDetails: i18n.t("canvas.editor.errors.generationInterrupted") } } : node));
 }
 
 function isGenerationCanceled(error: unknown) {

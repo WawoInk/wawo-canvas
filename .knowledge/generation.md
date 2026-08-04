@@ -280,13 +280,15 @@ original credits * enterprise.discount_rate
 `web/src/services/api/generations.ts`：
 
 - `createGeneration` 创建 first-party task。
-- `waitForGeneration` 每 5 秒轮询。
+- `waitForGeneration` 每 5 秒轮询；连续 20 次可重试的浏览器查询错误只暂停本地观察，收到有效任务响应会清零错误计数。
+- `getGenerationByClientRequestId` 在创建响应丢失时找回当前用户的同一 first-party task。
 - `cancelGeneration` 请求取消。
 - `readGenerationError` 读取信封中的稳定错误。
 
 Canvas metadata 持久化：
 
 - `generationTaskId`
+- `generationClientRequestId`
 - 兼容 `upstreamTaskId`
 - `generationProfileId`
 - `taskModel`
@@ -298,7 +300,7 @@ Canvas metadata 持久化：
 - video compatibility
 - first-party video
 
-停止轮询不清除任务 ID；resume 使用同一任务。重试必须生成新的 client request ID。
+停止轮询不清除任务 ID；刷新会重新证实所有尚未物化成功的 first-party 视频节点，只有 client request ID 时先找回原任务。已有平台 `fileId` 的成功视频保持展示且不再查询任务。重试必须生成新的 client request ID。
 
 ## 任务历史与审计
 
