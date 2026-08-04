@@ -1,0 +1,124 @@
+- main [ref=f1e153]:
+  - complementary "画布总览" [ref=f1e154]:
+    - tablist "总览类型" [ref=f1e155]:
+      - tab "Canvas" [selected] [ref=f1e156]
+      - tab "Assets" [ref=f1e161]
+      - button "折叠总览侧栏" [ref=f1e164]
+    - generic [ref=f1e169]:
+      - textbox "搜索 Canvas 节点" [ref=f1e175]:
+        - /placeholder: 搜索节点
+      - generic [ref=f1e177] [cursor=pointer]:
+        - generic "全部类型" [ref=f1e178]:
+          - text: 全部类型
+          - combobox "节点类型" [ref=f1e179]
+        - img "down" [ref=f1e181]
+      - list "Canvas 节点列表" [ref=f1e184]:
+        - listitem [ref=f1e185]:
+          - button "8K超写实面部建模，柔肤滤镜（强度40%），虹膜动态高光追踪； 已完成" [ref=f1e186]:
+            - generic [ref=f1e192]:
+              - generic [ref=f1e193]: 8K超写实面部建模，柔肤滤镜（强度40%），虹膜动态高光追踪；
+              - generic [ref=f1e194]: 已完成
+        - listitem [ref=f1e196]:
+          - button "图片1 跳擦边舞预览 图片1 跳擦边舞 已完成" [ref=f1e197]:
+            - generic "图片1 跳擦边舞预览" [ref=f1e202]
+            - generic [ref=f1e203]:
+              - generic [ref=f1e204]: 图片1 跳擦边舞
+              - generic [ref=f1e205]: 已完成
+        - listitem [ref=f1e207]:
+          - button "u=1632009186,2602478950&fm=225&app=113&f=JPEG.jpeg 已完成" [ref=f1e208]:
+            - generic [ref=f1e214]:
+              - generic [ref=f1e215]: u=1632009186,2602478950&fm=225&app=113&f=JPEG.jpeg
+              - generic [ref=f1e216]: 已完成
+        - listitem [ref=f1e218]:
+          - button "modern-luxury-hotel-office-reception-lounge-with-meeting-room.jpg 已完成" [ref=f1e219]:
+            - generic [ref=f1e225]:
+              - generic [ref=f1e226]: modern-luxury-hotel-office-reception-lounge-with-meeting-room.jpg
+              - generic [ref=f1e227]: 已完成
+        - listitem [ref=f1e229]:
+          - button "在 图片1 左下角加垃圾桶 已完成" [ref=f1e230]:
+            - generic [ref=f1e236]:
+              - generic [ref=f1e237]: 在 图片1 左下角加垃圾桶
+              - generic [ref=f1e238]: 已完成
+        - listitem [ref=f1e240]:
+          - button "左下角放垃圾桶 失败" [ref=f1e241]:
+            - generic [ref=f1e247]:
+              - generic [ref=f1e248]: 左下角放垃圾桶
+              - generic [ref=f1e249]: 失败
+        - listitem [ref=f1e251]:
+          - button "Video预览 Video 已完成" [ref=f1e252]:
+            - generic "Video预览" [ref=f1e257]
+            - generic [ref=f1e258]:
+              - generic [ref=f1e259]: Video
+              - generic [ref=f1e260]: 已完成
+        - listitem [ref=f1e262]:
+          - button "hajimi.jpeg 已完成" [ref=f1e263]:
+            - generic [ref=f1e269]:
+              - generic [ref=f1e270]: hajimi.jpeg
+              - generic [ref=f1e271]: 已完成
+        - listitem [ref=f1e273]:
+          - button "Video预览 Video 已完成" [ref=f1e274]:
+            - generic "Video预览" [ref=f1e279]
+            - generic [ref=f1e280]:
+              - generic [ref=f1e281]: Video
+              - generic [ref=f1e282]: 已完成
+        - listitem [ref=f1e284]:
+          - button "hotel.jpg 已完成" [ref=f1e285]:
+            - generic [ref=f1e291]:
+              - generic [ref=f1e292]: hotel.jpg
+              - generic [ref=f1e293]: 已完成
+        - listitem [ref=f1e295]:
+          - button "图片1 将图片修改成夜晚内景的情况 已完成" [ref=f1e296]:
+            - generic [ref=f1e302]:
+              - generic [ref=f1e303]: 图片1 将图片修改成夜晚内景的情况
+              - generic [ref=f1e304]: 已完成
+        - listitem [ref=f1e306]:
+          - button "Video预览 Video 已完成" [ref=f1e307]:
+            - generic "Video预览" [ref=f1e312]
+            - generic [ref=f1e313]:
+              - generic [ref=f1e314]: Video
+              - generic [ref=f1e315]: 已完成
+        - listitem [ref=f1e317]:
+          - button "Video 就绪" [ref=f1e318]:
+            - generic [ref=f1e323]:
+              - generic [ref=f1e324]: Video
+              - generic [ref=f1e325]: 就绪
+  - generic [ref=f1e327]:
+    - generic:
+      - generic [ref=f1e328]:
+        - button "打开画布菜单" [ref=f1e329]
+        - button "无限画布 1" [ref=f1e332]
+      - generic [ref=f1e333]:
+        - generic [ref=f1e334]:
+          - button "配置" [ref=f1e335]
+          - button "切换到浅色主题" [ref=f1e339]
+          - generic [ref=f1e347]: 9,496
+          - button "账户菜单" [ref=f1e353]:
+            - generic [ref=f1e354]: A
+        - button "Agent" [ref=f1e357] [cursor=pointer]
+    - generic [ref=f1e363]:
+      - generic:
+        - generic [ref=f1e372]:
+          - generic [ref=f1e375]:
+            - img "图片1 将图片修改成夜晚内景的情况"
+          - generic: 图片7
+        - generic [ref=f1e380]: 视频4
+        - generic [ref=f1e388]: 空视频节点
+    - generic [ref=f1e400]:
+      - button "移动/选择" [ref=f1e401] [cursor=pointer]
+      - button "撤销" [disabled] [ref=f1e408]
+      - button "重做" [disabled] [ref=f1e409]
+      - button "文本" [ref=f1e411] [cursor=pointer]
+      - button "图片" [ref=f1e415] [cursor=pointer]
+      - button "视频" [ref=f1e421] [cursor=pointer]
+      - button "音频" [ref=f1e426] [cursor=pointer]
+      - button "生成配置" [ref=f1e431] [cursor=pointer]
+      - button "上传素材" [ref=f1e436] [cursor=pointer]
+      - button "我的素材" [ref=f1e442] [cursor=pointer]
+      - button "画布外观" [ref=f1e446] [cursor=pointer]
+      - button "清空画布" [ref=f1e455] [cursor=pointer]
+    - generic [ref=f1e461]:
+      - button "打开小地图" [ref=f1e462] [cursor=pointer]
+      - button "重置视图" [ref=f1e467] [cursor=pointer]
+      - slider "放大/缩小画布" [ref=f1e475]: "89"
+      - generic [ref=f1e476]: 89%
+      - button "快捷键" [ref=f1e477] [cursor=pointer]

@@ -1,0 +1,153 @@
+- generic [ref=f1e1]:
+  - generic [ref=f1e4]:
+    - banner [ref=f1e5]:
+      - generic [ref=f1e6]:
+        - generic [ref=f1e7]:
+          - link "Canvan 首页" [ref=f1e8] [cursor=pointer]:
+            - /url: /
+            - img "Canvan" [ref=f1e9]
+          - navigation [ref=f1e10]:
+            - link "我的画布" [ref=f1e11] [cursor=pointer]:
+              - /url: /canvas
+            - link "生图工作台" [ref=f1e18] [cursor=pointer]:
+              - /url: /image
+            - link "视频创作台" [ref=f1e24] [cursor=pointer]:
+              - /url: /video
+            - link "提示词库" [ref=f1e29] [cursor=pointer]:
+              - /url: /prompts
+            - link "我的素材" [ref=f1e34] [cursor=pointer]:
+              - /url: /assets
+        - generic [ref=f1e42]:
+          - button "配置" [ref=f1e43]
+          - button "切换到浅色主题" [ref=f1e47]
+          - button "账户菜单" [active] [ref=f1e56]:
+            - generic [ref=f1e57]: A
+    - main [ref=f1e60]:
+      - generic [ref=f1e61]:
+        - generic [ref=f1e62]:
+          - heading "Canvan" [level=1] [ref=f1e63]
+          - paragraph [ref=f1e64]:
+            - text: 在
+            - generic [ref=f1e65]: Canvan
+            - text: 中生成、连接和重组
+            - generic [ref=f1e67]: 图片、文字与图形
+            - text: ，让创作从单次生成变成连续推演。
+          - generic [ref=f1e69]:
+            - link "开始使用" [ref=f1e71] [cursor=pointer]:
+              - /url: /canvas
+            - link "打开画布" [ref=f1e76] [cursor=pointer]:
+              - /url: /canvas
+        - generic [ref=f1e78]:
+          - generic [ref=f1e79]:
+            - generic [ref=f1e80]:
+              - heading "沉淀每一次好结果" [level=2] [ref=f1e81]
+              - paragraph [ref=f1e82]: 收藏稳定出图的提示词、参考风格和结果图片，让下一次创作从已有经验开始。
+            - link "查看提示词库" [ref=f1e83] [cursor=pointer]:
+              - /url: /prompts
+          - generic [ref=f1e88]:
+            - button "便利店夜景 摄影 照片级写实 便利店夜景 在夏夜晚上 10 点的便利店门口，生成一张超写实的城市街头多人合影。3 到 4 个年轻人在门口短暂聊天，有人拿着饮料，有人坐在室外塑料椅上，有人站着看手机。玻璃门窗内透出明亮白光，外面有暖黄色路灯和远处汽车车灯。人物穿着日常服装：T 恤、衬衫、短裤、牛仔裤、运动鞋。不要网红造型。面部和姿态必须像真实路人，不能过度精修。环境中必须包含真实便利店元素：冰柜贴纸、促销海报、垃圾桶、门口地垫、玻璃反光、路边共享单车、地面上的饮料瓶水珠。整张图应像摄影师在城市里抓拍到的真实生活切片。重点测试自然的多人互动、夜间便利店光线、玻璃反射，以及普通人的生活氛围还原。" [ref=f1e89] [cursor=pointer]:
+              - img "便利店夜景" [ref=f1e90]
+              - generic [ref=f1e91]:
+                - generic [ref=f1e92]:
+                  - generic [ref=f1e93]: 摄影
+                  - generic [ref=f1e94]: 照片级写实
+                - heading "便利店夜景" [level=3] [ref=f1e95]
+                - paragraph [ref=f1e96]: 在夏夜晚上 10 点的便利店门口，生成一张超写实的城市街头多人合影。3 到 4 个年轻人在门口短暂聊天，有人拿着饮料，有人坐在室外塑料椅上，有人站着看手机。玻璃门窗内透出明亮白光，外面有暖黄色路灯和远处汽车车灯。人物穿着日常服装：T 恤、衬衫、短裤、牛仔裤、运动鞋。不要网红造型。面部和姿态必须像真实路人，不能过度精修。环境中必须包含真实便利店元素：冰柜贴纸、促销海报、垃圾桶、门口地垫、玻璃反光、路边共享单车、地面上的饮料瓶水珠。整张图应像摄影师在城市里抓拍到的真实生活切片。重点测试自然的多人互动、夜间便利店光线、玻璃反射，以及普通人的生活氛围还原。
+            - button "RAW iPhone 质感：地铁站 摄影 照片级写实 RAW iPhone 质感：地铁站 生成一张完全 RAW 质感、未经处理、未经编辑、具备完整 iPhone 相机画质的图像。场景是美国的一处地铁站，带有一瞬间的运动模糊。地铁正在行驶。地铁前方站着一位老年女性和一位老年男性。" [ref=f1e97] [cursor=pointer]:
+              - img "RAW iPhone 质感：地铁站" [ref=f1e98]
+              - generic [ref=f1e99]:
+                - generic [ref=f1e100]:
+                  - generic [ref=f1e101]: 摄影
+                  - generic [ref=f1e102]: 照片级写实
+                - heading "RAW iPhone 质感：地铁站" [level=3] [ref=f1e103]
+                - paragraph [ref=f1e104]: 生成一张完全 RAW 质感、未经处理、未经编辑、具备完整 iPhone 相机画质的图像。场景是美国的一处地铁站，带有一瞬间的运动模糊。地铁正在行驶。地铁前方站着一位老年女性和一位老年男性。
+            - button "Apple Park 发布会人群视角 摄影 照片级写实 Apple Park 发布会人群视角 在 Apple Park 举办 iPhone 20 发布会期间，用 iPhone 从远处人群中拍摄的一张业余照片，蒂姆·库克正在台上演讲" [ref=f1e105] [cursor=pointer]:
+              - img "Apple Park 发布会人群视角" [ref=f1e106]
+              - generic [ref=f1e107]:
+                - generic [ref=f1e108]:
+                  - generic [ref=f1e109]: 摄影
+                  - generic [ref=f1e110]: 照片级写实
+                - heading "Apple Park 发布会人群视角" [level=3] [ref=f1e111]
+                - paragraph [ref=f1e112]: 在 Apple Park 举办 iPhone 20 发布会期间，用 iPhone 从远处人群中拍摄的一张业余照片，蒂姆·库克正在台上演讲
+            - button "手写笔记本照片 摄影 照片级写实 手写笔记本照片 一张业余照片：一本摊开的笔记本平放着，里面用黑色圆珠笔写满了手写笔记。字迹自然随意、略显凌乱，像个人笔记，带有真实的小瑕疵、划掉的词语和下划线标题。从略高一点的角度拍摄，窗边自然日光，无闪光灯。轻松的桌面环境，用 iPhone 拍摄。" [ref=f1e113] [cursor=pointer]:
+              - img "手写笔记本照片" [ref=f1e114]
+              - generic [ref=f1e115]:
+                - generic [ref=f1e116]:
+                  - generic [ref=f1e117]: 摄影
+                  - generic [ref=f1e118]: 照片级写实
+                - heading "手写笔记本照片" [level=3] [ref=f1e119]
+                - paragraph [ref=f1e120]: 一张业余照片：一本摊开的笔记本平放着，里面用黑色圆珠笔写满了手写笔记。字迹自然随意、略显凌乱，像个人笔记，带有真实的小瑕疵、划掉的词语和下划线标题。从略高一点的角度拍摄，窗边自然日光，无闪光灯。轻松的桌面环境，用 iPhone 拍摄。
+            - button "米粒微型文字 摄影 照片级写实 米粒微型文字 一大堆米，其中有一粒米上写着极小的文字“wOw”" [ref=f1e121] [cursor=pointer]:
+              - img "米粒微型文字" [ref=f1e122]
+              - generic [ref=f1e123]:
+                - generic [ref=f1e124]:
+                  - generic [ref=f1e125]: 摄影
+                  - generic [ref=f1e126]: 照片级写实
+                - heading "米粒微型文字" [level=3] [ref=f1e127]
+                - paragraph [ref=f1e128]: 一大堆米，其中有一粒米上写着极小的文字“wOw”
+            - button "360 等距柱状全景图 摄影 照片级写实 360 等距柱状全景图 [地点] 的 360 等距柱状全景图" [ref=f1e129] [cursor=pointer]:
+              - img "360 等距柱状全景图" [ref=f1e130]
+              - generic [ref=f1e131]:
+                - generic [ref=f1e132]:
+                  - generic [ref=f1e133]: 摄影
+                  - generic [ref=f1e134]: 照片级写实
+                - heading "360 等距柱状全景图" [level=3] [ref=f1e135]
+                - paragraph [ref=f1e136]: "[地点] 的 360 等距柱状全景图"
+            - button "《杀手》风格游戏画面 游戏 娱乐 《杀手》风格游戏画面 一个《杀手》关卡：你身处 OpenAI 总部，任务是在不被发现的情况下偷走 GPT-6" [ref=f1e137] [cursor=pointer]:
+              - img "《杀手》风格游戏画面" [ref=f1e138]
+              - generic [ref=f1e139]:
+                - generic [ref=f1e140]:
+                  - generic [ref=f1e141]: 游戏
+                  - generic [ref=f1e142]: 娱乐
+                - heading "《杀手》风格游戏画面" [level=3] [ref=f1e143]
+                - paragraph [ref=f1e144]: 一个《杀手》关卡：你身处 OpenAI 总部，任务是在不被发现的情况下偷走 GPT-6
+            - button "《黑神话：悟空》游戏场景 游戏 娱乐 《黑神话：悟空》游戏场景 生成一个《黑神话：悟空》的游戏场景，画面中悟空被二郎神击飞" [ref=f1e145] [cursor=pointer]:
+              - img "《黑神话：悟空》游戏场景" [ref=f1e146]
+              - generic [ref=f1e147]:
+                - generic [ref=f1e148]:
+                  - generic [ref=f1e149]: 游戏
+                  - generic [ref=f1e150]: 娱乐
+                - heading "《黑神话：悟空》游戏场景" [level=3] [ref=f1e151]
+                - paragraph [ref=f1e152]: 生成一个《黑神话：悟空》的游戏场景，画面中悟空被二郎神击飞
+            - button "GTA 6 风格游戏画面 游戏 娱乐 GTA 6 风格游戏画面 GTA 6 游戏内画面，非常细致，非常真实。镜头是对着一台固定的 4K 显示器近距离拍摄的。（画面带有轻微模糊，像是手持拍摄。）环境宽阔明亮，细节真实。角色正和 / :dog. 一起走在海滩上。" [ref=f1e153] [cursor=pointer]:
+              - img "GTA 6 风格游戏画面" [ref=f1e154]
+              - generic [ref=f1e155]:
+                - generic [ref=f1e156]:
+                  - generic [ref=f1e157]: 游戏
+                  - generic [ref=f1e158]: 娱乐
+                - heading "GTA 6 风格游戏画面" [level=3] [ref=f1e159]
+                - paragraph [ref=f1e160]: GTA 6 游戏内画面，非常细致，非常真实。镜头是对着一台固定的 4K 显示器近距离拍摄的。（画面带有轻微模糊，像是手持拍摄。）环境宽阔明亮，细节真实。角色正和 / :dog. 一起走在海滩上。
+            - button "GTA 6 婚礼任务截图 游戏 娱乐 GTA 6 婚礼任务截图 生成一张 GTA 6 的游戏截图，内容为 [场景描述]" [ref=f1e161] [cursor=pointer]:
+              - img "GTA 6 婚礼任务截图" [ref=f1e162]
+              - generic [ref=f1e163]:
+                - generic [ref=f1e164]:
+                  - generic [ref=f1e165]: 游戏
+                  - generic [ref=f1e166]: 娱乐
+                - heading "GTA 6 婚礼任务截图" [level=3] [ref=f1e167]
+                - paragraph [ref=f1e168]: 生成一张 GTA 6 的游戏截图，内容为 [场景描述]
+            - button "《英雄联盟》上路对线截图 游戏 娱乐 《英雄联盟》上路对线截图 帮我生成一张《英雄联盟》中路对线截图，画面内容是特朗普对阵哈梅内伊" [ref=f1e169] [cursor=pointer]:
+              - img "《英雄联盟》上路对线截图" [ref=f1e170]
+              - generic [ref=f1e171]:
+                - generic [ref=f1e172]:
+                  - generic [ref=f1e173]: 游戏
+                  - generic [ref=f1e174]: 娱乐
+                - heading "《英雄联盟》上路对线截图" [level=3] [ref=f1e175]
+                - paragraph [ref=f1e176]: 帮我生成一张《英雄联盟》中路对线截图，画面内容是特朗普对阵哈梅内伊
+            - button "现实中的名人 摄影 照片级写实 现实中的名人 山姆·奥特曼、唐纳德·特朗普和埃隆·马斯克在一家繁忙电影院的柜台后面工作" [ref=f1e177] [cursor=pointer]:
+              - img "现实中的名人" [ref=f1e178]
+              - generic [ref=f1e179]:
+                - generic [ref=f1e180]:
+                  - generic [ref=f1e181]: 摄影
+                  - generic [ref=f1e182]: 照片级写实
+                - heading "现实中的名人" [level=3] [ref=f1e183]
+                - paragraph [ref=f1e184]: 山姆·奥特曼、唐纳德·特朗普和埃隆·马斯克在一家繁忙电影院的柜台后面工作
+  - menu [ref=f1e186]:
+    - menuitem "admin" [disabled] [ref=f1e187]
+    - menuitem [ref=f1e189] [cursor=pointer]:
+      - link "账户设置" [ref=f1e195]:
+        - /url: /account
+    - menuitem [ref=f1e196] [cursor=pointer]:
+      - link "管理后台" [ref=f1e200]:
+        - /url: /admin
+    - separator [ref=f1e201]
+    - menuitem "退出登录" [ref=f1e202] [cursor=pointer]

@@ -1,0 +1,12 @@
+[
+  {
+    "enterpriseId": "enterprise-3c73258b-919f-4fd6-aa9d-c0848a0628a5",
+    "status": "PASS",
+    "message": "ok"
+  },
+  {
+    "enterpriseId": "enterprise-77e49c24-6158-4ead-a603-4a3aa3f9bc03",
+    "status": "PASS",
+    "message": "ok"
+  }
+]

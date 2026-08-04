@@ -1,0 +1,131 @@
+- generic [ref=f1e207]:
+  - complementary [ref=f1e208]:
+    - generic [ref=f1e209]:
+      - generic [ref=f1e210]:
+        - img "Canvan" [ref=f1e211]
+        - strong [ref=f1e213]: Canvan
+      - menu [ref=f1e214]:
+        - menuitem [ref=f1e215] [cursor=pointer]:
+          - img "team" [ref=f1e216]
+          - link "企业管理" [ref=f1e220]:
+            - /url: /admin/enterprises
+        - menuitem [ref=f1e221] [cursor=pointer]:
+          - img "user" [ref=f1e222]
+          - link "用户管理" [ref=f1e226]:
+            - /url: /admin/users
+        - menuitem [ref=f1e227] [cursor=pointer]:
+          - img "transaction" [ref=f1e228]
+          - link "算力点日志" [ref=f1e232]:
+            - /url: /admin/credit-logs
+        - menuitem [ref=f1e233] [cursor=pointer]:
+          - img "experiment" [ref=f1e234]
+          - link "使用日志" [ref=f1e238]:
+            - /url: /admin/generation-tasks
+        - menuitem [ref=f1e239] [cursor=pointer]:
+          - img "file-text" [ref=f1e240]
+          - link "提示词管理" [ref=f1e244]:
+            - /url: /admin/prompts
+        - menuitem [ref=f1e245] [cursor=pointer]:
+          - img "picture" [ref=f1e246]
+          - link "素材库" [ref=f1e250]:
+            - /url: /admin/assets
+        - menuitem [ref=f1e251] [cursor=pointer]:
+          - img "setting" [ref=f1e252]
+          - link "系统设置" [ref=f1e256]:
+            - /url: /admin/settings
+      - generic [ref=f1e257]:
+        - link "home 前往画布" [ref=f1e258] [cursor=pointer]:
+          - /url: /canvas
+          - img "home" [ref=f1e260]
+          - generic [ref=f1e263]: 前往画布
+        - button "logout 退出登录" [ref=f1e264] [cursor=pointer]:
+          - img "logout" [ref=f1e266]
+          - generic [ref=f1e269]: 退出登录
+  - generic [ref=f1e270]:
+    - banner [ref=f1e271]:
+      - heading "企业管理" [level=5] [ref=f1e574]
+      - generic [ref=f1e274]:
+        - button "切换到浅色主题" [ref=f1e275]
+        - button "账户菜单" [ref=f1e284]:
+          - generic [ref=f1e285]: A
+    - main [ref=f1e287]:
+      - main [ref=f1e575]:
+        - generic [ref=f1e576]:
+          - generic [ref=f1e580]:
+            - generic [ref=f1e583]:
+              - generic "关键词" [ref=f1e585]
+              - generic [ref=f1e589]:
+                - searchbox "搜索企业名称或主账号" [ref=f1e591]
+                - button [ref=f1e593] [cursor=pointer]:
+                  - img "search" [ref=f1e594]
+            - generic [ref=f1e603]:
+              - button "重 置" [ref=f1e605] [cursor=pointer]
+              - button "reload 查询" [ref=f1e608] [cursor=pointer]:
+                - img "reload" [ref=f1e610]
+                - generic [ref=f1e613]: 查询
+          - generic [ref=f1e616]:
+            - generic [ref=f1e618]:
+              - generic [ref=f1e621]:
+                - strong [ref=f1e624]: 企业列表
+                - generic [ref=f1e625]: 1 家
+              - generic [ref=f1e627]:
+                - button "plus 创建企业" [active] [ref=f1e629] [cursor=pointer]:
+                  - img "plus" [ref=f1e631]
+                  - generic [ref=f1e635]: 创建企业
+                - generic [ref=f1e636]:
+                  - img "reload" [ref=f1e639] [cursor=pointer]
+                  - img "column-height" [ref=f1e644] [cursor=pointer]
+                  - img "setting" [ref=f1e648] [cursor=pointer]
+            - generic [ref=f1e653]:
+              - table [ref=f1e657]:
+                - rowgroup [ref=f1e667]:
+                  - row [ref=f1e668]:
+                    - columnheader "企业" [ref=f1e669]
+                    - columnheader "主账号" [ref=f1e670]
+                    - columnheader "成员" [ref=f1e671]
+                    - columnheader "主账号余额" [ref=f1e672]
+                    - columnheader "企业状态" [ref=f1e673]
+                    - columnheader "主账号状态" [ref=f1e674]
+                    - columnheader "创建时间" [ref=f1e675]
+                    - columnheader "操作" [ref=f1e676]
+                - rowgroup [ref=f1e677]:
+                  - row [ref=f1e678]:
+                    - cell "测试 enterprise-616612b6-5572-4f4d-9de9-31a9cc44e96e" [ref=f1e679]:
+                      - generic [ref=f1e680]:
+                        - strong [ref=f1e682]: 测试
+                        - generic [ref=f1e683]: enterprise-616612b6-5572-4f4d-9de9-31a9cc44e96e
+                    - cell "demo-ent" [ref=f1e684]
+                    - cell "1 人" [ref=f1e686]
+                    - cell "5,000" [ref=f1e687]
+                    - cell [ref=f1e688]:
+                      - switch "启用 禁用" [checked] [ref=f1e689] [cursor=pointer]:
+                        - generic [ref=f1e691]:
+                          - generic: 启用
+                          - generic: 禁用
+                    - cell [ref=f1e692]:
+                      - switch "启用 禁用" [checked] [ref=f1e693] [cursor=pointer]:
+                        - generic [ref=f1e695]:
+                          - generic: 启用
+                          - generic: 禁用
+                    - cell "2026-07-23 10:57" [ref=f1e696]
+                    - cell [ref=f1e697]:
+                      - generic [ref=f1e698]:
+                        - button [ref=f1e700] [cursor=pointer]:
+                          - img "wallet" [ref=f1e702]
+                        - button [ref=f1e706] [cursor=pointer]:
+                          - img "key" [ref=f1e708]
+              - list [ref=f1e711]:
+                - listitem [ref=f1e712]: 共 1 家
+                - listitem "上一页" [ref=f1e713]:
+                  - button [disabled] [ref=f1e714]:
+                    - img "left" [ref=f1e715]
+                - listitem "1" [ref=f1e718] [cursor=pointer]
+                - listitem "下一页" [ref=f1e720]:
+                  - button [disabled] [ref=f1e721]:
+                    - img "right" [ref=f1e722]
+                - listitem [ref=f1e725]:
+                  - generic [ref=f1e726]:
+                    - generic "10 条/页" [ref=f1e727]:
+                      - text: 10 条/页
+                      - combobox "页码" [ref=f1e728]
+                    - img "down" [ref=f1e730]

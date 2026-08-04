@@ -1,0 +1,43 @@
+- generic [ref=e4]:
+  - banner [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - link "Canvan 首页" [ref=e8] [cursor=pointer]:
+          - /url: /
+          - img "Canvan" [ref=e9]
+        - navigation [ref=e10]:
+          - link "我的画布" [ref=e11] [cursor=pointer]:
+            - /url: /canvas
+          - link "生图工作台" [ref=e18] [cursor=pointer]:
+            - /url: /image
+          - link "视频创作台" [ref=e24] [cursor=pointer]:
+            - /url: /video
+          - link "提示词库" [ref=e29] [cursor=pointer]:
+            - /url: /prompts
+          - link "我的素材" [ref=e34] [cursor=pointer]:
+            - /url: /assets
+      - generic [ref=e42]:
+        - button "切换到浅色主题" [ref=e43]
+        - link "登录" [ref=e51] [cursor=pointer]:
+          - /url: /login
+  - main [ref=e53]:
+    - generic [ref=e54]:
+      - generic [ref=e55]:
+        - heading "Canvan" [level=1] [ref=e56]
+        - paragraph [ref=e57]:
+          - text: 在
+          - generic [ref=e58]: Canvan
+          - text: 中生成、连接和重组
+          - generic [ref=e60]: 图片、文字与图形
+          - text: ，让创作从单次生成变成连续推演。
+        - generic [ref=e62]:
+          - link "开始使用" [ref=e64] [cursor=pointer]:
+            - /url: /canvas
+          - link "打开画布" [ref=e69] [cursor=pointer]:
+            - /url: /canvas
+      - generic [ref=e72]:
+        - generic [ref=e73]:
+          - heading "沉淀每一次好结果" [level=2] [ref=e74]
+          - paragraph [ref=e75]: 收藏稳定出图的提示词、参考风格和结果图片，让下一次创作从已有经验开始。
+        - link "查看提示词库" [ref=e76] [cursor=pointer]:
+          - /url: /prompts

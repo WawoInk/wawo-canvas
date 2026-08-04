@@ -1,0 +1,5 @@
+date=2026-07-23
+base_url=http://localhost:3000
+node=v24.16.0
+go=go version go1.26.4 darwin/arm64
+bun=1.3.14

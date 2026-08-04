@@ -1,0 +1,580 @@
+- generic [ref=f2e5]:
+  - complementary [ref=f2e6]:
+    - generic [ref=f2e7]:
+      - generic [ref=f2e8]:
+        - img "Canvan" [ref=f2e9]
+        - strong [ref=f2e11]: Canvan
+      - menu [ref=f2e12]:
+        - menuitem [ref=f2e13] [cursor=pointer]:
+          - img "team" [ref=f2e14]
+          - link "企业管理" [ref=f2e18]:
+            - /url: /admin/enterprises
+        - menuitem [ref=f2e19] [cursor=pointer]:
+          - img "user" [ref=f2e20]
+          - link "用户管理" [ref=f2e24]:
+            - /url: /admin/users
+        - menuitem [ref=f2e25] [cursor=pointer]:
+          - img "transaction" [ref=f2e26]
+          - link "算力点日志" [ref=f2e30]:
+            - /url: /admin/credit-logs
+        - menuitem [ref=f2e31] [cursor=pointer]:
+          - img "experiment" [ref=f2e32]
+          - link "使用日志" [ref=f2e36]:
+            - /url: /admin/generation-tasks
+        - menuitem [ref=f2e37] [cursor=pointer]:
+          - img "file-text" [ref=f2e38]
+          - link "提示词管理" [ref=f2e42]:
+            - /url: /admin/prompts
+        - menuitem [ref=f2e43] [cursor=pointer]:
+          - img "picture" [ref=f2e44]
+          - link "素材库" [ref=f2e48]:
+            - /url: /admin/assets
+        - menuitem [ref=f2e49] [cursor=pointer]:
+          - img "setting" [ref=f2e50]
+          - link "系统设置" [ref=f2e54]:
+            - /url: /admin/settings
+      - generic [ref=f2e55]:
+        - link "home 前往画布" [ref=f2e56] [cursor=pointer]:
+          - /url: /canvas
+          - img "home" [ref=f2e58]
+          - generic [ref=f2e61]: 前往画布
+        - button "logout 退出登录" [ref=f2e62] [cursor=pointer]:
+          - img "logout" [ref=f2e64]
+          - generic [ref=f2e67]: 退出登录
+  - generic [ref=f2e68]:
+    - banner [ref=f2e69]:
+      - heading "系统设置" [level=5] [ref=f2e70]
+      - generic [ref=f2e72]:
+        - button "切换到浅色主题" [ref=f2e73]
+        - button "账户菜单" [ref=f2e82]:
+          - generic [ref=f2e83]: A
+    - main [ref=f2e85]:
+      - main [ref=f2e86]:
+        - generic [ref=f2e87]:
+          - generic [ref=f2e90]:
+            - generic [ref=f2e91]:
+              - tablist [ref=f2e92]:
+                - generic [ref=f2e94]:
+                  - tab "公开配置（对外暴露）" [selected] [ref=f2e96] [cursor=pointer]
+                  - tab "私有配置（不会对外暴露）" [ref=f2e98] [cursor=pointer]
+              - generic:
+                - generic:
+                  - tabpanel "公开配置（对外暴露）"
+            - generic [ref=f2e99]:
+              - button "reload 刷新" [ref=f2e101] [cursor=pointer]:
+                - img "reload" [ref=f2e103]
+                - generic [ref=f2e106]: 刷新
+              - button "save 保存设置" [ref=f2e108] [cursor=pointer]:
+                - img "save" [ref=f2e110]
+                - generic [ref=f2e113]: 保存设置
+          - generic [ref=f2e115]:
+            - generic [ref=f2e116]:
+              - radiogroup "segmented control" [ref=f2e117]:
+                - generic [ref=f2e118]:
+                  - generic [ref=f2e119] [cursor=pointer]:
+                    - radio "可视化编辑" [checked]
+                    - generic "可视化编辑" [ref=f2e120]
+                  - generic [ref=f2e121] [cursor=pointer]:
+                    - radio "手动编辑 JSON"
+                    - generic "手动编辑 JSON" [ref=f2e122]
+              - generic [ref=f2e123]: 这些配置会暴露给前端读取
+            - generic [ref=f2e125]:
+              - generic [ref=f2e128]:
+                - generic "系统可用模型(请先在私有配置里配置渠道)" [ref=f2e130]
+                - generic [ref=f2e131]:
+                  - generic [ref=f2e134]:
+                    - generic [ref=f2e135]:
+                      - generic "gemini-3-5-flash" [ref=f2e137]
+                      - generic "gpt-5-5" [ref=f2e144]
+                      - generic "gpt-image-2" [ref=f2e151]
+                      - generic "gpt-image-2-line-2" [ref=f2e158]
+                      - generic "seedance-2-0-line-2" [ref=f2e165]
+                      - generic "vidu_hq_headtail-oversea(首尾帧生视频)" [ref=f2e172]
+                      - generic "vidu_hq_i2v-oversea(图生视频)" [ref=f2e179]
+                      - generic "vidu_hq_r2v-oversea(参考生视频)" [ref=f2e186]
+                      - generic "vidu_hq_t2v-oversea(文生视频)" [ref=f2e193]
+                      - generic "viduq3-drama" [ref=f2e200]
+                      - generic "gpt-image-2-open-1-edit" [ref=f2e207]
+                      - generic "gpt-image-2-open-1-gen" [ref=f2e214]
+                      - combobox "系统可用模型(请先在私有配置里配置渠道)" [ref=f2e221]
+                    - img "down" [ref=f2e223]
+                  - generic [ref=f2e226]: 保存设置时会自动合并所有已启用私有渠道的模型，前台模型下拉会读取这里的公开列表
+              - generic [ref=f2e230]:
+                - generic "默认模型" [ref=f2e232]
+                - generic [ref=f2e236]:
+                  - generic "gpt-5-5" [ref=f2e237]:
+                    - text: gpt-5-5
+                    - combobox "默认模型" [ref=f2e238]
+                  - img "down" [ref=f2e240]
+                  - img "close-circle" [ref=f2e244] [cursor=pointer]
+              - generic [ref=f2e249]:
+                - generic "默认图片模型" [ref=f2e251]
+                - generic [ref=f2e255]:
+                  - generic "gpt-image-2" [ref=f2e256]:
+                    - text: gpt-image-2
+                    - combobox "默认图片模型" [ref=f2e257]
+                  - img "down" [ref=f2e259]
+                  - img "close-circle" [ref=f2e263] [cursor=pointer]
+              - generic [ref=f2e268]:
+                - generic "默认视频模型" [ref=f2e270]
+                - generic [ref=f2e274]:
+                  - generic "vidu_hq_headtail-oversea(首尾帧生视频)" [ref=f2e275]:
+                    - text: vidu_hq_headtail-oversea(首尾帧生视频)
+                    - combobox "默认视频模型" [ref=f2e276]
+                  - img "down" [ref=f2e278]
+                  - img "close-circle" [ref=f2e282] [cursor=pointer]
+              - generic [ref=f2e287]:
+                - generic "默认文本模型" [ref=f2e289]
+                - generic [ref=f2e293]:
+                  - generic "gpt-5-5" [ref=f2e294]:
+                    - text: gpt-5-5
+                    - combobox "默认文本模型" [ref=f2e295]
+                  - img "down" [ref=f2e297]
+                  - img "close-circle" [ref=f2e301] [cursor=pointer]
+              - generic [ref=f2e306]:
+                - generic "默认音频模型" [ref=f2e308]
+                - generic [ref=f2e312]:
+                  - combobox "默认音频模型" [ref=f2e314]
+                  - img "down" [ref=f2e316]
+                  - img "close-circle" [ref=f2e320] [cursor=pointer]
+              - generic [ref=f2e323]:
+                - heading "各能力可选模型" [level=5] [ref=f2e324]
+                - text: 必须显式勾选；未勾选的模型不会在前台展示，也不能发起平台生成。
+              - generic [ref=f2e327]:
+                - generic "图片模型可选项" [ref=f2e329]
+                - generic [ref=f2e330]:
+                  - generic [ref=f2e333]:
+                    - generic [ref=f2e334]:
+                      - generic "gpt-image-2" [ref=f2e336]
+                      - generic "gpt-image-2-open-1-edit" [ref=f2e343]
+                      - generic "gpt-image-2-open-1-gen" [ref=f2e350]
+                      - combobox "图片模型可选项" [ref=f2e357]
+                    - img "down" [ref=f2e359]
+                    - img "close-circle" [ref=f2e363] [cursor=pointer]
+                  - generic [ref=f2e366]: 留空时前台无图片模型可选
+              - generic [ref=f2e370]:
+                - generic "视频模型可选项" [ref=f2e372]
+                - generic [ref=f2e373]:
+                  - generic [ref=f2e376]:
+                    - generic [ref=f2e377]:
+                      - generic "vidu_hq_headtail-oversea(首尾帧生视频)" [ref=f2e379]
+                      - generic "vidu_hq_i2v-oversea(图生视频)" [ref=f2e386]
+                      - generic "vidu_hq_r2v-oversea(参考生视频)" [ref=f2e393]
+                      - generic "vidu_hq_t2v-oversea(文生视频)" [ref=f2e400]
+                      - combobox "视频模型可选项" [ref=f2e407]
+                    - img "down" [ref=f2e409]
+                    - img "close-circle" [ref=f2e413] [cursor=pointer]
+                  - generic [ref=f2e416]: 留空时前台无视频模型可选
+              - generic [ref=f2e420]:
+                - generic "文本模型可选项" [ref=f2e422]
+                - generic [ref=f2e423]:
+                  - generic [ref=f2e426]:
+                    - generic [ref=f2e427]:
+                      - generic "gpt-5-5" [ref=f2e429]
+                      - combobox "文本模型可选项" [ref=f2e436]
+                    - img "down" [ref=f2e438]
+                    - img "close-circle" [ref=f2e442] [cursor=pointer]
+                  - generic [ref=f2e445]: 留空时前台无文本模型可选
+              - generic [ref=f2e449]:
+                - generic "音频模型可选项" [ref=f2e451]
+                - generic [ref=f2e452]:
+                  - generic [ref=f2e455]:
+                    - generic [ref=f2e456]:
+                      - generic: 选择音频模型
+                      - combobox "音频模型可选项" [ref=f2e458]
+                    - img "down" [ref=f2e460]
+                  - generic [ref=f2e463]: 留空时前台无音频模型可选
+              - generic [ref=f2e465]:
+                - heading "图片请求格式" [level=5] [ref=f2e466]
+                - generic [ref=f2e467]: 仅显式配置的图片模型使用指定协议；未配置模型保持现有默认请求格式。
+                - generic [ref=f2e468]:
+                  - generic [ref=f2e469]:
+                    - generic [ref=f2e476]:
+                      - generic "gpt-image-2-open-1-edit" [ref=f2e477]:
+                        - text: gpt-image-2-open-1-edit
+                        - combobox [ref=f2e478]
+                      - img "down" [ref=f2e480]
+                    - generic [ref=f2e488]:
+                      - generic: multipart/form-data
+                      - generic [ref=f2e489] [cursor=pointer]:
+                        - generic "multipart/form-data" [ref=f2e1032]:
+                          - text: multipart/form-data
+                          - combobox [active] [ref=f2e491]
+                        - img "down" [ref=f2e493]
+                    - button "删除图片请求格式 gpt-image-2-open-1-edit" [ref=f2e497] [cursor=pointer]:
+                      - img "delete" [ref=f2e499]
+                  - button "plus 添加模型" [ref=f2e502] [cursor=pointer]:
+                    - img "plus" [ref=f2e504]
+                    - generic [ref=f2e508]: 添加模型
+              - generic [ref=f2e511]:
+                - generic "系统提示词" [ref=f2e513]
+                - textbox "系统提示词" [ref=f2e517]
+              - generic [ref=f2e520]:
+                - generic "允许用户自定义渠道" [ref=f2e522]
+                - generic [ref=f2e523]:
+                  - switch "允许用户自定义渠道" [ref=f2e526] [cursor=pointer]
+                  - generic [ref=f2e529]: 开启后，前端可提供走后端渠道和用户自定义 baseUrl 直连两种模式。关闭后，整个平台强制使用后台渠道，用户不再能自行配置渠道与模型，生成请求统一走后端代理并消耗算力点。
+              - generic [ref=f2e533]:
+                - generic "是否允许用户注册" [ref=f2e535]
+                - generic [ref=f2e536]:
+                  - switch "是否允许用户注册" [checked] [ref=f2e539] [cursor=pointer]
+                  - generic [ref=f2e542]: 关闭后隐藏注册入口，注册接口也会拒绝新用户创建
+              - generic [ref=f2e544]:
+                - heading "模型算力点" [level=5] [ref=f2e545]
+                - generic [ref=f2e546]: 普通模型按次计费；视频模型按私有配置中的能力绑定 ID 和计费规则匹配。
+                - table [ref=f2e553]:
+                  - rowgroup [ref=f2e559]:
+                    - row [ref=f2e560]:
+                      - columnheader "模型" [ref=f2e561]
+                      - columnheader "展示名称" [ref=f2e562]
+                      - columnheader "计费规则" [ref=f2e563]
+                      - columnheader "定价" [ref=f2e564]
+                  - rowgroup [ref=f2e565]:
+                    - row [ref=f2e566]:
+                      - cell "gemini-3-5-flash" [ref=f2e567]
+                      - cell [ref=f2e570]:
+                        - textbox "gemini-3-5-flash" [ref=f2e571]
+                      - cell "按次计费" [ref=f2e572]
+                      - cell "每次调用 10 Increase Value Decrease Value 点" [ref=f2e574]:
+                        - generic [ref=f2e575]:
+                          - generic [ref=f2e576]: 每次调用
+                          - generic [ref=f2e577]:
+                            - spinbutton [ref=f2e578]: "10.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e579] [cursor=pointer]:
+                                - img "up" [ref=f2e580]
+                              - button "Decrease Value" [ref=f2e583] [cursor=pointer]:
+                                - img "down" [ref=f2e584]
+                          - generic [ref=f2e587]: 点
+                    - row [ref=f2e588]:
+                      - cell "gpt-5-5" [ref=f2e589]
+                      - cell [ref=f2e592]:
+                        - textbox "gpt-5-5" [ref=f2e593]
+                      - cell "按次计费" [ref=f2e594]
+                      - cell "每次调用 10 Increase Value Decrease Value 点" [ref=f2e596]:
+                        - generic [ref=f2e597]:
+                          - generic [ref=f2e598]: 每次调用
+                          - generic [ref=f2e599]:
+                            - spinbutton [ref=f2e600]: "10.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e601] [cursor=pointer]:
+                                - img "up" [ref=f2e602]
+                              - button "Decrease Value" [ref=f2e605] [cursor=pointer]:
+                                - img "down" [ref=f2e606]
+                          - generic [ref=f2e609]: 点
+                    - row [ref=f2e610]:
+                      - cell "gpt-image-2" [ref=f2e611]
+                      - cell [ref=f2e614]:
+                        - textbox "gpt-image-2" [ref=f2e615]
+                      - cell "按次计费" [ref=f2e616]
+                      - cell "每次调用 10 Increase Value Decrease Value 点" [ref=f2e618]:
+                        - generic [ref=f2e619]:
+                          - generic [ref=f2e620]: 每次调用
+                          - generic [ref=f2e621]:
+                            - spinbutton [ref=f2e622]: "10.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e623] [cursor=pointer]:
+                                - img "up" [ref=f2e624]
+                              - button "Decrease Value" [ref=f2e627] [cursor=pointer]:
+                                - img "down" [ref=f2e628]
+                          - generic [ref=f2e631]: 点
+                    - row [ref=f2e632]:
+                      - cell "gpt-image-2-line-2" [ref=f2e633]
+                      - cell [ref=f2e636]:
+                        - textbox "gpt-image-2-line-2" [ref=f2e637]
+                      - cell "按次计费" [ref=f2e638]
+                      - cell "每次调用 10 Increase Value Decrease Value 点" [ref=f2e640]:
+                        - generic [ref=f2e641]:
+                          - generic [ref=f2e642]: 每次调用
+                          - generic [ref=f2e643]:
+                            - spinbutton [ref=f2e644]: "10.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e645] [cursor=pointer]:
+                                - img "up" [ref=f2e646]
+                              - button "Decrease Value" [ref=f2e649] [cursor=pointer]:
+                                - img "down" [ref=f2e650]
+                          - generic [ref=f2e653]: 点
+                    - row [ref=f2e654]:
+                      - cell "gpt-image-2-open-1-edit" [ref=f2e655]
+                      - cell [ref=f2e658]:
+                        - textbox "gpt-image-2-open-1-edit" [ref=f2e659]
+                      - cell "按次计费" [ref=f2e660]
+                      - cell "每次调用 10 Increase Value Decrease Value 点" [ref=f2e662]:
+                        - generic [ref=f2e663]:
+                          - generic [ref=f2e664]: 每次调用
+                          - generic [ref=f2e665]:
+                            - spinbutton [ref=f2e666]: "10.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e667] [cursor=pointer]:
+                                - img "up" [ref=f2e668]
+                              - button "Decrease Value" [ref=f2e671] [cursor=pointer]:
+                                - img "down" [ref=f2e672]
+                          - generic [ref=f2e675]: 点
+                    - row [ref=f2e676]:
+                      - cell "gpt-image-2-open-1-gen" [ref=f2e677]
+                      - cell [ref=f2e680]:
+                        - textbox "gpt-image-2-open-1-gen" [ref=f2e681]
+                      - cell "按次计费" [ref=f2e682]
+                      - cell "每次调用 10 Increase Value Decrease Value 点" [ref=f2e684]:
+                        - generic [ref=f2e685]:
+                          - generic [ref=f2e686]: 每次调用
+                          - generic [ref=f2e687]:
+                            - spinbutton [ref=f2e688]: "10.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e689] [cursor=pointer]:
+                                - img "up" [ref=f2e690]
+                              - button "Decrease Value" [ref=f2e693] [cursor=pointer]:
+                                - img "down" [ref=f2e694]
+                          - generic [ref=f2e697]: 点
+                    - row [ref=f2e698]:
+                      - cell "viduq3-drama viduq3-drama" [ref=f2e699]:
+                        - generic [ref=f2e700]:
+                          - generic [ref=f2e701]: viduq3-drama
+                          - generic [ref=f2e702]: viduq3-drama
+                      - cell [ref=f2e703]:
+                        - textbox "viduq3-drama" [ref=f2e704]
+                      - cell "按 credits 计费" [ref=f2e705]
+                      - cell "每 credits 13 Increase Value Decrease Value 点" [ref=f2e707]:
+                        - generic [ref=f2e708]:
+                          - generic [ref=f2e709]: 每 credits
+                          - generic [ref=f2e710]:
+                            - spinbutton [ref=f2e711]: "13.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e712] [cursor=pointer]:
+                                - img "up" [ref=f2e713]
+                              - button "Decrease Value" [ref=f2e716] [cursor=pointer]:
+                                - img "down" [ref=f2e717]
+                          - generic [ref=f2e720]: 点
+                    - row [ref=f2e721]:
+                      - cell "seedance-2-0-line-2 seedance-2-0-line-2" [ref=f2e722]:
+                        - generic [ref=f2e723]:
+                          - generic [ref=f2e724]: seedance-2-0-line-2
+                          - generic [ref=f2e725]: seedance-2-0-line-2
+                      - cell [ref=f2e726]:
+                        - textbox "seedance-2-0-line-2" [ref=f2e727]
+                      - cell "按秒计费" [ref=f2e728]
+                      - cell "480p 5 Increase Value Decrease Value 点/秒 720p 10 Increase Value Decrease Value 点/秒 1080p 15 Increase Value Decrease Value 点/秒" [ref=f2e730]:
+                        - generic [ref=f2e731]:
+                          - generic [ref=f2e732]:
+                            - generic [ref=f2e733]: 480p
+                            - generic [ref=f2e734]:
+                              - spinbutton [ref=f2e735]: "5.00"
+                              - generic:
+                                - button "Increase Value" [ref=f2e736] [cursor=pointer]:
+                                  - img "up" [ref=f2e737]
+                                - button "Decrease Value" [ref=f2e740] [cursor=pointer]:
+                                  - img "down" [ref=f2e741]
+                            - generic [ref=f2e744]: 点/秒
+                          - generic [ref=f2e745]:
+                            - generic [ref=f2e746]: 720p
+                            - generic [ref=f2e747]:
+                              - spinbutton [ref=f2e748]: "10.00"
+                              - generic:
+                                - button "Increase Value" [ref=f2e749] [cursor=pointer]:
+                                  - img "up" [ref=f2e750]
+                                - button "Decrease Value" [ref=f2e753] [cursor=pointer]:
+                                  - img "down" [ref=f2e754]
+                            - generic [ref=f2e757]: 点/秒
+                          - generic [ref=f2e758]:
+                            - generic [ref=f2e759]: 1080p
+                            - generic [ref=f2e760]:
+                              - spinbutton [ref=f2e761]: "15.00"
+                              - generic:
+                                - button "Increase Value" [ref=f2e762] [cursor=pointer]:
+                                  - img "up" [ref=f2e763]
+                                - button "Decrease Value" [ref=f2e766] [cursor=pointer]:
+                                  - img "down" [ref=f2e767]
+                            - generic [ref=f2e770]: 点/秒
+                    - row [ref=f2e771]:
+                      - cell "vidu_hq_headtail-oversea(首尾帧生视频) vidu_hq_headtail-oversea(首尾帧生视频)" [ref=f2e772]:
+                        - generic [ref=f2e773]:
+                          - generic [ref=f2e774]: vidu_hq_headtail-oversea(首尾帧生视频)
+                          - generic [ref=f2e775]: vidu_hq_headtail-oversea(首尾帧生视频)
+                      - cell [ref=f2e776]:
+                        - textbox "vidu_hq_headtail-oversea(首尾帧生视频)" [ref=f2e777]
+                      - cell "按次计费" [ref=f2e778]
+                      - cell "每次调用 5 Increase Value Decrease Value 点" [ref=f2e780]:
+                        - generic [ref=f2e781]:
+                          - generic [ref=f2e782]: 每次调用
+                          - generic [ref=f2e783]:
+                            - spinbutton [ref=f2e784]: "5.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e785] [cursor=pointer]:
+                                - img "up" [ref=f2e786]
+                              - button "Decrease Value" [ref=f2e789] [cursor=pointer]:
+                                - img "down" [ref=f2e790]
+                          - generic [ref=f2e793]: 点
+                    - row [ref=f2e794]:
+                      - cell "vidu_hq_i2v-oversea(图生视频) vidu_hq_i2v-oversea(图生视频)" [ref=f2e795]:
+                        - generic [ref=f2e796]:
+                          - generic [ref=f2e797]: vidu_hq_i2v-oversea(图生视频)
+                          - generic [ref=f2e798]: vidu_hq_i2v-oversea(图生视频)
+                      - cell [ref=f2e799]:
+                        - textbox "vidu_hq_i2v-oversea(图生视频)" [ref=f2e800]
+                      - cell "按次计费" [ref=f2e801]
+                      - cell "每次调用 5 Increase Value Decrease Value 点" [ref=f2e803]:
+                        - generic [ref=f2e804]:
+                          - generic [ref=f2e805]: 每次调用
+                          - generic [ref=f2e806]:
+                            - spinbutton [ref=f2e807]: "5.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e808] [cursor=pointer]:
+                                - img "up" [ref=f2e809]
+                              - button "Decrease Value" [ref=f2e812] [cursor=pointer]:
+                                - img "down" [ref=f2e813]
+                          - generic [ref=f2e816]: 点
+                    - row [ref=f2e817]:
+                      - cell "vidu_hq_r2v-oversea(参考生视频) vidu_hq_r2v-oversea(参考生视频)" [ref=f2e818]:
+                        - generic [ref=f2e819]:
+                          - generic [ref=f2e820]: vidu_hq_r2v-oversea(参考生视频)
+                          - generic [ref=f2e821]: vidu_hq_r2v-oversea(参考生视频)
+                      - cell [ref=f2e822]:
+                        - textbox "vidu_hq_r2v-oversea(参考生视频)" [ref=f2e823]: r2v_demo_name
+                      - cell "按秒计费" [ref=f2e824]
+                      - cell "480p 1 Increase Value Decrease Value 点/秒 720p 2 Increase Value Decrease Value 点/秒 1080p 3 Increase Value Decrease Value 点/秒" [ref=f2e826]:
+                        - generic [ref=f2e827]:
+                          - generic [ref=f2e828]:
+                            - generic [ref=f2e829]: 480p
+                            - generic [ref=f2e830]:
+                              - spinbutton [ref=f2e831]: "1.00"
+                              - generic:
+                                - button "Increase Value" [ref=f2e832] [cursor=pointer]:
+                                  - img "up" [ref=f2e833]
+                                - button "Decrease Value" [ref=f2e836] [cursor=pointer]:
+                                  - img "down" [ref=f2e837]
+                            - generic [ref=f2e840]: 点/秒
+                          - generic [ref=f2e841]:
+                            - generic [ref=f2e842]: 720p
+                            - generic [ref=f2e843]:
+                              - spinbutton [ref=f2e844]: "2.00"
+                              - generic:
+                                - button "Increase Value" [ref=f2e845] [cursor=pointer]:
+                                  - img "up" [ref=f2e846]
+                                - button "Decrease Value" [ref=f2e849] [cursor=pointer]:
+                                  - img "down" [ref=f2e850]
+                            - generic [ref=f2e853]: 点/秒
+                          - generic [ref=f2e854]:
+                            - generic [ref=f2e855]: 1080p
+                            - generic [ref=f2e856]:
+                              - spinbutton [ref=f2e857]: "3.00"
+                              - generic:
+                                - button "Increase Value" [ref=f2e858] [cursor=pointer]:
+                                  - img "up" [ref=f2e859]
+                                - button "Decrease Value" [ref=f2e862] [cursor=pointer]:
+                                  - img "down" [ref=f2e863]
+                            - generic [ref=f2e866]: 点/秒
+                    - row [ref=f2e867]:
+                      - cell "vidu_hq_t2v-oversea(文生视频) vidu_hq_t2v-oversea(文生视频)" [ref=f2e868]:
+                        - generic [ref=f2e869]:
+                          - generic [ref=f2e870]: vidu_hq_t2v-oversea(文生视频)
+                          - generic [ref=f2e871]: vidu_hq_t2v-oversea(文生视频)
+                      - cell [ref=f2e872]:
+                        - textbox "vidu_hq_t2v-oversea(文生视频)" [ref=f2e873]
+                      - cell "按次计费" [ref=f2e874]
+                      - cell "每次调用 5 Increase Value Decrease Value 点" [ref=f2e876]:
+                        - generic [ref=f2e877]:
+                          - generic [ref=f2e878]: 每次调用
+                          - generic [ref=f2e879]:
+                            - spinbutton [ref=f2e880]: "5.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e881] [cursor=pointer]:
+                                - img "up" [ref=f2e882]
+                              - button "Decrease Value" [ref=f2e885] [cursor=pointer]:
+                                - img "down" [ref=f2e886]
+                          - generic [ref=f2e889]: 点
+                    - row [ref=f2e890]:
+                      - cell "vidu_hq_headtail-oversea" [ref=f2e891]
+                      - cell [ref=f2e894]:
+                        - textbox "vidu_hq_headtail-oversea" [ref=f2e895]
+                      - cell "按次计费" [ref=f2e896]
+                      - cell "每次调用 10 Increase Value Decrease Value 点" [ref=f2e898]:
+                        - generic [ref=f2e899]:
+                          - generic [ref=f2e900]: 每次调用
+                          - generic [ref=f2e901]:
+                            - spinbutton [ref=f2e902]: "10.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e903] [cursor=pointer]:
+                                - img "up" [ref=f2e904]
+                              - button "Decrease Value" [ref=f2e907] [cursor=pointer]:
+                                - img "down" [ref=f2e908]
+                          - generic [ref=f2e911]: 点
+                    - row [ref=f2e912]:
+                      - cell "vidu_hq_i2v-oversea" [ref=f2e913]
+                      - cell [ref=f2e916]:
+                        - textbox "vidu_hq_i2v-oversea" [ref=f2e917]
+                      - cell "按次计费" [ref=f2e918]
+                      - cell "每次调用 10 Increase Value Decrease Value 点" [ref=f2e920]:
+                        - generic [ref=f2e921]:
+                          - generic [ref=f2e922]: 每次调用
+                          - generic [ref=f2e923]:
+                            - spinbutton [ref=f2e924]: "10.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e925] [cursor=pointer]:
+                                - img "up" [ref=f2e926]
+                              - button "Decrease Value" [ref=f2e929] [cursor=pointer]:
+                                - img "down" [ref=f2e930]
+                          - generic [ref=f2e933]: 点
+                    - row [ref=f2e934]:
+                      - cell "vidu_hq_r2v-oversea" [ref=f2e935]
+                      - cell [ref=f2e938]:
+                        - textbox "vidu_hq_r2v-oversea" [ref=f2e939]
+                      - cell "按次计费" [ref=f2e940]
+                      - cell "每次调用 10 Increase Value Decrease Value 点" [ref=f2e942]:
+                        - generic [ref=f2e943]:
+                          - generic [ref=f2e944]: 每次调用
+                          - generic [ref=f2e945]:
+                            - spinbutton [ref=f2e946]: "10.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e947] [cursor=pointer]:
+                                - img "up" [ref=f2e948]
+                              - button "Decrease Value" [ref=f2e951] [cursor=pointer]:
+                                - img "down" [ref=f2e952]
+                          - generic [ref=f2e955]: 点
+                    - row [ref=f2e956]:
+                      - cell "vidu_hq_t2v-oversea" [ref=f2e957]
+                      - cell [ref=f2e960]:
+                        - textbox "vidu_hq_t2v-oversea" [ref=f2e961]
+                      - cell "按次计费" [ref=f2e962]
+                      - cell "每次调用 10 Increase Value Decrease Value 点" [ref=f2e964]:
+                        - generic [ref=f2e965]:
+                          - generic [ref=f2e966]: 每次调用
+                          - generic [ref=f2e967]:
+                            - spinbutton [ref=f2e968]: "10.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e969] [cursor=pointer]:
+                                - img "up" [ref=f2e970]
+                              - button "Decrease Value" [ref=f2e973] [cursor=pointer]:
+                                - img "down" [ref=f2e974]
+                          - generic [ref=f2e977]: 点
+                    - row [ref=f2e978]:
+                      - cell "viduq2-pro-fast-oversea" [ref=f2e979]
+                      - cell [ref=f2e982]:
+                        - textbox "viduq2-pro-fast-oversea" [ref=f2e983]
+                      - cell "按次计费" [ref=f2e984]
+                      - cell "每次调用 10 Increase Value Decrease Value 点" [ref=f2e986]:
+                        - generic [ref=f2e987]:
+                          - generic [ref=f2e988]: 每次调用
+                          - generic [ref=f2e989]:
+                            - spinbutton [ref=f2e990]: "10.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e991] [cursor=pointer]:
+                                - img "up" [ref=f2e992]
+                              - button "Decrease Value" [ref=f2e995] [cursor=pointer]:
+                                - img "down" [ref=f2e996]
+                          - generic [ref=f2e999]: 点
+                    - row [ref=f2e1000]:
+                      - cell "viduq3-pro-oversea" [ref=f2e1001]
+                      - cell [ref=f2e1004]:
+                        - textbox "viduq3-pro-oversea" [ref=f2e1005]
+                      - cell "按次计费" [ref=f2e1006]
+                      - cell "每次调用 10 Increase Value Decrease Value 点" [ref=f2e1008]:
+                        - generic [ref=f2e1009]:
+                          - generic [ref=f2e1010]: 每次调用
+                          - generic [ref=f2e1011]:
+                            - spinbutton [ref=f2e1012]: "10.00"
+                            - generic:
+                              - button "Increase Value" [ref=f2e1013] [cursor=pointer]:
+                                - img "up" [ref=f2e1014]
+                              - button "Decrease Value" [ref=f2e1017] [cursor=pointer]:
+                                - img "down" [ref=f2e1018]
+                          - generic [ref=f2e1021]: 点

@@ -1,0 +1,375 @@
+{
+  "startedAt": "2026-07-23T03:48:26.007Z",
+  "baseUrl": "http://localhost:3000",
+  "summary": {
+    "total": 31,
+    "passed": 31,
+    "failed": 0
+  },
+  "results": [
+    {
+      "name": "LIVE-001 健康检查",
+      "status": "PASS",
+      "durationMs": 23,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-002 管理员登录",
+      "status": "PASS",
+      "durationMs": 78,
+      "detail": {
+        "token": "[REDACTED]",
+        "user": {
+          "id": "user-563a914e-6633-4cbf-9b3e-367570cf77a2",
+          "username": "admin",
+          "email": "",
+          "displayName": "",
+          "avatarUrl": "",
+          "role": "admin",
+          "credits": 9501,
+          "createdAt": "2026-07-06T03:19:08Z",
+          "updatedAt": "2026-07-23T03:48:24Z"
+        }
+      }
+    },
+    {
+      "name": "LIVE-003 创建企业必填校验",
+      "status": "PASS",
+      "durationMs": 3,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-004 创建企业 A 与主账号",
+      "status": "PASS",
+      "durationMs": 54,
+      "detail": {
+        "id": "enterprise-3c73258b-919f-4fd6-aa9d-c0848a0628a5",
+        "name": "自动测试企业A已更新-mrwz1fucdlyl",
+        "status": "active",
+        "ownerId": "user-f150553e-3731-4502-ac07-46f87f88e96f",
+        "createdAt": "2026-07-23T03:48:24Z",
+        "updatedAt": "2026-07-23T03:48:24Z",
+        "ownerName": "e2eoamrwz1fucdlyl",
+        "ownerStatus": "active",
+        "ownerCredits": 0,
+        "memberCount": 0
+      }
+    },
+    {
+      "name": "LIVE-005 重复主账号创建原子失败",
+      "status": "PASS",
+      "durationMs": 5,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-006 创建企业 B 用于越权测试",
+      "status": "PASS",
+      "durationMs": 49,
+      "detail": {
+        "id": "enterprise-77e49c24-6158-4ead-a603-4a3aa3f9bc03",
+        "name": "自动测试企业B-mrwz1fucdlyl",
+        "status": "active",
+        "ownerId": "user-f1db6563-20f6-4cc6-968e-e7b2d5c2ea6d",
+        "createdAt": "2026-07-23T03:48:24Z",
+        "updatedAt": "2026-07-23T03:48:24Z",
+        "ownerName": "e2eobmrwz1fucdlyl",
+        "ownerStatus": "active",
+        "ownerCredits": 0,
+        "memberCount": 0
+      }
+    },
+    {
+      "name": "LIVE-007 企业搜索与主账号字段",
+      "status": "PASS",
+      "durationMs": 2,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-008 平台积分按增量调整与余额下限",
+      "status": "PASS",
+      "durationMs": 10,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-009 企业主账号余额不能被用户管理接口覆盖",
+      "status": "PASS",
+      "durationMs": 3,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-010 企业主账号 A 登录与身份字段",
+      "status": "PASS",
+      "durationMs": 48,
+      "detail": {
+        "token": "[REDACTED]",
+        "user": {
+          "id": "user-f150553e-3731-4502-ac07-46f87f88e96f",
+          "username": "e2eoamrwz1fucdlyl",
+          "email": "",
+          "displayName": "自动测试主账号A-mrwz1fucdlyl",
+          "avatarUrl": "",
+          "role": "user",
+          "credits": 250,
+          "enterpriseId": "enterprise-3c73258b-919f-4fd6-aa9d-c0848a0628a5",
+          "enterpriseName": "自动测试企业A-mrwz1fucdlyl",
+          "enterpriseRole": "owner",
+          "enterpriseStatus": "active",
+          "createdAt": "2026-07-23T03:48:24Z",
+          "updatedAt": "2026-07-23T03:48:24Z"
+        }
+      }
+    },
+    {
+      "name": "LIVE-011 企业主账号 B 登录",
+      "status": "PASS",
+      "durationMs": 48,
+      "detail": {
+        "token": "[REDACTED]",
+        "user": {
+          "id": "user-f1db6563-20f6-4cc6-968e-e7b2d5c2ea6d",
+          "username": "e2eobmrwz1fucdlyl",
+          "email": "",
+          "displayName": "自动测试主账号B-mrwz1fucdlyl",
+          "avatarUrl": "",
+          "role": "user",
+          "credits": 0,
+          "enterpriseId": "enterprise-77e49c24-6158-4ead-a603-4a3aa3f9bc03",
+          "enterpriseName": "自动测试企业B-mrwz1fucdlyl",
+          "enterpriseRole": "owner",
+          "enterpriseStatus": "active",
+          "createdAt": "2026-07-23T03:48:24Z",
+          "updatedAt": "2026-07-23T03:48:24Z"
+        }
+      }
+    },
+    {
+      "name": "LIVE-012 创建成员时忽略伪造权限字段",
+      "status": "PASS",
+      "durationMs": 50,
+      "detail": {
+        "id": "user-65ca1d03-859a-473c-aedd-0c0910218009",
+        "username": "e2emamrwz1fucdlyl",
+        "email": "member-a-mrwz1fucdlyl@example.com",
+        "displayName": "自动测试成员A-mrwz1fucdlyl",
+        "status": "active",
+        "credits": 0,
+        "role": "user",
+        "enterpriseId": "enterprise-3c73258b-919f-4fd6-aa9d-c0848a0628a5",
+        "enterpriseRole": "member",
+        "createdAt": "2026-07-23T03:48:24Z",
+        "updatedAt": "2026-07-23T03:48:24Z"
+      }
+    },
+    {
+      "name": "LIVE-013 创建企业 B 成员",
+      "status": "PASS",
+      "durationMs": 51,
+      "detail": {
+        "id": "user-afa9a40b-ef9e-4032-9485-8742dc30385b",
+        "username": "e2embmrwz1fucdlyl",
+        "email": "",
+        "displayName": "自动测试成员B-mrwz1fucdlyl",
+        "status": "active",
+        "credits": 0,
+        "role": "user",
+        "enterpriseId": "enterprise-77e49c24-6158-4ead-a603-4a3aa3f9bc03",
+        "enterpriseRole": "member",
+        "createdAt": "2026-07-23T03:48:24Z",
+        "updatedAt": "2026-07-23T03:48:24Z"
+      }
+    },
+    {
+      "name": "LIVE-014 成员 A 独立登录",
+      "status": "PASS",
+      "durationMs": 49,
+      "detail": {
+        "id": "user-65ca1d03-859a-473c-aedd-0c0910218009",
+        "username": "e2emamrwz1fucdlyl",
+        "email": "member-a-mrwz1fucdlyl@example.com",
+        "displayName": "自动测试成员A-mrwz1fucdlyl",
+        "status": "active",
+        "credits": 0,
+        "role": "user",
+        "enterpriseId": "enterprise-3c73258b-919f-4fd6-aa9d-c0848a0628a5",
+        "enterpriseRole": "member",
+        "createdAt": "2026-07-23T03:48:24Z",
+        "updatedAt": "2026-07-23T03:48:24Z"
+      }
+    },
+    {
+      "name": "LIVE-015 成员 B 独立登录",
+      "status": "PASS",
+      "durationMs": 48,
+      "detail": {
+        "id": "user-afa9a40b-ef9e-4032-9485-8742dc30385b",
+        "username": "e2embmrwz1fucdlyl",
+        "email": "",
+        "displayName": "自动测试成员B-mrwz1fucdlyl",
+        "status": "active",
+        "credits": 0,
+        "role": "user",
+        "enterpriseId": "enterprise-77e49c24-6158-4ead-a603-4a3aa3f9bc03",
+        "enterpriseRole": "member",
+        "createdAt": "2026-07-23T03:48:24Z",
+        "updatedAt": "2026-07-23T03:48:24Z"
+      }
+    },
+    {
+      "name": "LIVE-016 注册个人账号",
+      "status": "PASS",
+      "durationMs": 51,
+      "detail": {
+        "token": "[REDACTED]",
+        "user": {
+          "id": "user-2d0c55a3-6ce2-4155-bbb7-792b53591f4e",
+          "username": "e2epmrwz1fucdlyl",
+          "email": "",
+          "displayName": "",
+          "avatarUrl": "",
+          "role": "user",
+          "credits": 0,
+          "createdAt": "2026-07-23T03:48:25Z",
+          "updatedAt": "2026-07-23T03:48:25Z"
+        }
+      }
+    },
+    {
+      "name": "LIVE-017 成员查询范围不接受客户端企业 ID",
+      "status": "PASS",
+      "durationMs": 2,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-018 积分分配、幂等与请求冲突",
+      "status": "PASS",
+      "durationMs": 12,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-019 积分收回、余额不足与越权拒绝",
+      "status": "PASS",
+      "durationMs": 8,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-020 并发分配最多成功一次且余额不为负",
+      "status": "PASS",
+      "durationMs": 7,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-021 企业积分流水筛选与范围隔离",
+      "status": "PASS",
+      "durationMs": 9,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-022 用户列表展示企业归属且主账号余额不可伪造",
+      "status": "PASS",
+      "durationMs": 2,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-023 个人资料校验与用户名只读",
+      "status": "PASS",
+      "durationMs": 4,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-024 企业概况与改名权限",
+      "status": "PASS",
+      "durationMs": 6,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-025 企业文本素材筛选、伪造范围忽略与只读权限",
+      "status": "PASS",
+      "durationMs": 9,
+      "detail": {
+        "id": "asset-602f63a3-593c-4c35-8fa8-0e14c2542221",
+        "userId": "user-f150553e-3731-4502-ac07-46f87f88e96f",
+        "enterpriseId": "enterprise-3c73258b-919f-4fd6-aa9d-c0848a0628a5",
+        "creatorName": "更新昵称-mrwz1fucdlyl",
+        "title": "源文本素材-mrwz1fucdlyl",
+        "type": "text",
+        "coverUrl": "",
+        "tags": [
+          "自动测试",
+          "mrwz1fucdlyl"
+        ],
+        "category": "",
+        "description": "用于跨企业与复制测试",
+        "content": "独立文本内容 mrwz1fucdlyl",
+        "createdAt": "2026-07-23T03:48:25Z",
+        "updatedAt": "2026-07-23T03:48:25Z"
+      }
+    },
+    {
+      "name": "LIVE-026 企业文本素材复制为独立个人副本",
+      "status": "PASS",
+      "durationMs": 5,
+      "detail": {
+        "id": "asset-e51e760e-f0c2-4bd3-9c13-800cae5b2323",
+        "userId": "user-65ca1d03-859a-473c-aedd-0c0910218009",
+        "title": "源文本素材-mrwz1fucdlyl",
+        "type": "text",
+        "coverUrl": "",
+        "tags": [
+          "自动测试",
+          "mrwz1fucdlyl"
+        ],
+        "category": "",
+        "description": "用于跨企业与复制测试",
+        "content": "独立文本内容 mrwz1fucdlyl",
+        "createdAt": "2026-07-23T03:48:25Z",
+        "updatedAt": "2026-07-23T03:48:25Z"
+      }
+    },
+    {
+      "name": "LIVE-027 删除源素材后个人副本仍可读",
+      "status": "PASS",
+      "durationMs": 6,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-028 成员密码重置与禁用立即使会话失效",
+      "status": "PASS",
+      "durationMs": 251,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-029 主账号密码重置、主账号停用与企业停用语义",
+      "status": "PASS",
+      "durationMs": 307,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-030 自助修改密码使旧会话失效",
+      "status": "PASS",
+      "durationMs": 240,
+      "detail": ""
+    },
+    {
+      "name": "LIVE-031 为浏览器测试准备只读共享素材",
+      "status": "PASS",
+      "durationMs": 3,
+      "detail": {
+        "id": "asset-bb563e5b-c4e0-41b9-8aeb-064f26833807",
+        "userId": "user-f150553e-3731-4502-ac07-46f87f88e96f",
+        "enterpriseId": "enterprise-3c73258b-919f-4fd6-aa9d-c0848a0628a5",
+        "creatorName": "更新昵称-mrwz1fucdlyl",
+        "title": "UI共享素材-mrwz1fucdlyl",
+        "type": "text",
+        "coverUrl": "",
+        "tags": [
+          "UI自动化"
+        ],
+        "category": "",
+        "description": "供 Playwright 成员只读与复制验证",
+        "content": "UI 自动化共享内容 mrwz1fucdlyl",
+        "createdAt": "2026-07-23T03:48:26Z",
+        "updatedAt": "2026-07-23T03:48:26Z"
+      }
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "total": 6,
+  "passed": 6,
+  "failed": 0,
+  "results": [
+    {
+      "name": "UI-001 管理员入口与企业列表",
+      "status": "PASS",
+      "durationMs": 2525,
+      "detail": ""
+    },
+    {
+      "name": "UI-002 主账号账户设置、成员和积分操作",
+      "status": "PASS",
+      "durationMs": 2221,
+      "detail": ""
+    },
+    {
+      "name": "UI-003 主账号新增、复制、删除企业文本素材",
+      "status": "PASS",
+      "durationMs": 2638,
+      "detail": ""
+    },
+    {
+      "name": "UI-004 移动端企业导航",
+      "status": "PASS",
+      "durationMs": 511,
+      "detail": ""
+    },
+    {
+      "name": "UI-005 成员只读权限与复制到个人素材",
+      "status": "PASS",
+      "durationMs": 2618,
+      "detail": ""
+    },
+    {
+      "name": "UI-006 切换到个人账号后企业入口与上一账号素材消失",
+      "status": "PASS",
+      "durationMs": 2696,
+      "detail": ""
+    }
+  ],
+  "uiCreatedTitle": "UI前端新增-mrwz1fucdlyl-mrwz1ivq"
+}

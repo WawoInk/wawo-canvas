@@ -1,0 +1,172 @@
+- generic [ref=f1e4]:
+  - complementary [ref=f1e5]:
+    - generic [ref=f1e6]:
+      - generic [ref=f1e7]:
+        - img "Canvan" [ref=f1e8]
+        - strong [ref=f1e10]: Canvan
+      - menu [ref=f1e11]:
+        - menuitem [ref=f1e12] [cursor=pointer]:
+          - img "team" [ref=f1e13]
+          - link "企业管理" [ref=f1e17]:
+            - /url: /admin/enterprises
+        - menuitem [ref=f1e18] [cursor=pointer]:
+          - img "user" [ref=f1e19]
+          - link "用户管理" [ref=f1e23]:
+            - /url: /admin/users
+        - menuitem [ref=f1e24] [cursor=pointer]:
+          - img "transaction" [ref=f1e25]
+          - link "算力点日志" [ref=f1e29]:
+            - /url: /admin/credit-logs
+        - menuitem [ref=f1e30] [cursor=pointer]:
+          - img "experiment" [ref=f1e31]
+          - link "使用日志" [ref=f1e35]:
+            - /url: /admin/generation-tasks
+        - menuitem [ref=f1e36] [cursor=pointer]:
+          - img "file-text" [ref=f1e37]
+          - link "提示词管理" [ref=f1e41]:
+            - /url: /admin/prompts
+        - menuitem [ref=f1e42] [cursor=pointer]:
+          - img "picture" [ref=f1e43]
+          - link "素材库" [ref=f1e47]:
+            - /url: /admin/assets
+        - menuitem [ref=f1e48] [cursor=pointer]:
+          - img "setting" [ref=f1e49]
+          - link "系统设置" [ref=f1e53]:
+            - /url: /admin/settings
+      - generic [ref=f1e54]:
+        - link "home 前往画布" [ref=f1e55] [cursor=pointer]:
+          - /url: /canvas
+          - img "home" [ref=f1e57]
+          - generic [ref=f1e60]: 前往画布
+        - button "logout 退出登录" [ref=f1e61] [cursor=pointer]:
+          - img "logout" [ref=f1e63]
+          - generic [ref=f1e66]: 退出登录
+  - generic [ref=f1e67]:
+    - banner [ref=f1e68]:
+      - heading "系统设置" [level=5] [ref=f1e624]
+      - generic [ref=f1e71]:
+        - button "切换到浅色主题" [ref=f1e72]
+        - button "账户菜单" [ref=f1e81]:
+          - generic [ref=f1e82]: A
+    - main [ref=f1e84]:
+      - main [ref=f1e625]:
+        - generic [ref=f1e626]:
+          - generic [ref=f1e629]:
+            - generic [ref=f1e630]:
+              - tablist [ref=f1e631]:
+                - generic [ref=f1e633]:
+                  - tab "公开配置（对外暴露）" [selected] [ref=f1e635] [cursor=pointer]
+                  - tab "私有配置（不会对外暴露）" [ref=f1e637] [cursor=pointer]
+              - generic:
+                - generic:
+                  - tabpanel "公开配置（对外暴露）"
+            - generic [ref=f1e638]:
+              - button "reload 刷新" [ref=f1e640] [cursor=pointer]:
+                - img "reload" [ref=f1e642]
+                - generic [ref=f1e645]: 刷新
+              - button "save 保存设置" [ref=f1e647] [cursor=pointer]:
+                - img "save" [ref=f1e649]
+                - generic [ref=f1e652]: 保存设置
+          - generic [ref=f1e654]:
+            - generic [ref=f1e655]:
+              - radiogroup "segmented control" [ref=f1e656]:
+                - generic [ref=f1e657]:
+                  - generic [ref=f1e658] [cursor=pointer]:
+                    - radio "可视化编辑"
+                    - generic "可视化编辑" [ref=f1e659]
+                  - generic [ref=f1e660] [cursor=pointer]:
+                    - radio "手动编辑 JSON" [checked]
+                    - generic "手动编辑 JSON" [ref=f1e661]
+              - generic [ref=f1e1561]:
+                - generic [ref=f1e1563]:
+                  - img "check-circle" [ref=f1e1564]
+                  - text: JSON 格式正确
+                - button "format-painter 格式化" [ref=f1e1569] [cursor=pointer]:
+                  - img "format-painter" [ref=f1e1571]
+                  - generic [ref=f1e1574]: 格式化
+            - generic [ref=f1e1578]:
+              - generic [ref=f1e1579]:
+                - generic [ref=f1e1580]:
+                  - generic [ref=f1e1581]: "1"
+                  - generic [ref=f1e1582]: "2"
+                  - generic [ref=f1e1583]: "3"
+                  - generic [ref=f1e1584]: "4"
+                  - generic [ref=f1e1585]: "5"
+                  - generic [ref=f1e1586]: "6"
+                  - generic [ref=f1e1587]: "7"
+                  - generic [ref=f1e1588]: "8"
+                  - generic [ref=f1e1589]: "9"
+                  - generic [ref=f1e1590]: "10"
+                  - generic [ref=f1e1591]: "11"
+                  - generic [ref=f1e1592]: "12"
+                  - generic [ref=f1e1593]: "13"
+                  - generic [ref=f1e1594]: "14"
+                  - generic [ref=f1e1595]: "15"
+                  - generic [ref=f1e1596]: "16"
+                  - generic [ref=f1e1597]: "17"
+                  - generic [ref=f1e1598]: "18"
+                  - generic [ref=f1e1599]: "19"
+                  - generic [ref=f1e1600]: "20"
+                  - generic [ref=f1e1601]: "21"
+                  - generic [ref=f1e1602]: "22"
+                  - generic [ref=f1e1603]: "23"
+                  - generic [ref=f1e1604]: "24"
+                  - generic [ref=f1e1605]: "25"
+                  - generic [ref=f1e1606]: "26"
+                  - generic [ref=f1e1607]: "27"
+                  - generic [ref=f1e1608]: "28"
+                  - generic [ref=f1e1609]: "29"
+                  - generic [ref=f1e1610]: "30"
+                  - generic [ref=f1e1611]: "31"
+                  - generic [ref=f1e1612]: "32"
+                  - generic [ref=f1e1613]: "33"
+                  - generic [ref=f1e1614]: "34"
+                  - generic [ref=f1e1615]: "35"
+                  - generic [ref=f1e1616]: "36"
+                - generic [ref=f1e1617]:
+                  - generic [ref=f1e1618]: ⌄
+                  - generic [ref=f1e1619]: ⌄
+                  - generic [ref=f1e1620]: ⌄
+                  - generic [ref=f1e1622]: ⌄
+                  - generic [ref=f1e1623]: ⌄
+                  - generic [ref=f1e1624]: ⌄
+                  - generic [ref=f1e1625]: ⌄
+                  - generic [ref=f1e1626]: ⌄
+                  - generic [ref=f1e1665]: ⌄
+              - textbox [active] [ref=f1e1627]:
+                - generic [ref=f1e1628]: "{"
+                - generic [ref=f1e1629]: "\"modelChannel\": {"
+                - generic [ref=f1e1630]: "\"availableModels\": ["
+                - generic [ref=f1e1631]: "\"gemini-3-5-flash\","
+                - generic [ref=f1e1632]: "\"gpt-5-5\","
+                - generic [ref=f1e1633]: "\"gpt-image-2\","
+                - generic [ref=f1e1634]: "\"gpt-image-2-line-2\","
+                - generic [ref=f1e1635]: "\"seedance-2-0-line-2\","
+                - generic [ref=f1e1636]: "\"vidu_hq_headtail-oversea(首尾帧生视频)\","
+                - generic [ref=f1e1637]: "\"vidu_hq_i2v-oversea(图生视频)\","
+                - generic [ref=f1e1638]: "\"vidu_hq_r2v-oversea(参考生视频)\","
+                - generic [ref=f1e1639]: "\"vidu_hq_t2v-oversea(文生视频)\","
+                - generic [ref=f1e1640]: "\"viduq3-drama\","
+                - generic [ref=f1e1641]: "\"gpt-image-2-open-1-edit\","
+                - generic [ref=f1e1642]: "\"gpt-image-2-open-1-gen\""
+                - generic [ref=f1e1643]: "],"
+                - generic [ref=f1e1644]: "\"modelCosts\": ["
+                - generic [ref=f1e1645]: "{"
+                - generic [ref=f1e1646]: "\"model\": \"gemini-3-5-flash\","
+                - generic [ref=f1e1647]: "\"credits\": \"10\""
+                - generic [ref=f1e1648]: "},"
+                - generic [ref=f1e1649]: "{"
+                - generic [ref=f1e1650]: "\"model\": \"gpt-5-5\","
+                - generic [ref=f1e1651]: "\"credits\": \"10\""
+                - generic [ref=f1e1652]: "},"
+                - generic [ref=f1e1653]: "{"
+                - generic [ref=f1e1654]: "\"model\": \"gpt-image-2\","
+                - generic [ref=f1e1655]: "\"credits\": \"10\""
+                - generic [ref=f1e1656]: "},"
+                - generic [ref=f1e1657]: "{"
+                - generic [ref=f1e1658]: "\"model\": \"vidu_hq_headtail-oversea\","
+                - generic [ref=f1e1659]: "\"credits\": \"10\""
+                - generic [ref=f1e1660]: "},"
+                - generic [ref=f1e1661]: "{"
+                - generic [ref=f1e1662]: "\"model\": \"vidu_hq_i2v-oversea\","
+                - generic [ref=f1e1663]: "\"credits\": \"10\""

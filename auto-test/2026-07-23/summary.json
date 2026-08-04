@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-23",
+  "status": "passed",
+  "totalExecutions": 92,
+  "passed": 92,
+  "failed": 0,
+  "suites": {
+    "goIntegration": { "passed": 22, "failed": 0 },
+    "bunFrontend": { "passed": 33, "failed": 0, "uniqueTests": 11, "reruns": 3 },
+    "liveApi": { "passed": 31, "failed": 0 },
+    "playwrightUi": { "passed": 6, "failed": 0 }
+  },
+  "browserConsole": { "errors": 0, "warnings": 0 },
+  "cleanup": "created enterprises disabled"
+}

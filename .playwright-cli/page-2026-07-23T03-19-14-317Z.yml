@@ -1,0 +1,207 @@
+- generic [ref=f1e207]:
+  - complementary [ref=f1e208]:
+    - generic [ref=f1e209]:
+      - generic [ref=f1e210]:
+        - img "Canvan" [ref=f1e211]
+        - strong [ref=f1e213]: Canvan
+      - menu [ref=f1e214]:
+        - menuitem [ref=f1e215] [cursor=pointer]:
+          - img "team" [ref=f1e216]
+          - link "企业管理" [ref=f1e220]:
+            - /url: /admin/enterprises
+        - menuitem [ref=f1e221] [cursor=pointer]:
+          - img "user" [ref=f1e222]
+          - link "用户管理" [ref=f1e226]:
+            - /url: /admin/users
+        - menuitem [ref=f1e227] [cursor=pointer]:
+          - img "transaction" [ref=f1e228]
+          - link "算力点日志" [ref=f1e232]:
+            - /url: /admin/credit-logs
+        - menuitem [ref=f1e233] [cursor=pointer]:
+          - img "experiment" [ref=f1e234]
+          - link "使用日志" [ref=f1e238]:
+            - /url: /admin/generation-tasks
+        - menuitem [ref=f1e239] [cursor=pointer]:
+          - img "file-text" [ref=f1e240]
+          - link "提示词管理" [ref=f1e244]:
+            - /url: /admin/prompts
+        - menuitem [ref=f1e245] [cursor=pointer]:
+          - img "picture" [ref=f1e246]
+          - link "素材库" [ref=f1e250]:
+            - /url: /admin/assets
+        - menuitem [ref=f1e251] [cursor=pointer]:
+          - img "setting" [ref=f1e252]
+          - link "系统设置" [ref=f1e256]:
+            - /url: /admin/settings
+      - generic [ref=f1e257]:
+        - link "home 前往画布" [ref=f1e258] [cursor=pointer]:
+          - /url: /canvas
+          - img "home" [ref=f1e260]
+          - generic [ref=f1e263]: 前往画布
+        - button "logout 退出登录" [ref=f1e264] [cursor=pointer]:
+          - img "logout" [ref=f1e266]
+          - generic [ref=f1e269]: 退出登录
+  - generic [ref=f1e270]:
+    - banner [ref=f1e271]:
+      - heading "用户管理" [level=5] [ref=f1e272]
+      - generic [ref=f1e274]:
+        - button "切换到浅色主题" [ref=f1e275]
+        - button "账户菜单" [ref=f1e284]:
+          - generic [ref=f1e285]: A
+    - main [ref=f1e287]:
+      - main [ref=f1e288]:
+        - generic [ref=f1e289]:
+          - generic [ref=f1e293]:
+            - generic [ref=f1e296]:
+              - generic "关键词" [ref=f1e298]
+              - generic [ref=f1e302]:
+                - searchbox "搜索用户名、昵称、邮箱或 Linux.do ID" [ref=f1e304]
+                - button [ref=f1e306] [cursor=pointer]:
+                  - img "search" [ref=f1e307]
+            - generic [ref=f1e316]:
+              - button "重 置" [ref=f1e318] [cursor=pointer]
+              - button "reload 查询" [ref=f1e321] [cursor=pointer]:
+                - img "reload" [ref=f1e323]
+                - generic [ref=f1e326]: 查询
+          - generic [ref=f1e329]:
+            - generic [ref=f1e331]:
+              - generic [ref=f1e334]:
+                - strong [ref=f1e337]: 用户列表
+                - generic [ref=f1e338]: 5 人
+              - generic [ref=f1e340]:
+                - button "plus 新增" [ref=f1e342] [cursor=pointer]:
+                  - img "plus" [ref=f1e344]
+                  - generic [ref=f1e348]: 新增
+                - generic [ref=f1e349]:
+                  - img "reload" [ref=f1e352] [cursor=pointer]
+                  - img "column-height" [ref=f1e357] [cursor=pointer]
+                  - img "setting" [ref=f1e361] [cursor=pointer]
+            - generic [ref=f1e366]:
+              - table [ref=f1e370]:
+                - rowgroup [ref=f1e380]:
+                  - row [ref=f1e381]:
+                    - columnheader "用户" [ref=f1e382]
+                    - columnheader "角色" [ref=f1e383]
+                    - columnheader "企业归属" [ref=f1e384]
+                    - columnheader "状态" [ref=f1e385]
+                    - columnheader "算力点" [ref=f1e386]
+                    - columnheader "Linux.do" [ref=f1e387]
+                    - columnheader "最近登录" [ref=f1e388]
+                    - columnheader "操作" [ref=f1e389]
+                - rowgroup [ref=f1e390]:
+                  - row [ref=f1e391]:
+                    - cell "D demo-ent-sub1 demo-ent-sub1" [ref=f1e392]:
+                      - generic [ref=f1e393]:
+                        - generic [ref=f1e394]: D
+                        - generic [ref=f1e396]:
+                          - strong [ref=f1e398]: demo-ent-sub1
+                          - generic [ref=f1e399]: demo-ent-sub1
+                    - cell "用户" [ref=f1e400]
+                    - cell "测试 子账号" [ref=f1e402]:
+                      - generic [ref=f1e403]:
+                        - generic [ref=f1e404]: 测试
+                        - generic [ref=f1e405]: 子账号
+                    - cell "正常" [ref=f1e406]
+                    - cell "4995" [ref=f1e408]
+                    - cell "-" [ref=f1e409]
+                    - cell "2026-07-23 11:04:28" [ref=f1e410]
+                    - cell [ref=f1e411]:
+                      - generic [ref=f1e412]:
+                        - button [ref=f1e414] [cursor=pointer]:
+                          - img "edit" [ref=f1e416]
+                        - button [ref=f1e420] [cursor=pointer]:
+                          - img "delete" [ref=f1e422]
+                  - row [ref=f1e425]:
+                    - cell "D demo-ent demo-ent" [ref=f1e426]:
+                      - generic [ref=f1e427]:
+                        - generic [ref=f1e428]: D
+                        - generic [ref=f1e430]:
+                          - strong [ref=f1e432]: demo-ent
+                          - generic [ref=f1e433]: demo-ent
+                    - cell "用户" [ref=f1e434]
+                    - cell "测试 主账号" [ref=f1e436]:
+                      - generic [ref=f1e437]:
+                        - generic [ref=f1e438]: 测试
+                        - generic [ref=f1e439]: 主账号
+                    - cell "正常" [ref=f1e440]
+                    - cell "5000" [ref=f1e442]
+                    - cell "-" [ref=f1e443]
+                    - cell "2026-07-23 10:58:42" [ref=f1e444]
+                    - cell [ref=f1e445]:
+                      - generic [ref=f1e446]:
+                        - button [ref=f1e448] [cursor=pointer]:
+                          - img "edit" [ref=f1e450]
+                        - button [ref=f1e454] [cursor=pointer]:
+                          - img "delete" [ref=f1e456]
+                  - row [ref=f1e459]:
+                    - cell "D demo demo" [ref=f1e460]:
+                      - generic [ref=f1e461]:
+                        - generic [ref=f1e462]: D
+                        - generic [ref=f1e464]:
+                          - strong [ref=f1e466]: demo
+                          - generic [ref=f1e467]: demo
+                    - cell "用户" [ref=f1e468]
+                    - cell "个人账号" [ref=f1e470]
+                    - cell "正常" [ref=f1e471]
+                    - cell "0" [ref=f1e473]
+                    - cell "-" [ref=f1e474]
+                    - cell "2026-07-22 11:08:36" [ref=f1e475]
+                    - cell [ref=f1e476]:
+                      - generic [ref=f1e477]:
+                        - button [ref=f1e479] [cursor=pointer]:
+                          - img "edit" [ref=f1e481]
+                        - button [ref=f1e485] [cursor=pointer]:
+                          - img "delete" [ref=f1e487]
+                  - row [ref=f1e490]:
+                    - cell "C cursor_verify_20260713 cursor_verify_20260713" [ref=f1e491]:
+                      - generic [ref=f1e492]:
+                        - generic [ref=f1e493]: C
+                        - generic [ref=f1e495]:
+                          - strong [ref=f1e497]: cursor_verify_20260713
+                          - generic [ref=f1e498]: cursor_verify_20260713
+                    - cell "用户" [ref=f1e499]
+                    - cell "个人账号" [ref=f1e501]
+                    - cell "正常" [ref=f1e502]
+                    - cell "0" [ref=f1e504]
+                    - cell "-" [ref=f1e505]
+                    - cell "-" [ref=f1e506]
+                    - cell [ref=f1e507]:
+                      - generic [ref=f1e508]:
+                        - button [ref=f1e510] [cursor=pointer]:
+                          - img "edit" [ref=f1e512]
+                        - button [ref=f1e516] [cursor=pointer]:
+                          - img "delete" [ref=f1e518]
+                  - row [ref=f1e521]:
+                    - cell "A admin admin" [ref=f1e522]:
+                      - generic [ref=f1e523]:
+                        - generic [ref=f1e524]: A
+                        - generic [ref=f1e526]:
+                          - strong [ref=f1e528]: admin
+                          - generic [ref=f1e529]: admin
+                    - cell "管理员" [ref=f1e530]
+                    - cell "个人账号" [ref=f1e532]
+                    - cell "正常" [ref=f1e533]
+                    - cell "9501" [ref=f1e535]
+                    - cell "-" [ref=f1e536]
+                    - cell "2026-07-23 11:18:53" [ref=f1e537]
+                    - cell [ref=f1e538]:
+                      - generic [ref=f1e539]:
+                        - button [ref=f1e541] [cursor=pointer]:
+                          - img "edit" [ref=f1e543]
+                        - button [ref=f1e547] [cursor=pointer]:
+                          - img "delete" [ref=f1e549]
+              - list [ref=f1e552]:
+                - listitem [ref=f1e553]: 共 5 人
+                - listitem "上一页" [ref=f1e554]:
+                  - button [disabled] [ref=f1e555]:
+                    - img "left" [ref=f1e556]
+                - listitem "1" [ref=f1e559] [cursor=pointer]
+                - listitem "下一页" [ref=f1e561]:
+                  - button [disabled] [ref=f1e562]:
+                    - img "right" [ref=f1e563]
+                - listitem [ref=f1e566]:
+                  - generic [ref=f1e567]:
+                    - generic "10 条/页" [ref=f1e568]:
+                      - text: 10 条/页
+                      - combobox "页码" [ref=f1e569]
+                    - img "down" [ref=f1e571]
