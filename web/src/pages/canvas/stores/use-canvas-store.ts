@@ -42,7 +42,8 @@ export type CanvasStore = {
     deleteProjects: (ids: string[]) => void;
     replaceProjects: (projects: CanvasProject[]) => void;
     clearProjects: () => void;
-    updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport" | "updatedAt" | "title">>) => void;
+    updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport" | "updatedAt" | "title">>) => Promise<void>;
+    waitForLocalPersistence: () => Promise<void>;
     acknowledgeProject: (id: string, localVersion: number, patch: Pick<CanvasProject, "revision" | "updatedAt">) => void;
     acknowledgeDelete: (id: string) => void;
     syncFromBackend: () => Promise<void>;
@@ -68,6 +69,11 @@ const canvasStorage: PersistStorage<CanvasStore> = {
     setItem: (name, value) => scopedStorage.setItem(name, JSON.stringify(value)),
     removeItem: (name) => scopedStorage.removeItem(name),
 };
+
+async function waitForCanvasPersistence() {
+    await Promise.resolve();
+    await scopedStorage.flush(CANVAS_STORE_KEY);
+}
 
 // ─── Store ──────────────────────────────────────────────────────────────
 
@@ -181,10 +187,14 @@ export const useCanvasStore = create<CanvasStore>()(
 
                 replaceProjects: (projects) => set({ projects }),
 
-                updateProject: (id, patch) =>
+                updateProject: async (id, patch) => {
                     set((state) => ({
                         projects: state.projects.map((project) => (project.id === id ? { ...project, ...patch, localVersion: project.localVersion + 1, dirty: true } : project)),
-                    })),
+                    }));
+                    await waitForCanvasPersistence();
+                },
+
+                waitForLocalPersistence: waitForCanvasPersistence,
 
                 acknowledgeProject: (id, localVersion, patch) =>
                     set((state) => ({

@@ -59,6 +59,11 @@ async function recoverProjectRevision(projectId: string, store: StoreAccess, ses
 }
 
 async function persistProject(projectId: string, store: StoreAccess): Promise<SyncResult> {
+    try {
+        await store.getState().waitForLocalPersistence();
+    } catch {
+        return "retry";
+    }
     const auth = useUserStore.getState();
     if (!auth.user?.id || !auth.token) return "pause";
     const session = { token: auth.token, userId: auth.user.id };

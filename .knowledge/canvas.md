@@ -10,12 +10,13 @@
   - 类型：`web/src/pages/canvas/types.ts`
   - 项目 Store：`web/src/pages/canvas/stores/use-canvas-store.ts`
   - 同步：`web/src/pages/canvas/stores/canvas-sync.ts`
+  - 视频结果 durable commit：`web/src/pages/canvas/stores/canvas-video-result.ts`
   - Replica 归一化：`web/src/pages/canvas/stores/canvas-replica.ts`
   - 渲染：`web/src/pages/canvas/components/infinite-canvas.tsx`、`canvas-node.tsx`、`canvas-connections.tsx`
   - 生成输入：`web/src/pages/canvas/components/canvas-node-generation.ts`
   - 导入导出：`web/src/pages/canvas/utils/canvas-export.ts`、`export-types.ts`
   - Agent：`canvas-assistant-panel.tsx`、`canvas-local-agent-panel.tsx`、`utils/canvas-agent-ops.ts`
-- **数据流**：页面本地 state -> `useCanvasStore.updateProject` -> IndexedDB Replica/dirty outbox -> 立即串行 REST CAS -> PostgreSQL；失败任务指数退避并在联网、页面恢复或重新水合时继续，远端 delta 反向合并非 dirty 项目。
+- **数据流**：页面本地 state -> `useCanvasStore.updateProject` -> 账号隔离、串行且可等待的 IndexedDB Replica/dirty outbox -> 本地 durable 后按项目串行 REST CAS -> PostgreSQL；失败任务指数退避并在联网、页面恢复或重新水合时继续，远端 delta 反向合并非 dirty 项目。
 - **依赖关系**：依赖用户边界、AI 配置、素材/文件、生成 API、sync client、WebDAV、Canvas Agent。
 - **常见修改位置**：
   - 项目持久结构：`types.ts` + Store normalize + 导入导出。
@@ -153,24 +154,27 @@ flowchart TB
 
 1. 浏览器生成项目 ID。
 2. 本地立即插入 `revision=0/localVersion=1/dirty=true` 的 Replica。
-3. 持久 outbox 立即执行 `POST /api/v1/canvas/projects`。
-4. 成功后写入服务端 revision；若期间又有修改，仍保持 dirty 并安排 update。
-5. 网络或服务端失败会指数退避重试；若 POST 已成功但响应丢失，会通过 GET 恢复服务端 revision，再提交本地最新项目。
+3. 账号隔离 storage 队列先完成该 Replica 的 durable write。
+4. 持久 outbox 执行 `POST /api/v1/canvas/projects`。
+5. 成功后写入服务端 revision；若期间又有修改，仍保持 dirty 并安排 update。
+6. 网络或服务端失败会指数退避重试；若 POST 已成功但响应丢失，会通过 GET 恢复服务端 revision，再提交本地最新项目。
 
 ### 更新
 
 1. 项目页调用 `updateProject`。
 2. Store 递增 `localVersion`，设置 `dirty=true`。
-3. subscription 比较业务字段，立即将项目加入按项目串行的后台队列。
-4. PUT 发送完整项目和 `expectedRevision`；进行中产生的新修改会排队并读取最新 Replica。
-5. 网络、HTTP 200 业务失败、408、425、429 和 5xx 使用 500ms 起步、最长 30 秒的指数退避，并在联网或页面重新可见时立即唤醒。
-6. 服务端 CAS 成功后返回新 revision；`acknowledgeProject` 只有在 `localVersion` 未变化时清除 dirty。
-7. 队列本身由持久化的 `dirty` Replica 表达，刷新、崩溃恢复或重新登录后会自动扫描继续。
+3. Zustand persist 写入按账号 storage key 串行；`updateProject` 返回可等待的 durable Promise。
+4. subscription 将项目加入按项目串行的后台队列；worker 等待当前账号 Canvas 写队列 drain 后重新读取项目。
+5. PUT 只发送已本地 durable 的完整项目和 `expectedRevision`；进行中产生的新修改会继续排队，旧异步快照不能覆盖新快照。
+6. 本地 durable write 失败时后端 retry 继续停在本地边界，直到后续真实写成功。
+7. 网络、HTTP 200 业务失败、408、425、429 和 5xx 使用 500ms 起步、最长 30 秒的指数退避，并在联网或页面重新可见时立即唤醒。
+8. 服务端 CAS 成功后返回新 revision；`acknowledgeProject` 只有在 `localVersion` 未变化时清除 dirty。
+9. 队列本身由持久化的 `dirty` Replica 表达，刷新、崩溃恢复或重新登录后会自动扫描继续。
 
 ### 删除
 
 1. 本地立刻移除项目并加入 Store tombstone。
-2. tombstone 立即进入同一后台队列执行 DELETE。
+2. tombstone 先进入账号隔离 storage 队列 durable write，再由同一后台队列执行 DELETE。
 3. 成功或服务端 404 后确认本地 tombstone。
 4. 服务端删除和 `deleted_records` Canvas tombstone 同事务。
 5. 网络或服务端失败时 tombstone 持久保留并持续重试。
@@ -193,7 +197,8 @@ infinite-canvas:canvas_store:<userId>
 
 切换用户时：
 
-- 禁止旧账号继续写 scoped storage。
+- storage 调用捕获当时的账号 key，同账号写串行，不会把旧账号快照写入新账号。
+- 切换过程禁止内存清空动作写入 scoped storage。
 - 清理内存项目和同步 timer。
 - 水合新账号缓存。
 - 所有异步 server response 在应用前检查 `{token,userId}` 未变化。

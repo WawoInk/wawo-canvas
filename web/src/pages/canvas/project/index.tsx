@@ -63,6 +63,7 @@ import { CanvasZoomControls } from "../components/canvas-zoom-controls";
 import { CanvasLocalAgentPanel } from "../components/canvas-local-agent-panel";
 import { useCanvasAgentStore } from "../stores/use-canvas-agent-store";
 import { useCanvasStore } from "../stores/use-canvas-store";
+import { commitCanvasVideoResult } from "../stores/canvas-video-result";
 import { applyCanvasAgentOps, type CanvasAgentOp, type CanvasAgentSnapshot } from "../utils/canvas-agent-ops";
 import { buildCanvasResourceReferences, buildNodeMentionReferences, getGenerationResourceNodes } from "../utils/canvas-resource-references";
 import type { CanvasAgentMode } from "../components/canvas-agent-chat-ui";
@@ -2759,29 +2760,16 @@ function InfiniteCanvasPage() {
             if (body.code !== 0 || !body.data?.url) throw new Error(body.msg || t("canvas.editor.errors.videoFileUnavailable"));
             const defaultSize = spec || NODE_DEFAULT_SIZE[CanvasNodeType.Video];
             const videoSize = fitNodeSize(file.width || defaultSize.width, file.height || defaultSize.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
-            setNodes((prev) =>
-                prev.map((n) =>
-                    n.id === nodeId
-                        ? {
-                              ...n,
-                              width: videoSize.width,
-                              height: videoSize.height,
-                              metadata: {
-                                  ...n.metadata,
-                                  content: body.data.url,
-                                  fileId: file.fileId,
-                                  status: NODE_STATUS_SUCCESS,
-                                  naturalWidth: file.width,
-                                  naturalHeight: file.height,
-                                  bytes: file.bytes,
-                                  mimeType: file.mimeType,
-                                  durationMs: file.durationMs,
-                                  generationTaskStatus: "succeeded",
-                              },
-                          }
-                        : n,
-                ),
-            );
+            const committedNodes = await commitCanvasVideoResult({
+                projectId,
+                nodeId,
+                nodes: nodesRef.current,
+                display: videoSize,
+                file: { url: body.data.url, ...file },
+                generationTaskStatus: "succeeded",
+            });
+            nodesRef.current = committedNodes;
+            setNodes(committedNodes);
         } catch (error) {
             if (isGenerationCanceled(error)) return;
             const generationError = generationErrorFrom(error);
@@ -2827,30 +2815,15 @@ function InfiniteCanvasPage() {
                     }
                     const defaultSize = spec || NODE_DEFAULT_SIZE[CanvasNodeType.Video];
                     const videoSize = fitNodeSize(stored.width || defaultSize.width, stored.height || defaultSize.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
-                    setNodes((prev) =>
-                        prev.map((n) => {
-                            if (n.id !== nodeId) return n;
-                            const center = { x: n.position.x + n.width / 2, y: n.position.y + n.height / 2 };
-                            return {
-                                ...n,
-                                width: videoSize.width,
-                                height: videoSize.height,
-                                position: { x: center.x - videoSize.width / 2, y: center.y - videoSize.height / 2 },
-                                metadata: {
-                                    ...n.metadata,
-                                    content: stored.url,
-                                    storageKey: "",
-                                    fileId: stored.fileId,
-                                    status: NODE_STATUS_SUCCESS,
-                                    naturalWidth: stored.width,
-                                    naturalHeight: stored.height,
-                                    bytes: stored.bytes,
-                                    mimeType: stored.mimeType,
-                                    durationMs: 0,
-                                },
-                            };
-                        }),
-                    );
+                    const committedNodes = await commitCanvasVideoResult({
+                        projectId,
+                        nodeId,
+                        nodes: nodesRef.current,
+                        display: { ...videoSize, preserveCenter: true },
+                        file: { url: stored.url, fileId: stored.fileId, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType, durationMs: 0 },
+                    });
+                    nodesRef.current = committedNodes;
+                    setNodes(committedNodes);
                     return;
                 }
                 if (state.status === "failed") throw new Error(state.error);

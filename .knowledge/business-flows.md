@@ -124,10 +124,12 @@ sequenceDiagram
 ```text
 Create/import in browser
 -> local Replica dirty=true, revision=0
--> immediate durable outbox POST with frontend ID
+-> serialized account-scoped IndexedDB durable write
+-> durable outbox POST with frontend ID
 -> acknowledge revision
 -> local edits increment localVersion
--> immediate project-serialized PUT expectedRevision
+-> await latest local durable write
+-> project-serialized PUT expectedRevision
 -> server CAS + new revision
 -> acknowledge if localVersion unchanged
 -> retry dirty/tombstone with exponential backoff until acknowledged
@@ -139,6 +141,7 @@ Create/import in browser
 - **失败**：
   - create POST 失败或响应丢失：本地项目保留，后台重试；若远端已创建则 GET 恢复 revision 后继续 PUT 最新状态。
   - update 409：采用服务端当前 revision，保留本地业务 JSON 并立即重试，本地最近修改获胜。
+  - 本地 durable write 失败：不发送尚未持久化的项目；后端 retry 保持等待，直到后续本地写成功。
   - 网络或可重试服务端失败：dirty/tombstone 持久保留，500ms 起步指数退避；联网、页面重新可见和重新水合会立即唤醒。
   - 非重试型 4xx：保留本地 dirty，暂停当前循环，后续用户修改或生命周期唤醒会再次尝试。
 - **核心文件**：Canvas Store、`canvas-sync.ts`、canvas API、canvas service/repository。
