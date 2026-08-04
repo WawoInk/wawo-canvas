@@ -3,19 +3,21 @@
 import { DeleteOutlined, EyeOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { Button, Card, Col, Form, Input, Modal, Row, Select, Space, Tag, Tooltip, Typography } from "antd";
-import dayjs from "dayjs";
+import type { TFunction } from "i18next";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
+import { formatDateTime, formatNumber } from "@/i18n/formatters";
 import type { AdminGenerationTask, AdminGenerationTaskDetailResponse } from "@/services/api/admin";
 import { compareDecimal, formatDecimal } from "@/lib/decimal";
 import { generationTaskStatus } from "./generation-task-status";
 import { useAdminGenerationTasks } from "./use-admin-generation-tasks";
 
-const taskTypeLabels: Record<string, string> = {
-    image: "图片生成",
-    video: "视频生成",
-    audio: "音频生成",
-    chat: "对话",
+const taskTypeLabelKeys: Record<string, string> = {
+    image: "admin.generationTasks.types.image",
+    video: "admin.generationTasks.types.video",
+    audio: "admin.generationTasks.types.audio",
+    chat: "admin.generationTasks.types.chat",
 };
 
 const taskTypeColors: Record<string, string> = {
@@ -26,6 +28,7 @@ const taskTypeColors: Record<string, string> = {
 };
 
 export default function AdminGenerationTasksPage() {
+    const { t } = useTranslation();
     const { tasks, keyword, taskType, status, page, pageSize, total, isLoading, isDeleting, searchLogs, filterByType, filterByStatus, changePage, changePageSize, resetFilters, refreshLogs, fetchDetail, deleteTask, batchDeleteTasks } =
         useAdminGenerationTasks();
     const [keywordText, setKeywordText] = useState(keyword);
@@ -34,11 +37,11 @@ export default function AdminGenerationTasksPage() {
 
     const handleDelete = (item: AdminGenerationTask) => {
         Modal.confirm({
-            title: "确认删除",
-            content: `确定删除该条使用日志吗？用户: ${item.username || item.userId}, 模型: ${item.modelDisplayName || item.model}`,
-            okText: "删除",
+            title: t("admin.generationTasks.delete.title"),
+            content: t("admin.generationTasks.delete.confirm", { user: item.username || item.userId, model: item.modelDisplayName || item.model }),
+            okText: t("admin.common.actions.delete"),
             okType: "danger",
-            cancelText: "取消",
+            cancelText: t("admin.common.actions.cancel"),
             onOk: () => deleteTask(item.id),
         });
     };
@@ -46,11 +49,11 @@ export default function AdminGenerationTasksPage() {
     const handleBatchDelete = () => {
         if (selectedRowKeys.length === 0) return;
         Modal.confirm({
-            title: "确认批量删除",
-            content: `确定删除选中的 ${selectedRowKeys.length} 条使用日志吗？此操作不可恢复。`,
-            okText: "删除",
+            title: t("admin.generationTasks.batchDelete.title"),
+            content: t("admin.generationTasks.batchDelete.confirm", { count: selectedRowKeys.length, value: formatNumber(selectedRowKeys.length) }),
+            okText: t("admin.common.actions.delete"),
             okType: "danger",
-            cancelText: "取消",
+            cancelText: t("admin.common.actions.cancel"),
             onOk: () => {
                 batchDeleteTasks(selectedRowKeys);
                 setSelectedRowKeys([]);
@@ -67,7 +70,7 @@ export default function AdminGenerationTasksPage() {
 
     const columns: ProColumns<AdminGenerationTask>[] = [
         {
-            title: "用户 ID",
+            title: t("admin.generationTasks.table.userId"),
             dataIndex: "userId",
             width: 220,
             render: (_, item) => (
@@ -77,64 +80,66 @@ export default function AdminGenerationTasksPage() {
             ),
         },
         {
-            title: "用户名",
+            title: t("admin.generationTasks.table.username"),
             dataIndex: "username",
             width: 120,
             render: (_, item) => <Typography.Text>{item.username || "-"}</Typography.Text>,
         },
         {
-            title: "任务类型",
+            title: t("admin.generationTasks.table.taskType"),
             dataIndex: "taskType",
             width: 100,
-            render: (_, item) => <Tag color={taskTypeColors[item.taskType] || "default"}>{taskTypeLabels[item.taskType] || item.taskType}</Tag>,
+            render: (_, item) => <Tag color={taskTypeColors[item.taskType] || "default"}>{taskTypeLabelKeys[item.taskType] ? t(taskTypeLabelKeys[item.taskType]) : item.taskType}</Tag>,
         },
         {
-            title: "模型",
+            title: t("admin.generationTasks.table.model"),
             dataIndex: "model",
             width: 160,
             ellipsis: true,
         },
         {
-            title: "模型展示名",
+            title: t("admin.generationTasks.table.modelDisplayName"),
             dataIndex: "modelDisplayName",
             width: 160,
             ellipsis: true,
             render: (_, item) => item.modelDisplayName || item.model || "-",
         },
         {
-            title: "Provider",
+            title: t("admin.generationTasks.table.provider"),
             dataIndex: "provider",
             width: 100,
         },
         {
-            title: "状态",
+            title: t("admin.generationTasks.table.status"),
             dataIndex: "status",
             width: 90,
             render: (_, item) => {
                 const status = generationTaskStatus(item.status);
-                return <Tag color={status.color}>{status.label}</Tag>;
+                return <Tag color={status.color}>{t(status.labelKey)}</Tag>;
             },
         },
         {
-            title: "扣费",
+            title: t("admin.generationTasks.table.credits"),
             dataIndex: "credits",
             width: 80,
             render: (_, item) => <Typography.Text type={compareDecimal(item.credits, "0") > 0 ? "danger" : "secondary"}>{compareDecimal(item.credits, "0") > 0 ? `-${formatDecimal(item.credits)}` : formatDecimal(item.credits)}</Typography.Text>,
         },
         {
-            title: "上游 Credits",
+            title: t("admin.generationTasks.table.upstreamCredits"),
             dataIndex: "upstreamCredits",
             width: 112,
             render: (_, item) => <Typography.Text type="secondary">{item.taskType === "video" ? (item.upstreamCredits ?? "null") : "-"}</Typography.Text>,
         },
         {
-            title: "耗时",
+            title: t("admin.generationTasks.table.duration"),
             dataIndex: "latencyMs",
             width: 80,
-            render: (_, item) => <Typography.Text type="secondary">{item.latencyMs > 0 ? `${(item.latencyMs / 1000).toFixed(1)}s` : "-"}</Typography.Text>,
+            render: (_, item) => (
+                <Typography.Text type="secondary">{item.latencyMs > 0 ? t("admin.generationTasks.values.seconds", { value: formatNumber(item.latencyMs / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) }) : "-"}</Typography.Text>
+            ),
         },
         {
-            title: "错误信息",
+            title: t("admin.generationTasks.table.error"),
             dataIndex: "errorMessage",
             ellipsis: true,
             width: 180,
@@ -148,22 +153,22 @@ export default function AdminGenerationTasksPage() {
                 ),
         },
         {
-            title: "创建时间",
+            title: t("admin.common.table.createdAt"),
             dataIndex: "createdAt",
             width: 170,
-            render: (_, item) => <Typography.Text type="secondary">{item.createdAt ? dayjs(item.createdAt).format("YYYY-MM-DD HH:mm:ss") : "-"}</Typography.Text>,
+            render: (_, item) => <Typography.Text type="secondary">{item.createdAt ? formatDateTime(item.createdAt) : "-"}</Typography.Text>,
         },
         {
-            title: "操作",
+            title: t("admin.common.table.actions"),
             key: "actions",
             width: 108,
             align: "right",
             render: (_, item) => (
                 <Space size={0}>
-                    <Tooltip title="查看详情">
+                    <Tooltip title={t("admin.common.actions.viewDetails")}>
                         <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => void openDetail(item)} />
                     </Tooltip>
-                    <Tooltip title="删除">
+                    <Tooltip title={t("admin.common.actions.delete")}>
                         <Button type="text" size="small" danger icon={<DeleteOutlined />} loading={isDeleting} onClick={() => handleDelete(item)} />
                     </Tooltip>
                 </Space>
@@ -178,37 +183,44 @@ export default function AdminGenerationTasksPage() {
                     <Form layout="vertical">
                         <Row gutter={16} align="bottom">
                             <Col flex="240px">
-                                <Form.Item label="用户 ID">
-                                    <Input value={keywordText} placeholder="搜索用户 ID" allowClear prefix={<SearchOutlined />} onPressEnter={() => searchLogs(keywordText)} onChange={(event) => setKeywordText(event.target.value)} />
+                                <Form.Item label={t("admin.generationTasks.filters.userId")}>
+                                    <Input
+                                        value={keywordText}
+                                        placeholder={t("admin.generationTasks.filters.userIdPlaceholder")}
+                                        allowClear
+                                        prefix={<SearchOutlined />}
+                                        onPressEnter={() => searchLogs(keywordText)}
+                                        onChange={(event) => setKeywordText(event.target.value)}
+                                    />
                                 </Form.Item>
                             </Col>
                             <Col flex="140px">
-                                <Form.Item label="任务类型">
+                                <Form.Item label={t("admin.generationTasks.filters.taskType")}>
                                     <Select
                                         value={taskType || undefined}
-                                        placeholder="全部"
+                                        placeholder={t("admin.common.filters.all")}
                                         allowClear
                                         options={[
-                                            { label: "图片生成", value: "image" },
-                                            { label: "视频生成", value: "video" },
-                                            { label: "音频生成", value: "audio" },
-                                            { label: "对话", value: "chat" },
+                                            { label: t("admin.generationTasks.types.image"), value: "image" },
+                                            { label: t("admin.generationTasks.types.video"), value: "video" },
+                                            { label: t("admin.generationTasks.types.audio"), value: "audio" },
+                                            { label: t("admin.generationTasks.types.chat"), value: "chat" },
                                         ]}
                                         onChange={(value) => filterByType(value || "")}
                                     />
                                 </Form.Item>
                             </Col>
                             <Col flex="140px">
-                                <Form.Item label="状态">
+                                <Form.Item label={t("admin.generationTasks.filters.status")}>
                                     <Select
                                         value={status || undefined}
-                                        placeholder="全部"
+                                        placeholder={t("admin.common.filters.all")}
                                         allowClear
                                         options={[
-                                            { label: "成功", value: "success" },
-                                            { label: "失败", value: "failed" },
-                                            { label: "运行中", value: "running" },
-                                            { label: "已取消", value: "cancelled" },
+                                            { label: t("admin.generationTasks.statuses.success"), value: "success" },
+                                            { label: t("admin.generationTasks.statuses.failed"), value: "failed" },
+                                            { label: t("admin.generationTasks.statuses.running"), value: "running" },
+                                            { label: t("admin.generationTasks.statuses.cancelled"), value: "cancelled" },
                                         ]}
                                         onChange={(value) => filterByStatus(value || "")}
                                     />
@@ -223,10 +235,10 @@ export default function AdminGenerationTasksPage() {
                                                 resetFilters();
                                             }}
                                         >
-                                            重置
+                                            {t("admin.common.actions.reset")}
                                         </Button>
                                         <Button type="primary" icon={<ReloadOutlined />} onClick={() => searchLogs(keywordText)}>
-                                            查询
+                                            {t("admin.common.actions.query")}
                                         </Button>
                                     </Space>
                                 </Form.Item>
@@ -250,11 +262,11 @@ export default function AdminGenerationTasksPage() {
                     }}
                     headerTitle={
                         <Space>
-                            <Typography.Text strong>使用日志</Typography.Text>
-                            <Tag>{total} 条</Tag>
+                            <Typography.Text strong>{t("admin.generationTasks.title")}</Typography.Text>
+                            <Tag>{t("admin.common.counts.records", { count: total, value: formatNumber(total) })}</Tag>
                             {selectedRowKeys.length > 0 && (
                                 <Button size="small" danger icon={<DeleteOutlined />} loading={isDeleting} onClick={handleBatchDelete}>
-                                    删除选中 ({selectedRowKeys.length})
+                                    {t("admin.generationTasks.actions.deleteSelected", { count: selectedRowKeys.length, value: formatNumber(selectedRowKeys.length) })}
                                 </Button>
                             )}
                         </Space>
@@ -266,80 +278,79 @@ export default function AdminGenerationTasksPage() {
                         total,
                         showSizeChanger: true,
                         pageSizeOptions: [10, 20, 50, 100],
-                        showTotal: (value) => `共 ${value} 条`,
+                        showTotal: (value) => t("admin.common.pagination.records", { count: value, value: formatNumber(value) }),
                         onChange: (nextPage, nextPageSize) => (nextPageSize !== pageSize ? changePageSize(nextPageSize) : changePage(nextPage)),
                     }}
                 />
             </Space>
 
-            {/* Detail Modal */}
-            <Modal title="任务详情" open={Boolean(detail)} width={800} footer={null} onCancel={() => setDetail(null)} destroyOnHidden>
+            <Modal title={t("admin.generationTasks.detail.title")} open={Boolean(detail)} width={800} footer={null} onCancel={() => setDetail(null)} destroyOnHidden>
                 {detail && (
                     <Space orientation="vertical" size={12} style={{ width: "100%" }}>
                         <Row gutter={24}>
                             <Col span={8}>
-                                <Typography.Text type="secondary">任务 ID</Typography.Text>
+                                <Typography.Text type="secondary">{t("admin.generationTasks.detail.taskId")}</Typography.Text>
                                 <br />
                                 <Typography.Text copyable>{detail.task.id}</Typography.Text>
                             </Col>
                             <Col span={8}>
-                                <Typography.Text type="secondary">用户 ID</Typography.Text>
+                                <Typography.Text type="secondary">{t("admin.generationTasks.detail.userId")}</Typography.Text>
                                 <br />
                                 <Typography.Text copyable>{detail.task.userId}</Typography.Text>
                             </Col>
                             <Col span={8}>
-                                <Typography.Text type="secondary">上游任务</Typography.Text>
+                                <Typography.Text type="secondary">{t("admin.generationTasks.detail.upstreamTask")}</Typography.Text>
                                 <br />
                                 <Typography.Text>{detail.task.upstreamTaskId || "-"}</Typography.Text>
                             </Col>
                         </Row>
                         <Row gutter={24}>
                             <Col span={6}>
-                                <Typography.Text type="secondary">类型</Typography.Text>
+                                <Typography.Text type="secondary">{t("admin.generationTasks.detail.type")}</Typography.Text>
                                 <br />
-                                <Tag color={taskTypeColors[detail.task.taskType]}>{taskTypeLabels[detail.task.taskType] || detail.task.taskType}</Tag>
+                                <Tag color={taskTypeColors[detail.task.taskType]}>{taskTypeLabelKeys[detail.task.taskType] ? t(taskTypeLabelKeys[detail.task.taskType]) : detail.task.taskType}</Tag>
                             </Col>
                             <Col span={6}>
-                                <Typography.Text type="secondary">状态</Typography.Text>
+                                <Typography.Text type="secondary">{t("admin.generationTasks.detail.status")}</Typography.Text>
                                 <br />
-                                <Tag color={generationTaskStatus(detail.task.status).color}>{generationTaskStatus(detail.task.status).label}</Tag>
+                                <Tag color={generationTaskStatus(detail.task.status).color}>{t(generationTaskStatus(detail.task.status).labelKey)}</Tag>
                             </Col>
                             <Col span={6}>
-                                <Typography.Text type="secondary">扣费</Typography.Text>
+                                <Typography.Text type="secondary">{t("admin.generationTasks.detail.credits")}</Typography.Text>
                                 <br />
                                 <Typography.Text>{detail.task.credits}</Typography.Text>
                             </Col>
                             <Col span={6}>
-                                <Typography.Text type="secondary">上游 Credits</Typography.Text>
+                                <Typography.Text type="secondary">{t("admin.generationTasks.detail.upstreamCredits")}</Typography.Text>
                                 <br />
                                 <Typography.Text>{detail.task.taskType === "video" ? (detail.task.upstreamCredits ?? "null") : "-"}</Typography.Text>
                             </Col>
                         </Row>
                         <Row gutter={24}>
                             <Col span={6}>
-                                <Typography.Text type="secondary">Provider</Typography.Text>
+                                <Typography.Text type="secondary">{t("admin.generationTasks.detail.provider")}</Typography.Text>
                                 <br />
                                 <Typography.Text>{detail.task.provider}</Typography.Text>
                             </Col>
                             <Col span={6}>
-                                <Typography.Text type="secondary">模型</Typography.Text>
+                                <Typography.Text type="secondary">{t("admin.generationTasks.detail.model")}</Typography.Text>
                                 <br />
                                 <Typography.Text>{detail.task.model}</Typography.Text>
                             </Col>
                             <Col span={6}>
-                                <Typography.Text type="secondary">创建时间</Typography.Text>
+                                <Typography.Text type="secondary">{t("admin.common.table.createdAt")}</Typography.Text>
                                 <br />
-                                <Typography.Text>{detail.task.createdAt ? dayjs(detail.task.createdAt).format("YYYY-MM-DD HH:mm:ss") : "-"}</Typography.Text>
+                                <Typography.Text>{detail.task.createdAt ? formatDateTime(detail.task.createdAt) : "-"}</Typography.Text>
                             </Col>
                             <Col span={6}>
-                                <Typography.Text type="secondary">耗时</Typography.Text>
+                                <Typography.Text type="secondary">{t("admin.generationTasks.detail.duration")}</Typography.Text>
                                 <br />
-                                <Typography.Text>{detail.task.latencyMs > 0 ? `${(detail.task.latencyMs / 1000).toFixed(1)}s` : "-"}</Typography.Text>
+                                <Typography.Text>{detail.task.latencyMs > 0 ? t("admin.generationTasks.values.seconds", { value: formatNumber(detail.task.latencyMs / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) }) : "-"}</Typography.Text>
                             </Col>
                         </Row>
                         {detail.task.errorMessage && (
                             <div>
-                                <Typography.Text type="secondary">错误信息</Typography.Text>
+                                <Typography.Text type="secondary">{t("admin.generationTasks.detail.error")}</Typography.Text>
                                 <br />
                                 <Typography.Text type="danger">
                                     {detail.task.errorCode ? `[${detail.task.errorCode}] ` : ""}
@@ -350,7 +361,7 @@ export default function AdminGenerationTasksPage() {
                         {detail.payload && (
                             <>
                                 <Typography.Text strong style={{ marginTop: 8, display: "block" }}>
-                                    请求体
+                                    {t("admin.generationTasks.detail.requestBody")}
                                 </Typography.Text>
                                 <pre
                                     style={{
@@ -364,10 +375,10 @@ export default function AdminGenerationTasksPage() {
                                         wordBreak: "break-all",
                                     }}
                                 >
-                                    {formatJSON(detail.payload.requestBody)}
+                                    {formatJSON(detail.payload.requestBody, t)}
                                 </pre>
                                 <Typography.Text strong style={{ marginTop: 8, display: "block" }}>
-                                    响应体
+                                    {t("admin.generationTasks.detail.responseBody")}
                                 </Typography.Text>
                                 <pre
                                     style={{
@@ -381,12 +392,12 @@ export default function AdminGenerationTasksPage() {
                                         wordBreak: "break-all",
                                     }}
                                 >
-                                    {formatJSON(detail.payload.responseBody)}
+                                    {formatJSON(detail.payload.responseBody, t)}
                                 </pre>
                                 {detail.payload.rawError && (
                                     <>
                                         <Typography.Text strong type="danger" style={{ marginTop: 8, display: "block" }}>
-                                            原始错误
+                                            {t("admin.generationTasks.detail.rawError")}
                                         </Typography.Text>
                                         <pre
                                             style={{
@@ -412,11 +423,11 @@ export default function AdminGenerationTasksPage() {
     );
 }
 
-function formatJSON(value: string | undefined): string {
-    if (!value) return "(无数据)";
+function formatJSON(value: string | undefined, t: TFunction): string {
+    if (!value) return t("admin.generationTasks.values.noData");
     try {
         return JSON.stringify(JSON.parse(value), null, 2);
     } catch {
-        return value.length > 4000 ? value.slice(0, 4000) + "...(截断)" : value;
+        return value.length > 4000 ? `${value.slice(0, 4000)}${t("admin.generationTasks.values.truncated")}` : value;
     }
 }

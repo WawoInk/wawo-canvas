@@ -2,6 +2,7 @@
 
 import { Drawer } from "antd";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { navigationToolsForUser, type NavigationToolSlug } from "@/constant/navigation-tools";
 import { cn } from "@/lib/utils";
@@ -14,9 +15,10 @@ type MobileNavDrawerProps = {
 };
 
 export function MobileNavDrawer({ open, activeToolSlug, onClose }: MobileNavDrawerProps) {
+    const { t } = useTranslation();
     const tools = navigationToolsForUser(useUserStore((state) => state.user));
     return (
-        <Drawer title="导航" placement="left" size={280} open={open} onClose={onClose} className="md:hidden">
+        <Drawer title={t("navigation.title")} placement="left" size={280} open={open} onClose={onClose} className="md:hidden">
             <div className="space-y-1">
                 {tools.map((tool) => {
                     const Icon = tool.icon;
@@ -29,7 +31,7 @@ export function MobileNavDrawer({ open, activeToolSlug, onClose }: MobileNavDraw
                             className={cn("flex items-center gap-3 rounded-lg px-3 py-3 text-base transition", active ? "bg-accent font-medium !text-foreground" : "!text-muted-foreground hover:bg-accent hover:!text-foreground")}
                         >
                             <Icon className="size-5" />
-                            <span>{tool.label}</span>
+                            <span>{t(tool.labelKey)}</span>
                         </Link>
                     );
                 })}

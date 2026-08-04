@@ -6,6 +6,7 @@ import { buildApiUrl, modelOptionName, resolveModelRequestConfig, type AiConfig 
 import { useUserStore } from "@/stores/use-user-store";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
+import i18n from "@/i18n";
 
 type SeedanceTask = {
     id: string;
@@ -40,10 +41,10 @@ export async function requestVideoGeneration(config: AiConfig, prompt: string, r
         const state = await pollVideoGenerationTask(config, task, options);
         if (state.status === "completed") return state.result;
         if (state.status === "failed") throw new Error(state.error);
-        if (attempt === 119) throw new Error("视频生成超时，请稍后重试");
+        if (attempt === 119) throw new Error(i18n.t("errors.video.timeout"));
         await delay(5000, options?.signal);
     }
-    throw new Error("视频生成超时，请稍后重试");
+    throw new Error(i18n.t("errors.video.timeout"));
 }
 
 export async function createVideoGenerationTask(
@@ -64,10 +65,10 @@ export async function createVideoGenerationTask(
         const headers: Record<string, string> = { ...aiHeaders(requestConfig, "application/json") };
         if (source) headers["X-Source"] = source;
         const created = unwrapSeedanceTask((await axios.post<ApiEnvelope<SeedanceTask>>(videoTaskApiUrl(requestConfig), payload, { headers, signal: options?.signal })).data);
-        if (!created.id) throw new Error("视频接口没有返回任务 ID");
+        if (!created.id) throw new Error(i18n.t("errors.video.missingTaskId"));
         return { id: created.id, model: selectedModel };
     } catch (error) {
-        throw new Error(readAxiosError(error, "视频任务创建失败"));
+        throw new Error(readAxiosError(error, i18n.t("errors.video.createTaskFailed")));
     }
 }
 
@@ -86,13 +87,13 @@ export async function pollVideoGenerationTask(config: AiConfig, task: VideoGener
         );
         if (state.status === "succeeded") {
             const url = state.content?.video_url;
-            if (!url) return { status: "failed", error: "视频任务成功但没有返回视频 URL" };
+            if (!url) return { status: "failed", error: i18n.t("errors.video.succeededWithoutUrl") };
             return { status: "completed", result: await videoResultFromUrl(url, options) };
         }
-        if (state.status === "failed" || state.status === "cancelled" || state.status === "expired") return { status: "failed", error: state.error?.message || `视频生成${state.status === "expired" ? "超时" : "失败"}` };
+        if (state.status === "failed" || state.status === "cancelled" || state.status === "expired") return { status: "failed", error: state.error?.message || i18n.t(state.status === "expired" ? "errors.video.timeout" : "errors.video.generationFailed") };
         return { status: "pending" };
     } catch (error) {
-        throw new Error(readAxiosError(error, "视频任务查询失败"));
+        throw new Error(readAxiosError(error, i18n.t("errors.video.queryTaskFailed")));
     }
 }
 
@@ -104,7 +105,7 @@ export async function storeGeneratedVideo(result: VideoGenerationResult): Promis
         const s3 = await uploadUrlToS3(result.url, "results/videos");
         return { url: s3.url, storageKey: s3.fileId, bytes: s3.bytes, mimeType: s3.mimeType || result.mimeType || "video/mp4", width: s3.width, height: s3.height, durationMs: s3.durationMs };
     }
-    throw new Error("视频接口没有返回可播放的视频");
+    throw new Error(i18n.t("errors.video.noPlayableVideo"));
 }
 
 function videoTaskApiUrl(config: AiConfig, taskId?: string) {
@@ -113,11 +114,11 @@ function videoTaskApiUrl(config: AiConfig, taskId?: string) {
 }
 
 export async function buildVideoGenerationPayload(config: AiConfig, selectedModel: string, prompt: string, references: ReferenceImage[] = [], videoReferences: ReferenceVideo[] = [], audioReferences: ReferenceAudio[] = []) {
-    if (audioReferences.length && !references.length && !videoReferences.length) throw new Error("参考音频不能单独使用，请同时添加参考图或参考视频");
+    if (audioReferences.length && !references.length && !videoReferences.length) throw new Error(i18n.t("errors.video.audioRequiresVisual"));
     const content = await buildSeedanceContent(config, prompt, references, videoReferences, audioReferences);
-    if (!content.length) throw new Error("请输入视频提示词，或连接参考图片/视频/音频");
+    if (!content.length) throw new Error(i18n.t("errors.video.promptOrReferenceRequired"));
     const negativePrompt = config.videoNegativePrompt.trim();
-    if (negativePrompt.length > 500) throw new Error("负向提示词不能超过 500 个字符");
+    if (negativePrompt.length > 500) throw new Error(i18n.t("errors.video.negativePromptTooLong"));
     return {
         model: modelOptionName(selectedModel),
         content,
@@ -150,7 +151,7 @@ async function resolveSeedanceImageUrl(config: AiConfig, image: ReferenceImage) 
     const directUrl = image.url || image.dataUrl;
     if (isPublicMediaUrl(directUrl) || directUrl.startsWith("asset://")) return directUrl;
     const dataUrl = await imageToDataUrl(image);
-    if (!dataUrl) throw new Error("参考图读取失败，请换一张图片或重新上传");
+    if (!dataUrl) throw new Error(i18n.t("errors.video.readReferenceImageFailed"));
     return dataUrl;
 }
 
@@ -159,7 +160,7 @@ async function resolveSeedanceVideoUrl(video: ReferenceVideo) {
     let blob: Blob | null = null;
     if (video.storageKey) blob = await getMediaBlob(video.storageKey);
     if (!blob && video.url?.startsWith("blob:")) blob = await (await fetch(video.url)).blob();
-    if (!blob) throw new Error("参考视频必须是公网 URL、素材 ID，或本地已保存的视频");
+    if (!blob) throw new Error(i18n.t("errors.video.invalidReferenceVideo"));
     return blobToDataUrl(blob);
 }
 
@@ -168,7 +169,7 @@ async function resolveSeedanceAudioUrl(audio: ReferenceAudio) {
     let blob: Blob | null = null;
     if (audio.storageKey) blob = await getMediaBlob(audio.storageKey);
     if (!blob && audio.url?.startsWith("blob:")) blob = await (await fetch(audio.url)).blob();
-    if (!blob) throw new Error("参考音频必须是公网 URL、素材 ID，或本地已保存的音频");
+    if (!blob) throw new Error(i18n.t("errors.video.invalidReferenceAudio"));
     return blobToDataUrl(blob);
 }
 
@@ -184,22 +185,22 @@ async function videoResultFromUrl(url: string, options?: RequestOptions): Promis
 }
 
 function assertVideoConfig(config: AiConfig, model: string) {
-    if (!model) throw new Error("请先配置视频模型");
+    if (!model) throw new Error(i18n.t("errors.config.videoModelRequired"));
     if (config.channelMode !== "remote") {
-        if (!config.baseUrl.trim()) throw new Error("请先配置 Base URL");
-        if (!config.apiKey.trim()) throw new Error("请先配置 API Key");
+        if (!config.baseUrl.trim()) throw new Error(i18n.t("errors.config.baseUrlRequired"));
+        if (!config.apiKey.trim()) throw new Error(i18n.t("errors.config.apiKeyRequired"));
     }
-    if (config.apiFormat === "gemini") throw new Error("Gemini 调用格式暂不支持视频生成，请使用 OpenAI 格式渠道");
+    if (config.apiFormat === "gemini") throw new Error(i18n.t("errors.video.geminiUnsupported"));
 }
 
 function unwrapSeedanceTask(payload: ApiEnvelope<SeedanceTask>) {
-    return unwrapEnvelope(payload, "视频接口没有返回任务");
+    return unwrapEnvelope(payload, i18n.t("errors.video.noTaskReturned"));
 }
 
 function unwrapEnvelope<T>(payload: ApiEnvelope<T>, emptyMessage: string): T {
     if (!payload) throw new Error(emptyMessage);
     if (typeof payload === "object" && "code" in payload && typeof payload.code === "number") {
-        if (payload.code !== 0) throw new Error(payload.msg || "请求失败");
+        if (payload.code !== 0) throw new Error(payload.msg || i18n.t("errors.requestFailed"));
         if (!payload.data) throw new Error(emptyMessage);
         return payload.data;
     }
@@ -207,19 +208,19 @@ function unwrapEnvelope<T>(payload: ApiEnvelope<T>, emptyMessage: string): T {
 }
 
 function readAxiosError(error: unknown, fallback: string) {
-    if (axios.isCancel(error)) return "请求已取消";
+    if (axios.isCancel(error)) return i18n.t("errors.requestCancelled");
     if (axios.isAxiosError<{ error?: { message?: string }; msg?: string; code?: number }>(error)) {
         const responseData = error.response?.data;
         return responseData?.msg || responseData?.error?.message || statusMessage(error.response?.status, fallback);
     }
-    if (error instanceof DOMException && error.name === "AbortError") return "请求已取消";
+    if (error instanceof DOMException && error.name === "AbortError") return i18n.t("errors.requestCancelled");
     return error instanceof Error ? error.message : fallback;
 }
 
 function statusMessage(status: number | undefined, fallback: string) {
-    if (status === 401 || status === 403) return "鉴权失败，请检查 API Key、套餐权限或模型权限";
-    if (status === 429) return "请求被限流或额度不足，请稍后重试";
-    return status ? `${fallback}（${status}）` : fallback;
+    if (status === 401 || status === 403) return i18n.t("errors.authenticationFailed");
+    if (status === 429) return i18n.t("errors.rateLimited");
+    return status ? i18n.t("errors.requestFailedWithStatus", { fallback, status }) : fallback;
 }
 
 async function assertVideoBlob(blob: Blob) {
@@ -230,7 +231,7 @@ async function assertVideoBlob(blob: Blob) {
     } catch {
         return;
     }
-    if (typeof payload.code === "number" && payload.code !== 0) throw new Error(payload.msg || "视频下载失败");
+    if (typeof payload.code === "number" && payload.code !== 0) throw new Error(payload.msg || i18n.t("errors.video.downloadFailed"));
     if (payload.error?.message) throw new Error(payload.error.message);
 }
 
@@ -260,7 +261,7 @@ function blobToDataUrl(blob: Blob) {
     return new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = () => reject(new Error("读取本地素材失败"));
+        reader.onerror = () => reject(new Error(i18n.t("errors.video.readLocalAssetFailed")));
         reader.readAsDataURL(blob);
     });
 }
@@ -275,7 +276,7 @@ export async function cancelVideoGenerationTask(config: AiConfig, task: VideoGen
             signal: options?.signal,
         });
     } catch (error) {
-        throw new Error(readAxiosError(error, "视频任务取消失败"));
+        throw new Error(readAxiosError(error, i18n.t("errors.video.cancelFailed")));
     }
 }
 
@@ -295,9 +296,9 @@ export async function remixVideoGenerationTask(config: AiConfig, task: VideoGene
                 })
             ).data,
         );
-        if (!created.id) throw new Error("视频接口没有返回任务 ID");
+        if (!created.id) throw new Error(i18n.t("errors.video.missingTaskId"));
         return { id: created.id, model: task.model };
     } catch (error) {
-        throw new Error(readAxiosError(error, "视频二次创作失败"));
+        throw new Error(readAxiosError(error, i18n.t("errors.video.remixFailed")));
     }
 }

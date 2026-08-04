@@ -3,9 +3,12 @@
 import { Download, FolderPlus, PencilLine, Plus, Search, Trash2, Upload as UploadIcon } from "lucide-react";
 import { saveAs } from "file-saver";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { App, Button, Card, Empty, Form, Input, Modal, Pagination, Popconfirm, Result, Select, Skeleton, Space, Tag, Typography, Upload, type UploadFile } from "antd";
 
+import i18n from "@/i18n";
+import { formatDateTime, formatNumber } from "@/i18n/formatters";
 import { useCopyText } from "@/hooks/use-copy-text";
 import { enterpriseCapabilities } from "@/lib/account-access";
 import { formatBytes } from "@/lib/image-utils";
@@ -30,10 +33,9 @@ import { defaultEnterpriseAssetQuery, enterpriseAssetQueryKey, updateEnterpriseA
 
 type AssetFormValues = EnterpriseAssetFormDraft & { file?: UploadFile[] };
 
-const assetTypeLabels: Record<EnterpriseAssetType, string> = { text: "文本", image: "图片", video: "视频" };
-
 export default function EnterpriseAssetsPage() {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const queryClient = useQueryClient();
     const copyText = useCopyText();
     const token = useUserStore((state) => state.token);
@@ -47,6 +49,11 @@ export default function EnterpriseAssetsPage() {
     const [formOpen, setFormOpen] = useState(false);
     const [form] = Form.useForm<AssetFormValues>();
     const formType = Form.useWatch("type", form) || "text";
+    const assetTypeLabels: Record<EnterpriseAssetType, string> = {
+        text: t("common.assetTypes.text"),
+        image: t("common.assetTypes.image"),
+        video: t("common.assetTypes.video"),
+    };
 
     useEffect(() => {
         setQuery(defaultEnterpriseAssetQuery);
@@ -96,33 +103,33 @@ export default function EnterpriseAssetsPage() {
             setEditing(null);
             form.resetFields();
             if (preview?.id === asset.id) setPreview(asset);
-            message.success(variables.asset ? "企业素材已保存" : "企业素材已新增");
+            message.success(variables.asset ? t("enterpriseAssets.messages.saved") : t("enterpriseAssets.messages.created"));
         },
-        onError: (error) => message.error(error instanceof Error ? error.message : "保存失败"),
+        onError: (error) => message.error(error instanceof Error ? error.message : t("enterpriseAssets.messages.saveFailed")),
     });
     const deleteMutation = useMutation({
         mutationFn: (asset: EnterpriseAsset) => deleteEnterpriseAsset(token, asset.id),
         onSuccess: async (_, asset) => {
             await queryClient.invalidateQueries({ queryKey: ["enterprise-assets", user?.id || "", enterpriseID] });
             if (preview?.id === asset.id) setPreview(null);
-            message.success("企业素材已删除");
+            message.success(t("enterpriseAssets.messages.deleted"));
         },
-        onError: (error) => message.error(error instanceof Error ? error.message : "删除失败"),
+        onError: (error) => message.error(error instanceof Error ? error.message : t("enterpriseAssets.messages.deleteFailed")),
     });
     const copyMutation = useMutation({
         mutationFn: (asset: EnterpriseAsset) => copyEnterpriseAsset(token, asset.id),
         onSuccess: async (_, asset) => {
             await refreshPersonalAssets();
-            message.success(`“${asset.title}”已加入我的素材`);
+            message.success(t("enterpriseAssets.messages.copiedToPersonal", { title: asset.title }));
         },
-        onError: (error) => message.error(error instanceof Error ? error.message : "加入我的素材失败"),
+        onError: (error) => message.error(error instanceof Error ? error.message : t("enterpriseAssets.messages.copyFailed")),
     });
     const downloadMutation = useMutation({
         mutationFn: async (asset: EnterpriseAsset) => {
-            if (!asset.fileId) throw new Error("素材没有可下载的文件");
+            if (!asset.fileId) throw new Error(t("enterpriseAssets.errors.noDownloadFile"));
             saveAs(await downloadEnterpriseFile(token, asset.fileId), assetFileName(asset));
         },
-        onError: (error) => message.error(error instanceof Error ? error.message : "下载失败"),
+        onError: (error) => message.error(error instanceof Error ? error.message : t("enterpriseAssets.messages.downloadFailed")),
     });
 
     const openForm = (asset?: EnterpriseAsset) => {
@@ -144,7 +151,7 @@ export default function EnterpriseAssetsPage() {
         );
     }
     if (summaryQuery.isError || !capabilities.canAccessAssets) {
-        return <Result status="403" title="无权限访问企业素材库" subTitle={error instanceof Error ? error.message : "当前账号不属于有效企业"} />;
+        return <Result status="403" title={t("enterpriseAssets.access.denied")} subTitle={error instanceof Error ? error.message : t("enterpriseAssets.access.invalidAccount")} />;
     }
 
     return (
@@ -153,15 +160,15 @@ export default function EnterpriseAssetsPage() {
                 <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-6">
                     <div>
                         <p className="text-xs text-muted-foreground">{summaryQuery.data?.name}</p>
-                        <h1 className="mt-2 text-3xl font-semibold">企业素材库</h1>
-                        <p className="mt-2 text-sm text-muted-foreground">企业文本、图片和视频按需从服务端读取，成员可浏览和下载，主账号可维护。</p>
+                        <h1 className="mt-2 text-3xl font-semibold">{t("enterpriseAssets.header.title")}</h1>
+                        <p className="mt-2 text-sm text-muted-foreground">{t("enterpriseAssets.header.description")}</p>
                     </div>
                     {capabilities.canManageAssets ? (
                         <Button type="primary" icon={<Plus className="size-4" />} onClick={() => openForm()}>
-                            新增企业素材
+                            {t("enterpriseAssets.actions.create")}
                         </Button>
                     ) : (
-                        <Tag color="blue">只读成员</Tag>
+                        <Tag color="blue">{t("enterpriseAssets.header.readOnly")}</Tag>
                     )}
                 </header>
 
@@ -169,10 +176,10 @@ export default function EnterpriseAssetsPage() {
                     <Input.Search
                         className="w-full sm:w-72"
                         prefix={<Search className="size-4 text-muted-foreground" />}
-                        placeholder="搜索标题、描述或内容"
+                        placeholder={t("enterpriseAssets.searchPlaceholder")}
                         value={keyword}
                         allowClear
-                        enterButton="搜索"
+                        enterButton={t("common.actions.search")}
                         onChange={(event) => setKeyword(event.target.value)}
                         onSearch={(value) => updateQuery({ keyword: value.trim() })}
                     />
@@ -180,17 +187,17 @@ export default function EnterpriseAssetsPage() {
                         className="w-32"
                         value={query.type || "all"}
                         options={[
-                            { label: "全部类型", value: "all" },
-                            { label: "文本", value: "text" },
-                            { label: "图片", value: "image" },
-                            { label: "视频", value: "video" },
+                            { label: t("enterpriseAssets.filters.allTypes"), value: "all" },
+                            { label: t("common.assetTypes.text"), value: "text" },
+                            { label: t("common.assetTypes.image"), value: "image" },
+                            { label: t("common.assetTypes.video"), value: "video" },
                         ]}
                         onChange={(type) => updateQuery({ type: type === "all" ? "" : type, tag: [] })}
                     />
                     <Select
                         className="min-w-48 flex-1 sm:max-w-80"
                         mode="multiple"
-                        placeholder="按标签筛选"
+                        placeholder={t("enterpriseAssets.filters.tagsPlaceholder")}
                         value={query.tag}
                         options={(assetsQuery.data?.tags || []).map((tag) => ({ label: tag, value: tag }))}
                         allowClear
@@ -199,7 +206,12 @@ export default function EnterpriseAssetsPage() {
                 </section>
 
                 {assetsQuery.isError ? (
-                    <Result status="error" title="企业素材加载失败" subTitle={error instanceof Error ? error.message : "请稍后重试"} extra={<Button onClick={() => assetsQuery.refetch()}>重新加载</Button>} />
+                    <Result
+                        status="error"
+                        title={t("enterpriseAssets.load.errorTitle")}
+                        subTitle={error instanceof Error ? error.message : t("enterpriseAssets.load.retryHint")}
+                        extra={<Button onClick={() => assetsQuery.refetch()}>{t("common.actions.reload")}</Button>}
+                    />
                 ) : assetsQuery.isLoading ? (
                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                         {Array.from({ length: 6 }, (_, index) => (
@@ -221,7 +233,7 @@ export default function EnterpriseAssetsPage() {
                                                 {asset.title}
                                             </Typography.Title>
                                             <Typography.Text type="secondary" className="text-xs">
-                                                由 {asset.creatorName || "企业成员"} 创建
+                                                {t("enterpriseAssets.card.createdBy", { name: asset.creatorName || t("enterpriseAssets.defaultCreator") })}
                                             </Typography.Text>
                                         </div>
                                         <Tag className="m-0 shrink-0">{assetTypeLabels[asset.type]}</Tag>
@@ -237,13 +249,13 @@ export default function EnterpriseAssetsPage() {
                                         ))}
                                     </div>
                                     <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-3 text-xs text-muted-foreground">
-                                        <span>{formatTime(asset.updatedAt)}</span>
+                                        <span>{formatDateTime(asset.updatedAt)}</span>
                                         <Space size={4}>
                                             <Button type="link" size="small" onClick={() => setPreview(asset)}>
-                                                查看
+                                                {t("common.actions.view")}
                                             </Button>
                                             <Button type="link" size="small" icon={<FolderPlus className="size-4" />} loading={copyMutation.isPending && copyMutation.variables?.id === asset.id} onClick={() => copyMutation.mutate(asset)}>
-                                                加入我的素材
+                                                {t("common.actions.addToMyAssets")}
                                             </Button>
                                             {asset.type !== "text" ? (
                                                 <Button
@@ -252,14 +264,20 @@ export default function EnterpriseAssetsPage() {
                                                     icon={<Download className="size-4" />}
                                                     loading={downloadMutation.isPending && downloadMutation.variables?.id === asset.id}
                                                     onClick={() => downloadMutation.mutate(asset)}
-                                                    aria-label={`下载${asset.title}`}
+                                                    aria-label={t("enterpriseAssets.aria.download", { title: asset.title })}
                                                 />
                                             ) : null}
                                             {capabilities.canManageAssets ? (
                                                 <>
-                                                    <Button type="text" size="small" icon={<PencilLine className="size-4" />} onClick={() => openForm(asset)} aria-label={`编辑${asset.title}`} />
-                                                    <Popconfirm title="删除企业素材" description="删除后企业成员将无法继续访问。" okText="删除" cancelText="取消" onConfirm={() => deleteMutation.mutate(asset)}>
-                                                        <Button type="text" danger size="small" icon={<Trash2 className="size-4" />} aria-label={`删除${asset.title}`} />
+                                                    <Button type="text" size="small" icon={<PencilLine className="size-4" />} onClick={() => openForm(asset)} aria-label={t("enterpriseAssets.aria.edit", { title: asset.title })} />
+                                                    <Popconfirm
+                                                        title={t("enterpriseAssets.delete.title")}
+                                                        description={t("enterpriseAssets.delete.description")}
+                                                        okText={t("common.actions.delete")}
+                                                        cancelText={t("common.actions.cancel")}
+                                                        onConfirm={() => deleteMutation.mutate(asset)}
+                                                    >
+                                                        <Button type="text" danger size="small" icon={<Trash2 className="size-4" />} aria-label={t("enterpriseAssets.aria.delete", { title: asset.title })} />
                                                     </Popconfirm>
                                                 </>
                                             ) : null}
@@ -271,7 +289,7 @@ export default function EnterpriseAssetsPage() {
                     </div>
                 ) : (
                     <div className="flex min-h-80 items-center justify-center border-y border-border">
-                        <Empty description="暂无企业素材" />
+                        <Empty description={t("enterpriseAssets.empty")} />
                     </div>
                 )}
 
@@ -288,43 +306,52 @@ export default function EnterpriseAssetsPage() {
                     </div>
                 ) : null}
 
-                <Modal title={editing ? "编辑企业素材" : "新增企业素材"} open={formOpen} confirmLoading={saveMutation.isPending} okText="保存" cancelText="取消" destroyOnHidden onCancel={() => setFormOpen(false)} onOk={() => form.submit()}>
+                <Modal
+                    title={editing ? t("enterpriseAssets.form.editTitle") : t("enterpriseAssets.form.createTitle")}
+                    open={formOpen}
+                    confirmLoading={saveMutation.isPending}
+                    okText={t("common.actions.save")}
+                    cancelText={t("common.actions.cancel")}
+                    destroyOnHidden
+                    onCancel={() => setFormOpen(false)}
+                    onOk={() => form.submit()}
+                >
                     <Form form={form} layout="vertical" onFinish={(values) => saveMutation.mutate({ asset: editing, values })}>
-                        <Form.Item name="type" label="类型" rules={[{ required: true, message: "请选择素材类型" }]}>
+                        <Form.Item name="type" label={t("common.fields.type")} rules={[{ required: true, message: t("enterpriseAssets.form.validation.typeRequired") }]}>
                             <Select
                                 disabled={Boolean(editing)}
                                 options={[
-                                    { label: "文本", value: "text" },
-                                    { label: "图片", value: "image" },
-                                    { label: "视频", value: "video" },
+                                    { label: t("common.assetTypes.text"), value: "text" },
+                                    { label: t("common.assetTypes.image"), value: "image" },
+                                    { label: t("common.assetTypes.video"), value: "video" },
                                 ]}
                                 onChange={() => form.setFieldValue("file", [])}
                             />
                         </Form.Item>
-                        <Form.Item name="title" label="标题" rules={[{ required: true, whitespace: true, message: "请输入素材标题" }]}>
+                        <Form.Item name="title" label={t("common.fields.title")} rules={[{ required: true, whitespace: true, message: t("enterpriseAssets.form.validation.titleRequired") }]}>
                             <Input maxLength={100} showCount />
                         </Form.Item>
-                        <Form.Item name="tags" label="标签">
-                            <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入后回车添加标签" />
+                        <Form.Item name="tags" label={t("common.fields.tags")}>
+                            <Select mode="tags" tokenSeparators={[",", "，"]} placeholder={t("enterpriseAssets.form.tagsPlaceholder")} />
                         </Form.Item>
-                        <Form.Item name="description" label="说明">
+                        <Form.Item name="description" label={t("enterpriseAssets.form.fields.description")}>
                             <Input.TextArea rows={2} maxLength={300} showCount />
                         </Form.Item>
                         {formType === "text" ? (
-                            <Form.Item name="content" label="文本内容" rules={[{ required: true, whitespace: true, message: "请输入文本内容" }]}>
+                            <Form.Item name="content" label={t("enterpriseAssets.form.fields.textContent")} rules={[{ required: true, whitespace: true, message: t("enterpriseAssets.form.validation.contentRequired") }]}>
                                 <Input.TextArea rows={10} />
                             </Form.Item>
                         ) : (
                             <Form.Item
                                 name="file"
-                                label={editing ? "替换文件" : "媒体文件"}
+                                label={editing ? t("enterpriseAssets.form.fields.replacementFile") : t("enterpriseAssets.form.fields.mediaFile")}
                                 valuePropName="fileList"
                                 getValueFromEvent={(event) => (Array.isArray(event) ? event : event?.fileList)}
-                                rules={editing ? [] : [{ required: true, message: `请选择${assetTypeLabels[formType]}` }]}
-                                extra={editing ? "不选择文件时仅更新素材信息。" : undefined}
+                                rules={editing ? [] : [{ required: true, message: t("enterpriseAssets.form.validation.fileRequired", { type: assetTypeLabels[formType] }) }]}
+                                extra={editing ? t("enterpriseAssets.form.replacementHint") : undefined}
                             >
                                 <Upload accept={formType === "image" ? "image/*" : "video/*"} beforeUpload={() => false} maxCount={1}>
-                                    <Button icon={<UploadIcon className="size-4" />}>{editing ? "选择替换文件" : "选择文件"}</Button>
+                                    <Button icon={<UploadIcon className="size-4" />}>{editing ? t("enterpriseAssets.actions.selectReplacement") : t("enterpriseAssets.actions.selectFile")}</Button>
                                 </Upload>
                             </Form.Item>
                         )}
@@ -332,21 +359,21 @@ export default function EnterpriseAssetsPage() {
                 </Modal>
 
                 <Modal
-                    title={preview?.title || "素材详情"}
+                    title={preview?.title || t("enterpriseAssets.preview.defaultTitle")}
                     open={Boolean(preview)}
                     footer={
                         <Space>
                             {preview?.type === "text" ? (
-                                <Button type="primary" onClick={() => copyText(preview.content, "素材内容已复制")}>
-                                    复制内容
+                                <Button type="primary" onClick={() => copyText(preview.content, t("enterpriseAssets.messages.contentCopied"))}>
+                                    {t("enterpriseAssets.actions.copyContent")}
                                 </Button>
                             ) : (
                                 <Button type="primary" icon={<Download className="size-4" />} loading={downloadMutation.isPending && downloadMutation.variables?.id === preview?.id} onClick={() => preview && downloadMutation.mutate(preview)}>
-                                    下载文件
+                                    {t("enterpriseAssets.actions.downloadFile")}
                                 </Button>
                             )}
                             <Button icon={<FolderPlus className="size-4" />} loading={copyMutation.isPending && copyMutation.variables?.id === preview?.id} onClick={() => preview && copyMutation.mutate(preview)}>
-                                加入我的素材
+                                {t("common.actions.addToMyAssets")}
                             </Button>
                         </Space>
                     }
@@ -365,10 +392,14 @@ export default function EnterpriseAssetsPage() {
                             {preview.type === "image" && preview.url ? <img src={preview.url} alt={preview.title} className="max-h-[55vh] w-full rounded-lg bg-muted object-contain" /> : null}
                             {preview.type === "video" && preview.url ? <video src={preview.url} className="max-h-[55vh] w-full rounded-lg bg-muted" controls autoPlay /> : null}
                             {preview.type !== "text" ? (
-                                <Typography.Text type="secondary">{[preview.width && preview.height ? `${preview.width} × ${preview.height}` : "", formatBytes(preview.bytes), preview.mimeType].filter(Boolean).join(" · ")}</Typography.Text>
+                                <Typography.Text type="secondary">
+                                    {[preview.width && preview.height ? `${formatNumber(preview.width, { useGrouping: false })} × ${formatNumber(preview.height, { useGrouping: false })}` : "", formatBytes(preview.bytes), preview.mimeType]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                </Typography.Text>
                             ) : null}
                             <Typography.Text type="secondary" className="block text-xs">
-                                创建者：{preview.creatorName || "企业成员"} · 更新于 {formatTime(preview.updatedAt)}
+                                {t("enterpriseAssets.preview.metadata", { creator: preview.creatorName || t("enterpriseAssets.defaultCreator"), updatedAt: formatDateTime(preview.updatedAt) })}
                             </Typography.Text>
                         </div>
                     ) : null}
@@ -397,7 +428,7 @@ async function readMediaSize(file: File, type: Exclude<EnterpriseAssetType, "tex
             error ? reject(error) : resolve({ width: video.videoWidth, height: video.videoHeight });
         };
         video.onloadedmetadata = () => done();
-        video.onerror = () => done(new Error("无法读取视频信息"));
+        video.onerror = () => done(new Error(i18n.t("enterpriseAssets.errors.readVideoMetadata")));
         video.preload = "metadata";
         video.src = url;
     });
@@ -406,8 +437,4 @@ async function readMediaSize(file: File, type: Exclude<EnterpriseAssetType, "tex
 function assetFileName(asset: EnterpriseAsset) {
     const extension = asset.mimeType === "image/jpeg" ? "jpg" : asset.mimeType.split("/")[1]?.split("+")[0] || (asset.type === "image" ? "png" : "mp4");
     return asset.title.toLowerCase().endsWith(`.${extension}`) ? asset.title : `${asset.title}.${extension}`;
-}
-
-function formatTime(value: string) {
-    return value ? new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "";
 }

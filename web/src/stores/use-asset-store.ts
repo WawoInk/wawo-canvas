@@ -6,6 +6,7 @@ import { persist, type PersistStorage, type StorageValue } from "zustand/middlew
 import { nanoid } from "nanoid";
 import { message } from "antd";
 
+import i18n from "@/i18n";
 import { createAccountStorage, isCurrentSession } from "@/lib/account-storage";
 import { localForageStorage } from "@/lib/localforage-storage";
 import { useUserStore } from "@/stores/use-user-store";
@@ -86,8 +87,8 @@ export const useAssetStore = create<AssetStore>()(
                     syncScheduler.markActivity();
                     return finalId;
                 } catch {
-                    message.error("创建资产失败，请检查网络连接");
-                    throw new Error("创建资产失败");
+                    message.error(i18n.t("assets.messages.createFailed"));
+                    throw new Error(i18n.t("assets.errors.createFailed"));
                 }
             },
             updateAsset: async (id, patch) => {
@@ -108,10 +109,10 @@ export const useAssetStore = create<AssetStore>()(
                     // 409 冲突：服务端版本已变更，触发全量同步拉取最新
                     if (err instanceof ApiError && err.status === 409) {
                         await syncClient.syncDomain("assets");
-                        message.warning("资产已被其他会话修改，已刷新为最新版本");
+                        message.warning(i18n.t("assets.messages.conflictRefreshed"));
                         return;
                     }
-                    message.error("更新资产失败，请检查网络连接");
+                    message.error(i18n.t("assets.messages.updateFailed"));
                     throw err;
                 }
             },
@@ -123,8 +124,8 @@ export const useAssetStore = create<AssetStore>()(
                     }));
                     syncScheduler.markActivity();
                 } catch {
-                    message.error("删除资产失败，请检查网络连接");
-                    throw new Error("删除资产失败");
+                    message.error(i18n.t("assets.messages.deleteFailed"));
+                    throw new Error(i18n.t("assets.errors.deleteFailed"));
                 }
             },
             removeAssetWithFile: async (id, fileId) => {

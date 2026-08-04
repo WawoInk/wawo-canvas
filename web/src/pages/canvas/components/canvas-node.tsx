@@ -3,10 +3,13 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { ChevronRight, Image as ImageIcon, Music2, RefreshCw, Star, Video } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { generationStatusLabel } from "@/services/api/generations";
 import { formatBytes } from "@/lib/image-utils";
+import { formatDimensions } from "@/i18n/formatters";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasResourceMentionTextarea } from "./canvas-resource-mention-textarea";
 import { CanvasNodeType, type CanvasNodeData, type Position } from "../types";
@@ -55,6 +58,7 @@ type Theme = (typeof canvasThemes)[keyof typeof canvasThemes];
 type NodeContentRendererProps = {
     node: CanvasNodeData;
     theme: Theme;
+    t: TFunction;
     isEditingContent: boolean;
     textareaRef: React.RefObject<HTMLTextAreaElement | null>;
     isBatchRoot: boolean;
@@ -106,6 +110,7 @@ export const CanvasNode = React.memo(function CanvasNode({
     onViewImage,
     onContextMenu,
 }: CanvasNodeProps) {
+    const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const [hovered, setHovered] = useState(false);
     const [isEditingContent, setIsEditingContent] = useState(false);
@@ -302,6 +307,7 @@ export const CanvasNode = React.memo(function CanvasNode({
                     <NodeContent
                         node={data}
                         theme={theme}
+                        t={t}
                         isEditingContent={isEditingContent}
                         textareaRef={textareaRef}
                         isBatchRoot={isBatchRoot}
@@ -344,7 +350,7 @@ function NodeContent(props: NodeContentRendererProps) {
     if (node.type === CanvasNodeType.Config && props.renderNodeContent) return props.renderNodeContent(node);
     if (props.isBatchRoot) return <ImageNodeContent {...props} />;
     if (node.metadata?.status === "loading") return <LoadingContent node={node} theme={theme} />;
-    if (node.metadata?.status === "error") return <ErrorContent node={node} theme={theme} onRetry={props.onRetry} />;
+    if (node.metadata?.status === "error") return <ErrorContent node={node} theme={theme} t={props.t} onRetry={props.onRetry} />;
 
     switch (node.type) {
         case CanvasNodeType.Text:
@@ -352,6 +358,7 @@ function NodeContent(props: NodeContentRendererProps) {
                 <TextContent
                     node={node}
                     theme={theme}
+                    t={props.t}
                     isEditingContent={props.isEditingContent}
                     textareaRef={props.textareaRef}
                     mentionReferences={props.mentionReferences}
@@ -363,19 +370,19 @@ function NodeContent(props: NodeContentRendererProps) {
         case CanvasNodeType.Image:
             return <ImageNodeContent {...props} />;
         case CanvasNodeType.Config:
-            return <EmptyImageContent theme={theme} />;
+            return <EmptyImageContent theme={theme} t={props.t} />;
         case CanvasNodeType.Video:
-            return <VideoNodeContent node={node} theme={theme} />;
+            return <VideoNodeContent node={node} theme={theme} t={props.t} />;
         case CanvasNodeType.Audio:
-            return <AudioNodeContent node={node} theme={theme} />;
+            return <AudioNodeContent node={node} theme={theme} t={props.t} />;
         default:
-            return <UnknownNodeContent theme={theme} />;
+            return <UnknownNodeContent theme={theme} t={props.t} />;
     }
 }
 
-type ThemeRendererProps = Pick<NodeContentRendererProps, "theme">;
-type MediaRendererProps = Pick<NodeContentRendererProps, "node" | "theme">;
-type TextContentProps = Pick<NodeContentRendererProps, "node" | "theme" | "isEditingContent" | "textareaRef" | "mentionReferences" | "onContentChange" | "onStopEditing" | "onGenerateImage">;
+type TranslatedThemeRendererProps = Pick<NodeContentRendererProps, "theme" | "t">;
+type MediaRendererProps = Pick<NodeContentRendererProps, "node" | "theme" | "t">;
+type TextContentProps = Pick<NodeContentRendererProps, "node" | "theme" | "t" | "isEditingContent" | "textareaRef" | "mentionReferences" | "onContentChange" | "onStopEditing" | "onGenerateImage">;
 
 function LoadingContent({ node, theme }: Pick<NodeContentRendererProps, "node" | "theme">) {
     return (
@@ -386,10 +393,10 @@ function LoadingContent({ node, theme }: Pick<NodeContentRendererProps, "node" |
     );
 }
 
-function ErrorContent({ node, theme, onRetry }: Pick<NodeContentRendererProps, "node" | "theme" | "onRetry">) {
+function ErrorContent({ node, theme, t, onRetry }: Pick<NodeContentRendererProps, "node" | "theme" | "t" | "onRetry">) {
     return (
         <div className="flex max-w-[260px] flex-col items-center gap-3 px-5 text-center">
-            <div className="text-xs leading-5 text-red-300">{node.metadata?.errorDetails || "生成失败"}</div>
+            <div className="text-xs leading-5 text-red-300">{node.metadata?.errorDetails || t("canvas.node.errors.generationFailed")}</div>
             <button
                 type="button"
                 className="inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition hover:scale-[1.02]"
@@ -401,21 +408,21 @@ function ErrorContent({ node, theme, onRetry }: Pick<NodeContentRendererProps, "
                 onMouseDown={(event) => event.stopPropagation()}
             >
                 <RefreshCw className="size-3.5" />
-                重试
+                {t("canvas.actions.retry")}
             </button>
         </div>
     );
 }
 
-function UnknownNodeContent({ theme }: ThemeRendererProps) {
+function UnknownNodeContent({ theme, t }: TranslatedThemeRendererProps) {
     return (
         <div className="flex h-full w-full items-center justify-center text-sm" style={{ color: theme.node.placeholder }}>
-            未知节点
+            {t("canvas.node.unknown")}
         </div>
     );
 }
 
-function TextContent({ node, theme, isEditingContent, textareaRef, mentionReferences, onContentChange, onStopEditing, onGenerateImage }: TextContentProps) {
+function TextContent({ node, theme, t, isEditingContent, textareaRef, mentionReferences, onContentChange, onStopEditing, onGenerateImage }: TextContentProps) {
     const fontSize = node.metadata?.fontSize || 14;
     const textStyle = { fontSize: `${fontSize}px`, lineHeight: `${Math.round(fontSize * 1.65)}px`, color: theme.node.text, boxSizing: "border-box" } as React.CSSProperties;
 
@@ -431,11 +438,11 @@ function TextContent({ node, theme, isEditingContent, textareaRef, mentionRefere
                 }}
                 onMouseDown={(event) => event.stopPropagation()}
                 onPointerDown={(event) => event.stopPropagation()}
-                title="用文本生图"
-                aria-label="用文本生图"
+                title={t("canvas.toolbar.actions.generateImage.title")}
+                aria-label={t("canvas.toolbar.actions.generateImage.title")}
             >
                 <ImageIcon className="size-3.5" />
-                生图
+                {t("canvas.toolbar.actions.generateImage.label")}
             </button>
             {isEditingContent ? (
                 <CanvasResourceMentionTextarea
@@ -455,7 +462,7 @@ function TextContent({ node, theme, isEditingContent, textareaRef, mentionRefere
                 />
             ) : (
                 <div className="thin-scrollbar block h-full w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent pl-4 pr-14 pt-0 pb-4 font-mono" style={textStyle} onWheel={(event) => event.stopPropagation()}>
-                    {node.metadata?.content || <span style={{ color: theme.node.placeholder }}>双击编辑文字</span>}
+                    {node.metadata?.content || <span style={{ color: theme.node.placeholder }}>{t("canvas.node.placeholders.editText")}</span>}
                 </div>
             )}
         </div>
@@ -472,7 +479,7 @@ function ImageNodeContent(props: NodeContentRendererProps) {
             props.node.metadata?.status === "loading" ? (
                 <LoadingContent node={props.node} theme={props.theme} />
             ) : props.node.metadata?.status === "error" ? (
-                <ErrorContent node={props.node} theme={props.theme} onRetry={props.onRetry} />
+                <ErrorContent node={props.node} theme={props.theme} t={props.t} onRetry={props.onRetry} />
             ) : (
                 <EmptyImageContent {...props} isBatchRoot={false} />
             );
@@ -494,19 +501,20 @@ function ImageNodeContent(props: NodeContentRendererProps) {
             batchRecovering={props.batchRecovering}
             onToggleBatch={props.onToggleBatch}
             onSetBatchPrimary={props.onSetBatchPrimary}
+            t={props.t}
         />
     );
 }
 
-type EmptyImageContentProps = Pick<NodeContentRendererProps, "theme"> & Partial<Pick<NodeContentRendererProps, "isBatchRoot" | "batchCount" | "batchExpanded" | "batchOpening" | "batchRecovering" | "onToggleBatch">>;
+type EmptyImageContentProps = Pick<NodeContentRendererProps, "theme" | "t"> & Partial<Pick<NodeContentRendererProps, "isBatchRoot" | "batchCount" | "batchExpanded" | "batchOpening" | "batchRecovering" | "onToggleBatch">>;
 
-function EmptyImageContent({ theme, isBatchRoot = false, batchCount = 0, batchExpanded = false, batchOpening = false, batchRecovering = false, onToggleBatch }: EmptyImageContentProps) {
+function EmptyImageContent({ theme, t, isBatchRoot = false, batchCount = 0, batchExpanded = false, batchOpening = false, batchRecovering = false, onToggleBatch }: EmptyImageContentProps) {
     const content = (
         <div className="flex h-full w-full flex-col items-center justify-center gap-3" style={{ color: theme.node.placeholder }}>
             <div className="flex size-14 items-center justify-center rounded-2xl" style={{ background: theme.toolbar.activeBg }}>
                 <ImageIcon className="size-6 opacity-30" />
             </div>
-            <span className="text-[10px] tracking-[0.18em] opacity-50">空图片节点</span>
+            <span className="text-[10px] tracking-[0.18em] opacity-50">{t("canvas.node.placeholders.emptyImage")}</span>
         </div>
     );
     if (isBatchRoot)
@@ -518,30 +526,30 @@ function EmptyImageContent({ theme, isBatchRoot = false, batchCount = 0, batchEx
     return content;
 }
 
-function VideoNodeContent({ node, theme }: MediaRendererProps) {
+function VideoNodeContent({ node, theme, t }: MediaRendererProps) {
     if (!node.metadata?.content)
         return (
             <div className="flex h-full w-full flex-col items-center justify-center gap-3" style={{ color: theme.node.placeholder }}>
                 <Video className="size-7 opacity-35" />
-                <span className="text-sm">空视频节点</span>
+                <span className="text-sm">{t("canvas.node.placeholders.emptyVideo")}</span>
             </div>
         );
     return <video src={node.metadata.content} controls className="h-full w-full rounded-[18px] bg-black object-contain" data-canvas-no-zoom />;
 }
 
-function AudioNodeContent({ node, theme }: MediaRendererProps) {
+function AudioNodeContent({ node, theme, t }: MediaRendererProps) {
     if (!node.metadata?.content)
         return (
             <div className="flex h-full w-full flex-col items-center justify-center gap-2" style={{ color: theme.node.placeholder }}>
                 <Music2 className="size-7 opacity-35" />
-                <span className="text-sm">空音频节点</span>
+                <span className="text-sm">{t("canvas.node.placeholders.emptyAudio")}</span>
             </div>
         );
     return (
         <div className="flex h-full w-full flex-col justify-center gap-3 px-4" style={{ background: theme.node.fill, color: theme.node.text }}>
             <div className="flex min-w-0 items-center gap-2 text-sm opacity-70">
                 <Music2 className="size-4 shrink-0" />
-                <span className="truncate">{node.title || "音频"}</span>
+                <span className="truncate">{node.title || t("canvas.node.defaultTitles.audio")}</span>
             </div>
             <audio src={node.metadata.content} controls className="w-full" data-canvas-no-zoom />
         </div>
@@ -557,6 +565,7 @@ function ImageContent({
     batchRecovering,
     onToggleBatch,
     onSetBatchPrimary,
+    t,
 }: {
     node: CanvasNodeData;
     isBatchRoot: boolean;
@@ -566,6 +575,7 @@ function ImageContent({
     batchRecovering: boolean;
     onToggleBatch?: () => void;
     onSetBatchPrimary?: () => void;
+    t: TFunction;
 }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const isBatchChild = Boolean(node.metadata?.batchRootId);
@@ -586,7 +596,7 @@ function ImageContent({
                     type="button"
                     className="absolute right-2.5 top-2.5 z-30 flex h-8 items-center justify-center gap-1 rounded-full border px-2.5 text-xs font-semibold shadow-[0_6px_18px_rgba(15,23,42,.10)] backdrop-blur-md transition hover:scale-[1.02]"
                     style={{ background: `${theme.toolbar.panel}d9`, borderColor: `${theme.toolbar.border}cc`, color: theme.node.text }}
-                    aria-label={batchExpanded ? "图片组已展开" : "图片组已收起"}
+                    aria-label={t(batchExpanded ? "canvas.node.batch.expanded" : "canvas.node.batch.collapsed")}
                     onClick={(event) => {
                         event.stopPropagation();
                         onToggleBatch?.();
@@ -611,7 +621,7 @@ function ImageContent({
                     onPointerDown={(event) => event.stopPropagation()}
                 >
                     <Star className="size-3.5 text-[#2f80ff]" />
-                    设为主图
+                    {t("canvas.node.actions.setPrimary")}
                 </button>
             ) : null}
         </BatchFrame>
@@ -625,7 +635,7 @@ function ImageInfoBar({ node }: { node: CanvasNodeData }) {
     return (
         <div className="pointer-events-none absolute bottom-3 right-3 z-40 max-w-[calc(100%-24px)]">
             <span className="max-w-full truncate rounded-md bg-black/55 px-2 py-1 text-[11px] font-medium leading-none text-white backdrop-blur-sm">
-                {width} x {height}
+                {formatDimensions(width, height)}
                 {size ? ` · ${size}` : ""}
             </span>
         </div>

@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { Image } from "antd";
 import { LoaderCircle, Play } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 /** Lazy image with blur-up placeholder and loading spinner. */
 export function LazyImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
+    const { t } = useTranslation();
     const [loaded, setLoaded] = useState(false);
     const [failed, setFailed] = useState(false);
 
@@ -22,7 +24,7 @@ export function LazyImage({ src, alt, className }: { src: string; alt: string; c
                 </div>
             )}
             {failed ? (
-                <div className="flex aspect-[4/3] items-center justify-center text-xs text-stone-400">加载失败</div>
+                <div className="flex aspect-[4/3] items-center justify-center text-xs text-stone-400">{t("common.states.loadFailed")}</div>
             ) : (
                 <img src={src} alt={alt} loading="lazy" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} className={`size-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`} />
             )}
@@ -32,11 +34,12 @@ export function LazyImage({ src, alt, className }: { src: string; alt: string; c
 
 /** Lazy video poster + preview — only loads metadata on mount, full source on click. */
 export function LazyVideo({ src, poster, className }: { src: string; poster?: string; className?: string }) {
+    const { t } = useTranslation();
     const [playing, setPlaying] = useState(false);
     const [loaded, setLoaded] = useState(false);
     if (!playing) {
         return (
-            <button type="button" className={`group relative overflow-hidden bg-black ${className || ""}`} onClick={() => setPlaying(true)}>
+            <button type="button" className={`group relative overflow-hidden bg-black ${className || ""}`} aria-label={t("common.actions.playVideo")} onClick={() => setPlaying(true)}>
                 {poster ? (
                     <img src={poster} alt="" className="size-full object-cover opacity-80" onLoad={() => setLoaded(true)} />
                 ) : (

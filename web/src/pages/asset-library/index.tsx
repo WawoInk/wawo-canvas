@@ -2,10 +2,12 @@
 
 import { Copy, FolderPlus, Search } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { App, Button, Card, Drawer, Empty, Image, Input, Pagination, Spin, Tag, Typography } from "antd";
 import axios from "axios";
 
+import i18n from "@/i18n";
 import { useCopyText } from "@/hooks/use-copy-text";
 import { cn } from "@/lib/utils";
 import { useAuthReady } from "@/hooks/use-auth-ready";
@@ -17,6 +19,7 @@ const PAGE_SIZE = 12;
 
 export default function AssetLibraryPage() {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const copyText = useCopyText();
     const isAuthReady = useAuthReady();
     const [keyword, setKeyword] = useState("");
@@ -35,9 +38,9 @@ export default function AssetLibraryPage() {
 
     useEffect(() => {
         if (query.isError) {
-            message.error(query.error instanceof Error ? query.error.message : "获取素材库失败");
+            message.error(query.error instanceof Error ? query.error.message : t("assetLibrary.errors.fetch"));
         }
-    }, [message, query.error, query.isError]);
+    }, [message, query.error, query.isError, t]);
 
     const isReady = query.isFetched || query.isError;
     const items = query.data?.items || [];
@@ -75,9 +78,9 @@ export default function AssetLibraryPage() {
                     metadata: { source: "asset-library", assetId: asset.id },
                 });
             }
-            message.success("已加入我的素材");
+            message.success(t("assetLibrary.messages.added"));
         } catch {
-            message.error("加入失败");
+            message.error(t("assetLibrary.messages.addFailed"));
         }
     };
 
@@ -94,8 +97,8 @@ export default function AssetLibraryPage() {
             <main className="min-h-0 flex-1 overflow-y-auto bg-background bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] px-6 py-8 [background-size:16px_16px] dark:bg-[radial-gradient(rgba(245,245,244,.16)_1px,transparent_1px)]">
                 <div className="pb-8">
                     <div className="mx-auto max-w-5xl text-center">
-                        <h1 className="text-4xl font-semibold tracking-tight text-foreground">素材库</h1>
-                        <p className="mt-3 text-sm text-muted-foreground">挑选团队素材，加入我的素材后继续编辑和使用。</p>
+                        <h1 className="text-4xl font-semibold tracking-tight text-foreground">{t("assetLibrary.header.title")}</h1>
+                        <p className="mt-3 text-sm text-muted-foreground">{t("assetLibrary.header.description")}</p>
                     </div>
                     <div className="mx-auto mt-8 w-full max-w-2xl">
                         <Input
@@ -103,7 +106,7 @@ export default function AssetLibraryPage() {
                             className="w-full"
                             prefix={<Search className="size-4 text-muted-foreground" />}
                             value={keyword}
-                            placeholder="按标题查询"
+                            placeholder={t("assetLibrary.searchPlaceholder")}
                             onChange={(event) => {
                                 setPage(1);
                                 setKeyword(event.target.value);
@@ -112,12 +115,12 @@ export default function AssetLibraryPage() {
                     </div>
                     <div className="mx-auto mt-6 max-w-6xl space-y-3">
                         <div className="grid gap-2 sm:grid-cols-[56px_minmax(0,1fr)] sm:items-start">
-                            <div className="pt-2 text-xs font-medium text-muted-foreground">类型</div>
+                            <div className="pt-2 text-xs font-medium text-muted-foreground">{t("common.fields.type")}</div>
                             <div className="flex flex-wrap gap-2">
                                 {[
-                                    { label: "全部", value: "" },
-                                    { label: "文本", value: "text" },
-                                    { label: "图片", value: "image" },
+                                    { label: t("common.all"), value: "" },
+                                    { label: t("common.assetTypes.text"), value: "text" },
+                                    { label: t("common.assetTypes.image"), value: "image" },
                                 ].map((item) => (
                                     <Tag.CheckableTag
                                         key={item.value || "all"}
@@ -134,7 +137,7 @@ export default function AssetLibraryPage() {
                             </div>
                         </div>
                         <div className="grid gap-2 sm:grid-cols-[56px_minmax(0,1fr)] sm:items-start">
-                            <div className="pt-2 text-xs font-medium text-muted-foreground">标签</div>
+                            <div className="pt-2 text-xs font-medium text-muted-foreground">{t("common.fields.tags")}</div>
                             <div className="flex flex-wrap gap-2">
                                 <Tag.CheckableTag
                                     checked={selectedTags.length === 0}
@@ -144,7 +147,7 @@ export default function AssetLibraryPage() {
                                         setSelectedTags([]);
                                     }}
                                 >
-                                    全部
+                                    {t("common.all")}
                                 </Tag.CheckableTag>
                                 {availableTags.map((tag) => (
                                     <Tag.CheckableTag
@@ -171,7 +174,7 @@ export default function AssetLibraryPage() {
                         ))}
                     </div>
 
-                    {!items.length ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有找到素材" className="py-20" /> : null}
+                    {!items.length ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("assetLibrary.empty")} className="py-20" /> : null}
 
                     <div className="flex justify-center">
                         <Pagination current={page} pageSize={PAGE_SIZE} total={total} showSizeChanger={false} onChange={(nextPage) => setPage(nextPage)} />
@@ -179,20 +182,20 @@ export default function AssetLibraryPage() {
                 </div>
             </main>
 
-            <Drawer title="素材详情" open={Boolean(selectedAsset)} size="large" onClose={() => setSelectedAsset(null)}>
+            <Drawer title={t("assetLibrary.details.title")} open={Boolean(selectedAsset)} size="large" onClose={() => setSelectedAsset(null)}>
                 {selectedAsset ? (
                     <div className="space-y-5">
                         {selectedAsset.coverUrl ? (
                             <Image src={selectedAsset.coverUrl} alt={selectedAsset.title} className="rounded-lg" />
                         ) : (
-                            <div className="rounded-lg border bg-card p-5 text-sm leading-6 text-muted-foreground">{selectedAsset.content || "暂无封面"}</div>
+                            <div className="rounded-lg border bg-card p-5 text-sm leading-6 text-muted-foreground">{selectedAsset.content || t("common.states.noCover")}</div>
                         )}
                         <div>
                             <Typography.Title level={4} className="!mb-2">
                                 {selectedAsset.title}
                             </Typography.Title>
                             <div className="flex flex-wrap gap-1.5">
-                                <Tag>{selectedAsset.type === "image" ? "图片" : "文本"}</Tag>
+                                <Tag>{t(`common.assetTypes.${selectedAsset.type}`)}</Tag>
                                 {selectedAsset.tags.map((tag) => (
                                     <Tag key={tag}>{tag}</Tag>
                                 ))}
@@ -200,7 +203,7 @@ export default function AssetLibraryPage() {
                         </div>
                         <div className="rounded-lg border p-4">
                             <Typography.Text type="secondary" className="block text-xs">
-                                内容
+                                {t("common.fields.content")}
                             </Typography.Text>
                             {selectedAsset.type === "text" ? <Typography.Paragraph className="mt-2 whitespace-pre-wrap">{selectedAsset.content}</Typography.Paragraph> : <Typography.Text className="mt-2 block">{selectedAsset.url}</Typography.Text>}
                         </div>
@@ -208,16 +211,16 @@ export default function AssetLibraryPage() {
                         <div className="flex flex-wrap gap-2">
                             {selectedAsset.type === "text" ? (
                                 <Button type="primary" icon={<Copy className="size-4" />} onClick={() => copyText(selectedAsset.content)}>
-                                    复制文本
+                                    {t("assetLibrary.actions.copyText")}
                                 </Button>
                             ) : null}
                             {selectedAsset.type === "image" ? (
                                 <Button type="primary" icon={<Copy className="size-4" />} onClick={() => copyText(selectedAsset.url)}>
-                                    复制链接
+                                    {t("assetLibrary.actions.copyLink")}
                                 </Button>
                             ) : null}
                             <Button icon={<FolderPlus className="size-4" />} onClick={() => void saveToMyAssets(selectedAsset)}>
-                                加入我的素材
+                                {t("common.actions.addToMyAssets")}
                             </Button>
                         </div>
                     </div>
@@ -228,6 +231,7 @@ export default function AssetLibraryPage() {
 }
 
 function LibraryCard({ asset, onOpen, onAdd }: { asset: AssetLibraryItem; onOpen: () => void; onAdd: () => void }) {
+    const { t } = useTranslation();
     const cover = asset.coverUrl;
     return (
         <Card
@@ -239,7 +243,7 @@ function LibraryCard({ asset, onOpen, onAdd }: { asset: AssetLibraryItem; onOpen
                     {cover ? (
                         <img src={cover} alt={asset.title} className="aspect-[4/3] w-full object-cover" />
                     ) : (
-                        <div className="flex aspect-[4/3] items-center justify-center bg-muted p-5 text-center text-sm leading-6 text-muted-foreground">{asset.content || "暂无封面"}</div>
+                        <div className="flex aspect-[4/3] items-center justify-center bg-muted p-5 text-center text-sm leading-6 text-muted-foreground">{asset.content || t("common.states.noCover")}</div>
                     )}
                 </button>
             }
@@ -248,7 +252,7 @@ function LibraryCard({ asset, onOpen, onAdd }: { asset: AssetLibraryItem; onOpen
                 <div className="p-4">
                     <div className="flex items-start justify-between gap-3">
                         <h2 className="line-clamp-1 text-sm font-semibold text-foreground">{asset.title}</h2>
-                        <Tag className="m-0 shrink-0 text-[11px]">{asset.type === "image" ? "图片" : "文本"}</Tag>
+                        <Tag className="m-0 shrink-0 text-[11px]">{t(`common.assetTypes.${asset.type}`)}</Tag>
                     </div>
                     <Typography.Paragraph type="secondary" ellipsis={{ rows: 3 }} className="!mb-0 !mt-2 !text-xs !leading-5">
                         {asset.type === "text" ? asset.content : asset.url}
@@ -259,16 +263,16 @@ function LibraryCard({ asset, onOpen, onAdd }: { asset: AssetLibraryItem; onOpen
                                 {tag}
                             </Tag>
                         ))}
-                        {!asset.tags.length ? <Tag className="m-0 text-[11px]">无标签</Tag> : null}
+                        {!asset.tags.length ? <Tag className="m-0 text-[11px]">{t("common.states.noTags")}</Tag> : null}
                     </div>
                 </div>
             </button>
             <div className="flex items-center gap-2 px-4 pb-4">
                 <Button size="small" onClick={onOpen}>
-                    查看
+                    {t("common.actions.view")}
                 </Button>
                 <Button size="small" icon={<FolderPlus className="size-3.5" />} onClick={onAdd}>
-                    加入我的素材
+                    {t("common.actions.addToMyAssets")}
                 </Button>
             </div>
         </Card>
@@ -285,7 +289,7 @@ function blobToDataUrl(blob: Blob) {
     return new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = () => reject(new Error("读取图片失败"));
+        reader.onerror = () => reject(new Error(i18n.t("assetLibrary.errors.readImage")));
         reader.readAsDataURL(blob);
     });
 }

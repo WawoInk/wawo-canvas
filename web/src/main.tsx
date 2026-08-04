@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 import { AppProviders } from "@/components/layout/app-providers";
 import { router } from "@/router";
+import "@/i18n";
 import "antd/dist/reset.css";
 import "./styles/globals.css";
 

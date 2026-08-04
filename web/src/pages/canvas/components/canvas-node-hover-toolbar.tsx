@@ -3,12 +3,15 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { App, Modal, Segmented, Tooltip } from "antd";
 import { Download, Ellipsis, FolderPlus, Image as ImageIcon, Info, MessageSquare, Minus, Music2, Pencil, Plus, RefreshCw, Settings2, Trash2, Upload, Video } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { formatBytes, getDataUrlByteSize } from "@/lib/image-utils";
+import { formatDimensions, formatNumber } from "@/i18n/formatters";
 import { useCopyText } from "@/hooks/use-copy-text";
 import { useThemeStore } from "@/stores/use-theme-store";
-import { CanvasNodeType, type CanvasNodeData, type ViewportTransform } from "../types";
+import { CanvasNodeType, type CanvasNodeData, type CanvasNodeStatus, type ViewportTransform } from "../types";
 import { ImageToolSettingsModal, type ImageToolbarSettingsTool } from "./canvas-image-toolbar-settings-modal";
 import { IMAGE_QUICK_TOOLS_STORAGE_KEY, buildImageToolbarTools, defaultImageQuickToolIds, readImageQuickToolsConfig, type ImageQuickToolId } from "./canvas-image-toolbar-tools";
 
@@ -75,6 +78,7 @@ export function CanvasNodeHoverToolbar({
     onToggleFreeResize,
     onDelete,
 }: CanvasNodeHoverToolbarProps) {
+    const { t } = useTranslation();
     const [quickImageToolIds, setQuickImageToolIds] = useState<ImageQuickToolId[]>(defaultImageQuickToolIds);
     const [showImageToolLabels, setShowImageToolLabels] = useState(true);
     const [draftImageToolIds, setDraftImageToolIds] = useState<ImageQuickToolId[]>(defaultImageQuickToolIds);
@@ -118,12 +122,12 @@ export function CanvasNodeHoverToolbar({
     const copyImagePrompt = (target: CanvasNodeData) => {
         const prompt = target.metadata?.prompt?.trim();
         if (!prompt) {
-            message.warning("暂无可复制的提示词");
+            message.warning(t("canvas.toolbar.messages.noPrompt"));
             return;
         }
-        copyText(prompt, "提示词已复制");
+        copyText(prompt, t("canvas.toolbar.messages.promptCopied"));
     };
-    const imageTools = buildImageToolbarTools(node, { onUpload, onToggleFreeResize, onMaskEdit, onCrop, onSplit, onUpscale, onSuperResolve, onAngle, onViewImage, onCopyPrompt: copyImagePrompt, onReversePrompt });
+    const imageTools = buildImageToolbarTools(node, { onUpload, onToggleFreeResize, onMaskEdit, onCrop, onSplit, onUpscale, onSuperResolve, onAngle, onViewImage, onCopyPrompt: copyImagePrompt, onReversePrompt }, t);
 
     function openImageToolSettings() {
         // @ts-expect-error -- node is non-null here due to guard at line 103, TS doesn't narrow across function boundaries
@@ -134,22 +138,44 @@ export function CanvasNodeHoverToolbar({
     }
 
     const baseToolbarTools: ToolbarTool[] = [
-        { id: "info", title: "查看节点信息", label: "信息", icon: <Info className="size-4" />, onClick: () => onInfo(node) },
-        { id: "delete", title: "移除节点", label: "删除", icon: <Trash2 className="size-4" />, onClick: () => onDelete(node), danger: true },
+        { id: "info", title: t("canvas.toolbar.actions.info.title"), label: t("canvas.toolbar.actions.info.label"), icon: <Info className="size-4" />, onClick: () => onInfo(node) },
+        { id: "delete", title: t("canvas.toolbar.actions.delete.title"), label: t("canvas.toolbar.actions.delete.label"), icon: <Trash2 className="size-4" />, onClick: () => onDelete(node), danger: true },
     ];
     const nodeToolbarTools: ToolbarTool[] = [
-        ...(canRetry ? [{ id: "retry", title: "重新生成", label: "重试", icon: <RefreshCw className="size-4" />, onClick: () => onRetry(node) }] : []),
-        ...(hasImage || hasVideo || isText ? [{ id: "saveAsset", title: "加入我的素材", label: "存素材", icon: <FolderPlus className="size-4" />, onClick: () => onSaveAsset(node) }] : []),
-        ...(hasImage || hasVideo || hasAudio ? [{ id: "download", title: hasAudio ? "下载音频" : hasVideo ? "下载视频" : "下载图片", label: "下载", icon: <Download className="size-4" />, onClick: () => onDownload(node) }] : []),
-        ...(canOpenDialog ? [{ id: "edit", title: "编辑", label: "编辑", icon: <MessageSquare className="size-4" />, onClick: () => onToggleDialog(node) }] : []),
-        ...(isText ? [{ id: "editText", title: "编辑文本", label: "编辑文字", icon: <Pencil className="size-4" />, onClick: () => onEditText(node) }] : []),
-        ...(isText ? [{ id: "generateImage", title: "用文本生图", label: "生图", icon: <ImageIcon className="size-4" />, onClick: () => onGenerateImage(node) }] : []),
-        ...(isConfig ? [{ id: "config", title: "生成配置", label: "生成配置", icon: <Settings2 className="size-4" />, onClick: () => onToggleDialog(node) }] : []),
-        ...(isText ? [{ id: "decreaseFont", title: "减小字号", label: "缩小", icon: <Minus className="size-4" />, onClick: () => onDecreaseFont(node) }] : []),
-        ...(isText ? [{ id: "increaseFont", title: "增大字号", label: "放大", icon: <Plus className="size-4" />, onClick: () => onIncreaseFont(node) }] : []),
-        ...(isImage && !hasImage ? [{ id: "uploadImage", title: "上传图片", label: "上传图片", icon: <Upload className="size-4" />, onClick: () => onUpload(node) }] : []),
-        ...(isVideo ? [{ id: "uploadVideo", title: hasVideo ? "替换视频" : "上传视频", label: hasVideo ? "替换视频" : "上传视频", icon: <Video className="size-4" />, onClick: () => onUpload(node) }] : []),
-        ...(isAudio ? [{ id: "uploadAudio", title: hasAudio ? "替换音频" : "上传音频", label: hasAudio ? "替换音频" : "上传音频", icon: <Music2 className="size-4" />, onClick: () => onUpload(node) }] : []),
+        ...(canRetry ? [{ id: "retry", title: t("canvas.toolbar.actions.retry.title"), label: t("canvas.toolbar.actions.retry.label"), icon: <RefreshCw className="size-4" />, onClick: () => onRetry(node) }] : []),
+        ...(hasImage || hasVideo || isText ? [{ id: "saveAsset", title: t("canvas.toolbar.actions.saveAsset.title"), label: t("canvas.toolbar.actions.saveAsset.label"), icon: <FolderPlus className="size-4" />, onClick: () => onSaveAsset(node) }] : []),
+        ...(hasImage || hasVideo || hasAudio
+            ? [{ id: "download", title: t(`canvas.toolbar.actions.download.${hasAudio ? "audio" : hasVideo ? "video" : "image"}`), label: t("canvas.toolbar.actions.download.label"), icon: <Download className="size-4" />, onClick: () => onDownload(node) }]
+            : []),
+        ...(canOpenDialog ? [{ id: "edit", title: t("canvas.toolbar.actions.edit.title"), label: t("canvas.toolbar.actions.edit.label"), icon: <MessageSquare className="size-4" />, onClick: () => onToggleDialog(node) }] : []),
+        ...(isText ? [{ id: "editText", title: t("canvas.toolbar.actions.editText.title"), label: t("canvas.toolbar.actions.editText.label"), icon: <Pencil className="size-4" />, onClick: () => onEditText(node) }] : []),
+        ...(isText ? [{ id: "generateImage", title: t("canvas.toolbar.actions.generateImage.title"), label: t("canvas.toolbar.actions.generateImage.label"), icon: <ImageIcon className="size-4" />, onClick: () => onGenerateImage(node) }] : []),
+        ...(isConfig ? [{ id: "config", title: t("canvas.toolbar.actions.config.title"), label: t("canvas.toolbar.actions.config.label"), icon: <Settings2 className="size-4" />, onClick: () => onToggleDialog(node) }] : []),
+        ...(isText ? [{ id: "decreaseFont", title: t("canvas.toolbar.actions.decreaseFont.title"), label: t("canvas.toolbar.actions.decreaseFont.label"), icon: <Minus className="size-4" />, onClick: () => onDecreaseFont(node) }] : []),
+        ...(isText ? [{ id: "increaseFont", title: t("canvas.toolbar.actions.increaseFont.title"), label: t("canvas.toolbar.actions.increaseFont.label"), icon: <Plus className="size-4" />, onClick: () => onIncreaseFont(node) }] : []),
+        ...(isImage && !hasImage ? [{ id: "uploadImage", title: t("canvas.toolbar.actions.upload.image"), label: t("canvas.toolbar.actions.upload.image"), icon: <Upload className="size-4" />, onClick: () => onUpload(node) }] : []),
+        ...(isVideo
+            ? [
+                  {
+                      id: "uploadVideo",
+                      title: t(`canvas.toolbar.actions.${hasVideo ? "replace" : "upload"}.video`),
+                      label: t(`canvas.toolbar.actions.${hasVideo ? "replace" : "upload"}.video`),
+                      icon: <Video className="size-4" />,
+                      onClick: () => onUpload(node),
+                  },
+              ]
+            : []),
+        ...(isAudio
+            ? [
+                  {
+                      id: "uploadAudio",
+                      title: t(`canvas.toolbar.actions.${hasAudio ? "replace" : "upload"}.audio`),
+                      label: t(`canvas.toolbar.actions.${hasAudio ? "replace" : "upload"}.audio`),
+                      icon: <Music2 className="size-4" />,
+                      onClick: () => onUpload(node),
+                  },
+              ]
+            : []),
         ...(hasImage ? imageTools.map((tool) => ({ id: tool.id, title: tool.title, label: tool.label, icon: tool.icon, active: tool.active, onClick: tool.onClick })) : []),
     ];
     const toolbarTools = hasImage ? [...baseToolbarTools, ...nodeToolbarTools].filter((tool) => quickImageToolIdSet.has(tool.id as ImageQuickToolId)) : [...baseToolbarTools, ...nodeToolbarTools];
@@ -192,7 +218,17 @@ export function CanvasNodeHoverToolbar({
                 {toolbarTools.map((tool) => (
                     <ToolbarAction key={tool.id} {...tool} showLabel={showImageToolLabels} />
                 ))}
-                {hasImage ? <ToolbarAction id="more" title="配置快捷工具" label="更多" icon={<Ellipsis className="size-4" />} active={imageToolSettingsOpen} onClick={openImageToolSettings} showLabel={showImageToolLabels} /> : null}
+                {hasImage ? (
+                    <ToolbarAction
+                        id="more"
+                        title={t("canvas.toolbar.settings.moreTitle")}
+                        label={t("canvas.toolbar.settings.moreLabel")}
+                        icon={<Ellipsis className="size-4" />}
+                        active={imageToolSettingsOpen}
+                        onClick={openImageToolSettings}
+                        showLabel={showImageToolLabels}
+                    />
+                ) : null}
             </div>
             {hasImage ? (
                 <ImageToolSettingsModal
@@ -211,6 +247,7 @@ export function CanvasNodeHoverToolbar({
 }
 
 export function CanvasNodeInfoModal({ node, open, onClose }: { node: CanvasNodeData | null; open: boolean; onClose: () => void }) {
+    const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const [view, setView] = useState<"info" | "json">("info");
     const imageBytes = node?.type === CanvasNodeType.Image && node.metadata?.content ? getDataUrlByteSize(node.metadata.content) : 0;
@@ -222,13 +259,13 @@ export function CanvasNodeInfoModal({ node, open, onClose }: { node: CanvasNodeD
             (key, value) => {
                 if (key === "title") return undefined;
                 if (key === "content" && typeof value === "string" && value.startsWith("data:image/")) {
-                    return "[base64 image]";
+                    return t("canvas.node.info.base64ImagePlaceholder");
                 }
                 return value;
             },
             2,
         );
-    }, [node]);
+    }, [node, t]);
 
     useEffect(() => {
         if (open) setView("info");
@@ -236,14 +273,14 @@ export function CanvasNodeInfoModal({ node, open, onClose }: { node: CanvasNodeD
 
     const title = (
         <div className="flex items-center justify-between gap-4 pr-12">
-            <span>节点信息</span>
+            <span>{t("canvas.node.info.title")}</span>
             <Segmented
                 size="small"
                 value={view}
                 onChange={(value) => setView(value as "info" | "json")}
                 options={[
-                    { label: "信息", value: "info" },
-                    { label: "JSON", value: "json" },
+                    { label: t("canvas.node.info.tabs.info"), value: "info" },
+                    { label: t("canvas.node.info.tabs.json"), value: "json" },
                 ]}
             />
         </div>
@@ -255,14 +292,14 @@ export function CanvasNodeInfoModal({ node, open, onClose }: { node: CanvasNodeD
                 <div className="h-[56vh] min-h-[360px] text-sm">
                     {view === "info" ? (
                         <div className="thin-scrollbar h-full space-y-3 overflow-auto pr-1">
-                            <InfoRow label="ID" value={node.id} />
-                            <InfoRow label="类型" value={node.type === CanvasNodeType.Text ? "文本" : node.type === CanvasNodeType.Image ? "图片" : node.type === CanvasNodeType.Video ? "视频" : node.type === CanvasNodeType.Audio ? "音频" : "生成配置"} />
-                            <InfoRow label="尺寸" value={`${Math.round(node.width)} x ${Math.round(node.height)}`} />
-                            <InfoRow label="位置" value={`${Math.round(node.position.x)}, ${Math.round(node.position.y)}`} />
-                            <InfoRow label="状态" value={node.metadata?.status || "idle"} />
-                            {batchCount > 1 ? <InfoRow label="图片组" value={`${batchCount} 张`} /> : null}
-                            {node.metadata?.prompt ? <InfoRow label="提示词" value={node.metadata.prompt} /> : null}
-                            {imageBytes ? <InfoRow label="图片大小" value={formatBytes(imageBytes)} /> : null}
+                            <InfoRow label={t("canvas.node.info.fields.id")} value={node.id} />
+                            <InfoRow label={t("canvas.node.info.fields.type")} value={nodeTypeLabel(node.type, t)} />
+                            <InfoRow label={t("canvas.node.info.fields.size")} value={formatDimensions(Math.round(node.width), Math.round(node.height))} />
+                            <InfoRow label={t("canvas.node.info.fields.position")} value={t("canvas.node.info.positionValue", { x: formatNumber(Math.round(node.position.x)), y: formatNumber(Math.round(node.position.y)) })} />
+                            <InfoRow label={t("canvas.node.info.fields.status")} value={nodeStatusLabel(node.metadata?.status, t)} />
+                            {batchCount > 1 ? <InfoRow label={t("canvas.node.info.fields.batch")} value={t("canvas.counts.images", { count: batchCount, value: formatNumber(batchCount) })} /> : null}
+                            {node.metadata?.prompt ? <InfoRow label={t("canvas.node.info.fields.prompt")} value={node.metadata.prompt} /> : null}
+                            {imageBytes ? <InfoRow label={t("canvas.node.info.fields.imageSize")} value={formatBytes(imageBytes)} /> : null}
                             {node.metadata?.errorDetails ? (
                                 <div className="rounded-lg border p-3 text-red-400" style={{ borderColor: theme.node.stroke }}>
                                     {node.metadata.errorDetails}
@@ -278,6 +315,14 @@ export function CanvasNodeInfoModal({ node, open, onClose }: { node: CanvasNodeD
             ) : null}
         </Modal>
     );
+}
+
+function nodeTypeLabel(type: CanvasNodeData["type"], t: TFunction) {
+    return t(`canvas.node.types.${type}`);
+}
+
+function nodeStatusLabel(status: CanvasNodeStatus | undefined, t: TFunction) {
+    return t(`canvas.node.status.${status || "idle"}`);
 }
 
 function ToolbarAction({ title, label, icon, onClick, showLabel, active = false, danger = false }: ToolbarTool & { showLabel: boolean }) {

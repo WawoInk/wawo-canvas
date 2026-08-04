@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import i18n from "../../i18n/index.ts";
 import { buildGenerationCommand, buildVideoGenerationSettings, buildShortDramaGenerationSettings, generationStatusLabel, generationTaskId, pollGenerationTask, readGeneratedVideoFile, resolveCanvasVideoSubmission } from "./generation-contract.ts";
+
+await i18n.changeLanguage("en-US");
 
 test("builds the first-party prompt-only video command", () => {
     assert.deepEqual(
@@ -113,8 +116,8 @@ test("keeps first-party task identity compatible with old Canvas nodes", () => {
     assert.equal(generationTaskId({ generationTaskId: "platform-new", upstreamTaskId: "legacy-old" }), "platform-new");
     assert.equal(generationTaskId({ upstreamTaskId: "legacy-old" }), "legacy-old");
     assert.equal(generationTaskId({}), "");
-    assert.equal(generationStatusLabel("queued"), "排队中");
-    assert.equal(generationStatusLabel("running"), "生成中");
+    assert.equal(generationStatusLabel("queued"), "Queued");
+    assert.equal(generationStatusLabel("running"), "Generating");
 });
 
 test("reports queued and running before returning a structured terminal task", async () => {
@@ -146,7 +149,7 @@ test("keeps polling through the 30-minute default window", async () => {
 
 test("selects the Canvas video submission boundary without remote fallback", () => {
     assert.equal(resolveCanvasVideoSubmission("remote", { id: "seedance-1-5-pro" }), "first-party");
-    assert.throws(() => resolveCanvasVideoSubmission("remote", undefined), /不支持第一方 Canvas 视频生成/);
+    assert.throws(() => resolveCanvasVideoSubmission("remote", undefined), /does not support first-party Canvas video generation/);
     assert.equal(resolveCanvasVideoSubmission("local", undefined), "local-compatibility");
 });
 

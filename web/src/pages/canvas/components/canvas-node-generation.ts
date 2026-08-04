@@ -1,9 +1,10 @@
 import type { GenerationCommand, GenerationError, GenerationProfile, ShortDramaGenerationSettings, VideoGenerationSettings } from "@/services/api/generations";
 import { buildGenerationCommand, buildShortDramaGenerationSettings, buildVideoGenerationSettings } from "@/services/api/generations";
 import type { AiTextMessage } from "@/services/api/image";
-import { imageReferenceLabel } from "@/lib/image-reference-prompt";
-import { seedanceReferenceLabel, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution } from "@/lib/seedance-video";
+import { normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution } from "@/lib/seedance-video";
 import { boolConfig } from "@/lib/seedance-video";
+import i18n from "@/i18n";
+import { formatNumber } from "@/i18n/formatters";
 import type { AiConfig } from "@/stores/use-config-store";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
@@ -31,7 +32,7 @@ export type VideoGenerationIntent = {
 export function buildVideoGenerationIntent(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[], prompt: string, settings: VideoGenerationSettings, negativePrompt = ""): VideoGenerationIntent {
     const references = { images: [] as PlatformMediaReference[], videos: [] as PlatformMediaReference[], audios: [] as PlatformMediaReference[] };
     for (const node of getGenerationResourceNodes(nodeId, nodes, connections)) {
-        if (!node.metadata?.fileId) throw new Error(`素材「${node.title || node.id}」尚未上传到平台文件库`);
+        if (!node.metadata?.fileId) throw new Error(i18n.t("canvas.generation.errors.resourceNotUploaded", { name: node.title || node.id }));
         const reference = { fileId: node.metadata.fileId, sourceNodeId: node.id, name: node.title || node.id };
         if (node.type === CanvasNodeType.Image) references.images.push(reference);
         if (node.type === CanvasNodeType.Video) references.videos.push(reference);
@@ -103,14 +104,14 @@ export type ShortDramaGenerationIntent = {
 
 export function buildShortDramaGenerationIntent(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[], script: string, settings: ShortDramaGenerationSettings): ShortDramaGenerationIntent {
     const target = nodes.find((node) => node.id === nodeId);
-    if (!target?.title.trim()) throw new Error("请输入短剧标题");
-    if (!script.trim()) throw new Error("请输入短剧脚本");
+    if (!target?.title.trim()) throw new Error(i18n.t("canvas.generation.errors.shortDramaTitleRequired"));
+    if (!script.trim()) throw new Error(i18n.t("canvas.generation.errors.shortDramaScriptRequired"));
     const imageNodes = getGenerationResourceNodes(nodeId, nodes, connections).filter((node) => node.type === CanvasNodeType.Image);
-    if (!imageNodes.length) throw new Error("请连接至少一张短剧资产图片");
+    if (!imageNodes.length) throw new Error(i18n.t("canvas.generation.errors.shortDramaAssetRequired"));
     const assets = imageNodes.map((node) => {
         const role = target.metadata?.dramaAssetRoles?.[node.id];
-        if (!role) throw new Error(`请为图片「${node.title || node.id}」选择角色`);
-        if (!node.metadata?.fileId) throw new Error(`图片「${node.title || node.id}」尚未上传到平台文件库`);
+        if (!role) throw new Error(i18n.t("canvas.generation.errors.shortDramaRoleRequired", { name: node.title || node.id }));
+        if (!node.metadata?.fileId) throw new Error(i18n.t("canvas.generation.errors.imageNotUploaded", { name: node.title || node.id }));
         const name = node.title || node.id;
         return {
             sourceNodeId: node.id,
@@ -282,10 +283,7 @@ function readNodeTextInput(node: CanvasNodeData) {
 }
 
 function generationLabel(type: NodeGenerationInput["type"], index: number) {
-    if (type === "image") return imageReferenceLabel(index);
-    if (type === "video") return seedanceReferenceLabel("video", index);
-    if (type === "audio") return seedanceReferenceLabel("audio", index);
-    return `文本${index + 1}`;
+    return i18n.t(`canvas.resources.labels.${type}`, { index: formatNumber(index + 1, { useGrouping: false }) });
 }
 
 function readReferenceImage(node: CanvasNodeData): ReferenceImage | null {

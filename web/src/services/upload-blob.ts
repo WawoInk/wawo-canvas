@@ -1,4 +1,5 @@
 import { readImageMeta } from "@/lib/image-utils";
+import i18n from "@/i18n";
 
 export type UploadResult = {
     fileId: string;
@@ -61,7 +62,7 @@ async function uploadBlobServer(blob: Blob, fileType: FileType): Promise<UploadR
     const headers = { ...authHeader() };
     const resp = await fetch("/api/v1/files", { method: "POST", body: form, headers });
     const json = await resp.json();
-    if (json.code !== 0) throw new Error(json.msg || "上传失败");
+    if (json.code !== 0) throw new Error(json.msg || i18n.t("errors.upload.failed"));
     const { id, url, mimeType, bytes } = json.data;
     if (fileType === "images" || fileType === "results/images") {
         const meta = await readImageMeta(URL.createObjectURL(blob));
@@ -95,7 +96,7 @@ export async function uploadUrlToS3(url: string, fileType: FileType): Promise<Up
         headers,
     });
     const json = await resp.json();
-    if (json.code !== 0) throw new Error(json.msg || "代理上传失败");
+    if (json.code !== 0) throw new Error(json.msg || i18n.t("errors.upload.proxyFailed"));
     const meta = fileType.endsWith("images") ? await readImageMeta(json.data.url) : { width: 0, height: 0 };
     return { fileId: json.data.id, url: json.data.url, width: meta.width, height: meta.height, bytes: json.data.bytes || 0, mimeType: json.data.mimeType || "application/octet-stream" };
 }

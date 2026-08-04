@@ -1,0 +1,3005 @@
+{
+    "common": {
+        "brand": "Canvan",
+        "login": "登录",
+        "register": "注册",
+        "logout": "退出登录",
+        "copied": "已复制",
+        "github": "GitHub",
+        "configuration": "配置",
+        "keyboardShortcuts": "快捷键",
+        "accountMenu": "账户菜单",
+        "accountSettings": "账户设置",
+        "adminConsole": "管理后台",
+        "currentCredits": "当前算力点余额",
+        "switchToLightTheme": "切换到浅色主题",
+        "switchToDarkTheme": "切换到深色主题",
+        "switchTheme": "切换主题",
+        "goToCanvas": "前往画布",
+        "all": "全部",
+        "optional": "可选",
+        "assetTypes": {
+            "text": "文本",
+            "image": "图片",
+            "video": "视频"
+        },
+        "fields": {
+            "type": "类型",
+            "title": "标题",
+            "tags": "标签",
+            "source": "来源",
+            "note": "备注",
+            "content": "内容"
+        },
+        "actions": {
+            "save": "保存",
+            "cancel": "取消",
+            "delete": "删除",
+            "view": "查看",
+            "edit": "编辑",
+            "copy": "复制",
+            "download": "下载",
+            "upload": "上传",
+            "playVideo": "播放视频",
+            "search": "搜索",
+            "reload": "重新加载",
+            "addToMyAssets": "加入我的素材",
+            "done": "完成"
+        },
+        "states": {
+            "noCover": "暂无封面",
+            "noTags": "无标签",
+            "loadFailed": "加载失败",
+            "notAvailable": "暂无"
+        }
+    },
+    "generation": {
+        "status": {
+            "queued": "排队中",
+            "running": "生成中"
+        }
+    },
+    "language": {
+        "switcherLabel": "切换语言",
+        "options": {
+            "zhCN": "中文",
+            "enUS": "English"
+        }
+    },
+    "navigation": {
+        "title": "导航",
+        "openMenu": "打开导航菜单",
+        "menu": "导航菜单",
+        "brandHome": "Canvan 首页",
+        "canvas": "我的画布",
+        "image": "生图工作台",
+        "video": "视频创作台",
+        "prompts": "提示词库",
+        "assets": "我的素材",
+        "enterpriseAssets": "企业素材库"
+    },
+    "home": {
+        "hero": {
+            "description": "在<brand>{{brand}}</brand>中生成、连接和重组<media>{{mediaTypes}}</media>，让创作从单次生成变成连续推演。",
+            "mediaTypes": "图片、文字与图形",
+            "start": "开始使用",
+            "openCanvas": "打开画布"
+        },
+        "showcase": {
+            "title": "沉淀每一次好结果",
+            "description": "收藏稳定出图的提示词、参考风格和结果图片，让下一次创作从已有经验开始。",
+            "browsePrompts": "查看提示词库",
+            "loadError": "获取提示词失败"
+        }
+    },
+    "auth": {
+        "title": "账号登录",
+        "description": "支持账号密码和 Linux.do 登录。",
+        "fields": {
+            "username": "用户名",
+            "password": "密码",
+            "confirmPassword": "确认密码"
+        },
+        "actions": {
+            "loginWithLinuxDo": "使用 Linux.do 登录"
+        },
+        "validation": {
+            "usernameRequired": "请输入用户名",
+            "passwordRequired": "请输入密码",
+            "confirmPasswordRequired": "请再次输入密码",
+            "passwordMismatch": "两次输入的密码不一致"
+        },
+        "messages": {
+            "loginSuccess": "登录成功",
+            "registerSuccess": "注册成功",
+            "registrationDisabled": "当前未开放注册",
+            "loginFailed": "登录失败"
+        }
+    },
+    "notFound": {
+        "code": "404",
+        "title": "页面不存在",
+        "description": "这个地址没有对应的页面，可能已经移动或被合并到其他入口。",
+        "backHome": "返回首页"
+    },
+    "versionRelease": {
+        "open": "查看版本更新",
+        "title": "版本更新",
+        "currentVersion": "当前版本",
+        "latestVersion": "最新版本",
+        "checking": "检查中...",
+        "checkForUpdates": "检查更新",
+        "unreleased": "未发布",
+        "latest": "最新",
+        "current": "当前",
+        "messages": {
+            "updated": "已是最新版本",
+            "updateFailed": "检查更新失败"
+        },
+        "errors": {
+            "versionRead": "读取版本信息失败",
+            "changelogRead": "读取更新日志失败"
+        },
+        "types": {
+            "added": "新增",
+            "fixed": "修复",
+            "changed": "调整",
+            "docs": "文档"
+        }
+    },
+    "account": {
+        "loading": "正在加载账户...",
+        "header": {
+            "eyebrow": "账户中心",
+            "title": "账户设置"
+        },
+        "tabs": {
+            "account": "账户信息",
+            "logs": "日志记录",
+            "enterprise": "企业信息"
+        },
+        "overview": {
+            "title": "账户概况",
+            "fields": {
+                "username": "用户名",
+                "credits": "当前积分",
+                "role": "平台身份",
+                "registeredAt": "注册时间"
+            }
+        },
+        "roles": {
+            "platform": {
+                "guest": "访客",
+                "user": "普通用户",
+                "admin": "平台管理员"
+            },
+            "enterprise": {
+                "owner": "企业主账号",
+                "member": "企业成员"
+            }
+        },
+        "status": {
+            "active": "正常",
+            "disabled": "已禁用"
+        },
+        "profile": {
+            "title": "个人资料",
+            "fields": {
+                "displayName": "昵称",
+                "email": "邮箱"
+            },
+            "placeholders": {
+                "displayName": "请输入昵称",
+                "email": "请输入邮箱"
+            },
+            "validation": {
+                "email": "请输入有效邮箱"
+            },
+            "actions": {
+                "save": "保存资料"
+            },
+            "messages": {
+                "updateSuccess": "个人资料已更新",
+                "updateError": "个人资料更新失败"
+            }
+        },
+        "password": {
+            "title": "修改密码",
+            "fields": {
+                "current": "当前密码",
+                "new": "新密码",
+                "confirm": "确认新密码"
+            },
+            "currentHint": "通过第三方账号登录且尚未设置本地密码时可留空",
+            "validation": {
+                "newRequired": "请输入新密码",
+                "confirmRequired": "请再次输入新密码",
+                "mismatch": "两次输入的密码不一致"
+            },
+            "actions": {
+                "update": "修改密码"
+            },
+            "messages": {
+                "updateSuccess": "密码已修改，请重新登录",
+                "updateError": "密码修改失败"
+            }
+        },
+        "enterprise": {
+            "overview": {
+                "title": "企业概况",
+                "loadError": "企业信息加载失败",
+                "fields": {
+                    "name": "企业名称",
+                    "role": "企业身份",
+                    "status": "企业状态",
+                    "memberCount": "成员数量",
+                    "discountRate": "折扣倍率"
+                },
+                "memberCount_one": "{{value}} 人",
+                "memberCount_other": "{{value}} 人",
+                "discountRate": "{{value}} 倍",
+                "placeholders": {
+                    "name": "企业名称"
+                },
+                "validation": {
+                    "nameRequired": "请输入企业名称"
+                },
+                "actions": {
+                    "rename": "更新企业名称"
+                },
+                "renameSuccess": "企业名称已更新",
+                "renameError": "企业名称更新失败"
+            },
+            "members": {
+                "title": "企业成员",
+                "description": "创建和管理本企业子账号",
+                "searchAria": "搜索企业成员",
+                "searchPlaceholder": "搜索用户名、昵称或邮箱",
+                "status": {
+                    "active": "正常",
+                    "disabled": "已禁用"
+                },
+                "table": {
+                    "member": "成员",
+                    "email": "邮箱",
+                    "credits": "积分",
+                    "status": "状态",
+                    "actions": "操作"
+                },
+                "fields": {
+                    "username": "用户名",
+                    "initialPassword": "初始密码",
+                    "displayName": "昵称",
+                    "email": "邮箱",
+                    "newPassword": "新密码",
+                    "creditAmount": "积分数量"
+                },
+                "placeholders": {
+                    "creditAmount": "请输入积分数量"
+                },
+                "validation": {
+                    "usernameRequired": "请输入用户名",
+                    "initialPasswordRequired": "请输入初始密码",
+                    "email": "请输入有效邮箱",
+                    "newPasswordRequired": "请输入新密码",
+                    "creditAmountRequired": "请输入积分数量",
+                    "creditAmountPositive": "积分数量必须为正数"
+                },
+                "actions": {
+                    "create": "创建成员",
+                    "allocate": "分配积分",
+                    "reclaim": "收回积分",
+                    "disable": "禁用",
+                    "enable": "启用",
+                    "resetPassword": "重置密码",
+                    "confirmAllocate": "确认分配",
+                    "confirmReclaim": "确认收回",
+                    "cancel": "取消"
+                },
+                "confirm": {
+                    "disable": "确认禁用该成员？",
+                    "enable": "确认启用该成员？"
+                },
+                "modals": {
+                    "createTitle": "创建企业成员",
+                    "resetPasswordFor": "重置密码：{{name}}",
+                    "allocateFor": "分配积分：{{name}}",
+                    "reclaimFor": "收回积分：{{name}}"
+                },
+                "messages": {
+                    "loadError": "成员加载失败",
+                    "createSuccess": "成员已创建",
+                    "createError": "成员创建失败",
+                    "disableSuccess": "成员已禁用",
+                    "enableSuccess": "成员已启用",
+                    "statusError": "成员状态更新失败",
+                    "passwordResetSuccess": "成员密码已重置",
+                    "passwordResetError": "密码重置失败",
+                    "allocateSuccess": "积分分配成功",
+                    "reclaimSuccess": "积分收回成功",
+                    "allocateError": "积分分配失败",
+                    "reclaimError": "积分收回失败"
+                }
+            },
+            "creditLogs": {
+                "title": "企业积分流水",
+                "description": "查看本企业的积分分配、消费和退款记录",
+                "filters": {
+                    "memberAria": "按成员筛选企业积分流水",
+                    "allMembers": "全部成员",
+                    "mainAccount": "{{name}}（主账号）",
+                    "memberName": "{{displayName}}（{{username}}）",
+                    "typeAria": "按类型筛选企业积分流水",
+                    "allTypes": "全部类型",
+                    "searchAria": "搜索企业积分流水",
+                    "searchPlaceholder": "搜索成员、类型、备注或关联 ID"
+                },
+                "export": {
+                    "button": "导出企业积分流水",
+                    "fileName": "企业积分流水.csv"
+                },
+                "table": {
+                    "member": "成员",
+                    "type": "类型",
+                    "change": "变动",
+                    "balance": "余额",
+                    "relatedInfo": "关联信息",
+                    "counterparty": "对方：{{id}}",
+                    "remark": "备注",
+                    "time": "时间"
+                },
+                "csv": {
+                    "logId": "流水 ID",
+                    "member": "成员",
+                    "username": "用户名",
+                    "type": "类型",
+                    "change": "变动",
+                    "balance": "余额",
+                    "relatedId": "关联 ID",
+                    "counterpartyId": "对方 ID",
+                    "remark": "备注",
+                    "time": "时间"
+                },
+                "messages": {
+                    "memberFilterLoadError": "成员筛选加载失败",
+                    "loadError": "企业积分流水加载失败",
+                    "emptyExport": "暂无企业积分流水可导出",
+                    "exportSuccess": "企业积分流水已导出",
+                    "exportError": "企业积分流水导出失败"
+                }
+            }
+        },
+        "logs": {
+            "title": "日志记录",
+            "description": "仅展示当前登录账号的使用情况和积分变动",
+            "tabs": {
+                "usage": "使用记录",
+                "credits": "积分记录"
+            },
+            "filters": {
+                "dateFormat": "YYYY-MM-DD",
+                "startDate": "开始日期",
+                "endDate": "结束日期"
+            },
+            "pagination": {
+                "total_one": "共 {{value}} 条",
+                "total_other": "共 {{value}} 条"
+            },
+            "operations": {
+                "generateVideo": "生成视频",
+                "generateShortDrama": "生成短剧",
+                "generateImage": "生成图片",
+                "generateAudio": "生成音频",
+                "textChat": "文本对话"
+            },
+            "sources": {
+                "canvas": "无限画布",
+                "imageWorkbench": "图片工作台",
+                "videoWorkbench": "视频工作台"
+            },
+            "statuses": {
+                "queued": "排队中",
+                "pending": "等待中",
+                "running": "运行中",
+                "success": "成功",
+                "failed": "失败",
+                "cancelled": "已取消"
+            },
+            "creditTypes": {
+                "adminAdjust": "平台调整",
+                "aiConsume": "模型消费",
+                "aiRefund": "失败返还",
+                "enterpriseAllocate": "企业分配",
+                "enterpriseReclaim": "企业收回"
+            },
+            "table": {
+                "taskId": "任务 ID",
+                "logId": "流水 ID",
+                "operation": "操作",
+                "source": "来源",
+                "model": "模型",
+                "modelDisplayName": "模型展示名",
+                "status": "状态",
+                "credits": "积分",
+                "upstreamCredits": "上游 Credits",
+                "duration": "耗时",
+                "durationSeconds": "耗时（秒）",
+                "time": "时间",
+                "type": "类型",
+                "change": "变动",
+                "balance": "余额",
+                "relatedTask": "关联任务",
+                "remark": "备注"
+            },
+            "values": {
+                "unknown": "未知",
+                "credits_one": "{{value}} 积分",
+                "credits_other": "{{value}} 积分",
+                "seconds": "{{value}} 秒"
+            },
+            "usage": {
+                "export": {
+                    "button": "导出使用记录",
+                    "fileName": "使用记录.csv"
+                },
+                "messages": {
+                    "loadError": "使用记录加载失败",
+                    "emptyExport": "暂无使用记录可导出",
+                    "exportSuccess": "使用记录已导出",
+                    "exportError": "使用记录导出失败"
+                }
+            },
+            "credits": {
+                "export": {
+                    "button": "导出日志记录",
+                    "fileName": "积分记录.csv"
+                },
+                "messages": {
+                    "loadError": "积分记录加载失败",
+                    "emptyExport": "暂无积分记录可导出",
+                    "exportSuccess": "积分记录已导出",
+                    "exportError": "积分记录导出失败"
+                }
+            }
+        }
+    },
+    "assets": {
+        "header": {
+            "title": "我的素材",
+            "description": "收藏常用文本和图片，按类型、标题和标签快速查找。"
+        },
+        "searchPlaceholder": "搜索标题、内容、标签或来源",
+        "empty": "没有找到素材",
+        "actions": {
+            "export": "导出素材",
+            "import": "导入素材",
+            "create": "新增素材",
+            "selectVideo": "选择视频文件",
+            "selectImage": "选择图片文件",
+            "copyText": "复制文本",
+            "downloadVideo": "下载视频",
+            "downloadImage": "下载图片"
+        },
+        "form": {
+            "createTitle": "新增素材",
+            "editTitle": "编辑素材",
+            "defaultSource": "手动添加",
+            "fields": {
+                "coverUrl": "封面 URL",
+                "textContent": "文本内容",
+                "imageFile": "图片文件",
+                "videoFile": "视频文件"
+            },
+            "placeholders": {
+                "title": "给素材起一个容易检索的名字",
+                "coverUrl": "可粘贴图片 URL，也可以上传本地封面",
+                "tags": "输入标签后回车",
+                "source": "手动添加 / 画布 / 提示词库",
+                "content": "保存提示词、说明文案、参考描述等文本素材"
+            },
+            "validation": {
+                "titleRequired": "请输入标题",
+                "contentRequired": "请输入文本内容"
+            }
+        },
+        "preview": {
+            "title": "预览",
+            "noFile": "未选择文件",
+            "untitled": "未命名素材",
+            "noTags": "未打标签"
+        },
+        "card": {
+            "unknownSource": "未标注来源"
+        },
+        "details": {
+            "title": "素材详情"
+        },
+        "delete": {
+            "title": "删除素材",
+            "description": "确定删除「{{title}}」吗？删除后会从我的素材中移除。"
+        },
+        "messages": {
+            "createFailed": "创建素材失败，请检查网络连接",
+            "videoRequired": "请上传视频文件",
+            "imageRequired": "请选择图片文件",
+            "updated": "素材已更新",
+            "saved": "素材已保存",
+            "updateFailed": "更新素材失败，请检查网络连接",
+            "conflictRefreshed": "素材已被其他会话修改，已刷新为最新版本",
+            "saveFailed": "保存素材失败，请检查网络连接",
+            "imageUploadFailed": "图片上传失败，请重试",
+            "videoUploadFailed": "视频上传失败，请重试",
+            "textCopied": "文本已复制",
+            "nothingToExport": "暂无素材可导出",
+            "importSuccess_one": "已导入 {{value}} 个素材",
+            "importSuccess_other": "已导入 {{value}} 个素材",
+            "invalidPackage": "导入失败，请选择有效的素材压缩包",
+            "deleted": "素材已删除",
+            "deleteFailed": "删除素材失败，请检查网络连接"
+        },
+        "download": {
+            "defaultFileName": "素材"
+        },
+        "export": {
+            "fileName": "我的素材.zip"
+        },
+        "errors": {
+            "missingManifest": "压缩包缺少 {{fileName}}",
+            "createFailed": "创建素材失败",
+            "deleteFailed": "删除素材失败"
+        }
+    },
+    "assetLibrary": {
+        "header": {
+            "title": "素材库",
+            "description": "挑选团队素材，加入我的素材后继续编辑和使用。"
+        },
+        "searchPlaceholder": "按标题查询",
+        "empty": "没有找到素材",
+        "details": {
+            "title": "素材详情"
+        },
+        "actions": {
+            "copyText": "复制文本",
+            "copyLink": "复制链接"
+        },
+        "messages": {
+            "added": "已加入我的素材",
+            "addFailed": "加入失败"
+        },
+        "errors": {
+            "fetch": "获取素材库失败",
+            "readImage": "读取图片失败"
+        }
+    },
+    "enterpriseAssets": {
+        "access": {
+            "denied": "无权限访问企业素材库",
+            "invalidAccount": "当前账号不属于有效企业"
+        },
+        "header": {
+            "title": "企业素材库",
+            "description": "企业文本、图片和视频按需从服务端读取，成员可浏览和下载，主账号可维护。",
+            "readOnly": "只读成员"
+        },
+        "searchPlaceholder": "搜索标题、描述或内容",
+        "filters": {
+            "allTypes": "全部类型",
+            "tagsPlaceholder": "按标签筛选"
+        },
+        "load": {
+            "errorTitle": "企业素材加载失败",
+            "retryHint": "请稍后重试"
+        },
+        "defaultCreator": "企业成员",
+        "card": {
+            "createdBy": "由 {{name}} 创建"
+        },
+        "actions": {
+            "create": "新增企业素材",
+            "selectReplacement": "选择替换文件",
+            "selectFile": "选择文件",
+            "copyContent": "复制内容",
+            "downloadFile": "下载文件"
+        },
+        "aria": {
+            "download": "下载{{title}}",
+            "edit": "编辑{{title}}",
+            "delete": "删除{{title}}"
+        },
+        "delete": {
+            "title": "删除企业素材",
+            "description": "删除后企业成员将无法继续访问。"
+        },
+        "empty": "暂无企业素材",
+        "form": {
+            "createTitle": "新增企业素材",
+            "editTitle": "编辑企业素材",
+            "fields": {
+                "description": "说明",
+                "textContent": "文本内容",
+                "replacementFile": "替换文件",
+                "mediaFile": "媒体文件"
+            },
+            "tagsPlaceholder": "输入后回车添加标签",
+            "replacementHint": "不选择文件时仅更新素材信息。",
+            "validation": {
+                "typeRequired": "请选择素材类型",
+                "titleRequired": "请输入素材标题",
+                "contentRequired": "请输入文本内容",
+                "fileRequired": "请选择{{type}}"
+            }
+        },
+        "preview": {
+            "defaultTitle": "素材详情",
+            "metadata": "创建者：{{creator}} · 更新于 {{updatedAt}}"
+        },
+        "messages": {
+            "saved": "企业素材已保存",
+            "created": "企业素材已新增",
+            "saveFailed": "保存失败",
+            "deleted": "企业素材已删除",
+            "deleteFailed": "删除失败",
+            "copiedToPersonal": "“{{title}}”已加入我的素材",
+            "copyFailed": "加入我的素材失败",
+            "downloadFailed": "下载失败",
+            "contentCopied": "素材内容已复制"
+        },
+        "errors": {
+            "noDownloadFile": "素材没有可下载的文件",
+            "mediaRequired": "请上传图片或视频文件",
+            "readVideoMetadata": "无法读取视频信息",
+            "downloadFailed": "文件下载失败",
+            "uploadFailed": "文件上传失败"
+        }
+    },
+    "prompts": {
+        "header": {
+            "title": "提示词中心",
+            "summary_one": "共 {{value}} 条提示词，按标题、标签与分类快速查找灵感。",
+            "summary_other": "共 {{value}} 条提示词，按标题、标签与分类快速查找灵感。"
+        },
+        "searchPlaceholder": "按标题查询",
+        "filters": {
+            "category": "分类"
+        },
+        "empty": "没有找到匹配的提示词",
+        "select": {
+            "title": "提示词库"
+        },
+        "detail": {
+            "dates": "创建：{{createdAt}} · 更新：{{updatedAt}}"
+        },
+        "actions": {
+            "copy": "复制提示词",
+            "use": "使用此提示词"
+        },
+        "pagination": {
+            "loading": "加载中...",
+            "scrollForMore": "继续向下滚动加载更多",
+            "end": "已经到底了"
+        },
+        "messages": {
+            "added": "已加入我的素材",
+            "copied": "提示词已复制"
+        },
+        "errors": {
+            "fetch": "获取提示词失败"
+        }
+    },
+    "imageWorkbench": {
+        "title": "生图工作台",
+        "parameters": "参数",
+        "model": "模型",
+        "configRequired": "请先完成配置",
+        "mobile": {
+            "logs": "记录"
+        },
+        "prompt": {
+            "label": "提示词",
+            "openLibrary": "查看提示词库",
+            "openAssets": "查看我的素材",
+            "placeholder": "描述画面主体、风格、构图、光线和用途",
+            "required": "请输入生图提示词"
+        },
+        "references": {
+            "title": "参考图",
+            "clipboard": "剪切板",
+            "clipboardEmpty": "剪切板里没有可读取的图片",
+            "clipboardRead_one": "已读取 {{value}} 张参考图",
+            "clipboardRead_other": "已读取 {{value}} 张参考图",
+            "clipboardFileName": "剪切板图片-{{index}}.png",
+            "resultFileName": "生成结果-{{index}}.png",
+            "label": "图片{{index}}",
+            "promptContext": "参考图片编号：{{labels}}。请按这些编号理解提示词中的图片引用。\n\n{{prompt}}",
+            "remove": "移除参考图",
+            "empty": "暂无参考图",
+            "added": "已加入参考图",
+            "movePrevious": "将参考图前移",
+            "moveNext": "将参考图后移"
+        },
+        "actions": {
+            "adjust": "调整",
+            "generate": "开始生成",
+            "addToAssets": "添加到素材",
+            "addReference": "加入参考图",
+            "retry": "重试",
+            "new": "新建",
+            "selectAll": "全选",
+            "deselectAll": "取消全选"
+        },
+        "results": {
+            "title": "生成结果",
+            "waiting": "等待 {{duration}}",
+            "empty": "还没有生成图片",
+            "alt": "生成结果 {{index}}",
+            "pending": "生成中",
+            "failed": "生成失败",
+            "generated": "图片已生成",
+            "downloadFileName": "图片-{{index}}.png"
+        },
+        "assets": {
+            "generatedTitle": "生成结果 {{index}}",
+            "source": "生图工作台",
+            "saved": "已加入我的素材",
+            "saveFailed": "保存素材失败，请检查网络连接后重试",
+            "unsupportedType": "生图工作台只能使用文本或图片素材"
+        },
+        "logs": {
+            "title": "生成记录",
+            "empty": "暂无生成记录",
+            "deleteTitle": "删除生成记录",
+            "deleteConfirm_one": "确定删除选中的 {{value}} 条生成记录吗？",
+            "deleteConfirm_other": "确定删除选中的 {{value}} 条生成记录吗？",
+            "untitled": "未命名",
+            "select": "选择生成记录“{{title}}”",
+            "status": {
+                "pending": "生成中",
+                "success": "成功",
+                "failed": "失败"
+            },
+            "successCount_one": "成功 {{value}} 张",
+            "successCount_other": "成功 {{value}} 张",
+            "failedCount_one": "失败 {{value}} 张",
+            "failedCount_other": "失败 {{value}} 张"
+        },
+        "pending": {
+            "creating": "正在创建图片",
+            "almostDone": "马上就好了",
+            "keepWaiting": "再等等",
+            "refining": "正在整理细节"
+        }
+    },
+    "imageSettings": {
+        "title": "图像设置",
+        "quality": {
+            "label": "质量",
+            "options": {
+                "auto": "自动",
+                "high": "高",
+                "medium": "中",
+                "low": "低"
+            }
+        },
+        "size": {
+            "label": "尺寸",
+            "auto": "自动",
+            "alignTo16": "16 倍数对齐",
+            "alignHint": "输入完成后自动向上补成 16 的倍数",
+            "widthShort": "宽",
+            "heightShort": "高"
+        },
+        "aspectRatio": "宽高比",
+        "transparent": {
+            "label": "透明背景",
+            "hint": "仅部分模型支持透明背景"
+        },
+        "count": "生成张数",
+        "imageCount_one": "{{value}} 张",
+        "imageCount_other": "{{value}} 张"
+    },
+    "videoWorkbench": {
+        "title": "视频创作台",
+        "parameters": "参数",
+        "model": "模型",
+        "configRequired": "请先完成配置",
+        "mobile": {
+            "logs": "记录"
+        },
+        "prompt": {
+            "label": "提示词",
+            "openLibrary": "查看提示词库",
+            "openAssets": "查看我的素材",
+            "placeholder": "描述镜头运动、主体动作、场景氛围和画面风格",
+            "required": "请输入视频提示词"
+        },
+        "references": {
+            "unsupported": "已忽略不支持的参考素材，请使用图片、mp4/mov 视频或 mp3/wav 音频",
+            "imageTooLarge": "已忽略超过 30MB 的参考图",
+            "videoTooLarge": "已忽略超过 50MB 的参考视频",
+            "audioTooLarge": "已忽略超过 15MB 的参考音频",
+            "movePrevious": "将参考素材前移",
+            "moveNext": "将参考素材后移",
+            "promptContext": "参考素材编号：{{labels}}。请按这些编号理解提示词中的图片、视频和音频引用。\n\n{{prompt}}",
+            "labels": {
+                "image": "图片{{index}}",
+                "video": "视频{{index}}",
+                "audio": "音频{{index}}"
+            },
+            "images": {
+                "title": "参考图",
+                "remove": "移除参考图",
+                "empty_one": "暂无参考图，最多 {{value}} 张",
+                "empty_other": "暂无参考图，最多 {{value}} 张"
+            },
+            "videos": {
+                "title": "参考视频",
+                "remove": "移除参考视频",
+                "empty_one": "暂无参考视频，最多 {{value}} 个",
+                "empty_other": "暂无参考视频，最多 {{value}} 个",
+                "hint": "参考视频需为 mp4/mov，H.264/H.265，FPS 24-60；含真人人脸素材请使用火山授权 asset:// 素材。"
+            },
+            "audios": {
+                "title": "参考音频",
+                "remove": "移除参考音频",
+                "empty_one": "暂无参考音频，最多 {{value}} 个，mp3/wav，单个 15MB 内",
+                "empty_other": "暂无参考音频，最多 {{value}} 个，mp3/wav，单个 15MB 内",
+                "invalidDuration": "已忽略不符合时长要求的参考音频：单个 2-15 秒，总时长不超过 15 秒"
+            }
+        },
+        "actions": {
+            "adjust": "调整",
+            "generate": "开始生成",
+            "addToAssets": "添加到素材",
+            "retry": "重试",
+            "new": "新建",
+            "selectAll": "全选",
+            "deselectAll": "取消全选"
+        },
+        "results": {
+            "title": "生成结果",
+            "waiting": "等待 {{duration}}",
+            "empty": "还没有生成视频",
+            "pending": "生成中",
+            "failed": "生成失败",
+            "generated": "视频已生成",
+            "downloadFileName": "视频.mp4"
+        },
+        "assets": {
+            "generatedTitle": "生成视频",
+            "source": "视频创作台",
+            "saved": "已加入我的素材",
+            "saveFailed": "保存素材失败，请检查网络连接后重试",
+            "missingFile": "视频文件已丢失，请重新生成"
+        },
+        "logs": {
+            "title": "生成记录",
+            "empty": "暂无生成记录",
+            "deleteTitle": "删除生成记录",
+            "deleteConfirm_one": "确定删除选中的 {{value}} 条生成记录吗？",
+            "deleteConfirm_other": "确定删除选中的 {{value}} 条生成记录吗？",
+            "untitled": "未命名",
+            "select": "选择生成记录“{{title}}”",
+            "status": {
+                "pending": "生成中",
+                "success": "成功",
+                "failed": "失败"
+            }
+        }
+    },
+    "videoSettings": {
+        "title": "视频设置",
+        "localModeHint": "本地直连仅提供原始视频接口兼容；Model Profile、短剧与平台文件能力需要远程模式。",
+        "resolution": "分辨率",
+        "aspectRatio": "比例",
+        "duration": "时长",
+        "smart": "智能",
+        "seconds": "{{value}} 秒",
+        "quality": {
+            "label": "质量",
+            "high": "高",
+            "standard": "标准"
+        },
+        "output": "输出",
+        "generateAudio": "生成声音",
+        "watermark": "添加水印",
+        "negativePrompt": {
+            "label": "负向提示词（可选）",
+            "placeholder": "例如：低质量、模糊、畸形。"
+        },
+        "ratios": {
+            "landscape": "横屏",
+            "portrait": "竖屏",
+            "square": "方形",
+            "standardLandscape": "标准横屏",
+            "standardPortrait": "标准竖屏",
+            "cinema": "宽银幕",
+            "wide": "宽屏",
+            "tall": "长图",
+            "adaptive": "自适应"
+        },
+        "autoMatch": "自动匹配"
+    },
+    "audioSettings": {
+        "title": "音频设置",
+        "voice": "声音",
+        "format": "格式",
+        "speed": "语速",
+        "instructions": {
+            "label": "声音指令",
+            "placeholder": "例如：自然、温暖、适合旁白。"
+        }
+    },
+    "config": {
+        "title": "配置与用户偏好",
+        "subtitle": "渠道聚合、模型选择和同步偏好",
+        "tabs": {
+            "channels": "渠道",
+            "models": "模型",
+            "preferences": "生成偏好",
+            "webdav": "WebDAV"
+        },
+        "messages": {
+            "saved": "配置已保存",
+            "savedContinue": "配置已保存，请继续刚才的请求",
+            "keepOneChannel": "至少保留一个渠道",
+            "channelCredentialsRequired": "请先填写该渠道的 Base URL 和 API Key",
+            "anyChannelCredentialsRequired": "请先填写至少一个渠道的 Base URL 和 API Key",
+            "channelModelsUpdated": "{{name}} 模型列表已更新",
+            "modelsUpdated": "模型列表已更新"
+        },
+        "channels": {
+            "important": "重要：",
+            "selectableHint": "新增或拉取模型后，需要到“模型”标签页选择可选项才会显示。",
+            "goToModels": "去模型设置",
+            "fetchAll": "拉取全部",
+            "add": "新增渠道",
+            "untitled": "未命名渠道",
+            "defaultName": "默认渠道",
+            "newName": "新渠道",
+            "generatedName": "渠道 {{index}}",
+            "modelWithChannel": "{{model}}（{{channel}}）",
+            "savedModels_one": "{{format}} · 已保存 {{value}} 个模型",
+            "savedModels_other": "{{format}} · 已保存 {{value}} 个模型",
+            "fetchModels": "拉取模型",
+            "delete": "删除渠道“{{name}}”",
+            "name": "渠道名称",
+            "apiFormat": "调用格式",
+            "apiFormats": {
+                "openai": "OpenAI",
+                "gemini": "Gemini",
+                "xvanai": "XvanAI"
+            },
+            "baseUrl": "Base URL",
+            "apiKey": "API Key",
+            "modelList": "模型列表",
+            "modelListPlaceholder": "输入模型名，或点击拉取模型"
+        },
+        "models": {
+            "heading": "默认模型和可选项",
+            "forcedHint": "管理员已统一配置各能力可选项，仅可选择默认模型。",
+            "hint": "可选项决定各处下拉框展示哪些模型；同名模型会以括号里的渠道名区分。",
+            "channelsFirst": "先到渠道里填写或拉取模型",
+            "optionsPlaceholder": "请选择或输入{{label}}",
+            "default": {
+                "image": "默认生图模型",
+                "video": "默认视频模型",
+                "text": "默认文本模型",
+                "audio": "默认音频模型"
+            },
+            "options": {
+                "image": "生图模型可选项",
+                "video": "视频模型可选项",
+                "text": "文本模型可选项",
+                "audio": "音频模型可选项"
+            }
+        },
+        "preferences": {
+            "canvasImageCount": "画布默认生图张数",
+            "canvasImageCountHint": "新建画布生图和配置节点默认使用，单个节点仍可单独覆盖。",
+            "audioVoice": "默认音频声音",
+            "audioFormat": "默认音频格式",
+            "audioSpeed": "默认音频语速",
+            "audioInstructions": "默认音频指令",
+            "systemPrompt": "系统提示词",
+            "managedByAdmin": "由管理员统一配置",
+            "systemPromptPlaceholder": "例如：你是一位擅长电影感写实摄影的视觉导演。"
+        },
+        "webdav": {
+            "title": "WebDAV 同步",
+            "description": "同步画布、我的素材、生成记录和本地媒体文件，不包含 AI API Key；服务不支持 CORS 时可走 Next.js 转发。",
+            "lastSynced": "上次同步 {{time}}",
+            "neverSynced": "尚未同步",
+            "connectionMode": "连接方式",
+            "direct": "前端直连",
+            "nextProxy": "Next.js 转发",
+            "url": "WebDAV 地址",
+            "urlPlaceholder": "https://nas.example.com/webdav",
+            "urlRequired": "请先填写 WebDAV 地址",
+            "directory": "远程目录",
+            "directoryPlaceholder": "infinite-canvas",
+            "directoryHint": "会在该目录下分业务目录保存，每个目录包含 {{manifest}} 和 files/",
+            "username": "用户名",
+            "password": "密码 / 应用密码",
+            "testConnection": "测试连接",
+            "connectionAvailable": "WebDAV 连接可用",
+            "syncNow": "立即同步",
+            "syncing": "同步中",
+            "syncSummary": "同步完成：{{projects}} 个画布，{{assets}} 个素材，{{records}} 条记录，本次上传 {{files}} 个文件 {{bytes}}",
+            "domains": {
+                "canvas": "画布",
+                "assets": "我的素材",
+                "image-workbench": "生图工作台",
+                "video-workbench": "视频创作台"
+            },
+            "stages": {
+                "waiting": "等待同步",
+                "waitingLocalData": "等待本地数据加载",
+                "preparing": "准备同步",
+                "readingRemoteManifest": "读取远端清单",
+                "readingLocalData": "读取本地数据",
+                "downloadingMissingMedia": "下载缺失媒体",
+                "applyingMergedData": "写入本地合并结果",
+                "uploadingNewMedia": "上传新增媒体",
+                "uploadingManifest": "上传清单",
+                "checkingMissingMedia": "检查缺失媒体",
+                "mediaComplete": "媒体已齐全",
+                "downloadingMedia": "下载媒体",
+                "checkingLocalMedia": "检查本地媒体",
+                "mediaUploadNotNeeded": "媒体无需上传",
+                "uploadingMedia": "上传媒体",
+                "done": "完成",
+                "complete": "同步完成",
+                "failed": "同步失败"
+            }
+        },
+        "remote": {
+            "forced": "管理员已强制使用后台渠道，所有生成请求将由后台代理并消耗算力点，无法自行配置渠道",
+            "active": "正在使用后台配置的远程渠道，生成请求将由后台代理并消耗算力点"
+        }
+    },
+    "modelPicker": {
+        "placeholder": "选择模型",
+        "capabilities": {
+            "image": "生图",
+            "video": "视频",
+            "text": "文本",
+            "audio": "音频"
+        },
+        "empty": {
+            "configureSelectable": "请先在上方配置可选模型",
+            "noMatching": "暂无匹配的{{capability}}模型",
+            "noMatchingGeneric": "暂无匹配的模型",
+            "addChannels": "请先到配置里添加渠道和模型"
+        }
+    },
+    "admin": {
+        "menus": {
+            "enterprises": "企业管理",
+            "users": "用户管理",
+            "creditLogs": "算力点日志",
+            "generationTasks": "使用日志",
+            "prompts": "提示词管理",
+            "assets": "素材库",
+            "assetsManagement": "素材库管理",
+            "settings": "系统设置"
+        },
+        "common": {
+            "actions": {
+                "add": "新增",
+                "adjust": "调整",
+                "cancel": "取消",
+                "close": "关闭",
+                "confirm": "确定",
+                "create": "创建",
+                "delete": "删除",
+                "details": "详情",
+                "edit": "编辑",
+                "enlarge": "放大",
+                "query": "查询",
+                "refresh": "刷新",
+                "reset": "重置",
+                "save": "保存",
+                "sync": "同步",
+                "test": "测试",
+                "viewDetails": "查看详情"
+            },
+            "counts": {
+                "companies_one": "{{value}} 家",
+                "companies_other": "{{value}} 家",
+                "people_one": "{{value}} 人",
+                "people_other": "{{value}} 人",
+                "records_one": "{{value}} 条",
+                "records_other": "{{value}} 条"
+            },
+            "filters": {
+                "all": "全部",
+                "keyword": "关键词"
+            },
+            "messages": {
+                "adjustFailed": "调整失败",
+                "deleteFailed": "删除失败",
+                "operationFailed": "操作失败",
+                "saveFailed": "保存失败",
+                "syncFailed": "同步失败"
+            },
+            "pagination": {
+                "companies_one": "共 {{value}} 家",
+                "companies_other": "共 {{value}} 家",
+                "people_one": "共 {{value}} 人",
+                "people_other": "共 {{value}} 人",
+                "records_one": "共 {{value}} 条",
+                "records_other": "共 {{value}} 条"
+            },
+            "statuses": {
+                "disabled": "已停用",
+                "enable": "启用",
+                "enabled": "已启用"
+            },
+            "table": {
+                "actions": "操作",
+                "createdAt": "创建时间",
+                "time": "时间"
+            }
+        },
+        "users": {
+            "title": "用户列表",
+            "roles": {
+                "user": "普通用户",
+                "userShort": "用户",
+                "admin": "管理员"
+            },
+            "statuses": {
+                "active": "正常",
+                "banned": "禁用"
+            },
+            "enterpriseRoles": {
+                "owner": "主账号",
+                "member": "子账号",
+                "personal": "个人账号"
+            },
+            "filters": {
+                "searchPlaceholder": "搜索用户名、昵称、邮箱或 Linux.do ID"
+            },
+            "table": {
+                "user": "用户",
+                "userId": "用户 ID",
+                "linuxDo": "Linux.do",
+                "role": "角色",
+                "enterprise": "企业归属",
+                "status": "状态",
+                "credits": "算力点",
+                "lastLogin": "最近登录"
+            },
+            "modal": {
+                "createTitle": "新增用户",
+                "editTitle": "编辑用户"
+            },
+            "form": {
+                "basicInfo": "基础信息",
+                "username": "用户名",
+                "password": "密码",
+                "newPassword": "新密码",
+                "displayName": "昵称",
+                "email": "邮箱",
+                "role": "角色",
+                "status": "状态",
+                "creditAdjustment": "算力点调整",
+                "credits": "算力点",
+                "enterpriseCreditsHint": "企业账号积分请在企业管理中按增量调整。"
+            },
+            "validation": {
+                "usernameRequired": "请输入用户名",
+                "passwordRequired": "请输入密码",
+                "roleRequired": "请选择角色",
+                "statusRequired": "请选择状态"
+            },
+            "messages": {
+                "created": "用户已新增",
+                "saved": "用户已保存",
+                "deleted": "用户已删除",
+                "creditsAdjusted": "算力点已调整",
+                "loadFailed": "读取用户失败"
+            },
+            "delete": {
+                "title": "删除用户",
+                "confirm": "确定删除「{{name}}」吗？删除后该账号将无法继续登录。"
+            }
+        },
+        "enterprises": {
+            "title": "企业列表",
+            "actions": {
+                "create": "创建企业",
+                "setDiscount": "设置折扣倍率",
+                "adjustCredits": "调整主账号积分",
+                "resetPassword": "重置主账号密码",
+                "confirmAdjustment": "确认调整"
+            },
+            "filters": {
+                "searchPlaceholder": "搜索企业名称或主账号"
+            },
+            "table": {
+                "enterprise": "企业",
+                "owner": "主账号",
+                "members": "成员",
+                "ownerBalance": "主账号余额",
+                "discountRate": "折扣倍率",
+                "enterpriseStatus": "企业状态",
+                "ownerStatus": "主账号状态"
+            },
+            "values": {
+                "multiplier": "{{value}} 倍"
+            },
+            "units": {
+                "multiplier": "倍"
+            },
+            "create": {
+                "title": "创建企业"
+            },
+            "discount": {
+                "title": "设置折扣倍率 · {{name}}"
+            },
+            "credits": {
+                "title": "调整主账号积分 · {{name}}",
+                "balancePrefix": "当前余额：",
+                "balanceHint": "。正数增加，负数扣减，扣减后余额不能小于 0。",
+                "recentAdjustments": "最近平台调整",
+                "reason": "原因",
+                "operator": "操作者"
+            },
+            "password": {
+                "title": "重置主账号密码",
+                "confirm": "重置「{{name}}」的密码后，该账号现有会话会立即失效。"
+            },
+            "form": {
+                "name": "企业名称",
+                "ownerDisplayName": "主账号昵称",
+                "ownerUsername": "主账号用户名",
+                "initialPassword": "初始密码",
+                "discountRate": "折扣倍率",
+                "adjustmentAmount": "调整数量",
+                "adjustmentPlaceholder": "例如 100 或 -50.5",
+                "adjustmentReason": "调整原因",
+                "reasonPlaceholder": "例如：线下充值到账",
+                "newPassword": "新密码"
+            },
+            "validation": {
+                "nameRequired": "请输入企业名称",
+                "ownerUsernameRequired": "请输入用户名",
+                "initialPasswordRequired": "请输入初始密码",
+                "discountRequired": "请输入折扣倍率",
+                "discountRange": "折扣倍率必须在 0.1 到 1 之间",
+                "adjustmentRequired": "请输入调整数量",
+                "adjustmentNonZero": "调整数量不能为 0",
+                "reasonRequired": "请输入调整原因",
+                "newPasswordRequired": "请输入新密码"
+            },
+            "messages": {
+                "creditLogsLoadFailed": "读取充值记录失败"
+            }
+        },
+        "creditLogs": {
+            "title": "算力点日志",
+            "types": {
+                "adminAdjust": "后台调整",
+                "aiConsume": "模型消费",
+                "aiRefund": "失败返还",
+                "enterpriseAllocate": "企业分配",
+                "enterpriseReclaim": "企业收回"
+            },
+            "filters": {
+                "searchPlaceholder": "搜索用户 ID、类型、备注或关联 ID"
+            },
+            "table": {
+                "userId": "用户 ID",
+                "relatedId": "操作者 / 关联 ID",
+                "type": "类型",
+                "change": "变动",
+                "balance": "余额",
+                "remark": "备注"
+            },
+            "modal": {
+                "createTitle": "新增日志",
+                "editTitle": "编辑日志"
+            },
+            "form": {
+                "userId": "用户 ID",
+                "type": "类型",
+                "amount": "变动数量",
+                "balance": "变动后余额",
+                "relatedId": "关联 ID",
+                "createdAtPlaceholder": "不填则新增时自动生成",
+                "remark": "备注",
+                "extra": "扩展信息"
+            },
+            "validation": {
+                "userIdRequired": "请输入用户 ID",
+                "typeRequired": "请输入类型",
+                "amountRequired": "请输入变动数量",
+                "balanceRequired": "请输入变动后余额"
+            },
+            "messages": {
+                "created": "日志已新增",
+                "saved": "日志已保存",
+                "deleted": "日志已删除",
+                "loadFailed": "读取日志失败"
+            },
+            "delete": {
+                "title": "删除日志",
+                "confirm": "确定删除这条算力点日志吗？"
+            }
+        },
+        "generationTasks": {
+            "title": "使用日志",
+            "types": {
+                "image": "图片生成",
+                "video": "视频生成",
+                "audio": "音频生成",
+                "chat": "对话"
+            },
+            "statuses": {
+                "queued": "排队中",
+                "pending": "等待中",
+                "running": "运行中",
+                "success": "成功",
+                "failed": "失败",
+                "cancelled": "已取消",
+                "unknown": "未知"
+            },
+            "filters": {
+                "userId": "用户 ID",
+                "userIdPlaceholder": "搜索用户 ID",
+                "taskType": "任务类型",
+                "status": "状态"
+            },
+            "table": {
+                "userId": "用户 ID",
+                "username": "用户名",
+                "taskType": "任务类型",
+                "model": "模型",
+                "modelDisplayName": "模型展示名",
+                "provider": "服务商",
+                "status": "状态",
+                "credits": "扣费",
+                "upstreamCredits": "上游 Credits",
+                "duration": "耗时",
+                "error": "错误信息"
+            },
+            "actions": {
+                "deleteSelected_one": "删除选中（{{value}}）",
+                "deleteSelected_other": "删除选中（{{value}}）"
+            },
+            "delete": {
+                "title": "确认删除",
+                "confirm": "确定删除该条使用日志吗？用户：{{user}}，模型：{{model}}"
+            },
+            "batchDelete": {
+                "title": "确认批量删除",
+                "confirm_one": "确定删除选中的 {{value}} 条使用日志吗？此操作不可恢复。",
+                "confirm_other": "确定删除选中的 {{value}} 条使用日志吗？此操作不可恢复。"
+            },
+            "detail": {
+                "title": "任务详情",
+                "taskId": "任务 ID",
+                "userId": "用户 ID",
+                "upstreamTask": "上游任务",
+                "type": "类型",
+                "status": "状态",
+                "credits": "扣费",
+                "upstreamCredits": "上游 Credits",
+                "provider": "服务商",
+                "model": "模型",
+                "duration": "耗时",
+                "error": "错误信息",
+                "requestBody": "请求体",
+                "responseBody": "响应体",
+                "rawError": "原始错误"
+            },
+            "values": {
+                "seconds": "{{value}} 秒",
+                "noData": "（无数据）",
+                "truncated": "…（已截断）"
+            },
+            "messages": {
+                "deleted": "已删除",
+                "batchDeleted_one": "已删除 {{value}} 条记录",
+                "batchDeleted_other": "已删除 {{value}} 条记录",
+                "batchDeleteFailed": "批量删除失败",
+                "loadFailed": "读取日志失败"
+            }
+        },
+        "assets": {
+            "title": "素材列表",
+            "types": {
+                "all": "全部类型",
+                "text": "文本",
+                "image": "图片"
+            },
+            "filters": {
+                "searchPlaceholder": "搜索标题、内容或标签",
+                "type": "类型",
+                "tags": "标签",
+                "allTags": "全部标签"
+            },
+            "table": {
+                "cover": "封面",
+                "title": "标题",
+                "type": "类型",
+                "tags": "标签",
+                "category": "分类"
+            },
+            "modal": {
+                "createTitle": "新增素材",
+                "editTitle": "编辑素材"
+            },
+            "form": {
+                "type": "类型",
+                "title": "标题",
+                "coverUrl": "封面 URL",
+                "tags": "标签，用逗号分隔",
+                "category": "分类",
+                "description": "描述",
+                "imageFile": "图片文件",
+                "imageUploadHint": "上传后自动填充 S3 URL",
+                "textContent": "文本内容"
+            },
+            "validation": {
+                "typeRequired": "请选择类型",
+                "titleRequired": "请输入标题",
+                "contentRequired": "请输入文本内容"
+            },
+            "actions": {
+                "selectImage": "选择图片",
+                "copyContent": "复制内容"
+            },
+            "detail": {
+                "title": "素材详情"
+            },
+            "delete": {
+                "title": "删除素材",
+                "confirm": "确定删除「{{title}}」吗？删除后会从服务器素材库中移除。"
+            },
+            "values": {
+                "uncategorized": "未标注"
+            },
+            "messages": {
+                "created": "素材已新增",
+                "saved": "素材已保存",
+                "deleted": "素材已删除",
+                "loadFailed": "读取素材失败",
+                "fileUnreadable": "文件不可读",
+                "uploadFailed": "上传失败"
+            }
+        },
+        "prompts": {
+            "title": "提示词列表",
+            "filters": {
+                "searchPlaceholder": "搜索标题或提示词",
+                "group": "分组",
+                "tags": "标签",
+                "allCategories": "全部分类",
+                "allTags": "全部标签"
+            },
+            "table": {
+                "cover": "封面",
+                "title": "标题",
+                "category": "分类",
+                "tags": "标签"
+            },
+            "actions": {
+                "batchDelete_one": "批量删除 {{value}}",
+                "batchDelete_other": "批量删除 {{value}}",
+                "copyPrompt": "复制提示词",
+                "remoteSource": "远程源"
+            },
+            "modal": {
+                "createTitle": "新增提示词",
+                "editTitle": "编辑提示词"
+            },
+            "form": {
+                "title": "标题",
+                "category": "分类",
+                "coverUrl": "封面 URL",
+                "tags": "标签，用逗号分隔",
+                "prompt": "提示词"
+            },
+            "validation": {
+                "titleRequired": "请输入标题",
+                "promptRequired": "请输入提示词"
+            },
+            "detail": {
+                "title": "提示词详情"
+            },
+            "sync": {
+                "title": "同步远程提示词源",
+                "remoteSource": "远程源"
+            },
+            "delete": {
+                "title": "删除提示词",
+                "confirm": "确定删除「{{title}}」吗？删除后会从当前分类中删除。"
+            },
+            "batchDelete": {
+                "title": "批量删除提示词",
+                "confirm_one": "确定删除已选中的 {{value}} 条提示词吗？删除后会从当前分类中删除。",
+                "confirm_other": "确定删除已选中的 {{value}} 条提示词吗？删除后会从当前分类中删除。"
+            },
+            "messages": {
+                "synced": "远程提示词源已同步",
+                "created": "提示词已新增",
+                "saved": "提示词已保存",
+                "deleted": "提示词已删除",
+                "batchDeleted": "提示词已批量删除",
+                "batchDeleteFailed": "批量删除失败",
+                "loadFailed": "读取提示词失败"
+            }
+        },
+        "settings": {
+            "tabs": {
+                "public": "公开配置（对外暴露）",
+                "private": "私有配置（不会对外暴露）"
+            },
+            "actions": {
+                "saveSettings": "保存设置",
+                "format": "格式化",
+                "addModel": "添加模型",
+                "selectModels": "选择模型"
+            },
+            "editor": {
+                "visual": "可视化编辑",
+                "json": "手动编辑 JSON",
+                "validJson": "JSON 格式正确",
+                "publicHint": "这些配置会暴露给前端读取",
+                "privateHint": "这些配置只会在后台保存"
+            },
+            "messages": {
+                "loadFailed": "读取设置失败",
+                "saved": "已保存",
+                "invalidJson": "JSON 格式不正确",
+                "invalidPublicJson": "公开配置 JSON 格式不正确",
+                "invalidPrivateJson": "私有配置 JSON 格式不正确"
+            },
+            "units": {
+                "seconds": "秒"
+            },
+            "public": {
+                "availableModels": {
+                    "label": "系统可用模型（请先在私有配置里配置渠道）",
+                    "hint": "保存设置时会自动合并所有已启用私有渠道的模型，前台模型下拉会读取这里的公开列表",
+                    "placeholder": "请选择系统可用模型"
+                },
+                "defaultModels": {
+                    "default": "默认模型",
+                    "image": "默认图片模型",
+                    "video": "默认视频模型",
+                    "text": "默认文本模型",
+                    "audio": "默认音频模型"
+                },
+                "capabilityModels": {
+                    "title": "各能力可选模型",
+                    "description": "必须显式勾选；未勾选的模型不会在前台展示，也不能发起平台生成。",
+                    "imageLabel": "图片模型可选项",
+                    "imageHint": "留空时前台无图片模型可选",
+                    "imagePlaceholder": "选择图片模型",
+                    "videoLabel": "视频模型可选项",
+                    "videoHint": "留空时前台无视频模型可选",
+                    "videoPlaceholder": "选择视频模型",
+                    "textLabel": "文本模型可选项",
+                    "textHint": "留空时前台无文本模型可选",
+                    "textPlaceholder": "选择文本模型",
+                    "audioLabel": "音频模型可选项",
+                    "audioHint": "留空时前台无音频模型可选",
+                    "audioPlaceholder": "选择音频模型"
+                },
+                "imageRequestFormats": {
+                    "title": "图片请求格式",
+                    "description": "仅显式配置的图片模型使用指定协议；未配置模型保持现有默认请求格式。",
+                    "modelRequired": "请选择图片模型",
+                    "formatRequired": "请选择请求格式",
+                    "formatPlaceholder": "选择请求格式",
+                    "deleteLabel": "删除图片请求格式 {{model}}"
+                },
+                "systemPrompt": "系统提示词",
+                "customChannel": {
+                    "label": "允许用户自定义渠道",
+                    "hint": "开启后，前端可提供走后端渠道和用户自定义 baseUrl 直连两种模式。关闭后，整个平台强制使用后台渠道，用户不再能自行配置渠道与模型，生成请求统一走后端代理并消耗算力点。"
+                },
+                "registration": {
+                    "label": "是否允许用户注册",
+                    "hint": "关闭后隐藏注册入口，注册接口也会拒绝新用户创建"
+                }
+            },
+            "billing": {
+                "title": "模型算力点",
+                "description": "普通模型按次计费；视频模型按私有配置中的能力绑定 ID 和计费规则匹配。",
+                "modes": {
+                    "perCredit": "按 credits 计费",
+                    "perSecond": "按秒计费",
+                    "perCall": "按次计费"
+                },
+                "table": {
+                    "model": "模型",
+                    "displayName": "展示名称",
+                    "rule": "计费规则",
+                    "price": "定价"
+                },
+                "units": {
+                    "pointsPerSecond": "点/秒",
+                    "perCredit": "每 credits",
+                    "perCall": "每次调用",
+                    "points": "点"
+                }
+            },
+            "private": {
+                "linuxDo": {
+                    "title": "Linux.do 登录",
+                    "callbackHint": "本项目接口回调地址是 /api/auth/linux-do/callback，请在 Linux.do 应用后台自行拼接站点前缀。",
+                    "manageApp": "点击此处管理你的 LinuxDO OAuth App",
+                    "enabled": "开启 Linux.do 登录",
+                    "clientId": "Linux.do Client ID",
+                    "clientIdPlaceholder": "输入 Linux.do OAuth App 的 ID",
+                    "clientSecret": "Linux.do Client Secret",
+                    "secretPlaceholder": "留空则沿用已保存的密钥"
+                },
+                "promptSync": {
+                    "title": "提示词定时同步",
+                    "enabled": "开启定时同步",
+                    "cron": "Cron 表达式",
+                    "hint": "默认每 5 分钟同步内置 GitHub 远程提示词源"
+                },
+                "fileLimits": {
+                    "title": "文件上传大小限制",
+                    "description": "设置各类型文件上传到 S3 存储桶的单个文件大小上限（单位：MB）。",
+                    "image": "图片（images）",
+                    "video": "视频（videos）",
+                    "audio": "音频（audios）",
+                    "prompt": "提示词（prompts）"
+                }
+            },
+            "channels": {
+                "actions": {
+                    "add": "新增渠道",
+                    "deleteLabel": "删除渠道 {{name}}"
+                },
+                "table": {
+                    "name": "名称",
+                    "protocol": "协议",
+                    "status": "状态",
+                    "models": "模型",
+                    "weight": "权重"
+                },
+                "protocols": {
+                    "openai": "OpenAI",
+                    "xvanai": "XvanAI"
+                },
+                "values": {
+                    "unnamed": "未命名渠道",
+                    "channel": "渠道",
+                    "noModels": "未配置模型",
+                    "modelSummary_one": "{{value}} 个模型：{{models}}…",
+                    "modelSummary_other": "{{value}} 个模型：{{models}}…"
+                },
+                "drawer": {
+                    "createTitle": "新增渠道",
+                    "editTitle": "编辑渠道"
+                },
+                "form": {
+                    "name": "渠道名称",
+                    "protocol": "协议",
+                    "weight": "权重",
+                    "baseUrl": "接口地址",
+                    "apiKey": "API Key",
+                    "apiKeyPlaceholder": "留空则沿用已保存的 API Key",
+                    "models": "渠道可用模型",
+                    "remark": "备注"
+                },
+                "validation": {
+                    "nameRequired": "请输入渠道名称",
+                    "baseUrlRequired": "请输入接口地址",
+                    "apiKeyRequired": "请输入 API Key"
+                },
+                "messages": {
+                    "baseUrlRequired": "请先填写接口地址",
+                    "apiKeyRequired": "请先填写 API Key",
+                    "noModelsReturned": "上游未返回模型列表，请手动输入模型名称",
+                    "modelsFetched_one": "已获取 {{value}} 个模型，请选择后确认",
+                    "modelsFetched_other": "已获取 {{value}} 个模型，请选择后确认",
+                    "modelsLoadFailed": "读取模型失败",
+                    "testRequirements": "请先填写接口地址和至少一个模型",
+                    "testFailed": "测试失败"
+                }
+            },
+            "generationProfiles": {
+                "title": "视频能力绑定",
+                "description": "将渠道中的实际模型绑定到画布支持的生成能力。普通视频使用 Seedance 请求结构，短剧使用 Vidu Drama 请求结构。",
+                "channelRequired": "请先新增并启用一个包含模型的渠道。",
+                "empty": "尚未绑定视频能力。新增绑定后，画布会使用稳定的能力名称调用所选上游模型。",
+                "defaultName": "视频绑定 {{number}}",
+                "types": {
+                    "standardVideo": "普通视频（Seedance）",
+                    "shortDrama": "短剧（Vidu Drama）"
+                },
+                "actions": {
+                    "add": "新增绑定",
+                    "deleteLabel": "删除{{capability}}绑定"
+                },
+                "values": {
+                    "capability": "能力"
+                },
+                "tabs": {
+                    "binding": "能力绑定",
+                    "billing": "计费规则"
+                },
+                "form": {
+                    "bindingId": "绑定 ID",
+                    "capability": "画布能力",
+                    "channel": "渠道",
+                    "channelPlaceholder": "选择渠道",
+                    "upstreamModel": "上游模型",
+                    "modelPlaceholder": "选择模型",
+                    "selectChannelFirst": "请先选择渠道",
+                    "maxDuration": "最大时长",
+                    "durationPlaceholder": "{{value}} 秒",
+                    "resolutions": "支持分辨率",
+                    "billingMode": "计费方式"
+                }
+            },
+            "modelSelector": {
+                "title": "选择渠道模型",
+                "selectedSummary": "已选择 {{selected}} / {{total}}",
+                "searchPlaceholder": "搜索模型",
+                "modelPlaceholder": "输入模型名称",
+                "fetchModels": "拉取模型列表",
+                "manualHint": "如果上游不提供 OpenAI /models 模型列表接口，请在这里手动增加模型名称。",
+                "tabs": {
+                    "new_one": "新获取的模型（{{value}}）",
+                    "new_other": "新获取的模型（{{value}}）",
+                    "current_one": "已有的模型（{{value}}）",
+                    "current_other": "已有的模型（{{value}}）"
+                },
+                "currentSummary": "当前列表已选择 {{selected}} / {{total}}",
+                "selectAll": "全选当前列表",
+                "clearCurrent": "取消当前列表",
+                "empty": "没有匹配的模型"
+            },
+            "channelTest": {
+                "title": "{{name}}渠道的模型测试",
+                "modelCount_one": "共 {{value}} 个模型",
+                "modelCount_other": "共 {{value}} 个模型",
+                "batchTest_one": "批量测试 {{value}} 个模型",
+                "batchTest_other": "批量测试 {{value}} 个模型",
+                "description": "普通文本模型会发送一条 hi；Agent Plan / Seedance 视频模型只做配置格式检查，不会发起视频生成，也不代表模型权限已验证。",
+                "searchPlaceholder": "搜索模型…",
+                "table": {
+                    "model": "模型名称",
+                    "status": "状态"
+                },
+                "statuses": {
+                    "testing": "测试中",
+                    "notStarted": "未开始",
+                    "success": "成功"
+                },
+                "duration": "请求时长：{{value}} 秒"
+            }
+        }
+    },
+    "errors": {
+        "customChannelDisabled": "后台未允许用户自定义渠道，请联系管理员进行配置",
+        "requestFailed": "请求失败",
+        "requestCancelled": "请求已取消",
+        "requestFailedWithStatus": "{{fallback}}：{{status}}",
+        "authenticationFailed": "鉴权失败，请检查 API Key、套餐权限或模型权限",
+        "rateLimited": "请求被限流或额度不足，请稍后重试",
+        "backendProxyFailed": "后端代理请求失败",
+        "noContentReturned": "没有返回内容",
+        "authRequired": "请先登录",
+        "config": {
+            "baseUrlRequired": "请先配置 Base URL",
+            "apiKeyRequired": "请先配置 API Key",
+            "videoModelRequired": "请先配置视频模型",
+            "audioModelRequired": "请先配置音频模型"
+        },
+        "image": {
+            "invalidSizeFormat": "图像尺寸格式不支持，请使用 auto、9:16 或 1024x1024",
+            "invalidRatio": "图像比例必须是正数，例如 9:16",
+            "invalidDimensions": "图像尺寸必须是正整数，例如 1024x1024",
+            "dimensionStep": "图像尺寸的宽高必须是 16 的倍数，请调整尺寸",
+            "edgeTooLarge": "图像尺寸最长边不能超过 3840px，请调整尺寸",
+            "ratioTooLarge": "图像宽高比不能超过 3:1，请调整尺寸",
+            "pixelRange": "图像总像素需在 655360 到 8294400 之间，请调整尺寸",
+            "noImageReturned": "接口没有返回图片",
+            "noImageReturnedByGemini": "Gemini 接口没有返回图片",
+            "readFailed": "读取图片失败",
+            "geminiRejected": "Gemini 拒绝了本次请求：{{reason}}",
+            "geminiMaskUnsupported": "Gemini 调用格式暂不支持蒙版编辑",
+            "generationFailed": "图片生成失败",
+            "asyncCreateMissingTaskId": "图片异步任务创建失败，未返回 task_id",
+            "asyncCreateFailed": "图片异步任务创建失败",
+            "asyncEditMissingTaskId": "图片异步编辑任务创建失败，未返回 task_id",
+            "asyncEditFailed": "图片异步编辑任务创建失败",
+            "taskQueryFailed": "图片任务查询失败",
+            "taskSucceededWithoutImage": "图片任务成功但没有返回图片",
+            "readModelsFailed": "读取模型失败"
+        },
+        "video": {
+            "timeout": "视频生成超时，请稍后重试",
+            "missingTaskId": "视频接口没有返回任务 ID",
+            "createTaskFailed": "视频任务创建失败",
+            "succeededWithoutUrl": "视频任务成功但没有返回视频 URL",
+            "queryTaskFailed": "视频任务查询失败",
+            "noPlayableVideo": "视频接口没有返回可播放的视频",
+            "audioRequiresVisual": "参考音频不能单独使用，请同时添加参考图或参考视频",
+            "promptOrReferenceRequired": "请输入视频提示词，或连接参考图片、视频或音频",
+            "negativePromptTooLong": "负向提示词不能超过 500 个字符",
+            "readReferenceImageFailed": "参考图读取失败，请换一张图片或重新上传",
+            "invalidReferenceVideo": "参考视频必须是公网 URL、素材 ID，或本地已保存的视频",
+            "invalidReferenceAudio": "参考音频必须是公网 URL、素材 ID，或本地已保存的音频",
+            "geminiUnsupported": "Gemini 调用格式暂不支持视频生成，请使用 OpenAI 格式渠道",
+            "noTaskReturned": "视频接口没有返回任务",
+            "generationFailed": "视频生成失败",
+            "downloadFailed": "视频下载失败",
+            "readLocalAssetFailed": "读取本地素材失败",
+            "cancelFailed": "视频任务取消失败",
+            "cancelled": "视频生成已取消",
+            "remixFailed": "视频二次创作失败",
+            "emptyResult": "视频结果为空",
+            "firstPartyProfileRequired": "当前模型不支持第一方 Canvas 视频生成，请选择已配置的 Model Profile",
+            "posterLoadFailed": "无法加载视频首帧",
+            "referenceTooLarge": "{{label}} 超过 50MB，请压缩后再上传",
+            "referenceDuration": "{{label}} 时长需要在 2-15 秒之间",
+            "referenceDimensions": "{{label}} 宽高需要在 300-6000px 之间",
+            "referenceRatio": "{{label}} 宽高比需要在 0.4-2.5 之间",
+            "referencePixels": "{{label}} 像素总量不符合 Seedance 要求，请转成 480p/720p/1080p 后再上传",
+            "referenceTotalDuration": "Seedance 参考视频总时长不能超过 15 秒"
+        },
+        "audio": {
+            "generationFailed": "音频生成失败",
+            "geminiUnsupported": "Gemini 调用格式暂不支持音频生成，请使用 OpenAI 格式渠道"
+        },
+        "webdav": {
+            "connectionTestFailed": "WebDAV 连接测试失败",
+            "readFileFailed": "读取 WebDAV 同步文件失败",
+            "readFileTimeout": "读取 WebDAV 同步文件超时",
+            "emptyUpload": "上传文件为空，已取消上传",
+            "uploadFileFailed": "上传 WebDAV 同步文件失败",
+            "createDirectoryFailed": "创建 WebDAV 远程目录失败",
+            "requestTimeout": "WebDAV 请求超时，请检查网络、代理或远端服务状态",
+            "connectionFailed": "无法连接 WebDAV，请检查地址、HTTPS 证书、CORS 或网络状态",
+            "authenticationFailed": "WebDAV 认证失败，请检查用户名、密码或应用密码",
+            "pathNotFound": "WebDAV 路径不存在，请检查地址和远程目录",
+            "syncFailed": "WebDAV 同步失败",
+            "invalidManifest": "{{domain}} 同步清单不是当前应用的数据"
+        },
+        "api": {
+            "connectionFailed": "接口连接失败，请确认后端服务已启动",
+            "notFound": "接口不存在，请确认后端服务已启动",
+            "unexpectedResponse": "接口返回异常，请稍后重试"
+        },
+        "upload": {
+            "failed": "上传失败",
+            "proxyFailed": "代理上传失败"
+        }
+    },
+    "seo": {
+        "default": {
+            "title": "Canvan AI 创作平台",
+            "description": "Canvan — AI 无限画布创作平台"
+        },
+        "pages": {
+            "home": {
+                "title": "Canvan AI 创作平台",
+                "description": "通过无限画布组织提示词、图片、视频和 AI 创作流程。"
+            },
+            "login": {
+                "title": "登录 | Canvan",
+                "description": "登录 Canvan AI 创作平台。"
+            },
+            "canvas": {
+                "title": "我的画布 | Canvan",
+                "description": "管理并编辑你的 AI 无限画布项目。"
+            },
+            "image": {
+                "title": "生图工作台 | Canvan",
+                "description": "使用 AI 生成和编辑图片。"
+            },
+            "video": {
+                "title": "视频创作台 | Canvan",
+                "description": "使用 AI 创建和管理视频生成任务。"
+            },
+            "prompts": {
+                "title": "提示词库 | Canvan",
+                "description": "浏览、搜索和复用 AI 提示词。"
+            },
+            "assets": {
+                "title": "我的素材 | Canvan",
+                "description": "管理个人 AI 创作素材。"
+            },
+            "assetLibrary": {
+                "title": "素材库 | Canvan",
+                "description": "浏览并保存公共创作素材。"
+            },
+            "account": {
+                "title": "账户设置 | Canvan",
+                "description": "管理账户资料、安全设置和使用记录。"
+            },
+            "enterpriseAssets": {
+                "title": "企业素材库 | Canvan",
+                "description": "管理企业共享创作素材。"
+            },
+            "admin": {
+                "title": "管理后台 | Canvan",
+                "description": "管理 Canvan 平台用户、内容和系统设置。"
+            },
+            "notFound": {
+                "title": "页面不存在 | Canvan",
+                "description": "当前页面不存在。"
+            }
+        }
+    },
+    "canvas": {
+        "nodeTypes": {
+            "image": "图片",
+            "text": "文本",
+            "config": "配置",
+            "video": "视频",
+            "audio": "音频"
+        },
+        "library": {
+            "states": {
+                "loading": "正在加载...",
+                "opening": "正在打开画布...",
+                "loadingProjects": "正在加载画布..."
+            },
+            "header": {
+                "eyebrow": "画布库",
+                "title": "无限画布"
+            },
+            "actions": {
+                "exportSelected": "导出选中",
+                "deleteSelected": "删除选中",
+                "deleteAll": "删除全部",
+                "import": "导入画布",
+                "create": "新建画布"
+            },
+            "messages": {
+                "importSuccess_one": "已导入 {{value}} 个画布",
+                "importSuccess_other": "已导入 {{value}} 个画布"
+            },
+            "errors": {
+                "importFailed": "导入失败，请选择有效的画布压缩包"
+            },
+            "empty": {
+                "title": "还没有画布",
+                "description": "新建一个画布后，就可以独立保存节点、连线和画布外观。"
+            },
+            "project": {
+                "defaultTitle": "无限画布 {{index}}",
+                "selectedExportFileName_one": "无限画布-{{value}}个项目",
+                "selectedExportFileName_other": "无限画布-{{value}}个项目",
+                "selectLabel": "选择 {{title}}",
+                "nodeCount_one": "{{value}} 个节点",
+                "nodeCount_other": "{{value}} 个节点",
+                "connectionCount_one": "{{value}} 条连线",
+                "connectionCount_other": "{{value}} 条连线",
+                "updatedAt": "更新于 {{time}}",
+                "actions": {
+                    "saveName": "保存名称",
+                    "cancelRename": "取消重命名",
+                    "export": "导出",
+                    "rename": "重命名",
+                    "delete": "删除"
+                }
+            },
+            "deleteDialog": {
+                "title": "删除画布？",
+                "cancel": "取消",
+                "confirm": "删除",
+                "description_one": "将删除 {{value}} 个画布，里面的节点和连线也会一起移除。",
+                "description_other": "将删除 {{value}} 个画布，里面的节点和连线也会一起移除。"
+            }
+        },
+        "toolbar": {
+            "tools": {
+                "hand": "移动/选择",
+                "undo": "撤销",
+                "redo": "重做",
+                "text": "文本",
+                "image": "图片",
+                "video": "视频",
+                "audio": "音频",
+                "config": "生成配置",
+                "upload": "上传素材",
+                "assets": "我的素材",
+                "appearance": "画布外观",
+                "deleteSelected": "删除选中",
+                "clear": "清空画布"
+            },
+            "appearance": {
+                "title": "画布外观",
+                "themeMode": "主题模式",
+                "light": "浅色",
+                "dark": "深色",
+                "gridStyle": "网格样式",
+                "dots": "点",
+                "lines": "线",
+                "blank": "空白",
+                "imageInfo": "图片信息",
+                "switchTheme": "切换到{{theme}}主题"
+            },
+            "messages": {
+                "noPrompt": "暂无可复制的提示词",
+                "promptCopied": "提示词已复制"
+            },
+            "settings": {
+                "title": "自定义工具栏",
+                "showLabels": "显示按钮文字",
+                "description": "选择你想在图片节点编辑栏中使用的快捷工具。",
+                "previewTitle": "节点预览",
+                "previewNode": "图片节点",
+                "toolsLabel": "快捷工具",
+                "moreTitle": "配置快捷工具",
+                "moreLabel": "更多"
+            },
+            "actions": {
+                "info": {
+                    "title": "查看节点信息",
+                    "label": "信息"
+                },
+                "delete": {
+                    "title": "移除节点",
+                    "label": "删除"
+                },
+                "retry": {
+                    "title": "重新生成",
+                    "label": "重试"
+                },
+                "saveAsset": {
+                    "title": "加入我的素材",
+                    "label": "存素材"
+                },
+                "download": {
+                    "label": "下载",
+                    "image": "下载图片",
+                    "video": "下载视频",
+                    "audio": "下载音频"
+                },
+                "edit": {
+                    "title": "编辑",
+                    "label": "编辑"
+                },
+                "editText": {
+                    "title": "编辑文本",
+                    "label": "编辑文字"
+                },
+                "generateImage": {
+                    "title": "用文本生图",
+                    "label": "生图"
+                },
+                "config": {
+                    "title": "生成配置",
+                    "label": "生成配置"
+                },
+                "decreaseFont": {
+                    "title": "减小字号",
+                    "label": "缩小"
+                },
+                "increaseFont": {
+                    "title": "增大字号",
+                    "label": "放大"
+                },
+                "upload": {
+                    "image": "上传图片",
+                    "video": "上传视频",
+                    "audio": "上传音频"
+                },
+                "replace": {
+                    "video": "替换视频",
+                    "audio": "替换音频"
+                }
+            },
+            "imageTools": {
+                "copyPrompt": {
+                    "label": "复制提示词",
+                    "title": "复制生成该图片的提示词"
+                },
+                "reversePrompt": {
+                    "label": "反推提示词",
+                    "title": "创建反推提示词的文本和配置节点"
+                },
+                "replace": {
+                    "label": "替换图片",
+                    "title": "替换图片"
+                },
+                "resize": {
+                    "lockedLabel": "锁比例",
+                    "freeLabel": "自由比例",
+                    "toLockedTitle": "切换为等比缩放",
+                    "toFreeTitle": "切换为自由比例"
+                },
+                "maskEdit": {
+                    "label": "局部编辑",
+                    "title": "添加蒙版遮罩后局部修改"
+                },
+                "crop": {
+                    "label": "裁剪",
+                    "title": "裁剪并生成新节点"
+                },
+                "split": {
+                    "label": "切图",
+                    "title": "按行列切分图片"
+                },
+                "upscale": {
+                    "label": "放大",
+                    "title": "放大图片分辨率"
+                },
+                "superResolve": {
+                    "label": "超分",
+                    "title": "AI 超分"
+                },
+                "angle": {
+                    "label": "多角度",
+                    "title": "生成角度"
+                },
+                "view": {
+                    "label": "查看大图",
+                    "title": "查看图片详情"
+                }
+            }
+        },
+        "zoom": {
+            "minimap": {
+                "open": "打开小地图",
+                "close": "关闭小地图"
+            },
+            "reset": "重置视图",
+            "scale": "放大/缩小画布"
+        },
+        "shortcuts": {
+            "title": "快捷键",
+            "gestures": {
+                "dragCanvas": "拖动画布",
+                "wheel": "滚轮",
+                "drag": "拖动",
+                "click": "点击",
+                "zoomSlider": "缩放滑杆",
+                "dropMedia": "拖入图片/视频/音频"
+            },
+            "actions": {
+                "pan": "平移视图",
+                "zoom": "缩放画布",
+                "preciseZoom": "精确调整缩放",
+                "boxSelect": "框选多个节点",
+                "addSelection": "追加选择节点",
+                "selectAll": "全选节点",
+                "copyPaste": "复制 / 粘贴节点",
+                "copyPasteClipboard": "复制 / 粘贴节点，或粘贴剪切板文本/图片",
+                "undo": "撤销",
+                "redo": "重做",
+                "deleteSelection": "删除选中",
+                "cancelOverlays": "取消选择并关闭浮层",
+                "upload": "上传到画布"
+            }
+        },
+        "contextMenu": {
+            "duplicate": "复制",
+            "delete": "删除"
+        },
+        "overview": {
+            "label": "画布总览",
+            "expand": "展开总览侧栏",
+            "collapse": "折叠总览侧栏",
+            "tabs": {
+                "label": "总览类型",
+                "canvas": "画布",
+                "assets": "素材"
+            },
+            "search": {
+                "placeholder": "搜索节点",
+                "ariaLabel": "搜索 Canvas 节点"
+            },
+            "type": {
+                "all": "全部类型",
+                "label": "节点类型"
+            },
+            "listLabel": "Canvas 节点列表",
+            "batchResults_one": " · {{value}} 个结果",
+            "batchResults_other": " · {{value}} 个结果",
+            "empty": "没有匹配节点",
+            "videoPreview": "{{title}}预览",
+            "status": {
+                "processing": "处理中",
+                "failed": "失败",
+                "completed": "已完成",
+                "ready": "就绪"
+            }
+        },
+        "editor": {
+            "project": {
+                "untitled": "未命名画布",
+                "imported": "导入画布"
+            },
+            "connectionCreate": {
+                "title": "引用该节点生成",
+                "close": "关闭",
+                "text": {
+                    "title": "文本生成",
+                    "description": "脚本、广告词、品牌文案"
+                },
+                "image": "图片生成",
+                "video": "视频生成",
+                "audio": "音频参考",
+                "config": {
+                    "title": "配置节点",
+                    "description": "模型、尺寸、数量和输入顺序"
+                }
+            },
+            "confirmations": {
+                "continueGeneration": "继续生成",
+                "stopWaiting": {
+                    "title": "停止等待？",
+                    "description": "这只会停止当前页面等待，不会取消上游任务；稍后仍可恢复查询。",
+                    "confirm": "停止"
+                },
+                "cancelGeneration": {
+                    "title": "取消生成任务？",
+                    "description": "取消会提交给上游；只有上游确认后任务才会变为已取消。",
+                    "confirm": "取消任务"
+                }
+            },
+            "errors": {
+                "taskCancelled": "任务已取消",
+                "configConnection": "配置节点之间不能连接",
+                "emptySaveText": "没有可保存的文本",
+                "emptySaveVideo": "没有可保存的视频",
+                "emptySaveImage": "没有可保存的图片",
+                "emptyImageForReversePrompt": "图片节点为空，无法反推提示词",
+                "maskEditFailed": "局部修改失败",
+                "generationFailed": "生成失败",
+                "videoTaskCreateFailed": "视频任务创建失败",
+                "retryPromptMissing": "找不到提示词，无法重试",
+                "retryReferenceMissing": "参考图片已丢失，无法继续重试",
+                "imageGenerationTimeout": "图片生成超时，请稍后重试",
+                "imageGenerationFailed": "图片生成失败",
+                "videoResultEmpty": "视频结果为空",
+                "videoFileUnavailable": "视频文件不可用",
+                "videoGenerationFailed": "视频生成失败",
+                "videoGenerationTimeout": "视频生成超时，请稍后重试",
+                "emptyTextForImage": "文本节点为空，无法生图",
+                "assetImageUnavailable": "素材图片暂时不可用，请刷新后重试",
+                "generationInterrupted": "页面刷新后生成已中断，请重新生成。"
+            },
+            "files": {
+                "clipboardImageName": "剪切板图片.png",
+                "downloadName": "canvas-{{type}}-{{id}}.{{extension}}"
+            },
+            "messages": {
+                "clipboardImageAdded": "已从剪切板添加图片",
+                "clipboardTextAdded": "已从剪切板添加文本",
+                "assetSaved": "已加入我的素材",
+                "imageSplit_one": "已切分为 {{value}} 个子节点",
+                "imageSplit_other": "已切分为 {{value}} 个子节点"
+            },
+            "nodes": {
+                "copySuffix": " 副本",
+                "copyTitle": "{{title}} 副本",
+                "clipboardText": "剪切板文本",
+                "canvasText": "画布文本",
+                "canvasVideo": "画布视频",
+                "canvasImage": "画布图片",
+                "reversePrompt": "反推提示词",
+                "reversePromptConfig": "反推提示词配置",
+                "croppedImage": "裁剪图片",
+                "splitImageTitle": "{{title}} {{row}}-{{column}}",
+                "maskEditResult": "局部编辑结果",
+                "upscaledImage": "放大图片",
+                "generatedImage": "生成图片",
+                "prompt": "提示词",
+                "generatedVideo": "生成视频",
+                "generatedAudio": "生成音频",
+                "generatedText": "生成文本",
+                "assistantText": "助手文本"
+            },
+            "prompts": {
+                "reverseImage": "请根据参考图片反推一段适合用于 AI 生图的提示词。\n\n要求：\n1. 只输出提示词正文，不要解释。\n2. 覆盖主体、构图、风格、光线、色彩、材质、镜头和氛围。\n3. 尽量写成可直接用于生图模型的完整提示词。",
+                "reverseComposer": "参考图片：@[node:{{imageNodeId}}]\n任务说明：@[node:{{instructionNodeId}}]",
+                "maskEdit": "只修改蒙版透明区域，其他区域保持不变。{{prompt}}",
+                "editText": "请根据要求修改以下文本。\n\n原文：\n{{sourceText}}\n\n修改要求：\n{{prompt}}",
+                "angle": "基于参考图重新生成同一主体的新视角，保持主体、颜色、材质和画面风格一致，不要只做透视变形。{{angle}}。"
+            },
+            "modals": {
+                "superResolution": {
+                    "title": "AI 超分",
+                    "unavailable": "暂未实现"
+                },
+                "imagePreview": {
+                    "title": "图片详情"
+                },
+                "clear": {
+                    "title": "清空画布？",
+                    "cancel": "取消",
+                    "confirm": "清空",
+                    "description": "这会删除当前画布上的所有节点和连线。"
+                }
+            },
+            "topbar": {
+                "openMenu": "打开画布菜单",
+                "renameHint": "双击修改画布名称",
+                "agent": "Agent",
+                "menu": {
+                    "home": "主页",
+                    "docs": "文档",
+                    "projects": "我的画布",
+                    "new": "新建画布",
+                    "delete": "删除当前画布",
+                    "import": "导入素材",
+                    "undo": "撤销",
+                    "redo": "重做"
+                }
+            },
+            "agent": {
+                "connected": "已连接到本地 Codex",
+                "connecting": "连接中",
+                "starting": "正在连接本地 Codex",
+                "openPanel": "打开本地 Codex 面板"
+            },
+            "angle": {
+                "horizontal": {
+                    "front": "正面视角",
+                    "right": "向右旋转 {{value}}°",
+                    "left": "向左旋转 {{value}}°"
+                },
+                "pitch": {
+                    "level": "水平视角",
+                    "down": "俯视 {{value}}°",
+                    "up": "仰视 {{value}}°"
+                },
+                "lens": {
+                    "wide": "广角",
+                    "standard": "标准"
+                },
+                "label": "AI 多角度：{{horizontal}}，{{pitch}}，镜头距离 {{distance}}，{{lens}}镜头"
+            }
+        },
+        "actions": {
+            "aiGenerate": "AI 生成",
+            "cancel": "取消",
+            "cancelGenerationTask": "取消生成任务",
+            "cancelTask": "取消任务",
+            "generate": "生成",
+            "reset": "重置",
+            "resumeQuery": "恢复查询",
+            "retry": "重试",
+            "save": "保存",
+            "startGeneration": "开始生成",
+            "stop": "停止",
+            "stopWaiting": "停止等待"
+        },
+        "common": {
+            "reading": "读取中",
+            "unknown": "未知"
+        },
+        "counts": {
+            "items_one": "{{value}} 个",
+            "items_other": "{{value}} 个",
+            "images_one": "{{value}} 张",
+            "images_other": "{{value}} 张",
+            "videos_one": "{{value}} 个",
+            "videos_other": "{{value}} 个",
+            "audios_one": "{{value}} 个",
+            "audios_other": "{{value}} 个",
+            "nodes_one": "{{value}} 个",
+            "nodes_other": "{{value}} 个"
+        },
+        "units": {
+            "degreeSuffix": "°",
+            "pixelDimensions": "{{value}} px",
+            "pixelValue": "{{value}} px"
+        },
+        "assets": {
+            "picker": {
+                "title": "选择素材",
+                "searchPlaceholder": "搜索素材",
+                "empty": "没有素材",
+                "insert": "插入",
+                "previewAria": "{{title}}预览",
+                "filters": {
+                    "all": "全部",
+                    "text": "文本",
+                    "image": "图片",
+                    "video": "视频"
+                }
+            }
+        },
+        "composer": {
+            "title": "组装提示词",
+            "hint": "@ 引用已连接素材，发送前按当前连接重新编号",
+            "placeholder": "输入提示词，按 @ 引用连接的图片或文本",
+            "imagePreviewAlt": "引用图片预览"
+        },
+        "resources": {
+            "labels": {
+                "text": "文本{{index}}",
+                "image": "图片{{index}}",
+                "video": "视频{{index}}",
+                "audio": "音频{{index}}"
+            }
+        },
+        "models": {
+            "legacySelection": "旧模型：{{model}}（请重新选择）"
+        },
+        "configNode": {
+            "title": "生成配置",
+            "modes": {
+                "image": "生图",
+                "text": "文本",
+                "video": "视频",
+                "audio": "音频"
+            },
+            "inputs": {
+                "prompt": "提示词",
+                "referenceImage": "参考图",
+                "referenceVideo": "参考视频",
+                "referenceAudio": "参考音频"
+            }
+        },
+        "prompts": {
+            "library": "提示词库"
+        },
+        "settings": {
+            "aspectRatioPlaceholder": "比例"
+        },
+        "promptEditor": {
+            "promptAria": "提示词",
+            "resourcesAria": "资源",
+            "expand": "放大输入框",
+            "collapse": "缩小输入框"
+        },
+        "promptPanel": {
+            "placeholders": {
+                "video": "描述要生成的视频内容",
+                "audio": "描述要生成的音频内容",
+                "imageEdit": "请输入你想要把这张图修改成什么",
+                "imageGenerate": "描述要生成的图片内容",
+                "textEdit": "请输入你想要将本段文本修改成什么",
+                "textGenerate": "请输入你想要生成的文本内容"
+            },
+            "shortDrama": {
+                "assetsTitle": "短剧资产角色",
+                "missingRole": "缺少角色",
+                "roleAria": "{{title}}角色",
+                "selectRole": "选择角色",
+                "roles": {
+                    "character": "角色",
+                    "scene": "场景",
+                    "tool": "道具"
+                }
+            }
+        },
+        "node": {
+            "unknown": "未知节点",
+            "errors": {
+                "generationFailed": "生成失败"
+            },
+            "placeholders": {
+                "editText": "双击编辑文字",
+                "emptyImage": "空图片节点",
+                "emptyVideo": "空视频节点",
+                "emptyAudio": "空音频节点"
+            },
+            "defaultTitles": {
+                "audio": "音频"
+            },
+            "batch": {
+                "expanded": "图片组已展开",
+                "collapsed": "图片组已收起"
+            },
+            "actions": {
+                "setPrimary": "设为主图"
+            },
+            "types": {
+                "text": "文本",
+                "image": "图片",
+                "config": "生成配置",
+                "video": "视频",
+                "audio": "音频"
+            },
+            "status": {
+                "idle": "就绪",
+                "success": "已完成",
+                "loading": "处理中",
+                "error": "失败"
+            },
+            "info": {
+                "title": "节点信息",
+                "base64ImagePlaceholder": "[base64 图片]",
+                "positionValue": "{{x}}, {{y}}",
+                "tabs": {
+                    "info": "信息",
+                    "json": "JSON"
+                },
+                "fields": {
+                    "id": "ID",
+                    "type": "类型",
+                    "size": "尺寸",
+                    "position": "位置",
+                    "status": "状态",
+                    "batch": "图片组",
+                    "prompt": "提示词",
+                    "imageSize": "图片大小"
+                }
+            }
+        },
+        "angle": {
+            "title": "AI 多角度",
+            "description": "左侧只预览方向，结果会基于原图重新生成",
+            "horizontal": "左右角度",
+            "pitch": "俯仰角度",
+            "distance": "镜头距离",
+            "wideAngle": "广角镜头",
+            "standard": "标准",
+            "wide": "广角"
+        },
+        "crop": {
+            "title": "裁剪图片",
+            "resizeAria": "调整裁剪框",
+            "cropSize": "裁剪尺寸 {{value}}",
+            "ratio": "比例 {{value}}",
+            "originalSize": "原图 {{value}}",
+            "lockedRatio": "锁定比例",
+            "freeRatio": "自由比例",
+            "confirm": "确认裁剪"
+        },
+        "maskEdit": {
+            "title": "局部遮罩编辑",
+            "paint": "画笔",
+            "erase": "擦除",
+            "brushSize": "笔刷大小",
+            "request": "修改要求",
+            "placeholder": "例如：把选中区域改成金属材质，保持原图光影",
+            "apply": "AI 修改",
+            "errors": {
+                "promptRequired": "请输入修改要求",
+                "maskRequired": "请先涂抹局部区域"
+            }
+        },
+        "split": {
+            "title": "切分图片",
+            "description_one": "生成 {{value}} 个图片子节点，并按原图网格排列到画布右侧",
+            "description_other": "生成 {{value}} 个图片子节点，并按原图网格排列到画布右侧",
+            "original": "原图",
+            "rows": "行数",
+            "columns": "列数",
+            "childNodes": "子节点",
+            "approxPiece": "单块约",
+            "generate": "生成子节点"
+        },
+        "upscale": {
+            "title": "图片放大",
+            "source": "源图",
+            "targetPixels": "目标像素",
+            "algorithm": "放大算法",
+            "outputSize": "输出尺寸",
+            "generate": "生成放大图",
+            "errors": {
+                "reachedMax": "图片已达到 4K，无需放大",
+                "reachedTarget": "图片已达到当前目标像素，无需放大"
+            },
+            "algorithms": {
+                "high": {
+                    "title": "高清插值",
+                    "description": "适合照片和细节图"
+                },
+                "bilinear": {
+                    "title": "双线性",
+                    "description": "平滑、速度快"
+                },
+                "nearest": {
+                    "title": "最近邻",
+                    "description": "适合像素风格"
+                }
+            }
+        },
+        "generation": {
+            "errors": {
+                "resourceNotUploaded": "素材「{{name}}」尚未上传到平台文件库",
+                "shortDramaTitleRequired": "请输入短剧标题",
+                "shortDramaScriptRequired": "请输入短剧脚本",
+                "shortDramaAssetRequired": "请连接至少一张短剧资产图片",
+                "shortDramaRoleRequired": "请为图片「{{name}}」选择角色",
+                "imageNotUploaded": "图片「{{name}}」尚未上传到平台文件库"
+            }
+        },
+        "export": {
+            "defaultFileName": "无限画布"
+        },
+        "agent": {
+            "title": "Agent",
+            "codex": "Codex",
+            "mode": {
+                "online": "网站",
+                "local": "本机"
+            },
+            "tabs": {
+                "setup": "连接",
+                "chat": "对话",
+                "history": "历史",
+                "logs": "日志"
+            },
+            "accessibility": {
+                "panel": "Agent 面板",
+                "openAiLogo": "OpenAI"
+            },
+            "actions": {
+                "cancel": "取消",
+                "clear": "清空",
+                "configure": "配置",
+                "connect": "连接",
+                "copy": "复制",
+                "delete": "删除",
+                "deleteRecord": "删除记录",
+                "disconnect": "断开",
+                "newConversation": "新对话",
+                "open": "进入",
+                "refresh": "刷新",
+                "undo": "撤销"
+            },
+            "chat": {
+                "removeImage": "移除图片",
+                "send": "发送",
+                "uploadImage": "上传图片",
+                "working": "处理中..."
+            },
+            "composer": {
+                "placeholder": "询问 Codex，或让它操作画布"
+            },
+            "tools": {
+                "approve": "批准执行",
+                "call": "工具调用",
+                "confirmTitle": "确认工具调用",
+                "confirmToggle": "工具确认",
+                "detail": "详情",
+                "reject": "拒绝执行",
+                "status": {
+                    "approved": "已批准执行",
+                    "completed": "执行完成",
+                    "failed": "执行失败",
+                    "noop": "未生效",
+                    "pending": "等待确认",
+                    "rejected": "拒绝执行"
+                }
+            },
+            "toolNames": {
+                "applyOps": "画布操作",
+                "getState": "读取画布",
+                "getSelection": "读取选区",
+                "exportSnapshot": "导出快照",
+                "createNode": "创建节点",
+                "createTextNode": "创建文本",
+                "createTextNodes": "批量创建文本",
+                "createConfigNode": "创建生成配置",
+                "createImagePromptFlow": "创建生图流程",
+                "createGenerationFlow": "创建生成流程",
+                "generateText": "生成文本",
+                "generateImage": "生成图片",
+                "generateVideo": "生成视频",
+                "generateAudio": "生成音频",
+                "updateNode": "更新节点",
+                "updateNodeText": "更新文本",
+                "moveNodes": "移动节点",
+                "resizeNode": "调整节点尺寸",
+                "deleteNodes": "删除节点",
+                "connectNodes": "连接节点",
+                "selectNodes": "选择节点",
+                "setViewport": "调整视口",
+                "runGeneration": "触发生成"
+            },
+            "operations": {
+                "addNode_one": "新增 {{value}} 个节点",
+                "addNode_other": "新增 {{value}} 个节点",
+                "updateNode_one": "更新 {{value}} 个节点",
+                "updateNode_other": "更新 {{value}} 个节点",
+                "deleteNode_one": "删除 {{value}} 个节点",
+                "deleteNode_other": "删除 {{value}} 个节点",
+                "deleteConnections_one": "删除 {{value}} 条连线",
+                "deleteConnections_other": "删除 {{value}} 条连线",
+                "connectNodes_one": "建立 {{value}} 条连线",
+                "connectNodes_other": "建立 {{value}} 条连线",
+                "setViewport_one": "调整 {{value}} 次视图",
+                "setViewport_other": "调整 {{value}} 次视图",
+                "selectNodes_one": "选择节点 {{value}} 次",
+                "selectNodes_other": "选择节点 {{value}} 次",
+                "runGeneration_one": "触发 {{value}} 次生成",
+                "runGeneration_other": "触发 {{value}} 次生成",
+                "unknown_one": "{{operation}} {{value}} 次",
+                "unknown_other": "{{operation}} {{value}} 次"
+            },
+            "attachments": {
+                "imagesSent": "发送了图片",
+                "maxPayload": "图片附件最多约 {{size}}。",
+                "payloadTooLarge": "图片附件超过 {{size}}，请删减后再发送。",
+                "promptContext_one": "用户上传了 {{value}} 张图片附件：{{names}}。",
+                "promptContext_other": "用户上传了 {{value}} 张图片附件：{{names}}。",
+                "readFailed": "图片读取失败",
+                "tooLargeTitle": "图片过大"
+            },
+            "deleteDialog": {
+                "title": "删除对话记录",
+                "description": "确定删除「{{name}}」吗？"
+            },
+            "diagnostics": {
+                "title": "Infinite Canvas Agent 诊断日志",
+                "endpoint": "Canvas Agent：{{value}}",
+                "connection": "连接：{{value}}",
+                "disabled": "未启用",
+                "logs": "日志：{{value}}",
+                "messages": "消息：{{value}}",
+                "none": "无",
+                "online": "在线",
+                "pendingTool": "待确认工具：{{value}}",
+                "sending": "发送中：{{value}}",
+                "status": "状态：{{value}}",
+                "waiting": "等待中：{{value}}"
+            },
+            "errors": {
+                "canvasOperationFailed": "画布操作失败",
+                "connectionFailed": "连接失败，请检查地址和 token",
+                "connectionLost": "本地 Agent 连接失败或已断开",
+                "deleteConversationFailed": "删除对话失败",
+                "invalidUrl": "本地 Agent 地址格式不正确",
+                "newConversationFailed": "新建对话失败",
+                "notDiscovered": "没有发现本地 Agent，请先在 Codex 使用插件或手动启动 Canvas Agent",
+                "pendingToolExists": "仍有待确认的画布工具调用",
+                "requestFailed": "本地 Agent 请求失败",
+                "requestRejected": "本地 Agent 拒绝了请求",
+                "resumeConversationFailed": "恢复对话失败",
+                "toolCancelledByUser": "用户取消了画布工具调用",
+                "urlRequired": "请填写本地 Agent 地址"
+            },
+            "history": {
+                "connectToView": "连接本地 Agent 后显示历史记录",
+                "count_one": "{{value}} 条历史记录",
+                "count_other": "{{value}} 条历史记录",
+                "current": "当前",
+                "defaultWorkspace": "默认画布目录",
+                "empty": "暂无历史",
+                "messageCount_one": "{{value}} 条消息",
+                "messageCount_other": "{{value}} 条消息",
+                "untitled": "未命名对话",
+                "workspace": "工作空间",
+                "workspaceEmpty": "当前工作空间还没有对话记录"
+            },
+            "logs": {
+                "agentLog": "日志",
+                "awaitingConfirmation": "等待确认",
+                "codexEvent": "Codex 事件",
+                "codexReply": "Codex 回复",
+                "connectionFailed": "连接失败",
+                "connectionLost": "连接断开",
+                "copied": "日志已复制",
+                "copyBlocked": "已选中日志，请手动复制",
+                "count_one": "{{value}} 条",
+                "count_other": "{{value}} 条",
+                "deleteConversationFailed": "删除对话失败",
+                "empty": "暂无事件日志",
+                "error": "错误",
+                "historyLoadFailed": "读取历史失败",
+                "latestError": "最近错误",
+                "latestErrorCopied": "最近错误已复制",
+                "newConversationFailed": "新建对话失败",
+                "rawJson": "原始 JSON",
+                "requestAccepted": "本地 Agent 已接收",
+                "resumeConversationFailed": "恢复对话失败",
+                "sendFailed": "发送失败",
+                "streamSummary": "流式摘要",
+                "threadCreated": "已创建 Codex 会话",
+                "title": "运行日志",
+                "toolCompleted": "{{tool}}完成",
+                "toolInvoked": "调用工具：{{tool}}",
+                "troubleshooting": "排查日志",
+                "turnCompleted": "本轮完成",
+                "turnFailed": "本轮失败",
+                "turnStarted": "开始处理",
+                "userSent": "用户发送"
+            },
+            "messages": {
+                "canvasReadSummary": "读取到 {{nodes}} 个节点，{{connections}} 条连线",
+                "completed": "已完成",
+                "connected": "本地 Agent 已连接",
+                "errorTitle": "错误",
+                "previousToolOperation": "上一次工具操作",
+                "recordDeleted": "记录已删除",
+                "sendFailed": "发送失败",
+                "toolCallCompleted": "工具调用完成",
+                "toolCompleted": "{{tool}}完成",
+                "toolFailed": "工具失败",
+                "undone": "已撤销"
+            },
+            "setup": {
+                "autoDiscovery": "默认自动读取 Local URL 和 Connect token，失败时再手动填写。",
+                "commandCopied": "命令已复制",
+                "connectToken": "连接 Token",
+                "connectTokenTechnical": "Connect token",
+                "copyCommand": "复制命令",
+                "description": "安装 Codex 插件后，画布会优先自动连接本机 Agent。",
+                "localUrl": "本地地址",
+                "localUrlTechnical": "Local URL",
+                "steps": {
+                    "connectCanvas": {
+                        "description": "回到这里点击连接，网页会自动读取本机 Agent 配置。",
+                        "title": "打开画布连接"
+                    },
+                    "installPlugin": {
+                        "description": "在 Codex app 安装 Infinite Canvas 插件后，首次使用插件会自动启动本地 Agent。",
+                        "title": "安装 Codex 插件"
+                    },
+                    "manualStart": {
+                        "description": "如果自动发现失败，再运行下面命令。",
+                        "title": "手动启动备用"
+                    }
+                },
+                "title": "连接本地 Agent",
+                "tokenPlaceholder": "自动发现，或手动填入 Connect token",
+                "urlPlaceholder": "例如 http://127.0.0.1:17371",
+                "webConnection": "网页连接"
+            },
+            "status": {
+                "applyingCanvasOps": "执行画布操作",
+                "awaitingConfirmation": "等待确认",
+                "callingTool": "调用 {{tool}}",
+                "cancelled": "已取消",
+                "completed": "完成",
+                "connected": "已连接",
+                "connecting": "连接中",
+                "connectionFailed": "连接失败",
+                "disconnected": "连接断开",
+                "error": "出错",
+                "executingStep": "执行步骤",
+                "messageUpdated": "更新消息",
+                "newConversation": "新对话",
+                "notConnected": "未连接",
+                "offline": "离线",
+                "readingCanvas": "读取画布",
+                "ready": "就绪",
+                "sendFailed": "发送失败",
+                "sending": "发送中",
+                "sessionRestored": "已恢复会话",
+                "thinking": "思考中",
+                "threadCreated": "已创建会话",
+                "toolCompleted": "工具完成",
+                "toolFailed": "工具失败",
+                "undone": "已撤销"
+            },
+            "usage": {
+                "inputOutput": "输入 {{input}} / 输出 {{output}} tokens",
+                "tokens_one": "{{value}} token",
+                "tokens_other": "{{value}} tokens"
+            }
+        },
+        "assistant": {
+            "accessibility": {
+                "resizePanel": "调整右侧面板宽度"
+            },
+            "actions": {
+                "collapse": "收起对话",
+                "deleteAll": "删除全部"
+            },
+            "composer": {
+                "placeholder": "描述你想让 Agent 如何操作画布"
+            },
+            "conversations": {
+                "new": "新对话"
+            },
+            "deleteDialog": {
+                "description_one": "将删除 {{value}} 条对话记录，此操作不可撤销。",
+                "description_other": "将删除 {{value}} 条对话记录，此操作不可撤销。",
+                "title": "删除对话记录？"
+            },
+            "diagnostics": {
+                "confirmTools": "工具确认：{{value}}",
+                "connections": "连线：{{value}}",
+                "logs": "日志：{{value}}",
+                "messages": "消息：{{value}}",
+                "model": "模型：{{value}}",
+                "nodes": "节点：{{value}}",
+                "running": "运行中：{{value}}",
+                "title": "Infinite Canvas 网站 Agent 诊断日志"
+            },
+            "empty": {
+                "brand": "Infinite Canvas",
+                "tagline": "一张画布，无限灵感"
+            },
+            "errors": {
+                "argumentsMustBeObject": "工具参数必须是 JSON 对象",
+                "fieldMustBeArray": "{{field}} 必须是数组",
+                "fieldMustBeNonEmptyString": "{{field}} 必须是非空字符串",
+                "fieldMustBeNumber": "{{field}} 必须是数字",
+                "fieldMustBeStringArray": "{{field}} 必须是字符串数组",
+                "fieldMustContainNonEmptyStrings": "{{field}} 必须只包含非空字符串",
+                "fieldMustContainObjects": "{{field}} 必须只包含对象",
+                "invalidArgumentsJson": "工具参数不是合法 JSON 对象",
+                "invalidNodeType": "节点类型必须是 text、image、config、video 或 audio",
+                "noToolCall": "模型没有返回工具调用，画布操作未执行。",
+                "opsMustBeArray": "ops 必须是数组",
+                "unsupportedOperation": "不支持的画布操作类型",
+                "unsupportedTool": "不支持的工具：{{name}}"
+            },
+            "generation": {
+                "promptTitle": "提示词",
+                "titles": {
+                    "text": "文本生成",
+                    "image": "图片生成",
+                    "video": "视频生成",
+                    "audio": "音频生成"
+                }
+            },
+            "history": {
+                "description": "网站 Agent 的对话记录会显示在这里"
+            },
+            "logs": {
+                "awaitingConfirmation": "等待用户确认",
+                "continuationFailed": "工具续跑失败",
+                "modelToolResponse": "模型工具回复",
+                "requestFailed": "请求失败",
+                "requestSent": "发送请求",
+                "stepLimitReached": "Agent Tool Loop 达到步数上限",
+                "toolApproved": "批准工具",
+                "toolLoopEnded": "Agent Tool Loop {{step}} 结束",
+                "toolLoopReply": "Agent Tool Loop {{step}} 回复",
+                "toolLoopStarted": "Agent Tool Loop {{step}} 开始",
+                "toolRejected": "拒绝工具",
+                "toolResults": "工具执行结果"
+            },
+            "messages": {
+                "autoExecutionCompleted": "工具自动执行完成",
+                "canvasOperationApplied": "画布操作已执行。",
+                "invalidToolArguments": "工具参数错误",
+                "noContent": "没有返回内容。",
+                "operationFailed": "操作失败",
+                "previousToolFailed": "前一个工具调用失败，未继续执行。",
+                "selectionCount_one": "当前选中 {{value}} 个节点。",
+                "selectionCount_other": "当前选中 {{value}} 个节点。",
+                "toolCallCancelled": "工具调用已取消",
+                "toolContextMissing": "工具上下文不完整，无法执行。",
+                "toolExecutionCompleted": "工具执行完成",
+                "toolExecutionFailed": "工具执行失败",
+                "toolsExecuted": "工具已执行。",
+                "waitingForConfirmation": "准备执行工具，等待确认。"
+            },
+            "model": {
+                "empty": "暂无文本模型",
+                "notConfigured": "未配置模型",
+                "select": "选择文本模型"
+            },
+            "noop": {
+                "connectNodesNotFound": "没有找到要连接的节点。",
+                "connectionsExist": "这些节点已经存在对应连线，无需重复连接。",
+                "connectionsNotFound": "没有找到要删除的连线。",
+                "deleteNodesNotFound": "没有找到要删除的节点。",
+                "generationNodesNotFound": "没有找到要触发生成的节点。",
+                "noConfigNodes": "画布当前没有生成配置节点可删除。",
+                "noConnections": "画布当前没有连线可删除。",
+                "noOperations": "模型没有返回可执行的画布操作。",
+                "selectNodesNotFound": "没有找到要选择的节点。",
+                "selectionUnchanged": "选区已经是目标状态。",
+                "stateUnchanged": "工具已执行，但画布状态没有变化；请在日志 tab 查看工具参数和执行前后状态。",
+                "updateNodesNotFound": "没有找到要更新的节点。",
+                "viewportUnchanged": "视图已经是目标状态。"
+            },
+            "references": {
+                "remove": "移除引用",
+                "textFallback": "文"
+            },
+            "setup": {
+                "description": "网站 Agent 直接使用当前网页配置的文本模型和 API。",
+                "textModel": "文本模型",
+                "title": "连接配置"
+            },
+            "snapshot": {
+                "summary": "当前画布有 {{nodes}} 个节点、{{connections}} 条连线。文本 {{text}} 个，图片 {{images}} 个，生成配置 {{configs}} 个，视频 {{videos}} 个，音频 {{audios}} 个。"
+            },
+            "subtitle": "画布助手",
+            "tabs": {
+                "setup": "连接配置"
+            }
+        }
+    }
+}

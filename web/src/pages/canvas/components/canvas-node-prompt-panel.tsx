@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { ArrowUp, LoaderCircle, Square } from "lucide-react";
 import { Button } from "antd";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { ModelPicker, type ModelPickerOption } from "@/components/model-picker";
 import { findGenerationProfile, getGenerationProfiles, type GenerationProfile, type ShortDramaAssetRole } from "@/services/api/generations";
@@ -37,6 +39,7 @@ type CanvasNodePromptPanelProps = {
 };
 
 export function CanvasNodePromptPanel({ node, isRunning, canResume = false, onPromptChange, onConfigChange, onGenerate, onStop, onResume, onCancel, mentionReferences = [], onImageSettingsOpenChange }: CanvasNodePromptPanelProps) {
+    const { t } = useTranslation();
     const globalConfig = useEffectiveConfig();
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const publicSettings = useConfigStore((state) => state.publicSettings);
@@ -51,7 +54,7 @@ export function CanvasNodePromptPanel({ node, isRunning, canResume = false, onPr
     const profile = findGenerationProfile(profiles, config.model || config.videoModel);
     const unresolvedVideoProfile = mode === "video" && config.channelMode === "remote" && Boolean(config.model) && !profile;
     const profileOptions: ModelPickerOption[] = profiles.map((item) => ({ value: item.id, label: item.displayName }));
-    if (unresolvedVideoProfile) profileOptions.unshift({ value: config.model, label: `旧模型：${config.model}（请重新选择）`, disabled: true });
+    if (unresolvedVideoProfile) profileOptions.unshift({ value: config.model, label: t("canvas.models.legacySelection", { model: config.model }), disabled: true });
     const credits = requestCreditCost({
         channelMode: config.channelMode,
         model: config.model,
@@ -108,12 +111,12 @@ export function CanvasNodePromptPanel({ node, isRunning, canResume = false, onPr
                 onSubmit={submit}
                 className="thin-scrollbar h-24 w-full resize-none rounded-xl border px-3 py-2 text-sm leading-5 outline-none"
                 style={{ background: theme.node.fill, borderColor: theme.node.stroke, color: theme.node.text, lineHeight: "20px" }}
-                placeholder={promptPlaceholder(mode, hasImageContent, hasTextContent)}
+                placeholder={promptPlaceholder(mode, hasImageContent, hasTextContent, t)}
             />
 
             {mode === "video" && profile?.intents.includes("video.short-drama") ? (
                 <div className="mt-2 space-y-1.5 rounded-xl border p-2" style={{ borderColor: theme.node.stroke }}>
-                    <div className="text-xs font-medium">短剧资产角色</div>
+                    <div className="text-xs font-medium">{t("canvas.promptPanel.shortDrama.assetsTitle")}</div>
                     {mentionReferences
                         .filter((reference) => reference.kind === "image")
                         .map((reference) => (
@@ -124,19 +127,19 @@ export function CanvasNodePromptPanel({ node, isRunning, canResume = false, onPr
                             >
                                 <span className="min-w-0 flex-1">
                                     <span className="block truncate">{reference.title}</span>
-                                    <span className="block opacity-55">{node.metadata?.dramaAssetRoles?.[reference.nodeId] ? roleLabel(node.metadata.dramaAssetRoles[reference.nodeId]) : "缺少角色"}</span>
+                                    <span className="block opacity-55">{node.metadata?.dramaAssetRoles?.[reference.nodeId] ? roleLabel(node.metadata.dramaAssetRoles[reference.nodeId], t) : t("canvas.promptPanel.shortDrama.missingRole")}</span>
                                 </span>
                                 <select
-                                    aria-label={`${reference.title}角色`}
+                                    aria-label={t("canvas.promptPanel.shortDrama.roleAria", { title: reference.title })}
                                     className="h-8 rounded-lg border px-2"
                                     style={{ background: theme.node.fill, borderColor: theme.node.stroke, color: theme.node.text }}
                                     value={node.metadata?.dramaAssetRoles?.[reference.nodeId] || ""}
                                     onChange={(event) => onConfigChange(node.id, { dramaAssetRoles: { ...node.metadata?.dramaAssetRoles, [reference.nodeId]: event.target.value as ShortDramaAssetRole } })}
                                 >
-                                    <option value="">选择角色</option>
+                                    <option value="">{t("canvas.promptPanel.shortDrama.selectRole")}</option>
                                     {profile.capabilities.assets?.roles.map((role) => (
                                         <option key={role} value={role}>
-                                            {roleLabel(role)}
+                                            {roleLabel(role, t)}
                                         </option>
                                     ))}
                                 </select>
@@ -187,13 +190,13 @@ export function CanvasNodePromptPanel({ node, isRunning, canResume = false, onPr
                     )}
                 </div>
                 {canResume ? (
-                    <Button className="!h-10 shrink-0 !rounded-full !px-3" onClick={() => onResume?.(node.id)} aria-label="恢复查询">
-                        <span className="text-xs font-medium">恢复查询</span>
+                    <Button className="!h-10 shrink-0 !rounded-full !px-3" onClick={() => onResume?.(node.id)} aria-label={t("canvas.actions.resumeQuery")}>
+                        <span className="text-xs font-medium">{t("canvas.actions.resumeQuery")}</span>
                     </Button>
                 ) : null}
                 {isRunning && onCancel ? (
-                    <Button danger className="!h-10 shrink-0 !rounded-full !px-3" onClick={() => onCancel(node.id)} aria-label="取消生成任务">
-                        <span className="text-xs font-medium">取消任务</span>
+                    <Button danger className="!h-10 shrink-0 !rounded-full !px-3" onClick={() => onCancel(node.id)} aria-label={t("canvas.actions.cancelGenerationTask")}>
+                        <span className="text-xs font-medium">{t("canvas.actions.cancelTask")}</span>
                     </Button>
                 ) : null}
                 <Button
@@ -202,14 +205,14 @@ export function CanvasNodePromptPanel({ node, isRunning, canResume = false, onPr
                     danger={isRunning}
                     disabled={canResume || unresolvedVideoProfile || (!isRunning && !prompt.trim())}
                     onClick={() => (isRunning ? onStop(node.id) : submit())}
-                    aria-label={isRunning ? "停止等待" : "生成"}
+                    aria-label={t(isRunning ? "canvas.actions.stopWaiting" : "canvas.actions.generate")}
                 >
                     <span className="flex items-center gap-1.5">
                         {isRunning ? (
                             <>
                                 <LoaderCircle className="size-4 animate-spin" />
                                 <Square className="size-3.5 fill-current" />
-                                <span className="text-xs font-medium">停止等待</span>
+                                <span className="text-xs font-medium">{t("canvas.actions.stopWaiting")}</span>
                             </>
                         ) : (
                             <>
@@ -231,15 +234,13 @@ function defaultMode(type: CanvasNodeData["type"]): CanvasNodeGenerationMode {
     return type === CanvasNodeType.Text ? "text" : type === CanvasNodeType.Video ? "video" : type === CanvasNodeType.Audio ? "audio" : "image";
 }
 
-function promptPlaceholder(mode: CanvasNodeGenerationMode, hasImageContent: boolean, hasTextContent: boolean) {
-    if (mode === "video") return "描述要生成的视频内容";
-    if (mode === "audio") return "描述要生成的音频内容";
-    if (mode === "image") return hasImageContent ? "请输入你想要把这张图修改成什么" : "描述要生成的图片内容";
-    return hasTextContent ? "请输入你想要将本段文本修改成什么" : "请输入你想要生成的文本内容";
+function promptPlaceholder(mode: CanvasNodeGenerationMode, hasImageContent: boolean, hasTextContent: boolean, t: TFunction) {
+    if (mode === "video") return t("canvas.promptPanel.placeholders.video");
+    if (mode === "audio") return t("canvas.promptPanel.placeholders.audio");
+    if (mode === "image") return t(hasImageContent ? "canvas.promptPanel.placeholders.imageEdit" : "canvas.promptPanel.placeholders.imageGenerate");
+    return t(hasTextContent ? "canvas.promptPanel.placeholders.textEdit" : "canvas.promptPanel.placeholders.textGenerate");
 }
 
-function roleLabel(role: ShortDramaAssetRole) {
-    if (role === "character") return "角色";
-    if (role === "scene") return "场景";
-    return "道具";
+function roleLabel(role: ShortDramaAssetRole, t: TFunction) {
+    return t(`canvas.promptPanel.shortDrama.roles.${role}`);
 }

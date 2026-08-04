@@ -3,24 +3,26 @@
 import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { Button, Card, Col, Form, Input, InputNumber, Modal, Row, Space, Tag, Tooltip, Typography } from "antd";
-import dayjs from "dayjs";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
+import { formatDateTime, formatNumber } from "@/i18n/formatters";
 import type { AdminCreditLog } from "@/services/api/admin";
 import { compareDecimal, formatDecimal } from "@/lib/decimal";
 import { useAdminCreditLogs } from "./use-admin-credit-logs";
 
 type CreditLogFormValues = Partial<AdminCreditLog>;
 
-const creditLogTypeLabels: Record<string, string> = {
-    admin_adjust: "后台调整",
-    ai_consume: "模型消费",
-    ai_refund: "失败返还",
-    enterprise_allocate: "企业分配",
-    enterprise_reclaim: "企业收回",
+const creditLogTypeKeys: Record<string, string> = {
+    admin_adjust: "admin.creditLogs.types.adminAdjust",
+    ai_consume: "admin.creditLogs.types.aiConsume",
+    ai_refund: "admin.creditLogs.types.aiRefund",
+    enterprise_allocate: "admin.creditLogs.types.enterpriseAllocate",
+    enterprise_reclaim: "admin.creditLogs.types.enterpriseReclaim",
 };
 
 export default function AdminCreditLogsPage() {
+    const { t } = useTranslation();
     const { logs, keyword, page, pageSize, total, isLoading, searchLogs, changePage, changePageSize, resetFilters, refreshLogs, saveLog: saveAdminLog, deleteLog } = useAdminCreditLogs();
     const [form] = Form.useForm<CreditLogFormValues>();
     const [keywordText, setKeywordText] = useState(keyword);
@@ -41,58 +43,58 @@ export default function AdminCreditLogsPage() {
 
     const columns: ProColumns<AdminCreditLog>[] = [
         {
-            title: "用户 ID",
+            title: t("admin.creditLogs.table.userId"),
             dataIndex: "userId",
             width: 220,
             render: (_, item) => <Typography.Text copyable>{item.userId}</Typography.Text>,
         },
         {
-            title: "操作者 / 关联 ID",
+            title: t("admin.creditLogs.table.relatedId"),
             dataIndex: "relatedId",
             width: 220,
             render: (_, item) => (item.relatedId ? <Typography.Text copyable>{item.relatedId}</Typography.Text> : <Typography.Text type="secondary">-</Typography.Text>),
         },
         {
-            title: "类型",
+            title: t("admin.creditLogs.table.type"),
             dataIndex: "type",
             width: 140,
-            render: (_, item) => <Tag>{creditLogTypeLabels[item.type] || item.type || "-"}</Tag>,
+            render: (_, item) => <Tag>{creditLogTypeKeys[item.type] ? t(creditLogTypeKeys[item.type]) : item.type || "-"}</Tag>,
         },
         {
-            title: "变动",
+            title: t("admin.creditLogs.table.change"),
             dataIndex: "amount",
             width: 100,
             render: (_, item) => <Typography.Text type={compareDecimal(item.amount, "0") >= 0 ? "success" : "danger"}>{formatDecimal(item.amount)}</Typography.Text>,
         },
         {
-            title: "余额",
+            title: t("admin.creditLogs.table.balance"),
             dataIndex: "balance",
             width: 100,
             render: (_, item) => formatDecimal(item.balance),
         },
         {
-            title: "备注",
+            title: t("admin.creditLogs.table.remark"),
             dataIndex: "remark",
             ellipsis: true,
             render: (_, item) => <Typography.Text type="secondary">{item.remark || "-"}</Typography.Text>,
         },
         {
-            title: "创建时间",
+            title: t("admin.common.table.createdAt"),
             dataIndex: "createdAt",
             width: 180,
-            render: (_, item) => <Typography.Text type="secondary">{item.createdAt ? dayjs(item.createdAt).format("YYYY-MM-DD HH:mm:ss") : "-"}</Typography.Text>,
+            render: (_, item) => <Typography.Text type="secondary">{item.createdAt ? formatDateTime(item.createdAt) : "-"}</Typography.Text>,
         },
         {
-            title: "操作",
+            title: t("admin.common.table.actions"),
             key: "actions",
             width: 96,
             align: "right",
             render: (_, item) => (
                 <Space size={4}>
-                    <Tooltip title="编辑">
+                    <Tooltip title={t("admin.common.actions.edit")}>
                         <Button type="text" size="small" icon={<EditOutlined />} onClick={() => setEditingLog(item)} />
                     </Tooltip>
-                    <Tooltip title="删除">
+                    <Tooltip title={t("admin.common.actions.delete")}>
                         <Button danger type="text" size="small" icon={<DeleteOutlined />} onClick={() => setDeletingLog(item)} />
                     </Tooltip>
                 </Space>
@@ -107,10 +109,10 @@ export default function AdminCreditLogsPage() {
                     <Form layout="vertical">
                         <Row gutter={16} align="bottom">
                             <Col flex="360px">
-                                <Form.Item label="关键词">
+                                <Form.Item label={t("admin.common.filters.keyword")}>
                                     <Input.Search
                                         value={keywordText}
-                                        placeholder="搜索用户 ID、类型、备注或关联 ID"
+                                        placeholder={t("admin.creditLogs.filters.searchPlaceholder")}
                                         allowClear
                                         enterButton={<SearchOutlined />}
                                         onSearch={() => searchLogs(keywordText)}
@@ -127,10 +129,10 @@ export default function AdminCreditLogsPage() {
                                                 resetFilters();
                                             }}
                                         >
-                                            重置
+                                            {t("admin.common.actions.reset")}
                                         </Button>
                                         <Button type="primary" icon={<ReloadOutlined />} onClick={() => searchLogs(keywordText)}>
-                                            查询
+                                            {t("admin.common.actions.query")}
                                         </Button>
                                     </Space>
                                 </Form.Item>
@@ -149,14 +151,14 @@ export default function AdminCreditLogsPage() {
                     cardProps={{ variant: "borderless" }}
                     headerTitle={
                         <Space>
-                            <Typography.Text strong>算力点日志</Typography.Text>
-                            <Tag>{total} 条</Tag>
+                            <Typography.Text strong>{t("admin.creditLogs.title")}</Typography.Text>
+                            <Tag>{t("admin.common.counts.records", { count: total, value: formatNumber(total) })}</Tag>
                         </Space>
                     }
                     options={{ density: true, setting: true, reload: () => void refreshLogs() }}
                     toolBarRender={() => [
                         <Button key="add" type="primary" icon={<PlusOutlined />} onClick={() => setEditingLog({ type: "admin_adjust", amount: "0", balance: "0" })}>
-                            新增
+                            {t("admin.common.actions.add")}
                         </Button>,
                     ]}
                     pagination={{
@@ -165,52 +167,61 @@ export default function AdminCreditLogsPage() {
                         total,
                         showSizeChanger: true,
                         pageSizeOptions: [10, 20, 50, 100],
-                        showTotal: (value) => `共 ${value} 条`,
+                        showTotal: (value) => t("admin.common.pagination.records", { count: value, value: formatNumber(value) }),
                         onChange: (nextPage, nextPageSize) => (nextPageSize !== pageSize ? changePageSize(nextPageSize) : changePage(nextPage)),
                     }}
                 />
             </Space>
 
-            <Modal title={editingLog?.id ? "编辑日志" : "新增日志"} open={Boolean(editingLog)} width={680} onCancel={() => setEditingLog(null)} onOk={() => void saveLog()} okText="保存" cancelText="取消" destroyOnHidden>
+            <Modal
+                title={t(editingLog?.id ? "admin.creditLogs.modal.editTitle" : "admin.creditLogs.modal.createTitle")}
+                open={Boolean(editingLog)}
+                width={680}
+                onCancel={() => setEditingLog(null)}
+                onOk={() => void saveLog()}
+                okText={t("admin.common.actions.save")}
+                cancelText={t("admin.common.actions.cancel")}
+                destroyOnHidden
+            >
                 <Form form={form} layout="vertical" requiredMark={false}>
                     <Row gutter={14}>
                         <Col span={12}>
-                            <Form.Item name="userId" label="用户 ID" rules={[{ required: true, message: "请输入用户 ID" }]}>
+                            <Form.Item name="userId" label={t("admin.creditLogs.form.userId")} rules={[{ required: true, message: t("admin.creditLogs.validation.userIdRequired") }]}>
                                 <Input />
                             </Form.Item>
                         </Col>
                         <Col span={12}>
-                            <Form.Item name="type" label="类型" rules={[{ required: true, message: "请输入类型" }]}>
+                            <Form.Item name="type" label={t("admin.creditLogs.form.type")} rules={[{ required: true, message: t("admin.creditLogs.validation.typeRequired") }]}>
                                 <Input />
                             </Form.Item>
                         </Col>
                         <Col span={12}>
-                            <Form.Item name="amount" label="变动数量" rules={[{ required: true, message: "请输入变动数量" }]}>
+                            <Form.Item name="amount" label={t("admin.creditLogs.form.amount")} rules={[{ required: true, message: t("admin.creditLogs.validation.amountRequired") }]}>
                                 <InputNumber step="0.01" stringMode style={{ width: "100%" }} />
                             </Form.Item>
                         </Col>
                         <Col span={12}>
-                            <Form.Item name="balance" label="变动后余额" rules={[{ required: true, message: "请输入变动后余额" }]}>
+                            <Form.Item name="balance" label={t("admin.creditLogs.form.balance")} rules={[{ required: true, message: t("admin.creditLogs.validation.balanceRequired") }]}>
                                 <InputNumber min={0} step="0.01" stringMode style={{ width: "100%" }} />
                             </Form.Item>
                         </Col>
                         <Col span={12}>
-                            <Form.Item name="relatedId" label="关联 ID">
+                            <Form.Item name="relatedId" label={t("admin.creditLogs.form.relatedId")}>
                                 <Input />
                             </Form.Item>
                         </Col>
                         <Col span={12}>
-                            <Form.Item name="createdAt" label="创建时间">
-                                <Input placeholder="不填则新增时自动生成" />
+                            <Form.Item name="createdAt" label={t("admin.common.table.createdAt")}>
+                                <Input placeholder={t("admin.creditLogs.form.createdAtPlaceholder")} />
                             </Form.Item>
                         </Col>
                         <Col span={24}>
-                            <Form.Item name="remark" label="备注">
+                            <Form.Item name="remark" label={t("admin.creditLogs.form.remark")}>
                                 <Input.TextArea rows={3} />
                             </Form.Item>
                         </Col>
                         <Col span={24}>
-                            <Form.Item name="extra" label="扩展信息">
+                            <Form.Item name="extra" label={t("admin.creditLogs.form.extra")}>
                                 <Input.TextArea rows={3} />
                             </Form.Item>
                         </Col>
@@ -219,7 +230,7 @@ export default function AdminCreditLogsPage() {
             </Modal>
 
             <Modal
-                title="删除日志"
+                title={t("admin.creditLogs.delete.title")}
                 open={Boolean(deletingLog)}
                 onCancel={() => setDeletingLog(null)}
                 onOk={async () => {
@@ -227,11 +238,11 @@ export default function AdminCreditLogsPage() {
                     await deleteLog(deletingLog.id);
                     setDeletingLog(null);
                 }}
-                okText="删除"
+                okText={t("admin.common.actions.delete")}
                 okButtonProps={{ danger: true }}
-                cancelText="取消"
+                cancelText={t("admin.common.actions.cancel")}
             >
-                确定删除这条算力点日志吗？
+                {t("admin.creditLogs.delete.confirm")}
             </Modal>
         </main>
     );

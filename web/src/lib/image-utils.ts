@@ -1,24 +1,34 @@
 import type { ReferenceImage } from "@/types/image";
+import i18n from "@/i18n";
+import { formatUnit } from "@/i18n/formatters";
 
 export function formatBytes(bytes: number) {
     if (!Number.isFinite(bytes) || bytes <= 0) {
         return "";
     }
-    const units = ["B", "KB", "MB", "GB"];
+    const units: Array<NonNullable<Intl.NumberFormatOptions["unit"]>> = ["byte", "kilobyte", "megabyte", "gigabyte"];
     let value = bytes;
     let unitIndex = 0;
     while (value >= 1024 && unitIndex < units.length - 1) {
         value /= 1024;
         unitIndex += 1;
     }
-    return `${value >= 10 || unitIndex === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`;
+    return formatUnit(value, units[unitIndex], {
+        unitDisplay: "short",
+        maximumFractionDigits: value >= 10 || unitIndex === 0 ? 0 : 1,
+    });
 }
 
 export function formatDuration(ms: number) {
     const value = Math.max(0, Math.floor(ms / 1000));
     const minutes = Math.floor(value / 60);
     const seconds = value % 60;
-    return minutes ? `${minutes}分${String(seconds).padStart(2, "0")}秒` : `${seconds}秒`;
+    const formattedSeconds = formatUnit(seconds, "second", {
+        unitDisplay: "short",
+        minimumIntegerDigits: minutes ? 2 : 1,
+        maximumFractionDigits: 0,
+    });
+    return minutes ? `${formatUnit(minutes, "minute", { unitDisplay: "short", maximumFractionDigits: 0 })} ${formattedSeconds}` : formattedSeconds;
 }
 
 export function getDataUrlByteSize(dataUrl: string) {
@@ -34,7 +44,7 @@ export function readFileAsDataUrl(file: File) {
     return new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = () => reject(new Error("读取图片失败"));
+        reader.onerror = () => reject(new Error(i18n.t("errors.image.readFailed")));
         reader.readAsDataURL(file);
     });
 }

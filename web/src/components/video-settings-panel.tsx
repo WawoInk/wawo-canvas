@@ -2,21 +2,24 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { Switch } from "antd";
+import { useTranslation } from "react-i18next";
 
 import { ImageSettingsTheme } from "@/components/image-settings-panel";
-import { boolConfig, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedanceDurationOptions, seedancePixelLabel, seedanceRatioOptions, seedanceResolutionOptions } from "@/lib/seedance-video";
+import { boolConfig, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedanceDurationOptions, seedancePixelLabel, seedanceRatioLabel, seedanceRatioOptions, seedanceResolutionOptions } from "@/lib/seedance-video";
 import { type CanvasTheme } from "@/lib/canvas-theme";
 import { buildShortDramaGenerationSettings, buildVideoGenerationSettings, findGenerationProfile, getGenerationProfiles, type GenerationProfile, type ShortDramaGenerationSettings, type VideoGenerationSettings } from "@/services/api/generations";
 import { type AiConfig } from "@/stores/use-config-store";
+import i18n from "@/i18n";
+import { formatNumber } from "@/i18n/formatters";
 
 const sizeOptions = [
-    { value: "1280x720", label: "横屏", width: 1280, height: 720 },
-    { value: "720x1280", label: "竖屏", width: 720, height: 1280 },
-    { value: "1024x1024", label: "方形", width: 1024, height: 1024 },
-    { value: "1792x1024", label: "宽屏", width: 1792, height: 1024 },
-    { value: "1024x1792", label: "长图", width: 1024, height: 1792 },
-    { value: "auto", label: "auto", width: 0, height: 0 },
-];
+    { value: "1280x720", labelKey: "videoSettings.ratios.landscape", width: 1280, height: 720 },
+    { value: "720x1280", labelKey: "videoSettings.ratios.portrait", width: 720, height: 1280 },
+    { value: "1024x1024", labelKey: "videoSettings.ratios.square", width: 1024, height: 1024 },
+    { value: "1792x1024", labelKey: "videoSettings.ratios.wide", width: 1792, height: 1024 },
+    { value: "1024x1792", labelKey: "videoSettings.ratios.tall", width: 1024, height: 1792 },
+    { value: "auto", labelKey: "videoSettings.ratios.adaptive", width: 0, height: 0 },
+] as const;
 
 type VideoSettingsPanelProps = {
     config: AiConfig;
@@ -33,6 +36,7 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
 }
 
 function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDuration, showTitle, className, errorFieldPath }: VideoSettingsPanelProps) {
+    const { t } = useTranslation();
     const profileID = config.model || config.videoModel;
     const [profile, setProfile] = useState<GenerationProfile | null>(null);
 
@@ -71,7 +75,7 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
     const videoSettings = profile && !isDrama ? buildVideoGenerationSettings(profile, provided) : provided;
     const settings = dramaSettings || videoSettings;
     const supportedResolutions = definitions?.resolution.values ? new Set(definitions.resolution.values) : null;
-    const ratioOptions = definitions?.aspectRatio.values?.map((value) => ({ value, label: seedanceRatioOptions.find((item) => item.value === value)?.label || value })) || seedanceRatioOptions;
+    const ratioOptions = (definitions?.aspectRatio.values || seedanceRatioOptions.map((item) => item.value)).map((value) => ({ value, label: seedanceRatioLabel(value) }));
     const durationDefinition = definitions?.durationSeconds;
     const durationValue = settings.durationSeconds;
     const durationOptions = seedanceDurationOptions.filter((value) =>
@@ -82,14 +86,14 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
     return (
         <ImageSettingsTheme theme={theme}>
             <div className={className} style={{ color: theme.node.text }} onMouseDown={(event) => event.stopPropagation()}>
-                {showTitle ? <div className="text-lg font-semibold">视频设置</div> : null}
+                {showTitle ? <div className="text-lg font-semibold">{t("videoSettings.title")}</div> : null}
                 {config.channelMode === "local" ? (
                     <div className="rounded-xl border px-3 py-2 text-xs leading-5 opacity-70" style={{ borderColor: theme.node.stroke }}>
-                        本地直连仅提供原始视频接口兼容；Model Profile、短剧与平台文件能力需要远程模式。
+                        {t("videoSettings.localModeHint")}
                     </div>
                 ) : null}
                 <div style={settingError("resolution")}>
-                    <SettingGroup title="分辨率" color={theme.node.muted}>
+                    <SettingGroup title={t("videoSettings.resolution")} color={theme.node.muted}>
                         <div className="grid grid-cols-3 gap-2.5">
                             {seedanceResolutionOptions.map((item) => (
                                 <OptionPill
@@ -106,7 +110,7 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
                     </SettingGroup>
                 </div>
                 <div style={settingError("aspectRatio")}>
-                    <SettingGroup title="比例" color={theme.node.muted}>
+                    <SettingGroup title={t("videoSettings.aspectRatio")} color={theme.node.muted}>
                         <div className="grid grid-cols-3 gap-2.5">
                             {ratioOptions.map((item) => (
                                 <button
@@ -119,18 +123,18 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
                                 >
                                     <SizePreview width={ratioPreview(item.value).width} height={ratioPreview(item.value).height} color={theme.node.text} />
                                     <span>{item.label}</span>
-                                    <span className="text-[10px] leading-none opacity-55">{item.value === "adaptive" ? "adaptive" : seedancePixelLabel(String(settings.resolution || "720p"), item.value)}</span>
+                                    <span className="text-[10px] leading-none opacity-55">{item.value === "adaptive" ? t("videoSettings.autoMatch") : seedancePixelLabel(String(settings.resolution || "720p"), item.value)}</span>
                                 </button>
                             ))}
                         </div>
                     </SettingGroup>
                 </div>
                 <div style={settingError("durationSeconds")}>
-                    <SettingGroup title="时长" color={theme.node.muted}>
+                    <SettingGroup title={t("videoSettings.duration")} color={theme.node.muted}>
                         <div className="grid grid-cols-4 gap-2.5">
                             {durationOptions.map((value) => (
                                 <OptionPill key={value} selected={durationValue === (value === -1 && isDrama ? "auto" : value)} theme={theme} onClick={() => onConfigChange("videoSeconds", String(value))}>
-                                    {value === -1 ? "智能" : `${value}s`}
+                                    {value === -1 ? t("videoSettings.smart") : t("videoSettings.seconds", { value: formatNumber(value, { useGrouping: false }) })}
                                 </OptionPill>
                             ))}
                         </div>
@@ -145,11 +149,11 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
                 </div>
                 {definitions?.quality ? (
                     <div style={settingError("quality")}>
-                        <SettingGroup title="质量" color={theme.node.muted}>
+                        <SettingGroup title={t("videoSettings.quality.label")} color={theme.node.muted}>
                             <div className="grid grid-cols-2 gap-2.5">
                                 {definitions.quality.values?.map((value) => (
                                     <OptionPill key={value} selected={dramaSettings?.quality === value} theme={theme} onClick={() => onConfigChange("quality", value)}>
-                                        {value === "high" ? "高" : "标准"}
+                                        {value === "high" ? t("videoSettings.quality.high") : t("videoSettings.quality.standard")}
                                     </OptionPill>
                                 ))}
                             </div>
@@ -157,25 +161,29 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
                     </div>
                 ) : null}
                 {definitions?.generateAudio || definitions?.watermark ? (
-                    <SettingGroup title="输出" color={theme.node.muted}>
+                    <SettingGroup title={t("videoSettings.output")} color={theme.node.muted}>
                         <div className="grid gap-2 rounded-xl border p-2.5" style={{ borderColor: theme.node.stroke }}>
-                            {definitions?.generateAudio ? <SwitchRow label="生成声音" checked={Boolean(videoSettings.generateAudio)} theme={theme} onChange={(checked) => onConfigChange("videoGenerateAudio", String(checked))} /> : null}
-                            {definitions?.watermark ? <SwitchRow label="添加水印" checked={Boolean(videoSettings.watermark)} theme={theme} onChange={(checked) => onConfigChange("videoWatermark", String(checked))} /> : null}
+                            {definitions?.generateAudio ? (
+                                <SwitchRow label={t("videoSettings.generateAudio")} checked={Boolean(videoSettings.generateAudio)} theme={theme} onChange={(checked) => onConfigChange("videoGenerateAudio", String(checked))} />
+                            ) : null}
+                            {definitions?.watermark ? <SwitchRow label={t("videoSettings.watermark")} checked={Boolean(videoSettings.watermark)} theme={theme} onChange={(checked) => onConfigChange("videoWatermark", String(checked))} /> : null}
                         </div>
                     </SettingGroup>
                 ) : null}
                 {!isDrama ? (
-                    <SettingGroup title="负向提示词（可选）" color={theme.node.muted}>
+                    <SettingGroup title={t("videoSettings.negativePrompt.label")} color={theme.node.muted}>
                         <textarea
                             value={config.videoNegativePrompt || ""}
                             maxLength={500}
-                            placeholder="例如：低质量、模糊、畸形。"
+                            placeholder={t("videoSettings.negativePrompt.placeholder")}
                             className="thin-scrollbar h-20 w-full resize-none rounded-xl border bg-transparent px-3 py-2 text-sm leading-5 outline-none"
                             style={{ borderColor: theme.node.stroke, color: theme.node.text }}
                             onChange={(event) => onConfigChange("videoNegativePrompt", event.target.value)}
                             onMouseDown={(event) => event.stopPropagation()}
                         />
-                        <div className="text-right text-[10px] opacity-55">{(config.videoNegativePrompt || "").length}/500</div>
+                        <div className="text-right text-[10px] opacity-55">
+                            {formatNumber((config.videoNegativePrompt || "").length, { useGrouping: false })}/{formatNumber(500, { useGrouping: false })}
+                        </div>
                     </SettingGroup>
                 ) : null}
             </div>
@@ -189,15 +197,17 @@ export function videoResolutionLabel(value: string) {
 
 export function videoSizeLabel(value: string) {
     const ratio = normalizeSeedanceRatio(value);
-    if (value === "adaptive" || value === "auto") return "自适应";
-    if (ratio === value) return seedanceRatioOptions.find((item) => item.value === ratio)?.label || ratio;
+    if (value === "adaptive" || value === "auto") return i18n.t("videoSettings.ratios.adaptive");
+    if (ratio === value) return seedanceRatioLabel(ratio);
     const size = normalizeVideoSizeValue(value);
-    return sizeOptions.find((item) => item.value === size)?.label || size;
+    const option = sizeOptions.find((item) => item.value === size);
+    return option ? i18n.t(option.labelKey) : size;
 }
 
 export function videoSecondsLabel(value: string) {
-    if (String(value).trim() === "-1") return "智能";
-    return `${value || "6"}s`;
+    if (String(value).trim() === "-1") return i18n.t("videoSettings.smart");
+    const seconds = Number(value || "6");
+    return i18n.t("videoSettings.seconds", { value: Number.isFinite(seconds) ? formatNumber(seconds, { useGrouping: false }) : value || "6" });
 }
 
 export function normalizeVideoSizeValue(value: string) {

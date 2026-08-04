@@ -2,18 +2,21 @@
 
 import { FolderPlus, Search } from "lucide-react";
 import { type UIEvent, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { App, Button, Empty, Input, Spin, Tag } from "antd";
 
 import { PromptCard } from "@/components/prompts/prompt-card";
 import { PromptDetailDialog } from "@/components/prompts/prompt-detail-dialog";
 import { usePromptList } from "@/components/prompts/use-prompt-list";
 import { useCopyText } from "@/hooks/use-copy-text";
+import { formatNumber } from "@/i18n/formatters";
 import { cn } from "@/lib/utils";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { ALL_PROMPTS_OPTION, type Prompt } from "@/services/api/prompts";
 
 export default function PromptsPage() {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const [titleKeyword, setTitleKeyword] = useState("");
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [selectedCategory, setSelectedCategory] = useState(ALL_PROMPTS_OPTION);
@@ -24,9 +27,9 @@ export default function PromptsPage() {
 
     useEffect(() => {
         if (query.isError) {
-            message.error(query.error instanceof Error ? query.error.message : "获取提示词失败");
+            message.error(query.error instanceof Error ? query.error.message : t("prompts.errors.fetch"));
         }
-    }, [message, query.error, query.isError]);
+    }, [message, query.error, query.isError, t]);
 
     const toggleTag = (tag: string) => {
         if (tag === ALL_PROMPTS_OPTION) return setSelectedTags([]);
@@ -35,7 +38,7 @@ export default function PromptsPage() {
 
     const savePromptAsset = (item: Prompt) => {
         addAsset({ kind: "text", title: item.title, coverUrl: item.coverUrl, tags: item.tags, source: item.category, data: { content: item.prompt }, metadata: { source: "prompt-library", promptId: item.id, githubUrl: item.githubUrl } });
-        message.success("已加入我的素材");
+        message.success(t("prompts.messages.added"));
     };
 
     const handleListScroll = (event: UIEvent<HTMLDivElement>) => {
@@ -53,8 +56,8 @@ export default function PromptsPage() {
             >
                 <div className="pb-8">
                     <div className="mx-auto max-w-5xl text-center">
-                        <h1 className="text-4xl font-semibold tracking-tight text-foreground">提示词中心</h1>
-                        <p className="mt-3 text-sm text-muted-foreground">共 {totalPrompts} 条提示词，按标题、标签与分类快速查找灵感。</p>
+                        <h1 className="text-4xl font-semibold tracking-tight text-foreground">{t("prompts.header.title")}</h1>
+                        <p className="mt-3 text-sm text-muted-foreground">{t("prompts.header.summary", { count: totalPrompts, value: formatNumber(totalPrompts) })}</p>
                     </div>
                     {query.isLoading ? (
                         <div className="flex h-60 items-center justify-center">
@@ -64,21 +67,28 @@ export default function PromptsPage() {
                     {!query.isLoading ? (
                         <>
                             <div className="mx-auto mt-8 w-full max-w-2xl">
-                                <Input size="large" className="w-full" prefix={<Search className="size-4 text-muted-foreground" />} value={titleKeyword} placeholder="按标题查询" onChange={(event) => setTitleKeyword(event.target.value)} />
+                                <Input
+                                    size="large"
+                                    className="w-full"
+                                    prefix={<Search className="size-4 text-muted-foreground" />}
+                                    value={titleKeyword}
+                                    placeholder={t("prompts.searchPlaceholder")}
+                                    onChange={(event) => setTitleKeyword(event.target.value)}
+                                />
                             </div>
                             <div className="mx-auto mt-6 grid max-w-6xl gap-3 text-left">
                                 <div className="grid gap-2 sm:grid-cols-[56px_minmax(0,1fr)] sm:items-start">
-                                    <div className="pt-2 text-xs font-medium text-muted-foreground">分类</div>
+                                    <div className="pt-2 text-xs font-medium text-muted-foreground">{t("prompts.filters.category")}</div>
                                     <div className="flex flex-wrap gap-2">
                                         {promptCategoryOptions.map((category) => (
                                             <Tag.CheckableTag key={category} checked={selectedCategory === category} className={cn("prompt-filter-tag", selectedCategory === category && "is-active")} onChange={() => setSelectedCategory(category)}>
-                                                {category}
+                                                {category === ALL_PROMPTS_OPTION ? t("common.all") : category}
                                             </Tag.CheckableTag>
                                         ))}
                                     </div>
                                 </div>
                                 <div className="grid gap-2 sm:grid-cols-[56px_minmax(0,1fr)] sm:items-start">
-                                    <div className="pt-2 text-xs font-medium text-muted-foreground">标签</div>
+                                    <div className="pt-2 text-xs font-medium text-muted-foreground">{t("common.fields.tags")}</div>
                                     <div className="flex flex-wrap gap-2">
                                         {promptTags.map((tag) => (
                                             <Tag.CheckableTag
@@ -87,7 +97,7 @@ export default function PromptsPage() {
                                                 className={cn("prompt-filter-tag", (tag === ALL_PROMPTS_OPTION ? selectedTags.length === 0 : selectedTags.includes(tag)) && "is-active")}
                                                 onChange={() => toggleTag(tag)}
                                             >
-                                                {tag}
+                                                {tag === ALL_PROMPTS_OPTION ? t("common.all") : tag}
                                             </Tag.CheckableTag>
                                         ))}
                                     </div>
@@ -105,22 +115,24 @@ export default function PromptsPage() {
                                     key={item.id}
                                     item={item}
                                     onOpen={() => setSelectedPrompt(item)}
-                                    onCopy={() => copyText(item.prompt, "提示词已复制")}
+                                    onCopy={() => copyText(item.prompt, t("prompts.messages.copied"))}
                                     extraAction={
                                         <Button size="small" icon={<FolderPlus className="size-3.5" />} onClick={() => savePromptAsset(item)}>
-                                            加入我的素材
+                                            {t("common.actions.addToMyAssets")}
                                         </Button>
                                     }
                                 />
                             ))}
                         </div>
-                        {promptItems.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有找到匹配的提示词" className="py-16" /> : null}
-                        <div className="mx-auto mt-6 max-w-7xl text-center text-xs text-muted-foreground">{query.isFetchingNextPage ? "加载中..." : query.hasNextPage ? "继续向下滚动加载更多" : promptItems.length > 0 ? "已经到底了" : null}</div>
+                        {promptItems.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("prompts.empty")} className="py-16" /> : null}
+                        <div className="mx-auto mt-6 max-w-7xl text-center text-xs text-muted-foreground">
+                            {query.isFetchingNextPage ? t("prompts.pagination.loading") : query.hasNextPage ? t("prompts.pagination.scrollForMore") : promptItems.length > 0 ? t("prompts.pagination.end") : null}
+                        </div>
                     </div>
                 ) : null}
             </main>
 
-            <PromptDetailDialog prompt={selectedPrompt} onClose={() => setSelectedPrompt(null)} onCopy={(prompt) => copyText(prompt, "提示词已复制")} onSaveAsset={savePromptAsset} />
+            <PromptDetailDialog prompt={selectedPrompt} onClose={() => setSelectedPrompt(null)} onCopy={(prompt) => copyText(prompt, t("prompts.messages.copied"))} onSaveAsset={savePromptAsset} />
         </div>
     );
 }

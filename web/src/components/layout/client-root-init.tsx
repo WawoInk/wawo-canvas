@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { App } from "antd";
+import { useTranslation } from "react-i18next";
 
 import { createModelChannel, useConfigStore } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
@@ -16,6 +17,7 @@ import { revalidateSession, startSessionMonitor } from "@/services/session-monit
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const handledConfigParams = useRef(false);
     const { pathname } = useLocation();
@@ -27,6 +29,12 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     const config = useConfigStore((state) => state.config);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const isLoginPage = pathname === "/login" || pathname === "/admin/login";
+
+    useEffect(() => {
+        const page = seoPage(pathname);
+        document.title = t(`seo.pages.${page}.title`, { defaultValue: t("seo.default.title") });
+        document.querySelector('meta[name="description"]')?.setAttribute("content", t(`seo.pages.${page}.description`, { defaultValue: t("seo.default.description") }));
+    }, [pathname, t]);
 
     useEffect(() => {
         void loadPublicSettings();
@@ -92,14 +100,29 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
         window.history.replaceState(null, "", `${window.location.pathname}${searchParams.size ? `?${searchParams}` : ""}${window.location.hash}`);
         if (!publicSettings.modelChannel.allowCustomChannel) {
             openConfigDialog(false);
-            message.error("后台未允许用户自定义渠道，请联系管理员进行配置");
+            message.error(t("errors.customChannelDisabled"));
             return;
         }
         updateConfig("channelMode", "local");
         if (baseUrl) updateConfig("baseUrl", baseUrl);
         if (apiKey) updateConfig("apiKey", apiKey);
         openConfigDialog(false);
-    }, [message, openConfigDialog, publicSettings, updateConfig]);
+    }, [message, openConfigDialog, publicSettings, t, updateConfig]);
 
     return <>{children}</>;
+}
+
+function seoPage(pathname: string) {
+    if (pathname === "/") return "home";
+    if (pathname === "/login" || pathname === "/admin/login") return "login";
+    if (pathname === "/canvas" || pathname.startsWith("/canvas/")) return "canvas";
+    if (pathname === "/image") return "image";
+    if (pathname === "/video") return "video";
+    if (pathname === "/prompts") return "prompts";
+    if (pathname === "/assets") return "assets";
+    if (pathname === "/asset-library") return "assetLibrary";
+    if (pathname === "/account") return "account";
+    if (pathname === "/enterprise-assets") return "enterpriseAssets";
+    if (pathname.startsWith("/admin")) return "admin";
+    return "notFound";
 }

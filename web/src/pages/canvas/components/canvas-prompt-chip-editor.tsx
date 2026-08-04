@@ -4,6 +4,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ClipboardEvent, KeyboardEvent, MouseEvent, PointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { FileText, Image as ImageIcon, Maximize2, Minimize2, Music2, Video } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
@@ -28,6 +29,7 @@ type EditorSelection = {
 const CARET_PLACEHOLDER = "\uFEFF";
 
 export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, className, style, placeholder }: Props) {
+    const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const editorRef = useRef<HTMLDivElement>(null);
     const composingRef = useRef(false);
@@ -138,7 +140,7 @@ export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, 
             <div
                 ref={editorRef}
                 role="textbox"
-                aria-label="提示词"
+                aria-label={t("canvas.promptEditor.promptAria")}
                 aria-multiline="true"
                 contentEditable
                 suppressContentEditableWarning
@@ -211,8 +213,8 @@ export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, 
                 type="button"
                 className="absolute bottom-2 right-2 z-20 grid size-8 place-items-center rounded-md border transition hover:opacity-75 focus-visible:outline-2 focus-visible:outline-offset-2"
                 style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
-                title={expanded ? "缩小输入框" : "放大输入框"}
-                aria-label={expanded ? "缩小输入框" : "放大输入框"}
+                title={t(expanded ? "canvas.promptEditor.collapse" : "canvas.promptEditor.expand")}
+                aria-label={t(expanded ? "canvas.promptEditor.collapse" : "canvas.promptEditor.expand")}
                 onPointerDown={(event) => event.stopPropagation()}
                 onMouseDown={(event) => {
                     event.preventDefault();
@@ -284,6 +286,7 @@ function MentionMenu({
     theme: (typeof canvasThemes)[keyof typeof canvasThemes];
     onSelect: (reference: CanvasResourceReference) => void;
 }) {
+    const { t } = useTranslation();
     const rect = editor.getBoundingClientRect();
     const top = Math.min(rect.bottom + 6, window.innerHeight - 232);
     const left = Math.min(Math.max(8, rect.left), window.innerWidth - 264);
@@ -291,7 +294,7 @@ function MentionMenu({
     return createPortal(
         <div
             role="listbox"
-            aria-label="资源"
+            aria-label={t("canvas.promptEditor.resourcesAria")}
             className="fixed z-[120] max-h-56 w-64 overflow-y-auto rounded-xl border p-1 shadow-2xl"
             style={{ left, top, background: theme.toolbar.panel, borderColor: theme.toolbar.border }}
             onPointerDown={stop}

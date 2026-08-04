@@ -2,19 +2,32 @@
 
 import { type ReactNode, useState } from "react";
 import { ConfigProvider, Switch } from "antd";
+import { useTranslation } from "react-i18next";
 
 import { type CanvasTheme } from "@/lib/canvas-theme";
 import type { AiConfig } from "@/stores/use-config-store";
+import i18n from "@/i18n";
+import { formatNumber } from "@/i18n/formatters";
 
 const qualityOptions = [
-    { value: "auto", label: "自动" },
-    { value: "high", label: "高" },
-    { value: "medium", label: "中" },
-    { value: "low", label: "低" },
-];
+    { value: "auto", labelKey: "imageSettings.quality.options.auto" },
+    { value: "high", labelKey: "imageSettings.quality.options.high" },
+    { value: "medium", labelKey: "imageSettings.quality.options.medium" },
+    { value: "low", labelKey: "imageSettings.quality.options.low" },
+] as const;
 const DIMENSION_STEP = 16;
 
-const aspectOptions = [
+type AspectOption = {
+    value: string;
+    label: string;
+    width: number;
+    height: number;
+    icon: string;
+    size?: string;
+    labelKey?: string;
+};
+
+const aspectOptions: AspectOption[] = [
     { value: "1:1", label: "1:1", width: 1024, height: 1024, icon: "square" },
     { value: "3:2", label: "3:2", width: 1536, height: 1024, icon: "landscape" },
     { value: "2:3", label: "2:3", width: 1024, height: 1536, icon: "portrait" },
@@ -27,7 +40,7 @@ const aspectOptions = [
     { value: "9:16-2k", label: "9:16(2k)", size: "1152x2048", width: 1152, height: 2048, icon: "portrait" },
     { value: "16:9-4k", label: "16:9(4k)", size: "3840x2160", width: 3840, height: 2160, icon: "landscape" },
     { value: "9:16-4k", label: "9:16(4k)", size: "2160x3840", width: 2160, height: 3840, icon: "portrait" },
-    { value: "auto", label: "auto", width: 0, height: 0, icon: "auto" },
+    { value: "auto", label: "auto", labelKey: "imageSettings.size.auto", width: 0, height: 0, icon: "auto" },
 ];
 
 type ImageSettingsPanelProps = {
@@ -41,6 +54,7 @@ type ImageSettingsPanelProps = {
 };
 
 export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10 }: ImageSettingsPanelProps) {
+    const { t } = useTranslation();
     const [snapDimensionToStep, setSnapDimensionToStep] = useState(true);
     const quality = config.quality || "auto";
     const count = Math.max(1, Math.min(maxCount, Math.floor(Math.abs(Number(config.count)) || 1)));
@@ -69,37 +83,37 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                     if (document.activeElement instanceof HTMLInputElement && event.currentTarget.contains(document.activeElement)) document.activeElement.blur();
                 }}
             >
-                {showTitle ? <div className="text-lg font-semibold">图像设置</div> : null}
+                {showTitle ? <div className="text-lg font-semibold">{t("imageSettings.title")}</div> : null}
                 <div className="space-y-2.5">
-                    <SettingTitle color={theme.node.muted}>质量</SettingTitle>
+                    <SettingTitle color={theme.node.muted}>{t("imageSettings.quality.label")}</SettingTitle>
                     <div className="grid grid-cols-4 gap-2.5">
                         {qualityOptions.map((item) => (
                             <OptionPill key={item.value} selected={quality === item.value} theme={theme} onClick={() => onConfigChange("quality", item.value)}>
-                                {item.label}
+                                {t(item.labelKey)}
                             </OptionPill>
                         ))}
                     </div>
                 </div>
                 <div className="space-y-2.5">
                     <div className="flex items-center justify-between gap-3">
-                        <SettingTitle color={theme.node.muted}>尺寸</SettingTitle>
+                        <SettingTitle color={theme.node.muted}>{t("imageSettings.size.label")}</SettingTitle>
                         <div className="flex items-center gap-2">
                             <span className="text-xs font-medium" style={{ color: theme.node.muted }}>
-                                16倍数对齐
+                                {t("imageSettings.size.alignTo16")}
                             </span>
-                            <span title="输入完成后自动向上补成 16 的倍数" onMouseDown={(event) => event.stopPropagation()}>
+                            <span title={t("imageSettings.size.alignHint")} onMouseDown={(event) => event.stopPropagation()}>
                                 <Switch size="small" checked={snapDimensionToStep} onChange={setSnapDimensionToStep} />
                             </span>
                         </div>
                     </div>
                     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2.5">
-                        <DimensionInput prefix="W" value={dimensions.width} disabled={activeSize === "auto"} theme={theme} alignToStep={snapDimensionToStep} onChange={(value) => updateDimension("width", value)} />
+                        <DimensionInput prefix={t("imageSettings.size.widthShort")} value={dimensions.width} disabled={activeSize === "auto"} theme={theme} alignToStep={snapDimensionToStep} onChange={(value) => updateDimension("width", value)} />
                         <span className="text-lg opacity-45">↔</span>
-                        <DimensionInput prefix="H" value={dimensions.height} disabled={activeSize === "auto"} theme={theme} alignToStep={snapDimensionToStep} onChange={(value) => updateDimension("height", value)} />
+                        <DimensionInput prefix={t("imageSettings.size.heightShort")} value={dimensions.height} disabled={activeSize === "auto"} theme={theme} alignToStep={snapDimensionToStep} onChange={(value) => updateDimension("height", value)} />
                     </div>
                 </div>
                 <div className="space-y-2.5">
-                    <SettingTitle color={theme.node.muted}>宽高比</SettingTitle>
+                    <SettingTitle color={theme.node.muted}>{t("imageSettings.aspectRatio")}</SettingTitle>
                     <div className="grid grid-cols-4 gap-2.5">
                         {aspectOptions.map((item) => (
                             <button
@@ -111,7 +125,7 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                                 onClick={() => selectAspect(item.value)}
                             >
                                 <AspectIcon type={item.icon} width={item.width} height={item.height} color={theme.node.text} />
-                                <span>{item.label}</span>
+                                <span>{item.labelKey ? t(item.labelKey) : item.label}</span>
                             </button>
                         ))}
                     </div>
@@ -119,20 +133,20 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 <div className="space-y-2.5">
                     <div className="flex items-center justify-between gap-3">
                         <div>
-                            <SettingTitle color={theme.node.muted}>透明背景</SettingTitle>
+                            <SettingTitle color={theme.node.muted}>{t("imageSettings.transparent.label")}</SettingTitle>
                             <div className="mt-1 text-xs" style={{ color: theme.node.muted }}>
-                                仅部分模型支持透明背景
+                                {t("imageSettings.transparent.hint")}
                             </div>
                         </div>
-                        <Switch aria-label="透明背景" checked={config.background === "transparent"} onChange={(checked) => onConfigChange("background", checked ? "transparent" : "")} />
+                        <Switch aria-label={t("imageSettings.transparent.label")} checked={config.background === "transparent"} onChange={(checked) => onConfigChange("background", checked ? "transparent" : "")} />
                     </div>
                 </div>
                 <div className="space-y-2.5">
-                    <SettingTitle color={theme.node.muted}>生成张数</SettingTitle>
+                    <SettingTitle color={theme.node.muted}>{t("imageSettings.count")}</SettingTitle>
                     <div className="grid grid-cols-4 gap-2.5">
                         {Array.from({ length: quickCount }, (_, index) => index + 1).map((value) => (
                             <OptionPill key={value} selected={count === value} theme={theme} onClick={() => onConfigChange("count", String(value))}>
-                                {value} 张
+                                {t("imageSettings.imageCount", { count: value, value: formatNumber(value) })}
                             </OptionPill>
                         ))}
                         <CountInput value={count} max={maxCount} theme={theme} onChange={(value) => onConfigChange("count", String(value || 1))} />
@@ -157,11 +171,13 @@ export function ImageSettingsTheme({ theme, children }: { theme: CanvasTheme; ch
 }
 
 export function imageQualityLabel(value: string) {
-    return ({ auto: "自动", high: "高", medium: "中", low: "低" } as Record<string, string>)[value] || value;
+    const labelKey = qualityOptions.find((item) => item.value === value)?.labelKey;
+    return labelKey ? i18n.t(labelKey) : value;
 }
 
 export function imageSizeLabel(size: string) {
-    return aspectOptions.find((item) => (item.size || item.value) === size || item.value === size)?.label || size;
+    const option = aspectOptions.find((item) => (item.size || item.value) === size || item.value === size);
+    return option?.labelKey ? i18n.t(option.labelKey) : option?.label || size;
 }
 
 function OptionPill({ selected, theme, onClick, children }: { selected: boolean; theme: CanvasTheme; onClick: () => void; children: ReactNode }) {
@@ -236,7 +252,7 @@ function AspectIcon({ type, width, height, color }: { type: string; width: numbe
     );
 }
 
-function SettingTitle({ children, color }: { children: string; color: string }) {
+function SettingTitle({ children, color }: { children: ReactNode; color: string }) {
     return (
         <div className="text-xs font-medium" style={{ color }}>
             {children}

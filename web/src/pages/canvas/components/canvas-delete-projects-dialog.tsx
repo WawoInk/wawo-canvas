@@ -1,12 +1,15 @@
 "use client";
 
 import { Button, Modal } from "antd";
+import { useTranslation } from "react-i18next";
 
+import { formatNumber } from "@/i18n/formatters";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useCanvasStore } from "../stores/use-canvas-store";
 import { useCanvasUiStore } from "../stores/use-canvas-ui-store";
 
 export function CanvasDeleteProjectsDialog() {
+    const { t } = useTranslation();
     const ids = useCanvasUiStore((state) => state.deleteProjectIds);
     const setDeleteIds = useCanvasUiStore((state) => state.setDeleteProjectIds);
     const removeSelectedIds = useCanvasUiStore((state) => state.removeSelectedProjectIds);
@@ -21,20 +24,20 @@ export function CanvasDeleteProjectsDialog() {
 
     return (
         <Modal
-            title="删除画布？"
+            title={t("canvas.library.deleteDialog.title")}
             open={ids.length > 0}
             centered
             onCancel={() => setDeleteIds([])}
             footer={
                 <>
-                    <Button onClick={() => setDeleteIds([])}>取消</Button>
+                    <Button onClick={() => setDeleteIds([])}>{t("canvas.library.deleteDialog.cancel")}</Button>
                     <Button danger type="primary" onClick={confirm}>
-                        删除
+                        {t("canvas.library.deleteDialog.confirm")}
                     </Button>
                 </>
             }
         >
-            <p className="text-sm text-muted-foreground">将删除 {ids.length} 个画布，里面的节点和连线也会一起移除。</p>
+            <p className="text-sm text-muted-foreground">{t("canvas.library.deleteDialog.description", { count: ids.length, value: formatNumber(ids.length) })}</p>
         </Modal>
     );
 }

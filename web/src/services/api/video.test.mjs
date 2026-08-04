@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { defaultConfig } from "../../stores/use-config-store.ts";
+import i18n from "../../i18n/index.ts";
 import { buildVideoGenerationPayload } from "./video.ts";
 
 const config = (model, videoNegativePrompt = "") => ({
@@ -41,10 +42,11 @@ test("adds the negative prompt metadata without model version branching", async 
 });
 
 test("accepts 500 negative-prompt characters and rejects more", async () => {
+    await i18n.changeLanguage("en-US");
     const model = "vidu_r2v_new_ns-oversea";
     const accepted = "差".repeat(500);
     assert.deepEqual((await buildVideoGenerationPayload(config(model, accepted), model, "人物走进雨夜街道")).metadata, {
         extra_params: { negative_prompt: accepted },
     });
-    await assert.rejects(() => buildVideoGenerationPayload(config(model, `${accepted}差`), model, "人物走进雨夜街道"), /负向提示词不能超过 500 个字符/);
+    await assert.rejects(() => buildVideoGenerationPayload(config(model, `${accepted}差`), model, "人物走进雨夜街道"), /negative prompt cannot exceed 500 characters/i);
 });

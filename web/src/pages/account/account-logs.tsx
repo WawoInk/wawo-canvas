@@ -4,68 +4,89 @@ import { useEffect, useState } from "react";
 import { App, Button, DatePicker, Space, Table, Tabs, Tag } from "antd";
 import type { TableProps } from "antd";
 import type { Dayjs } from "dayjs";
+import type { TFunction } from "i18next";
 import { Download } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { formatDateTime, formatNumber } from "@/i18n/formatters";
 import { fetchUserCreditLogs, type UserCreditLog } from "@/services/api/auth";
 import { fetchGenerationTasks, type GenerationTaskItem } from "@/services/api/generation-tasks";
 import { compareDecimal, formatDecimal } from "@/lib/decimal";
 import { useUserStore } from "@/stores/use-user-store";
 import { downloadCsv, fetchAllPages, type CsvColumn } from "./account-log-export";
 
-const operationLabels: Record<string, string> = {
-    "video.generate": "生成视频",
-    "video.short-drama": "生成短剧",
-    image: "生成图片",
-    video: "生成视频",
-    audio: "生成音频",
-    chat: "文本对话",
+const operationLabelKeys: Record<string, string> = {
+    "video.generate": "account.logs.operations.generateVideo",
+    "video.short-drama": "account.logs.operations.generateShortDrama",
+    image: "account.logs.operations.generateImage",
+    video: "account.logs.operations.generateVideo",
+    audio: "account.logs.operations.generateAudio",
+    chat: "account.logs.operations.textChat",
 };
-const sourceLabels: Record<string, string> = {
-    canvas: "无限画布",
-    image_workbench: "图片工作台",
-    video_workbench: "视频工作台",
+const sourceLabelKeys: Record<string, string> = {
+    canvas: "account.logs.sources.canvas",
+    image_workbench: "account.logs.sources.imageWorkbench",
+    video_workbench: "account.logs.sources.videoWorkbench",
 };
-const statusLabels: Record<string, { label: string; color: string }> = {
-    queued: { label: "排队中", color: "default" },
-    pending: { label: "等待中", color: "default" },
-    running: { label: "运行中", color: "processing" },
-    success: { label: "成功", color: "success" },
-    succeeded: { label: "成功", color: "success" },
-    failed: { label: "失败", color: "error" },
-    cancelled: { label: "已取消", color: "warning" },
+const statusLabels: Record<string, { key: string; color: string }> = {
+    queued: { key: "account.logs.statuses.queued", color: "default" },
+    pending: { key: "account.logs.statuses.pending", color: "default" },
+    running: { key: "account.logs.statuses.running", color: "processing" },
+    success: { key: "account.logs.statuses.success", color: "success" },
+    succeeded: { key: "account.logs.statuses.success", color: "success" },
+    failed: { key: "account.logs.statuses.failed", color: "error" },
+    cancelled: { key: "account.logs.statuses.cancelled", color: "warning" },
 };
-const creditLogTypeLabels: Record<string, string> = {
-    admin_adjust: "平台调整",
-    ai_consume: "模型消费",
-    ai_refund: "失败返还",
-    enterprise_allocate: "企业分配",
-    enterprise_reclaim: "企业收回",
+const creditLogTypeKeys: Record<string, string> = {
+    admin_adjust: "account.logs.creditTypes.adminAdjust",
+    ai_consume: "account.logs.creditTypes.aiConsume",
+    ai_refund: "account.logs.creditTypes.aiRefund",
+    enterprise_allocate: "account.logs.creditTypes.enterpriseAllocate",
+    enterprise_reclaim: "account.logs.creditTypes.enterpriseReclaim",
 };
 
 type LogDateRange = [Dayjs, Dayjs] | null;
 
-const displayTime = (value: string) => (value ? new Date(value).toLocaleString("zh-CN") : "");
-const usageCsvColumns: CsvColumn<GenerationTaskItem>[] = [
-    { title: "任务 ID", value: (item) => item.id },
-    { title: "操作", value: (item) => operationLabels[item.intentKind || ""] || operationLabels[item.taskType] || item.intentKind || item.taskType },
-    { title: "来源", value: (item) => sourceLabels[item.source] || item.source },
-    { title: "模型", value: (item) => item.model },
-    { title: "模型展示名", value: (item) => item.modelDisplayName || item.model },
-    { title: "状态", value: (item) => statusLabels[item.status]?.label || item.status },
-    { title: "积分", value: (item) => formatDecimal(item.credits) },
-    { title: "上游 Credits", value: (item) => (item.taskType === "video" ? (item.upstreamCredits ?? "null") : "") },
-    { title: "耗时（秒）", value: (item) => (item.latencyMs ? (item.latencyMs / 1000).toFixed(1) : "") },
-    { title: "时间", value: (item) => displayTime(item.createdAt) },
-];
-const creditCsvColumns: CsvColumn<UserCreditLog>[] = [
-    { title: "流水 ID", value: (item) => item.id },
-    { title: "类型", value: (item) => creditLogTypeLabels[item.type] || item.type },
-    { title: "变动", value: (item) => formatDecimal(item.amount) },
-    { title: "余额", value: (item) => formatDecimal(item.balance) },
-    { title: "关联任务", value: (item) => item.taskId || item.relatedId },
-    { title: "备注", value: (item) => item.remark },
-    { title: "时间", value: (item) => displayTime(item.createdAt) },
-];
+function operationLabel(t: TFunction, item: GenerationTaskItem) {
+    const value = item.intentKind || item.taskType;
+    const key = operationLabelKeys[value];
+    return key ? t(key) : value;
+}
+
+function sourceLabel(t: TFunction, value: string) {
+    const key = sourceLabelKeys[value];
+    return key ? t(key) : value;
+}
+
+function createUsageCsvColumns(t: TFunction): CsvColumn<GenerationTaskItem>[] {
+    return [
+        { title: t("account.logs.table.taskId"), value: (item) => item.id },
+        { title: t("account.logs.table.operation"), value: (item) => operationLabel(t, item) },
+        { title: t("account.logs.table.source"), value: (item) => sourceLabel(t, item.source) },
+        { title: t("account.logs.table.model"), value: (item) => item.model },
+        { title: t("account.logs.table.modelDisplayName"), value: (item) => item.modelDisplayName || item.model },
+        { title: t("account.logs.table.status"), value: (item) => (statusLabels[item.status] ? t(statusLabels[item.status].key) : item.status) },
+        { title: t("account.logs.table.credits"), value: (item) => formatDecimal(item.credits) },
+        { title: t("account.logs.table.upstreamCredits"), value: (item) => (item.taskType === "video" ? (item.upstreamCredits ?? t("common.states.notAvailable")) : "") },
+        {
+            title: t("account.logs.table.durationSeconds"),
+            value: (item) => (item.latencyMs ? formatNumber(item.latencyMs / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ""),
+        },
+        { title: t("account.logs.table.time"), value: (item) => (item.createdAt ? formatDateTime(item.createdAt) : "") },
+    ];
+}
+
+function createCreditCsvColumns(t: TFunction): CsvColumn<UserCreditLog>[] {
+    return [
+        { title: t("account.logs.table.logId"), value: (item) => item.id },
+        { title: t("account.logs.table.type"), value: (item) => (creditLogTypeKeys[item.type] ? t(creditLogTypeKeys[item.type]) : item.type) },
+        { title: t("account.logs.table.change"), value: (item) => formatDecimal(item.amount) },
+        { title: t("account.logs.table.balance"), value: (item) => formatDecimal(item.balance) },
+        { title: t("account.logs.table.relatedTask"), value: (item) => item.taskId || item.relatedId },
+        { title: t("account.logs.table.remark"), value: (item) => item.remark },
+        { title: t("account.logs.table.time"), value: (item) => (item.createdAt ? formatDateTime(item.createdAt) : "") },
+    ];
+}
 
 type UsageLogTableProps = {
     items: GenerationTaskItem[];
@@ -80,17 +101,19 @@ type CreditLogTableProps = {
 };
 
 export function AccountLogs() {
+    const { t } = useTranslation();
+
     return (
         <section className="rounded-2xl border border-border bg-card p-6">
             <div>
-                <h2 className="text-lg font-semibold">日志记录</h2>
-                <p className="mt-1 text-sm text-muted-foreground">仅展示当前登录账号的使用情况和积分变动</p>
+                <h2 className="text-lg font-semibold">{t("account.logs.title")}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{t("account.logs.description")}</p>
             </div>
             <Tabs
                 className="mt-4"
                 items={[
-                    { key: "usage", label: "使用记录", children: <AccountUsageLogs /> },
-                    { key: "credits", label: "积分记录", children: <AccountCreditLogs /> },
+                    { key: "usage", label: t("account.logs.tabs.usage"), children: <AccountUsageLogs /> },
+                    { key: "credits", label: t("account.logs.tabs.credits"), children: <AccountCreditLogs /> },
                 ]}
             />
         </section>
@@ -98,6 +121,8 @@ export function AccountLogs() {
 }
 
 export function AccountUsageLogTable({ items, loading, pagination }: UsageLogTableProps) {
+    const { t } = useTranslation();
+
     return (
         <Table<GenerationTaskItem>
             rowKey="id"
@@ -107,30 +132,45 @@ export function AccountUsageLogTable({ items, loading, pagination }: UsageLogTab
             scroll={{ x: 1180 }}
             columns={[
                 {
-                    title: "操作",
+                    title: t("account.logs.table.operation"),
                     width: 180,
                     render: (_, item) => (
                         <div>
-                            <div>{operationLabels[item.intentKind || ""] || operationLabels[item.taskType] || item.intentKind || item.taskType || "-"}</div>
-                            <div className="text-xs text-muted-foreground">{sourceLabels[item.source] || item.source || "-"}</div>
+                            <div>{operationLabel(t, item) || "-"}</div>
+                            <div className="text-xs text-muted-foreground">{sourceLabel(t, item.source) || "-"}</div>
                         </div>
                     ),
                 },
-                { title: "模型", dataIndex: "model", ellipsis: true, render: (value: string) => value || "-" },
-                { title: "模型展示名", dataIndex: "modelDisplayName", width: 160, ellipsis: true, render: (value: string, item) => value || item.model || "-" },
+                { title: t("account.logs.table.model"), dataIndex: "model", ellipsis: true, render: (value: string) => value || "-" },
+                { title: t("account.logs.table.modelDisplayName"), dataIndex: "modelDisplayName", width: 160, ellipsis: true, render: (value: string, item) => value || item.model || "-" },
                 {
-                    title: "状态",
+                    title: t("account.logs.table.status"),
                     dataIndex: "status",
                     width: 100,
                     render: (value: string) => {
-                        const status = statusLabels[value] || { label: value || "未知", color: "default" };
-                        return <Tag color={status.color}>{status.label}</Tag>;
+                        const status = statusLabels[value];
+                        return <Tag color={status?.color || "default"}>{status ? t(status.key) : value || t("account.logs.values.unknown")}</Tag>;
                     },
                 },
-                { title: "积分", dataIndex: "credits", width: 100, render: (value: string) => `${formatDecimal(value)} 积分` },
-                { title: "上游 Credits", dataIndex: "upstreamCredits", width: 120, render: (_, item) => (item.taskType === "video" ? (item.upstreamCredits ?? "null") : "-") },
-                { title: "耗时", dataIndex: "latencyMs", width: 100, render: (value: number) => (value ? `${(value / 1000).toFixed(1)} 秒` : "-") },
-                { title: "时间", dataIndex: "createdAt", width: 180, render: (value: string) => (value ? new Date(value).toLocaleString("zh-CN") : "-") },
+                {
+                    title: t("account.logs.table.credits"),
+                    dataIndex: "credits",
+                    width: 100,
+                    render: (value: string) => t("account.logs.values.credits", { count: Number(value), value: formatDecimal(value) }),
+                },
+                { title: t("account.logs.table.upstreamCredits"), dataIndex: "upstreamCredits", width: 120, render: (_, item) => (item.taskType === "video" ? (item.upstreamCredits ?? t("common.states.notAvailable")) : "-") },
+                {
+                    title: t("account.logs.table.duration"),
+                    dataIndex: "latencyMs",
+                    width: 100,
+                    render: (value: number) =>
+                        value
+                            ? t("account.logs.values.seconds", {
+                                  value: formatNumber(value / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+                              })
+                            : "-",
+                },
+                { title: t("account.logs.table.time"), dataIndex: "createdAt", width: 180, render: (value: string) => (value ? formatDateTime(value) : "-") },
             ]}
         />
     );
@@ -138,6 +178,7 @@ export function AccountUsageLogTable({ items, loading, pagination }: UsageLogTab
 
 export function AccountUsageLogs() {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const token = useUserStore((state) => state.token);
     const userId = useUserStore((state) => state.user?.id);
     const [items, setItems] = useState<GenerationTaskItem[]>([]);
@@ -165,26 +206,26 @@ export function AccountUsageLogs() {
                 if (!current) return;
                 setItems([]);
                 setTotal(0);
-                setError(reason instanceof Error ? reason.message : "使用记录加载失败");
+                setError(reason instanceof Error ? reason.message : t("account.logs.usage.messages.loadError"));
             })
             .finally(() => current && setLoading(false));
         return () => {
             current = false;
         };
-    }, [endTime, page, pageSize, startTime, token, userId]);
+    }, [endTime, page, pageSize, startTime, t, token, userId]);
 
     const exportLogs = async () => {
         setExporting(true);
         try {
             const rows = await fetchAllPages((nextPage, nextPageSize) => fetchGenerationTasks({ start_time: startTime, end_time: endTime, page: nextPage, pageSize: nextPageSize }));
             if (!rows.length) {
-                message.warning("暂无使用记录可导出");
+                message.warning(t("account.logs.usage.messages.emptyExport"));
                 return;
             }
-            downloadCsv("使用记录.csv", usageCsvColumns, rows);
-            message.success("使用记录已导出");
+            downloadCsv(t("account.logs.usage.export.fileName"), createUsageCsvColumns(t), rows);
+            message.success(t("account.logs.usage.messages.exportSuccess"));
         } catch (reason) {
-            message.error(reason instanceof Error ? reason.message : "使用记录导出失败");
+            message.error(reason instanceof Error ? reason.message : t("account.logs.usage.messages.exportError"));
         } finally {
             setExporting(false);
         }
@@ -195,15 +236,15 @@ export function AccountUsageLogs() {
             <Space wrap className="mb-4">
                 <DatePicker.RangePicker
                     value={range}
-                    format="YYYY-MM-DD"
-                    placeholder={["开始日期", "结束日期"]}
+                    format={t("account.logs.filters.dateFormat")}
+                    placeholder={[t("account.logs.filters.startDate"), t("account.logs.filters.endDate")]}
                     onChange={(value) => {
                         setRange(value as LogDateRange);
                         setPage(1);
                     }}
                 />
                 <Button icon={<Download className="size-4" />} loading={exporting} onClick={() => void exportLogs()}>
-                    导出使用记录
+                    {t("account.logs.usage.export.button")}
                 </Button>
             </Space>
             {error ? <p className="mb-4 text-sm text-red-500">{error}</p> : null}
@@ -215,7 +256,7 @@ export function AccountUsageLogs() {
                     pageSize,
                     total,
                     showSizeChanger: true,
-                    showTotal: (value) => `共 ${value} 条`,
+                    showTotal: (value) => t("account.logs.pagination.total", { count: value, value: formatNumber(value) }),
                     onChange: (nextPage, nextPageSize) => {
                         setPage(nextPageSize !== pageSize ? 1 : nextPage);
                         setPageSize(nextPageSize);
@@ -228,6 +269,7 @@ export function AccountUsageLogs() {
 
 export function AccountCreditLogs() {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const token = useUserStore((state) => state.token);
     const user = useUserStore((state) => state.user);
     const [items, setItems] = useState<UserCreditLog[]>([]);
@@ -255,26 +297,26 @@ export function AccountCreditLogs() {
                 if (!current) return;
                 setItems([]);
                 setTotal(0);
-                setError(reason instanceof Error ? reason.message : "积分记录加载失败");
+                setError(reason instanceof Error ? reason.message : t("account.logs.credits.messages.loadError"));
             })
             .finally(() => current && setLoading(false));
         return () => {
             current = false;
         };
-    }, [endTime, page, pageSize, startTime, token, user?.credits, user?.id]);
+    }, [endTime, page, pageSize, startTime, t, token, user?.credits, user?.id]);
 
     const exportLogs = async () => {
         setExporting(true);
         try {
             const rows = await fetchAllPages((nextPage, nextPageSize) => fetchUserCreditLogs(token, { start_time: startTime, end_time: endTime, page: nextPage, pageSize: nextPageSize }));
             if (!rows.length) {
-                message.warning("暂无积分记录可导出");
+                message.warning(t("account.logs.credits.messages.emptyExport"));
                 return;
             }
-            downloadCsv("积分记录.csv", creditCsvColumns, rows);
-            message.success("积分记录已导出");
+            downloadCsv(t("account.logs.credits.export.fileName"), createCreditCsvColumns(t), rows);
+            message.success(t("account.logs.credits.messages.exportSuccess"));
         } catch (reason) {
-            message.error(reason instanceof Error ? reason.message : "积分记录导出失败");
+            message.error(reason instanceof Error ? reason.message : t("account.logs.credits.messages.exportError"));
         } finally {
             setExporting(false);
         }
@@ -285,15 +327,15 @@ export function AccountCreditLogs() {
             <Space wrap className="mb-4">
                 <DatePicker.RangePicker
                     value={range}
-                    format="YYYY-MM-DD"
-                    placeholder={["开始日期", "结束日期"]}
+                    format={t("account.logs.filters.dateFormat")}
+                    placeholder={[t("account.logs.filters.startDate"), t("account.logs.filters.endDate")]}
                     onChange={(value) => {
                         setRange(value as LogDateRange);
                         setPage(1);
                     }}
                 />
                 <Button icon={<Download className="size-4" />} loading={exporting} onClick={() => void exportLogs()}>
-                    导出日志记录
+                    {t("account.logs.credits.export.button")}
                 </Button>
             </Space>
             {error ? <p className="mb-4 text-sm text-red-500">{error}</p> : null}
@@ -305,7 +347,7 @@ export function AccountCreditLogs() {
                     pageSize,
                     total,
                     showSizeChanger: true,
-                    showTotal: (value) => `共 ${value} 条`,
+                    showTotal: (value) => t("account.logs.pagination.total", { count: value, value: formatNumber(value) }),
                     onChange: (nextPage, nextPageSize) => {
                         setPage(nextPageSize !== pageSize ? 1 : nextPage);
                         setPageSize(nextPageSize);
@@ -317,6 +359,8 @@ export function AccountCreditLogs() {
 }
 
 export function AccountCreditLogTable({ items, loading, pagination }: CreditLogTableProps) {
+    const { t } = useTranslation();
+
     return (
         <Table<UserCreditLog>
             rowKey="id"
@@ -325,17 +369,17 @@ export function AccountCreditLogTable({ items, loading, pagination }: CreditLogT
             pagination={pagination}
             scroll={{ x: 900 }}
             columns={[
-                { title: "类型", dataIndex: "type", width: 120, render: (value: string) => <Tag>{creditLogTypeLabels[value] || value || "-"}</Tag> },
+                { title: t("account.logs.table.type"), dataIndex: "type", width: 120, render: (value: string) => <Tag>{creditLogTypeKeys[value] ? t(creditLogTypeKeys[value]) : value || "-"}</Tag> },
                 {
-                    title: "变动",
+                    title: t("account.logs.table.change"),
                     dataIndex: "amount",
                     width: 100,
                     render: (value: string) => <span className={compareDecimal(value, "0") >= 0 ? "text-green-600" : "text-red-500"}>{compareDecimal(value, "0") > 0 ? `+${formatDecimal(value)}` : formatDecimal(value)}</span>,
                 },
-                { title: "余额", dataIndex: "balance", width: 100, render: (value: string) => formatDecimal(value) },
-                { title: "关联任务", width: 220, render: (_, item) => item.taskId || item.relatedId || "-" },
-                { title: "备注", dataIndex: "remark", ellipsis: true, render: (value: string) => value || "-" },
-                { title: "时间", dataIndex: "createdAt", width: 180, render: (value: string) => (value ? new Date(value).toLocaleString("zh-CN") : "-") },
+                { title: t("account.logs.table.balance"), dataIndex: "balance", width: 100, render: (value: string) => formatDecimal(value) },
+                { title: t("account.logs.table.relatedTask"), width: 220, render: (_, item) => item.taskId || item.relatedId || "-" },
+                { title: t("account.logs.table.remark"), dataIndex: "remark", ellipsis: true, render: (value: string) => value || "-" },
+                { title: t("account.logs.table.time"), dataIndex: "createdAt", width: 180, render: (value: string) => (value ? formatDateTime(value) : "-") },
             ]}
         />
     );

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { App } from "antd";
+import { useTranslation } from "react-i18next";
 
 import { adjustAdminUserCredits, deleteAdminUser, fetchAdminUsers, saveAdminUser, type AdminUser } from "@/services/api/admin";
 import { useUserStore } from "@/stores/use-user-store";
@@ -11,6 +12,7 @@ const defaultPageSize = 10;
 
 export function useAdminUsers() {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const queryClient = useQueryClient();
     const token = useUserStore((state) => state.token);
     const clearSession = useUserStore((state) => state.clearSession);
@@ -29,36 +31,36 @@ export function useAdminUsers() {
         mutationFn: (user: Partial<AdminUser> & { password?: string }) => saveAdminUser(token, user),
         onSuccess: async (_, user) => {
             await queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
-            message.success(user.id ? "用户已保存" : "用户已新增");
+            message.success(t(user.id ? "admin.users.messages.saved" : "admin.users.messages.created"));
         },
-        onError: (error) => message.error(error instanceof Error ? error.message : "保存失败"),
+        onError: (error) => message.error(error instanceof Error ? error.message : t("admin.common.messages.saveFailed")),
     });
 
     const deleteMutation = useMutation({
         mutationFn: (id: string) => deleteAdminUser(token, id),
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
-            message.success("用户已删除");
+            message.success(t("admin.users.messages.deleted"));
         },
-        onError: (error) => message.error(error instanceof Error ? error.message : "删除失败"),
+        onError: (error) => message.error(error instanceof Error ? error.message : t("admin.common.messages.deleteFailed")),
     });
 
     const creditMutation = useMutation({
         mutationFn: ({ id, credits }: { id: string; credits: string }) => adjustAdminUserCredits(token, id, credits),
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
-            message.success("算力点已调整");
+            message.success(t("admin.users.messages.creditsAdjusted"));
         },
-        onError: (error) => message.error(error instanceof Error ? error.message : "调整失败"),
+        onError: (error) => message.error(error instanceof Error ? error.message : t("admin.common.messages.adjustFailed")),
     });
 
     useEffect(() => {
         if (query.isError) {
-            const errorMessage = query.error instanceof Error ? query.error.message : "读取用户失败";
+            const errorMessage = query.error instanceof Error ? query.error.message : t("admin.users.messages.loadFailed");
             message.error(errorMessage);
             if (errorMessage.includes("未登录") || errorMessage.includes("权限不足") || errorMessage.includes("登录状态无效")) clearSession();
         }
-    }, [clearSession, message, query.error, query.isError]);
+    }, [clearSession, message, query.error, query.isError, t]);
 
     const updateFilters = (next: Partial<{ keyword: string; page: number; pageSize: number }>) => {
         const queryState = { keyword, page, pageSize, ...next };

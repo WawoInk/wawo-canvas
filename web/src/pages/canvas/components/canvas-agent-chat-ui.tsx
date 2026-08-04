@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Tooltip } from "antd";
 import { ArrowUp, CheckCircle2, CircleAlert, ImagePlus, LoaderCircle, UserRound, Wrench, X, XCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import type { AuthUser } from "@/services/api/auth";
@@ -19,8 +20,6 @@ export type CanvasAgentChatMessage = {
     attachments?: CanvasAgentChatAttachment[];
 };
 
-const WORKING_TEXT = "working...";
-
 export function AgentChatMessage({
     item,
     theme,
@@ -34,6 +33,7 @@ export function AgentChatMessage({
     onRejectTool?: (id: string) => void;
     onApproveTool?: (id: string) => void;
 }) {
+    const { t } = useTranslation();
     const isUser = item.role === "user";
     const isSystem = item.role === "system";
     const color = item.role === "error" ? "#dc2626" : item.role === "tool" ? "#E8956A" : theme.node.text;
@@ -52,7 +52,7 @@ export function AgentChatMessage({
         return (
             <div className="flex items-start gap-3">
                 <AgentAvatar theme={theme} />
-                <AgentToolCard title={item.title || "工具调用"} text={item.text} detail={item.detail} theme={theme} />
+                <AgentToolCard title={item.title || t("canvas.agent.tools.call")} text={item.text} detail={item.detail} theme={theme} />
             </div>
         );
     }
@@ -70,6 +70,7 @@ export function AgentChatMessage({
 }
 
 export function AgentPendingToolCard({ summary, detail, theme, onReject, onApprove }: { summary: string; detail?: unknown; theme: (typeof canvasThemes)[keyof typeof canvasThemes]; onReject?: () => void; onApprove?: () => void }) {
+    const { t } = useTranslation();
     return (
         <div className="flex items-start gap-3">
             <AgentAvatar theme={theme} />
@@ -82,13 +83,13 @@ export function AgentPendingToolCard({ summary, detail, theme, onReject, onAppro
                             </span>
                             <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-center gap-2 text-sm font-semibold leading-5">
-                                    <span>确认工具调用</span>
+                                    <span>{t("canvas.agent.tools.confirmTitle")}</span>
                                     <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium" style={{ borderColor: "rgba(217,119,6,.22)", color: "#d97706", background: "rgba(217,119,6,.04)" }}>
-                                        等待确认
+                                        {t("canvas.agent.tools.status.pending")}
                                     </span>
                                     {detail ? (
                                         <span className="ml-auto text-xs font-normal" style={{ color: theme.node.muted }}>
-                                            详情
+                                            {t("canvas.agent.tools.detail")}
                                         </span>
                                     ) : null}
                                 </div>
@@ -103,10 +104,10 @@ export function AgentPendingToolCard({ summary, detail, theme, onReject, onAppro
                 {onReject || onApprove ? (
                     <div className="mt-4 grid grid-cols-2 gap-2">
                         <Button danger className="!h-9" icon={<XCircle className="size-4" />} onClick={() => onReject?.()}>
-                            拒绝执行
+                            {t("canvas.agent.tools.reject")}
                         </Button>
                         <Button className="!h-9" icon={<CheckCircle2 className="size-4" />} style={{ borderColor: "rgba(22,163,74,.42)", color: "#16a34a", background: "transparent" }} onClick={() => onApprove?.()}>
-                            批准执行
+                            {t("canvas.agent.tools.approve")}
                         </Button>
                     </div>
                 ) : null}
@@ -116,6 +117,7 @@ export function AgentPendingToolCard({ summary, detail, theme, onReject, onAppro
 }
 
 export function AgentToolCard({ title, text, detail, theme }: { title: string; text: string; detail?: unknown; theme: (typeof canvasThemes)[keyof typeof canvasThemes] }) {
+    const { t } = useTranslation();
     const state = toolCardState(title, text, detail);
     return (
         <details className="min-w-0 flex-1 rounded-xl border px-4 py-3.5 text-left" style={{ borderColor: theme.node.stroke, background: "transparent", color: theme.node.text }}>
@@ -128,11 +130,11 @@ export function AgentToolCard({ title, text, detail, theme }: { title: string; t
                         <div className="flex flex-wrap items-center gap-2 text-sm font-semibold leading-5">
                             <span className="min-w-0 truncate">{title}</span>
                             <span className="inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium" style={{ borderColor: state.softBorder, color: state.color, background: state.softBg }}>
-                                {state.label}
+                                {t(state.labelKey)}
                             </span>
                             {detail ? (
                                 <span className="ml-auto text-xs font-normal" style={{ color: theme.node.muted }}>
-                                    详情
+                                    {t("canvas.agent.tools.detail")}
                                 </span>
                             ) : null}
                         </div>
@@ -148,17 +150,20 @@ export function AgentToolCard({ title, text, detail, theme }: { title: string; t
 }
 
 export function AgentWorkingMessage({ theme }: { theme: (typeof canvasThemes)[keyof typeof canvasThemes] }) {
+    const { t } = useTranslation();
+    const workingText = t("canvas.agent.chat.working");
     const [length, setLength] = useState(1);
     useEffect(() => {
-        const timer = window.setInterval(() => setLength((value) => (value >= WORKING_TEXT.length + 4 ? 1 : value + 1)), 120);
+        setLength(1);
+        const timer = window.setInterval(() => setLength((value) => (value >= workingText.length + 4 ? 1 : value + 1)), 120);
         return () => window.clearInterval(timer);
-    }, [setLength]);
+    }, [workingText]);
     return (
         <div className="flex items-start gap-2.5">
             <AgentAvatar theme={theme} />
             <div className="min-w-0 max-w-[82%]">
-                <div className="font-mono text-sm" style={{ color: theme.node.muted }} aria-label={WORKING_TEXT}>
-                    <span className="inline-block w-[76px]">{WORKING_TEXT.slice(0, Math.min(length, WORKING_TEXT.length))}</span>
+                <div className="font-mono text-sm" style={{ color: theme.node.muted }} aria-label={workingText}>
+                    <span className="inline-block w-[76px]">{workingText.slice(0, Math.min(length, workingText.length))}</span>
                 </div>
             </div>
         </div>
@@ -190,6 +195,7 @@ export function AgentChatComposer({
     onRemoveAttachment?: (id: string) => void;
     left?: ReactNode;
 }) {
+    const { t } = useTranslation();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const canSubmit = !disabled && !sending && Boolean(prompt.trim() || attachments.length);
     return (
@@ -206,7 +212,7 @@ export function AgentChatComposer({
                                         className="absolute right-1 top-1 grid size-5 place-items-center rounded-full border opacity-0 shadow-sm transition group-hover:opacity-100"
                                         style={{ background: theme.toolbar.panel, borderColor: theme.node.stroke, color: theme.node.text }}
                                         onClick={() => onRemoveAttachment(item.id)}
-                                        aria-label="移除图片"
+                                        aria-label={t("canvas.agent.chat.removeImage")}
                                     >
                                         <X className="size-3" />
                                     </button>
@@ -249,7 +255,7 @@ export function AgentChatComposer({
                                         event.target.value = "";
                                     }}
                                 />
-                                <Tooltip title="上传图片">
+                                <Tooltip title={t("canvas.agent.chat.uploadImage")}>
                                     <Button type="text" shape="circle" className="!h-9 !w-9 !min-w-9" disabled={sending} style={{ color: theme.node.muted }} icon={<ImagePlus className="size-4" />} onClick={() => fileInputRef.current?.click()} />
                                 </Tooltip>
                             </>
@@ -263,7 +269,7 @@ export function AgentChatComposer({
                         disabled={!canSubmit}
                         icon={sending ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
                         onClick={() => void onSubmit()}
-                        aria-label="发送"
+                        aria-label={t("canvas.agent.chat.send")}
                     />
                 </div>
             </div>
@@ -272,6 +278,7 @@ export function AgentChatComposer({
 }
 
 export function AgentModeSwitch({ value, theme, onChange }: { value: CanvasAgentMode; theme: (typeof canvasThemes)[keyof typeof canvasThemes]; onChange: (value: CanvasAgentMode) => void }) {
+    const { t } = useTranslation();
     return (
         <div className="inline-flex shrink-0 rounded-lg border p-0.5 text-xs" style={{ borderColor: theme.node.stroke }}>
             {(["online", "local"] as const).map((item) => (
@@ -282,7 +289,7 @@ export function AgentModeSwitch({ value, theme, onChange }: { value: CanvasAgent
                     style={{ background: value === item ? theme.node.fill : "transparent", color: value === item ? theme.node.text : theme.node.muted }}
                     onClick={() => onChange(item)}
                 >
-                    {item === "online" ? "网站" : "本机"}
+                    {t(`canvas.agent.mode.${item}`)}
                 </button>
             ))}
         </div>
@@ -302,10 +309,11 @@ export function AgentPanelTabs<T extends string>({
     right?: ReactNode;
     onChange: (value: T) => void;
 }) {
+    const { t } = useTranslation();
     return (
         <div className="border-b px-3" style={{ borderColor: theme.node.stroke }}>
             <div className="flex min-h-11 items-center justify-between gap-3">
-                <nav className="thin-scrollbar flex min-w-0 flex-1 items-center gap-3 overflow-x-auto text-sm" role="tablist" aria-label="Agent 面板">
+                <nav className="thin-scrollbar flex min-w-0 flex-1 items-center gap-3 overflow-x-auto text-sm" role="tablist" aria-label={t("canvas.agent.accessibility.panel")}>
                     {items.map((item) => (
                         <button
                             key={item.value}
@@ -337,8 +345,9 @@ function AgentDetailBlock({ detail, theme }: { detail: unknown; theme: (typeof c
 }
 
 function AgentAvatar({ theme }: { theme: (typeof canvasThemes)[keyof typeof canvasThemes] }) {
+    const { t } = useTranslation();
     return (
-        <span className="grid size-8 shrink-0 place-items-center" role="img" aria-label="OpenAI">
+        <span className="grid size-8 shrink-0 place-items-center" role="img" aria-label={t("canvas.agent.accessibility.openAiLogo")}>
             <span className="size-5 opacity-80" style={{ background: theme.node.text, WebkitMask: "url(/icons/openai.svg) center / contain no-repeat", mask: "url(/icons/openai.svg) center / contain no-repeat" }} />
         </span>
     );
@@ -367,13 +376,22 @@ function toolCardState(title: string, text: string, detail?: unknown) {
     const raw = `${title} ${text} ${normalizeText(objectField(detail, "error"))}`;
     const lower = raw.toLowerCase();
     const tool = String(objectField(detail, "name") || objectField(detail, "tool") || "");
-    if (objectField(detail, "status") === "noop" || /未生效|无需|没有找到|没有.*可|已存在/.test(raw))
-        return { label: "未生效", color: "#d97706", softBorder: "rgba(217,119,6,.22)", softBg: "rgba(217,119,6,.04)", icon: <CircleAlert className="size-4" />, isError: false };
-    if (/拒绝|取消/.test(raw) || lower.includes("rejected")) return { label: "拒绝执行", color: "#dc2626", softBorder: "rgba(220,38,38,.20)", softBg: "rgba(220,38,38,.04)", icon: <XCircle className="size-4" />, isError: true };
-    if (/失败|错误/.test(raw) || lower.includes("failed") || lower.includes("error")) return { label: "执行失败", color: "#dc2626", softBorder: "rgba(220,38,38,.20)", softBg: "rgba(220,38,38,.04)", icon: <XCircle className="size-4" />, isError: true };
+    if (objectField(detail, "status") === "noop" || /未生效|无需|没有找到|没有.*可|已存在/.test(raw) || lower.includes("no changes") || lower.includes("not found") || lower.includes("nothing to") || lower.includes("already"))
+        return { labelKey: "canvas.agent.tools.status.noop", color: "#d97706", softBorder: "rgba(217,119,6,.22)", softBg: "rgba(217,119,6,.04)", icon: <CircleAlert className="size-4" />, isError: false };
+    if (/拒绝|取消/.test(raw) || lower.includes("rejected"))
+        return { labelKey: "canvas.agent.tools.status.rejected", color: "#dc2626", softBorder: "rgba(220,38,38,.20)", softBg: "rgba(220,38,38,.04)", icon: <XCircle className="size-4" />, isError: true };
+    if (/失败|错误/.test(raw) || lower.includes("failed") || lower.includes("error"))
+        return { labelKey: "canvas.agent.tools.status.failed", color: "#dc2626", softBorder: "rgba(220,38,38,.20)", softBg: "rgba(220,38,38,.04)", icon: <XCircle className="size-4" />, isError: true };
     if (/完成|成功/.test(raw) || lower.includes("completed") || lower.includes("succeeded"))
-        return { label: tool === "canvas_apply_ops" || /画布操作/.test(title) ? "已批准执行" : "执行完成", color: "#16a34a", softBorder: "rgba(22,163,74,.20)", softBg: "rgba(22,163,74,.04)", icon: <CheckCircle2 className="size-4" />, isError: false };
-    return { label: "工具调用", color: "#E8956A", softBorder: "rgba(232,149,106,.20)", softBg: "rgba(232,149,106,.04)", icon: <Wrench className="size-4" />, isError: false };
+        return {
+            labelKey: tool === "canvas_apply_ops" || /画布操作|canvas operations?/i.test(title) ? "canvas.agent.tools.status.approved" : "canvas.agent.tools.status.completed",
+            color: "#16a34a",
+            softBorder: "rgba(22,163,74,.20)",
+            softBg: "rgba(22,163,74,.04)",
+            icon: <CheckCircle2 className="size-4" />,
+            isError: false,
+        };
+    return { labelKey: "canvas.agent.tools.call", color: "#E8956A", softBorder: "rgba(232,149,106,.20)", softBg: "rgba(232,149,106,.04)", icon: <Wrench className="size-4" />, isError: false };
 }
 
 function normalizeText(value: unknown) {

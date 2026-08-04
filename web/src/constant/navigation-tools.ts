@@ -5,34 +5,34 @@ import { enterpriseCapabilities, type EnterpriseIdentity } from "@/lib/account-a
 export const navigationTools = [
     {
         slug: "canvas",
-        label: "我的画布",
+        labelKey: "navigation.canvas",
         icon: Maximize2,
     },
     {
         slug: "image",
-        label: "生图工作台",
+        labelKey: "navigation.image",
         icon: ImagePlus,
     },
     {
         slug: "video",
-        label: "视频创作台",
+        labelKey: "navigation.video",
         icon: Video,
     },
     {
         slug: "prompts",
-        label: "提示词库",
+        labelKey: "navigation.prompts",
         icon: FileText,
     },
     {
         slug: "assets",
-        label: "我的素材",
+        labelKey: "navigation.assets",
         icon: Images,
     },
 ] as const;
 
 export const enterpriseNavigationTool = {
     slug: "enterprise-assets",
-    label: "企业素材库",
+    labelKey: "navigation.enterpriseAssets",
     icon: Building2,
 } as const;
 

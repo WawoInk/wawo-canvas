@@ -1,13 +1,13 @@
 export const generationTaskStatuses = {
-    queued: { label: "排队中", color: "default" },
-    pending: { label: "等待中", color: "default" },
-    running: { label: "运行中", color: "processing" },
-    success: { label: "成功", color: "success" },
-    succeeded: { label: "成功", color: "success" },
-    failed: { label: "失败", color: "error" },
-    cancelled: { label: "已取消", color: "warning" },
+    queued: { labelKey: "admin.generationTasks.statuses.queued", color: "default" },
+    pending: { labelKey: "admin.generationTasks.statuses.pending", color: "default" },
+    running: { labelKey: "admin.generationTasks.statuses.running", color: "processing" },
+    success: { labelKey: "admin.generationTasks.statuses.success", color: "success" },
+    succeeded: { labelKey: "admin.generationTasks.statuses.success", color: "success" },
+    failed: { labelKey: "admin.generationTasks.statuses.failed", color: "error" },
+    cancelled: { labelKey: "admin.generationTasks.statuses.cancelled", color: "warning" },
 } as const;
 
 export function generationTaskStatus(status: string) {
-    return generationTaskStatuses[status as keyof typeof generationTaskStatuses] || { label: "未知", color: "default" };
+    return generationTaskStatuses[status as keyof typeof generationTaskStatuses] || { labelKey: "admin.generationTasks.statuses.unknown", color: "default" };
 }

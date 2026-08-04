@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import i18n from "@/i18n";
 import type { CanvasAgentOp } from "../utils/canvas-agent-ops";
 
 export type AgentChatRole = "user" | "assistant" | "system" | "tool" | "error";
@@ -55,7 +56,7 @@ export const useCanvasAgentStore = create<CanvasAgentStore>((set) => ({
     loadingThreads: false,
     activeTab: "setup",
     confirmTools: true,
-    activity: "就绪",
+    activity: i18n.t("canvas.agent.status.ready"),
     connectError: "",
     pendingTool: null,
     setAgentState: (patch) => set(patch),

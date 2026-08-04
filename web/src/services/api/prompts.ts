@@ -1,3 +1,5 @@
+import i18n from "@/i18n";
+import { formatDate } from "@/i18n/formatters";
 import { compactApiParams, serializeApiParams } from "@/services/api/request";
 
 export type Prompt = {
@@ -13,7 +15,7 @@ export type Prompt = {
     updatedAt: string;
 };
 
-export const ALL_PROMPTS_OPTION = "全部";
+export const ALL_PROMPTS_OPTION = "__all__";
 
 export type PromptListResponse = {
     items: Prompt[];
@@ -33,15 +35,14 @@ export async function fetchPrompts({ keyword = "", tag = [], category = ALL_PROM
         }),
     );
     const response = await fetch(`/api/prompts${params.size ? `?${params}` : ""}`);
-    if (!response.ok) throw new Error("获取提示词失败");
+    if (!response.ok) throw new Error(i18n.t("prompts.errors.fetch"));
     const envelope = await response.json();
     if (!envelope || typeof envelope !== "object" || (typeof envelope.code === "number" && envelope.code !== 0)) {
-        throw new Error(envelope?.msg || "获取提示词失败");
+        throw new Error(envelope?.msg || i18n.t("prompts.errors.fetch"));
     }
     return envelope.data as PromptListResponse;
 }
 
 export function formatPromptDate(value: string) {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+    return formatDate(value, { year: "numeric", month: "2-digit", day: "2-digit" });
 }

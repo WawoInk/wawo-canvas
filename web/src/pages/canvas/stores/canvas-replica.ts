@@ -1,3 +1,4 @@
+import i18n from "@/i18n";
 import type { CanvasBackgroundMode } from "../../../lib/canvas-theme";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "../types";
 
@@ -24,7 +25,7 @@ export function normalizeCanvasProject(value: unknown): ReplicaCanvasProject | n
     if (typeof project.id !== "string" || !project.id) return null;
     return {
         id: project.id,
-        title: project.title || project.name || "未命名画布",
+        title: project.title || project.name || i18n.t("canvas.editor.project.untitled"),
         createdAt: typeof project.createdAt === "string" ? project.createdAt : "",
         updatedAt: typeof project.updatedAt === "string" ? project.updatedAt : "",
         revision: Number.isSafeInteger(project.revision) && Number(project.revision) >= 0 ? Number(project.revision) : 0,

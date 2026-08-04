@@ -1,0 +1,3005 @@
+{
+    "common": {
+        "brand": "Canvan",
+        "login": "Log in",
+        "register": "Register",
+        "logout": "Log out",
+        "copied": "Copied",
+        "github": "GitHub",
+        "configuration": "Configuration",
+        "keyboardShortcuts": "Keyboard shortcuts",
+        "accountMenu": "Account menu",
+        "accountSettings": "Account settings",
+        "adminConsole": "Admin console",
+        "currentCredits": "Current compute credit balance",
+        "switchToLightTheme": "Switch to light theme",
+        "switchToDarkTheme": "Switch to dark theme",
+        "switchTheme": "Toggle theme",
+        "goToCanvas": "Open canvas",
+        "all": "All",
+        "optional": "Optional",
+        "assetTypes": {
+            "text": "Text",
+            "image": "Image",
+            "video": "Video"
+        },
+        "fields": {
+            "type": "Type",
+            "title": "Title",
+            "tags": "Tags",
+            "source": "Source",
+            "note": "Note",
+            "content": "Content"
+        },
+        "actions": {
+            "save": "Save",
+            "cancel": "Cancel",
+            "delete": "Delete",
+            "view": "View",
+            "edit": "Edit",
+            "copy": "Copy",
+            "download": "Download",
+            "upload": "Upload",
+            "playVideo": "Play video",
+            "search": "Search",
+            "reload": "Reload",
+            "addToMyAssets": "Add to My Assets",
+            "done": "Done"
+        },
+        "states": {
+            "noCover": "No cover",
+            "noTags": "No tags",
+            "loadFailed": "Failed to load",
+            "notAvailable": "Not available"
+        }
+    },
+    "generation": {
+        "status": {
+            "queued": "Queued",
+            "running": "Generating"
+        }
+    },
+    "language": {
+        "switcherLabel": "Switch language",
+        "options": {
+            "zhCN": "中文",
+            "enUS": "English"
+        }
+    },
+    "navigation": {
+        "title": "Navigation",
+        "openMenu": "Open navigation menu",
+        "menu": "Navigation menu",
+        "brandHome": "Canvan home",
+        "canvas": "My canvases",
+        "image": "Image studio",
+        "video": "Video studio",
+        "prompts": "Prompt library",
+        "assets": "My assets",
+        "enterpriseAssets": "Enterprise assets"
+    },
+    "home": {
+        "hero": {
+            "description": "In <brand>{{brand}}</brand>, generate, connect, and remix <media>{{mediaTypes}}</media> to turn one-off generations into an evolving creative process.",
+            "mediaTypes": "images, text, and shapes",
+            "start": "Get started",
+            "openCanvas": "Open canvas"
+        },
+        "showcase": {
+            "title": "Build on every great result",
+            "description": "Save reliable prompts, reference styles, and generated images so your next creation starts with proven ideas.",
+            "browsePrompts": "Browse prompt library",
+            "loadError": "Failed to load prompts"
+        }
+    },
+    "auth": {
+        "title": "Sign in to your account",
+        "description": "Sign in with your username and password or Linux.do.",
+        "fields": {
+            "username": "Username",
+            "password": "Password",
+            "confirmPassword": "Confirm password"
+        },
+        "actions": {
+            "loginWithLinuxDo": "Continue with Linux.do"
+        },
+        "validation": {
+            "usernameRequired": "Enter your username",
+            "passwordRequired": "Enter your password",
+            "confirmPasswordRequired": "Enter your password again",
+            "passwordMismatch": "The passwords do not match"
+        },
+        "messages": {
+            "loginSuccess": "Logged in successfully",
+            "registerSuccess": "Account created successfully",
+            "registrationDisabled": "Registration is currently closed",
+            "loginFailed": "Login failed"
+        }
+    },
+    "notFound": {
+        "code": "404",
+        "title": "Page not found",
+        "description": "There is no page at this address. It may have moved or been merged into another section.",
+        "backHome": "Back to home"
+    },
+    "versionRelease": {
+        "open": "View release notes",
+        "title": "Release notes",
+        "currentVersion": "Current version",
+        "latestVersion": "Latest version",
+        "checking": "Checking...",
+        "checkForUpdates": "Check for updates",
+        "unreleased": "Unreleased",
+        "latest": "Latest",
+        "current": "Current",
+        "messages": {
+            "updated": "You are on the latest version",
+            "updateFailed": "Failed to check for updates"
+        },
+        "errors": {
+            "versionRead": "Failed to read version information",
+            "changelogRead": "Failed to read the changelog"
+        },
+        "types": {
+            "added": "Added",
+            "fixed": "Fixed",
+            "changed": "Changed",
+            "docs": "Docs"
+        }
+    },
+    "account": {
+        "loading": "Loading account...",
+        "header": {
+            "eyebrow": "Account center",
+            "title": "Account settings"
+        },
+        "tabs": {
+            "account": "Account",
+            "logs": "Logs",
+            "enterprise": "Enterprise"
+        },
+        "overview": {
+            "title": "Account overview",
+            "fields": {
+                "username": "Username",
+                "credits": "Current credits",
+                "role": "Platform role",
+                "registeredAt": "Registered"
+            }
+        },
+        "roles": {
+            "platform": {
+                "guest": "Guest",
+                "user": "User",
+                "admin": "Platform administrator"
+            },
+            "enterprise": {
+                "owner": "Enterprise owner",
+                "member": "Enterprise member"
+            }
+        },
+        "status": {
+            "active": "Active",
+            "disabled": "Disabled"
+        },
+        "profile": {
+            "title": "Profile",
+            "fields": {
+                "displayName": "Display name",
+                "email": "Email"
+            },
+            "placeholders": {
+                "displayName": "Enter a display name",
+                "email": "Enter an email address"
+            },
+            "validation": {
+                "email": "Enter a valid email address"
+            },
+            "actions": {
+                "save": "Save profile"
+            },
+            "messages": {
+                "updateSuccess": "Profile updated",
+                "updateError": "Failed to update profile"
+            }
+        },
+        "password": {
+            "title": "Change password",
+            "fields": {
+                "current": "Current password",
+                "new": "New password",
+                "confirm": "Confirm new password"
+            },
+            "currentHint": "Leave this blank if you signed in through a third party and have not set a local password",
+            "validation": {
+                "newRequired": "Enter a new password",
+                "confirmRequired": "Enter the new password again",
+                "mismatch": "The passwords do not match"
+            },
+            "actions": {
+                "update": "Change password"
+            },
+            "messages": {
+                "updateSuccess": "Password changed. Please log in again",
+                "updateError": "Failed to change password"
+            }
+        },
+        "enterprise": {
+            "overview": {
+                "title": "Enterprise overview",
+                "loadError": "Failed to load enterprise information",
+                "fields": {
+                    "name": "Enterprise name",
+                    "role": "Enterprise role",
+                    "status": "Enterprise status",
+                    "memberCount": "Members",
+                    "discountRate": "Discount multiplier"
+                },
+                "memberCount_one": "{{value}} member",
+                "memberCount_other": "{{value}} members",
+                "discountRate": "{{value}}x",
+                "placeholders": {
+                    "name": "Enterprise name"
+                },
+                "validation": {
+                    "nameRequired": "Enter an enterprise name"
+                },
+                "actions": {
+                    "rename": "Update enterprise name"
+                },
+                "renameSuccess": "Enterprise name updated",
+                "renameError": "Failed to update enterprise name"
+            },
+            "members": {
+                "title": "Enterprise members",
+                "description": "Create and manage accounts for this enterprise",
+                "searchAria": "Search enterprise members",
+                "searchPlaceholder": "Search by username, display name, or email",
+                "status": {
+                    "active": "Active",
+                    "disabled": "Disabled"
+                },
+                "table": {
+                    "member": "Member",
+                    "email": "Email",
+                    "credits": "Credits",
+                    "status": "Status",
+                    "actions": "Actions"
+                },
+                "fields": {
+                    "username": "Username",
+                    "initialPassword": "Initial password",
+                    "displayName": "Display name",
+                    "email": "Email",
+                    "newPassword": "New password",
+                    "creditAmount": "Credit amount"
+                },
+                "placeholders": {
+                    "creditAmount": "Enter a credit amount"
+                },
+                "validation": {
+                    "usernameRequired": "Enter a username",
+                    "initialPasswordRequired": "Enter an initial password",
+                    "email": "Enter a valid email address",
+                    "newPasswordRequired": "Enter a new password",
+                    "creditAmountRequired": "Enter a credit amount",
+                    "creditAmountPositive": "The credit amount must be positive"
+                },
+                "actions": {
+                    "create": "Create member",
+                    "allocate": "Allocate credits",
+                    "reclaim": "Reclaim credits",
+                    "disable": "Disable",
+                    "enable": "Enable",
+                    "resetPassword": "Reset password",
+                    "confirmAllocate": "Confirm allocation",
+                    "confirmReclaim": "Confirm reclaim",
+                    "cancel": "Cancel"
+                },
+                "confirm": {
+                    "disable": "Disable this member?",
+                    "enable": "Enable this member?"
+                },
+                "modals": {
+                    "createTitle": "Create enterprise member",
+                    "resetPasswordFor": "Reset password: {{name}}",
+                    "allocateFor": "Allocate credits: {{name}}",
+                    "reclaimFor": "Reclaim credits: {{name}}"
+                },
+                "messages": {
+                    "loadError": "Failed to load members",
+                    "createSuccess": "Member created",
+                    "createError": "Failed to create member",
+                    "disableSuccess": "Member disabled",
+                    "enableSuccess": "Member enabled",
+                    "statusError": "Failed to update member status",
+                    "passwordResetSuccess": "Member password reset",
+                    "passwordResetError": "Failed to reset password",
+                    "allocateSuccess": "Credits allocated",
+                    "reclaimSuccess": "Credits reclaimed",
+                    "allocateError": "Failed to allocate credits",
+                    "reclaimError": "Failed to reclaim credits"
+                }
+            },
+            "creditLogs": {
+                "title": "Enterprise credit logs",
+                "description": "Review credit allocations, usage, and refunds for this enterprise",
+                "filters": {
+                    "memberAria": "Filter enterprise credit logs by member",
+                    "allMembers": "All members",
+                    "mainAccount": "{{name}} (owner account)",
+                    "memberName": "{{displayName}} ({{username}})",
+                    "typeAria": "Filter enterprise credit logs by type",
+                    "allTypes": "All types",
+                    "searchAria": "Search enterprise credit logs",
+                    "searchPlaceholder": "Search members, types, notes, or related IDs"
+                },
+                "export": {
+                    "button": "Export enterprise credit logs",
+                    "fileName": "enterprise-credit-logs.csv"
+                },
+                "table": {
+                    "member": "Member",
+                    "type": "Type",
+                    "change": "Change",
+                    "balance": "Balance",
+                    "relatedInfo": "Related information",
+                    "counterparty": "Counterparty: {{id}}",
+                    "remark": "Note",
+                    "time": "Time"
+                },
+                "csv": {
+                    "logId": "Log ID",
+                    "member": "Member",
+                    "username": "Username",
+                    "type": "Type",
+                    "change": "Change",
+                    "balance": "Balance",
+                    "relatedId": "Related ID",
+                    "counterpartyId": "Counterparty ID",
+                    "remark": "Note",
+                    "time": "Time"
+                },
+                "messages": {
+                    "memberFilterLoadError": "Failed to load member filters",
+                    "loadError": "Failed to load enterprise credit logs",
+                    "emptyExport": "There are no enterprise credit logs to export",
+                    "exportSuccess": "Enterprise credit logs exported",
+                    "exportError": "Failed to export enterprise credit logs"
+                }
+            }
+        },
+        "logs": {
+            "title": "Logs",
+            "description": "Shows usage and credit changes for the current account only",
+            "tabs": {
+                "usage": "Usage",
+                "credits": "Credits"
+            },
+            "filters": {
+                "dateFormat": "MM/DD/YYYY",
+                "startDate": "Start date",
+                "endDate": "End date"
+            },
+            "pagination": {
+                "total_one": "{{value}} record",
+                "total_other": "{{value}} records"
+            },
+            "operations": {
+                "generateVideo": "Generate video",
+                "generateShortDrama": "Generate short drama",
+                "generateImage": "Generate image",
+                "generateAudio": "Generate audio",
+                "textChat": "Text chat"
+            },
+            "sources": {
+                "canvas": "Infinite canvas",
+                "imageWorkbench": "Image studio",
+                "videoWorkbench": "Video studio"
+            },
+            "statuses": {
+                "queued": "Queued",
+                "pending": "Pending",
+                "running": "Running",
+                "success": "Succeeded",
+                "failed": "Failed",
+                "cancelled": "Cancelled"
+            },
+            "creditTypes": {
+                "adminAdjust": "Platform adjustment",
+                "aiConsume": "Model usage",
+                "aiRefund": "Failed task refund",
+                "enterpriseAllocate": "Enterprise allocation",
+                "enterpriseReclaim": "Enterprise reclaim"
+            },
+            "table": {
+                "taskId": "Task ID",
+                "logId": "Log ID",
+                "operation": "Operation",
+                "source": "Source",
+                "model": "Model",
+                "modelDisplayName": "Model display name",
+                "status": "Status",
+                "credits": "Credits",
+                "upstreamCredits": "Upstream credits",
+                "duration": "Duration",
+                "durationSeconds": "Duration (seconds)",
+                "time": "Time",
+                "type": "Type",
+                "change": "Change",
+                "balance": "Balance",
+                "relatedTask": "Related task",
+                "remark": "Note"
+            },
+            "values": {
+                "unknown": "Unknown",
+                "credits_one": "{{value}} credit",
+                "credits_other": "{{value}} credits",
+                "seconds": "{{value}} sec"
+            },
+            "usage": {
+                "export": {
+                    "button": "Export usage",
+                    "fileName": "usage-records.csv"
+                },
+                "messages": {
+                    "loadError": "Failed to load usage records",
+                    "emptyExport": "There are no usage records to export",
+                    "exportSuccess": "Usage records exported",
+                    "exportError": "Failed to export usage records"
+                }
+            },
+            "credits": {
+                "export": {
+                    "button": "Export credit logs",
+                    "fileName": "credit-records.csv"
+                },
+                "messages": {
+                    "loadError": "Failed to load credit records",
+                    "emptyExport": "There are no credit records to export",
+                    "exportSuccess": "Credit records exported",
+                    "exportError": "Failed to export credit records"
+                }
+            }
+        }
+    },
+    "assets": {
+        "header": {
+            "title": "My Assets",
+            "description": "Save frequently used text and images, then find them quickly by type, title, or tag."
+        },
+        "searchPlaceholder": "Search titles, content, tags, or sources",
+        "empty": "No assets found",
+        "actions": {
+            "export": "Export assets",
+            "import": "Import assets",
+            "create": "New asset",
+            "selectVideo": "Select video file",
+            "selectImage": "Select image file",
+            "copyText": "Copy text",
+            "downloadVideo": "Download video",
+            "downloadImage": "Download image"
+        },
+        "form": {
+            "createTitle": "New asset",
+            "editTitle": "Edit asset",
+            "defaultSource": "Manual",
+            "fields": {
+                "coverUrl": "Cover URL",
+                "textContent": "Text content",
+                "imageFile": "Image file",
+                "videoFile": "Video file"
+            },
+            "placeholders": {
+                "title": "Give this asset an easy-to-find name",
+                "coverUrl": "Paste an image URL or upload a local cover",
+                "tags": "Enter a tag and press Enter",
+                "source": "Manual / Canvas / Prompt library",
+                "content": "Save prompts, notes, reference descriptions, and other text assets"
+            },
+            "validation": {
+                "titleRequired": "Enter a title",
+                "contentRequired": "Enter text content"
+            }
+        },
+        "preview": {
+            "title": "Preview",
+            "noFile": "No file selected",
+            "untitled": "Untitled asset",
+            "noTags": "No tags yet"
+        },
+        "card": {
+            "unknownSource": "Source not specified"
+        },
+        "details": {
+            "title": "Asset details"
+        },
+        "delete": {
+            "title": "Delete asset",
+            "description": "Delete “{{title}}”? It will be removed from My Assets."
+        },
+        "messages": {
+            "createFailed": "Failed to create the asset. Check your network connection.",
+            "videoRequired": "Upload a video file",
+            "imageRequired": "Select an image file",
+            "updated": "Asset updated",
+            "saved": "Asset saved",
+            "updateFailed": "Failed to update the asset. Check your network connection",
+            "conflictRefreshed": "The asset was changed in another session and has been refreshed.",
+            "saveFailed": "Failed to save the asset. Check your network connection",
+            "imageUploadFailed": "Failed to upload the image. Try again",
+            "videoUploadFailed": "Failed to upload the video. Try again",
+            "textCopied": "Text copied",
+            "nothingToExport": "There are no assets to export",
+            "importSuccess_one": "Imported {{value}} asset",
+            "importSuccess_other": "Imported {{value}} assets",
+            "invalidPackage": "Import failed. Select a valid asset archive",
+            "deleted": "Asset deleted",
+            "deleteFailed": "Failed to delete the asset. Check your network connection"
+        },
+        "download": {
+            "defaultFileName": "asset"
+        },
+        "export": {
+            "fileName": "my-assets.zip"
+        },
+        "errors": {
+            "missingManifest": "The archive is missing {{fileName}}",
+            "createFailed": "Failed to create the asset",
+            "deleteFailed": "Failed to delete the asset"
+        }
+    },
+    "assetLibrary": {
+        "header": {
+            "title": "Asset Library",
+            "description": "Choose shared assets, add them to My Assets, and continue editing or using them."
+        },
+        "searchPlaceholder": "Search by title",
+        "empty": "No assets found",
+        "details": {
+            "title": "Asset details"
+        },
+        "actions": {
+            "copyText": "Copy text",
+            "copyLink": "Copy link"
+        },
+        "messages": {
+            "added": "Added to My Assets",
+            "addFailed": "Failed to add the asset"
+        },
+        "errors": {
+            "fetch": "Failed to load the asset library",
+            "readImage": "Failed to read the image"
+        }
+    },
+    "enterpriseAssets": {
+        "access": {
+            "denied": "You do not have access to enterprise assets",
+            "invalidAccount": "This account does not belong to an active enterprise"
+        },
+        "header": {
+            "title": "Enterprise Assets",
+            "description": "Enterprise text, images, and videos are loaded from the server as needed. Members can browse and download them, while owners can manage them.",
+            "readOnly": "Read-only member"
+        },
+        "searchPlaceholder": "Search titles, descriptions, or content",
+        "filters": {
+            "allTypes": "All types",
+            "tagsPlaceholder": "Filter by tag"
+        },
+        "load": {
+            "errorTitle": "Failed to load enterprise assets",
+            "retryHint": "Try again later"
+        },
+        "defaultCreator": "Enterprise member",
+        "card": {
+            "createdBy": "Created by {{name}}"
+        },
+        "actions": {
+            "create": "New enterprise asset",
+            "selectReplacement": "Select replacement file",
+            "selectFile": "Select file",
+            "copyContent": "Copy content",
+            "downloadFile": "Download file"
+        },
+        "aria": {
+            "download": "Download {{title}}",
+            "edit": "Edit {{title}}",
+            "delete": "Delete {{title}}"
+        },
+        "delete": {
+            "title": "Delete enterprise asset",
+            "description": "Enterprise members will no longer be able to access it."
+        },
+        "empty": "No enterprise assets",
+        "form": {
+            "createTitle": "New enterprise asset",
+            "editTitle": "Edit enterprise asset",
+            "fields": {
+                "description": "Description",
+                "textContent": "Text content",
+                "replacementFile": "Replacement file",
+                "mediaFile": "Media file"
+            },
+            "tagsPlaceholder": "Enter a tag and press Enter",
+            "replacementHint": "Leave the file empty to update asset details only.",
+            "validation": {
+                "typeRequired": "Select an asset type",
+                "titleRequired": "Enter an asset title",
+                "contentRequired": "Enter text content",
+                "fileRequired": "Select a {{type}} file"
+            }
+        },
+        "preview": {
+            "defaultTitle": "Asset details",
+            "metadata": "Created by {{creator}} · Updated {{updatedAt}}"
+        },
+        "messages": {
+            "saved": "Enterprise asset saved",
+            "created": "Enterprise asset created",
+            "saveFailed": "Failed to save the asset",
+            "deleted": "Enterprise asset deleted",
+            "deleteFailed": "Failed to delete the asset",
+            "copiedToPersonal": "“{{title}}” was added to My Assets",
+            "copyFailed": "Failed to add the asset to My Assets",
+            "downloadFailed": "Download failed",
+            "contentCopied": "Asset content copied"
+        },
+        "errors": {
+            "noDownloadFile": "This asset does not have a downloadable file",
+            "mediaRequired": "Upload an image or video file",
+            "readVideoMetadata": "Could not read the video metadata",
+            "downloadFailed": "File download failed",
+            "uploadFailed": "File upload failed"
+        }
+    },
+    "prompts": {
+        "header": {
+            "title": "Prompt Center",
+            "summary_one": "{{value}} prompt. Search by title, tag, or category for inspiration.",
+            "summary_other": "{{value}} prompts. Search by title, tag, or category for inspiration."
+        },
+        "searchPlaceholder": "Search by title",
+        "filters": {
+            "category": "Category"
+        },
+        "empty": "No matching prompts found",
+        "select": {
+            "title": "Prompt Library"
+        },
+        "detail": {
+            "dates": "Created {{createdAt}} · Updated {{updatedAt}}"
+        },
+        "actions": {
+            "copy": "Copy prompt",
+            "use": "Use this prompt"
+        },
+        "pagination": {
+            "loading": "Loading...",
+            "scrollForMore": "Scroll down to load more",
+            "end": "You have reached the end"
+        },
+        "messages": {
+            "added": "Added to My Assets",
+            "copied": "Prompt copied"
+        },
+        "errors": {
+            "fetch": "Failed to load prompts"
+        }
+    },
+    "imageWorkbench": {
+        "title": "Image Studio",
+        "parameters": "Parameters",
+        "model": "Model",
+        "configRequired": "Complete the configuration first",
+        "mobile": {
+            "logs": "History"
+        },
+        "prompt": {
+            "label": "Prompt",
+            "openLibrary": "Browse Prompt Library",
+            "openAssets": "Browse My Assets",
+            "placeholder": "Describe the subject, style, composition, lighting, and intended use",
+            "required": "Enter an image prompt"
+        },
+        "references": {
+            "title": "Reference Images",
+            "clipboard": "Clipboard",
+            "clipboardEmpty": "No readable image was found on the clipboard",
+            "clipboardRead_one": "Read {{value}} reference image",
+            "clipboardRead_other": "Read {{value}} reference images",
+            "clipboardFileName": "clipboard-image-{{index}}.png",
+            "resultFileName": "generated-result-{{index}}.png",
+            "label": "Image {{index}}",
+            "promptContext": "Reference image IDs: {{labels}}. Use these IDs to interpret image references in the prompt.\n\n{{prompt}}",
+            "remove": "Remove reference image",
+            "empty": "No reference images",
+            "added": "Added to reference images",
+            "movePrevious": "Move reference image earlier",
+            "moveNext": "Move reference image later"
+        },
+        "actions": {
+            "adjust": "Adjust",
+            "generate": "Generate",
+            "addToAssets": "Add to Assets",
+            "addReference": "Add as Reference",
+            "retry": "Retry",
+            "new": "New",
+            "selectAll": "Select All",
+            "deselectAll": "Deselect All"
+        },
+        "results": {
+            "title": "Generated Images",
+            "waiting": "Waiting {{duration}}",
+            "empty": "No images generated yet",
+            "alt": "Generated result {{index}}",
+            "pending": "Generating",
+            "failed": "Generation Failed",
+            "generated": "Images generated",
+            "downloadFileName": "image-{{index}}.png"
+        },
+        "assets": {
+            "generatedTitle": "Generated Result {{index}}",
+            "source": "Image Studio",
+            "saved": "Added to My Assets",
+            "saveFailed": "Failed to save the asset. Check your network connection and try again.",
+            "unsupportedType": "Image Studio only supports text and image assets"
+        },
+        "logs": {
+            "title": "Generation History",
+            "empty": "No generation history",
+            "deleteTitle": "Delete Generation History",
+            "deleteConfirm_one": "Delete the selected {{value}} generation record?",
+            "deleteConfirm_other": "Delete the selected {{value}} generation records?",
+            "untitled": "Untitled",
+            "select": "Select generation record “{{title}}”",
+            "status": {
+                "pending": "Generating",
+                "success": "Succeeded",
+                "failed": "Failed"
+            },
+            "successCount_one": "{{value}} succeeded",
+            "successCount_other": "{{value}} succeeded",
+            "failedCount_one": "{{value}} failed",
+            "failedCount_other": "{{value}} failed"
+        },
+        "pending": {
+            "creating": "Creating image",
+            "almostDone": "Almost there",
+            "keepWaiting": "Just a little longer",
+            "refining": "Refining details"
+        }
+    },
+    "imageSettings": {
+        "title": "Image Settings",
+        "quality": {
+            "label": "Quality",
+            "options": {
+                "auto": "Auto",
+                "high": "High",
+                "medium": "Medium",
+                "low": "Low"
+            }
+        },
+        "size": {
+            "label": "Size",
+            "auto": "Auto",
+            "alignTo16": "Align to multiples of 16",
+            "alignHint": "Round dimensions up to a multiple of 16 after editing",
+            "widthShort": "W",
+            "heightShort": "H"
+        },
+        "aspectRatio": "Aspect Ratio",
+        "transparent": {
+            "label": "Transparent Background",
+            "hint": "Only some models support transparent backgrounds"
+        },
+        "count": "Image Count",
+        "imageCount_one": "{{value}} image",
+        "imageCount_other": "{{value}} images"
+    },
+    "videoWorkbench": {
+        "title": "Video Studio",
+        "parameters": "Parameters",
+        "model": "Model",
+        "configRequired": "Complete the configuration first",
+        "mobile": {
+            "logs": "History"
+        },
+        "prompt": {
+            "label": "Prompt",
+            "openLibrary": "Open prompt library",
+            "openAssets": "Open my assets",
+            "placeholder": "Describe camera movement, subject action, atmosphere, and visual style",
+            "required": "Enter a video prompt"
+        },
+        "references": {
+            "unsupported": "Unsupported references were ignored. Use images, mp4/mov video, or mp3/wav audio.",
+            "imageTooLarge": "Reference images larger than 30MB were ignored",
+            "videoTooLarge": "Reference videos larger than 50MB were ignored",
+            "audioTooLarge": "Reference audio larger than 15MB was ignored",
+            "movePrevious": "Move reference earlier",
+            "moveNext": "Move reference later",
+            "promptContext": "Reference media IDs: {{labels}}. Use these IDs to interpret image, video, and audio references in the prompt.\n\n{{prompt}}",
+            "labels": {
+                "image": "Image {{index}}",
+                "video": "Video {{index}}",
+                "audio": "Audio {{index}}"
+            },
+            "images": {
+                "title": "Reference Images",
+                "remove": "Remove reference image",
+                "empty_one": "No reference images. Up to {{value}} image.",
+                "empty_other": "No reference images. Up to {{value}} images."
+            },
+            "videos": {
+                "title": "Reference Videos",
+                "remove": "Remove reference video",
+                "empty_one": "No reference videos. Up to {{value}} video.",
+                "empty_other": "No reference videos. Up to {{value}} videos.",
+                "hint": "Reference videos must be mp4/mov, H.264/H.265, and 24-60 FPS. For real faces, use an authorized Volcengine asset:// asset."
+            },
+            "audios": {
+                "title": "Reference Audio",
+                "remove": "Remove reference audio",
+                "empty_one": "No reference audio. Up to {{value}} file, mp3/wav, 15MB each.",
+                "empty_other": "No reference audio. Up to {{value}} files, mp3/wav, 15MB each.",
+                "invalidDuration": "Reference audio outside the duration limits was ignored: 2-15 seconds each and 15 seconds total."
+            }
+        },
+        "actions": {
+            "adjust": "Adjust",
+            "generate": "Generate",
+            "addToAssets": "Add to assets",
+            "retry": "Retry",
+            "new": "New",
+            "selectAll": "Select all",
+            "deselectAll": "Deselect all"
+        },
+        "results": {
+            "title": "Results",
+            "waiting": "Waiting {{duration}}",
+            "empty": "No videos generated yet",
+            "pending": "Generating",
+            "failed": "Generation failed",
+            "generated": "Video generated",
+            "downloadFileName": "video.mp4"
+        },
+        "assets": {
+            "generatedTitle": "Generated Video",
+            "source": "Video Studio",
+            "saved": "Added to My Assets",
+            "saveFailed": "Failed to save the asset. Check the network connection and try again.",
+            "missingFile": "The video file is missing. Generate it again."
+        },
+        "logs": {
+            "title": "Generation History",
+            "empty": "No generation history",
+            "deleteTitle": "Delete Generation History",
+            "deleteConfirm_one": "Delete the selected {{value}} generation record?",
+            "deleteConfirm_other": "Delete the selected {{value}} generation records?",
+            "untitled": "Untitled",
+            "select": "Select generation record “{{title}}”",
+            "status": {
+                "pending": "Generating",
+                "success": "Succeeded",
+                "failed": "Failed"
+            }
+        }
+    },
+    "videoSettings": {
+        "title": "Video Settings",
+        "localModeHint": "Local direct mode only supports the raw video API. Model Profiles, short drama, and platform file features require remote mode.",
+        "resolution": "Resolution",
+        "aspectRatio": "Aspect Ratio",
+        "duration": "Duration",
+        "smart": "Smart",
+        "seconds": "{{value}}s",
+        "quality": {
+            "label": "Quality",
+            "high": "High",
+            "standard": "Standard"
+        },
+        "output": "Output",
+        "generateAudio": "Generate Audio",
+        "watermark": "Add Watermark",
+        "negativePrompt": {
+            "label": "Negative Prompt (Optional)",
+            "placeholder": "For example: low quality, blurry, distorted."
+        },
+        "ratios": {
+            "landscape": "Landscape",
+            "portrait": "Portrait",
+            "square": "Square",
+            "standardLandscape": "Standard Landscape",
+            "standardPortrait": "Standard Portrait",
+            "cinema": "Cinema",
+            "wide": "Wide",
+            "tall": "Tall",
+            "adaptive": "Adaptive"
+        },
+        "autoMatch": "Auto"
+    },
+    "audioSettings": {
+        "title": "Audio Settings",
+        "voice": "Voice",
+        "format": "Format",
+        "speed": "Speed",
+        "instructions": {
+            "label": "Voice Instructions",
+            "placeholder": "For example: natural, warm, suitable for narration."
+        }
+    },
+    "config": {
+        "title": "Configuration and Preferences",
+        "subtitle": "Channels, model selection, and sync preferences",
+        "tabs": {
+            "channels": "Channels",
+            "models": "Models",
+            "preferences": "Generation Preferences",
+            "webdav": "WebDAV"
+        },
+        "messages": {
+            "saved": "Configuration saved",
+            "savedContinue": "Configuration saved. Continue the previous request.",
+            "keepOneChannel": "Keep at least one channel",
+            "channelCredentialsRequired": "Enter the Base URL and API key for this channel first",
+            "anyChannelCredentialsRequired": "Enter a Base URL and API key for at least one channel",
+            "channelModelsUpdated": "Model list updated for {{name}}",
+            "modelsUpdated": "Model lists updated"
+        },
+        "channels": {
+            "important": "Important:",
+            "selectableHint": "After adding or fetching models, select the models to expose on the Models tab.",
+            "goToModels": "Open model settings",
+            "fetchAll": "Fetch all",
+            "add": "Add channel",
+            "untitled": "Untitled channel",
+            "defaultName": "Default Channel",
+            "newName": "New Channel",
+            "generatedName": "Channel {{index}}",
+            "modelWithChannel": "{{model}} ({{channel}})",
+            "savedModels_one": "{{format}} · {{value}} saved model",
+            "savedModels_other": "{{format}} · {{value}} saved models",
+            "fetchModels": "Fetch models",
+            "delete": "Delete channel “{{name}}”",
+            "name": "Channel Name",
+            "apiFormat": "API Format",
+            "apiFormats": {
+                "openai": "OpenAI",
+                "gemini": "Gemini",
+                "xvanai": "XvanAI"
+            },
+            "baseUrl": "Base URL",
+            "apiKey": "API Key",
+            "modelList": "Model List",
+            "modelListPlaceholder": "Enter a model name or fetch models"
+        },
+        "models": {
+            "heading": "Default Models and Selectable Models",
+            "forcedHint": "The administrator controls selectable models for each capability. You can only choose defaults.",
+            "hint": "Selectable models determine what appears in model pickers. Duplicate names include the channel name in parentheses.",
+            "channelsFirst": "Add or fetch models on the Channels tab first",
+            "optionsPlaceholder": "Select or enter {{label}}",
+            "default": {
+                "image": "Default Image Model",
+                "video": "Default Video Model",
+                "text": "Default Text Model",
+                "audio": "Default Audio Model"
+            },
+            "options": {
+                "image": "Selectable Image Models",
+                "video": "Selectable Video Models",
+                "text": "Selectable Text Models",
+                "audio": "Selectable Audio Models"
+            }
+        },
+        "preferences": {
+            "canvasImageCount": "Default Canvas Image Count",
+            "canvasImageCountHint": "Used by new canvas image and configuration nodes. Individual nodes can override it.",
+            "audioVoice": "Default Audio Voice",
+            "audioFormat": "Default Audio Format",
+            "audioSpeed": "Default Audio Speed",
+            "audioInstructions": "Default Audio Instructions",
+            "systemPrompt": "System Prompt",
+            "managedByAdmin": "Managed by the administrator",
+            "systemPromptPlaceholder": "For example: You are a visual director specializing in cinematic photorealism."
+        },
+        "webdav": {
+            "title": "WebDAV Sync",
+            "description": "Sync canvases, My Assets, generation history, and local media files. AI API keys are excluded. Use the Next.js proxy when the service does not support CORS.",
+            "lastSynced": "Last synced {{time}}",
+            "neverSynced": "Never synced",
+            "connectionMode": "Connection Mode",
+            "direct": "Direct browser connection",
+            "nextProxy": "Next.js proxy",
+            "url": "WebDAV URL",
+            "urlPlaceholder": "https://nas.example.com/webdav",
+            "urlRequired": "Enter the WebDAV URL first",
+            "directory": "Remote Directory",
+            "directoryPlaceholder": "infinite-canvas",
+            "directoryHint": "Each domain directory contains {{manifest}} and files/",
+            "username": "Username",
+            "password": "Password / App Password",
+            "testConnection": "Test connection",
+            "connectionAvailable": "WebDAV connection is available",
+            "syncNow": "Sync now",
+            "syncing": "Syncing",
+            "syncSummary": "Sync complete: {{projects}} canvases, {{assets}} assets, {{records}} records, and {{files}} files uploaded ({{bytes}})",
+            "domains": {
+                "canvas": "Canvas",
+                "assets": "My Assets",
+                "image-workbench": "Image Studio",
+                "video-workbench": "Video Studio"
+            },
+            "stages": {
+                "waiting": "Waiting to sync",
+                "waitingLocalData": "Waiting for local data",
+                "preparing": "Preparing sync",
+                "readingRemoteManifest": "Reading remote manifest",
+                "readingLocalData": "Reading local data",
+                "downloadingMissingMedia": "Downloading missing media",
+                "applyingMergedData": "Applying merged local data",
+                "uploadingNewMedia": "Uploading new media",
+                "uploadingManifest": "Uploading manifest",
+                "checkingMissingMedia": "Checking missing media",
+                "mediaComplete": "All media is available",
+                "downloadingMedia": "Downloading media",
+                "checkingLocalMedia": "Checking local media",
+                "mediaUploadNotNeeded": "No media upload needed",
+                "uploadingMedia": "Uploading media",
+                "done": "Done",
+                "complete": "Sync complete",
+                "failed": "Sync failed"
+            }
+        },
+        "remote": {
+            "forced": "The administrator requires the managed backend channel. All generation requests use the backend proxy and consume credits; custom channels are unavailable.",
+            "active": "Using the managed remote channel. Generation requests use the backend proxy and consume credits."
+        }
+    },
+    "modelPicker": {
+        "placeholder": "Select a model",
+        "capabilities": {
+            "image": "image",
+            "video": "video",
+            "text": "text",
+            "audio": "audio"
+        },
+        "empty": {
+            "configureSelectable": "Configure selectable models above first",
+            "noMatching": "No matching {{capability}} models",
+            "noMatchingGeneric": "No matching models",
+            "addChannels": "Add a channel and model in Configuration first"
+        }
+    },
+    "admin": {
+        "menus": {
+            "enterprises": "Enterprises",
+            "users": "Users",
+            "creditLogs": "Credit logs",
+            "generationTasks": "Usage logs",
+            "prompts": "Prompts",
+            "assets": "Asset library",
+            "assetsManagement": "Asset management",
+            "settings": "System settings"
+        },
+        "common": {
+            "actions": {
+                "add": "Add",
+                "adjust": "Adjust",
+                "cancel": "Cancel",
+                "close": "Close",
+                "confirm": "Confirm",
+                "create": "Create",
+                "delete": "Delete",
+                "details": "Details",
+                "edit": "Edit",
+                "enlarge": "Enlarge",
+                "query": "Search",
+                "refresh": "Refresh",
+                "reset": "Reset",
+                "save": "Save",
+                "sync": "Sync",
+                "test": "Test",
+                "viewDetails": "View details"
+            },
+            "counts": {
+                "companies_one": "{{value}} company",
+                "companies_other": "{{value}} companies",
+                "people_one": "{{value}} person",
+                "people_other": "{{value}} people",
+                "records_one": "{{value}} record",
+                "records_other": "{{value}} records"
+            },
+            "filters": {
+                "all": "All",
+                "keyword": "Keyword"
+            },
+            "messages": {
+                "adjustFailed": "Adjustment failed",
+                "deleteFailed": "Delete failed",
+                "operationFailed": "Operation failed",
+                "saveFailed": "Save failed",
+                "syncFailed": "Sync failed"
+            },
+            "pagination": {
+                "companies_one": "{{value}} company total",
+                "companies_other": "{{value}} companies total",
+                "people_one": "{{value}} person total",
+                "people_other": "{{value}} people total",
+                "records_one": "{{value}} record total",
+                "records_other": "{{value}} records total"
+            },
+            "statuses": {
+                "disabled": "Disabled",
+                "enable": "Enable",
+                "enabled": "Enabled"
+            },
+            "table": {
+                "actions": "Actions",
+                "createdAt": "Created at",
+                "time": "Time"
+            }
+        },
+        "users": {
+            "title": "Users",
+            "roles": {
+                "user": "Standard user",
+                "userShort": "User",
+                "admin": "Administrator"
+            },
+            "statuses": {
+                "active": "Active",
+                "banned": "Disabled"
+            },
+            "enterpriseRoles": {
+                "owner": "Owner account",
+                "member": "Member account",
+                "personal": "Personal account"
+            },
+            "filters": {
+                "searchPlaceholder": "Search username, display name, email, or Linux.do ID"
+            },
+            "table": {
+                "user": "User",
+                "userId": "User ID",
+                "linuxDo": "Linux.do",
+                "role": "Role",
+                "enterprise": "Enterprise",
+                "status": "Status",
+                "credits": "Credits",
+                "lastLogin": "Last login"
+            },
+            "modal": {
+                "createTitle": "Add user",
+                "editTitle": "Edit user"
+            },
+            "form": {
+                "basicInfo": "Basic information",
+                "username": "Username",
+                "password": "Password",
+                "newPassword": "New password",
+                "displayName": "Display name",
+                "email": "Email",
+                "role": "Role",
+                "status": "Status",
+                "creditAdjustment": "Credit adjustment",
+                "credits": "Credits",
+                "enterpriseCreditsHint": "Adjust enterprise account credits incrementally from Enterprise Management."
+            },
+            "validation": {
+                "usernameRequired": "Enter a username",
+                "passwordRequired": "Enter a password",
+                "roleRequired": "Select a role",
+                "statusRequired": "Select a status"
+            },
+            "messages": {
+                "created": "User added",
+                "saved": "User saved",
+                "deleted": "User deleted",
+                "creditsAdjusted": "Credits adjusted",
+                "loadFailed": "Failed to load users"
+            },
+            "delete": {
+                "title": "Delete user",
+                "confirm": "Delete “{{name}}”? This account will no longer be able to sign in."
+            }
+        },
+        "enterprises": {
+            "title": "Enterprises",
+            "actions": {
+                "create": "Create enterprise",
+                "setDiscount": "Set discount multiplier",
+                "adjustCredits": "Adjust owner credits",
+                "resetPassword": "Reset owner password",
+                "confirmAdjustment": "Confirm adjustment"
+            },
+            "filters": {
+                "searchPlaceholder": "Search enterprise name or owner account"
+            },
+            "table": {
+                "enterprise": "Enterprise",
+                "owner": "Owner account",
+                "members": "Members",
+                "ownerBalance": "Owner balance",
+                "discountRate": "Discount multiplier",
+                "enterpriseStatus": "Enterprise status",
+                "ownerStatus": "Owner status"
+            },
+            "values": {
+                "multiplier": "{{value}}×"
+            },
+            "units": {
+                "multiplier": "×"
+            },
+            "create": {
+                "title": "Create enterprise"
+            },
+            "discount": {
+                "title": "Set discount multiplier · {{name}}"
+            },
+            "credits": {
+                "title": "Adjust owner credits · {{name}}",
+                "balancePrefix": "Current balance: ",
+                "balanceHint": ". Positive values add credits; negative values deduct them. The resulting balance cannot be below 0.",
+                "recentAdjustments": "Recent platform adjustments",
+                "reason": "Reason",
+                "operator": "Operator"
+            },
+            "password": {
+                "title": "Reset owner password",
+                "confirm": "Reset the password for “{{name}}”? All existing sessions for this account will expire immediately."
+            },
+            "form": {
+                "name": "Enterprise name",
+                "ownerDisplayName": "Owner display name",
+                "ownerUsername": "Owner username",
+                "initialPassword": "Initial password",
+                "discountRate": "Discount multiplier",
+                "adjustmentAmount": "Adjustment amount",
+                "adjustmentPlaceholder": "For example, 100 or -50.5",
+                "adjustmentReason": "Reason",
+                "reasonPlaceholder": "For example, offline payment received",
+                "newPassword": "New password"
+            },
+            "validation": {
+                "nameRequired": "Enter an enterprise name",
+                "ownerUsernameRequired": "Enter a username",
+                "initialPasswordRequired": "Enter an initial password",
+                "discountRequired": "Enter a discount multiplier",
+                "discountRange": "The discount multiplier must be between 0.1 and 1",
+                "adjustmentRequired": "Enter an adjustment amount",
+                "adjustmentNonZero": "The adjustment amount cannot be 0",
+                "reasonRequired": "Enter a reason",
+                "newPasswordRequired": "Enter a new password"
+            },
+            "messages": {
+                "creditLogsLoadFailed": "Failed to load top-up records"
+            }
+        },
+        "creditLogs": {
+            "title": "Credit logs",
+            "types": {
+                "adminAdjust": "Admin adjustment",
+                "aiConsume": "Model usage",
+                "aiRefund": "Failure refund",
+                "enterpriseAllocate": "Enterprise allocation",
+                "enterpriseReclaim": "Enterprise reclaim"
+            },
+            "filters": {
+                "searchPlaceholder": "Search user ID, type, note, or related ID"
+            },
+            "table": {
+                "userId": "User ID",
+                "relatedId": "Operator / Related ID",
+                "type": "Type",
+                "change": "Change",
+                "balance": "Balance",
+                "remark": "Note"
+            },
+            "modal": {
+                "createTitle": "Add log",
+                "editTitle": "Edit log"
+            },
+            "form": {
+                "userId": "User ID",
+                "type": "Type",
+                "amount": "Change amount",
+                "balance": "Balance after change",
+                "relatedId": "Related ID",
+                "createdAtPlaceholder": "Leave blank to generate automatically",
+                "remark": "Note",
+                "extra": "Extra data"
+            },
+            "validation": {
+                "userIdRequired": "Enter a user ID",
+                "typeRequired": "Enter a type",
+                "amountRequired": "Enter a change amount",
+                "balanceRequired": "Enter the resulting balance"
+            },
+            "messages": {
+                "created": "Log added",
+                "saved": "Log saved",
+                "deleted": "Log deleted",
+                "loadFailed": "Failed to load logs"
+            },
+            "delete": {
+                "title": "Delete log",
+                "confirm": "Delete this credit log?"
+            }
+        },
+        "generationTasks": {
+            "title": "Usage logs",
+            "types": {
+                "image": "Image generation",
+                "video": "Video generation",
+                "audio": "Audio generation",
+                "chat": "Chat"
+            },
+            "statuses": {
+                "queued": "Queued",
+                "pending": "Pending",
+                "running": "Running",
+                "success": "Succeeded",
+                "failed": "Failed",
+                "cancelled": "Cancelled",
+                "unknown": "Unknown"
+            },
+            "filters": {
+                "userId": "User ID",
+                "userIdPlaceholder": "Search user ID",
+                "taskType": "Task type",
+                "status": "Status"
+            },
+            "table": {
+                "userId": "User ID",
+                "username": "Username",
+                "taskType": "Task type",
+                "model": "Model",
+                "modelDisplayName": "Model display name",
+                "provider": "Provider",
+                "status": "Status",
+                "credits": "Credits charged",
+                "upstreamCredits": "Upstream credits",
+                "duration": "Duration",
+                "error": "Error"
+            },
+            "actions": {
+                "deleteSelected_one": "Delete selected ({{value}})",
+                "deleteSelected_other": "Delete selected ({{value}})"
+            },
+            "delete": {
+                "title": "Confirm deletion",
+                "confirm": "Delete this usage log? User: {{user}}, model: {{model}}"
+            },
+            "batchDelete": {
+                "title": "Confirm bulk deletion",
+                "confirm_one": "Delete the selected {{value}} usage log? This action cannot be undone.",
+                "confirm_other": "Delete the selected {{value}} usage logs? This action cannot be undone."
+            },
+            "detail": {
+                "title": "Task details",
+                "taskId": "Task ID",
+                "userId": "User ID",
+                "upstreamTask": "Upstream task",
+                "type": "Type",
+                "status": "Status",
+                "credits": "Credits charged",
+                "upstreamCredits": "Upstream credits",
+                "provider": "Provider",
+                "model": "Model",
+                "duration": "Duration",
+                "error": "Error",
+                "requestBody": "Request body",
+                "responseBody": "Response body",
+                "rawError": "Raw error"
+            },
+            "values": {
+                "seconds": "{{value}} sec",
+                "noData": "(No data)",
+                "truncated": "… (truncated)"
+            },
+            "messages": {
+                "deleted": "Deleted",
+                "batchDeleted_one": "Deleted {{value}} record",
+                "batchDeleted_other": "Deleted {{value}} records",
+                "batchDeleteFailed": "Bulk delete failed",
+                "loadFailed": "Failed to load logs"
+            }
+        },
+        "assets": {
+            "title": "Assets",
+            "types": {
+                "all": "All types",
+                "text": "Text",
+                "image": "Image"
+            },
+            "filters": {
+                "searchPlaceholder": "Search title, content, or tags",
+                "type": "Type",
+                "tags": "Tags",
+                "allTags": "All tags"
+            },
+            "table": {
+                "cover": "Cover",
+                "title": "Title",
+                "type": "Type",
+                "tags": "Tags",
+                "category": "Category"
+            },
+            "modal": {
+                "createTitle": "Add asset",
+                "editTitle": "Edit asset"
+            },
+            "form": {
+                "type": "Type",
+                "title": "Title",
+                "coverUrl": "Cover URL",
+                "tags": "Tags, separated by commas",
+                "category": "Category",
+                "description": "Description",
+                "imageFile": "Image file",
+                "imageUploadHint": "The S3 URL is filled automatically after upload",
+                "textContent": "Text content"
+            },
+            "validation": {
+                "typeRequired": "Select a type",
+                "titleRequired": "Enter a title",
+                "contentRequired": "Enter text content"
+            },
+            "actions": {
+                "selectImage": "Select image",
+                "copyContent": "Copy content"
+            },
+            "detail": {
+                "title": "Asset details"
+            },
+            "delete": {
+                "title": "Delete asset",
+                "confirm": "Delete “{{title}}”? It will be removed from the server asset library."
+            },
+            "values": {
+                "uncategorized": "Uncategorized"
+            },
+            "messages": {
+                "created": "Asset added",
+                "saved": "Asset saved",
+                "deleted": "Asset deleted",
+                "loadFailed": "Failed to load assets",
+                "fileUnreadable": "The file cannot be read",
+                "uploadFailed": "Upload failed"
+            }
+        },
+        "prompts": {
+            "title": "Prompts",
+            "filters": {
+                "searchPlaceholder": "Search title or prompt",
+                "group": "Group",
+                "tags": "Tags",
+                "allCategories": "All categories",
+                "allTags": "All tags"
+            },
+            "table": {
+                "cover": "Cover",
+                "title": "Title",
+                "category": "Category",
+                "tags": "Tags"
+            },
+            "actions": {
+                "batchDelete_one": "Bulk delete {{value}}",
+                "batchDelete_other": "Bulk delete {{value}}",
+                "copyPrompt": "Copy prompt",
+                "remoteSource": "Remote source"
+            },
+            "modal": {
+                "createTitle": "Add prompt",
+                "editTitle": "Edit prompt"
+            },
+            "form": {
+                "title": "Title",
+                "category": "Category",
+                "coverUrl": "Cover URL",
+                "tags": "Tags, separated by commas",
+                "prompt": "Prompt"
+            },
+            "validation": {
+                "titleRequired": "Enter a title",
+                "promptRequired": "Enter a prompt"
+            },
+            "detail": {
+                "title": "Prompt details"
+            },
+            "sync": {
+                "title": "Sync remote prompt sources",
+                "remoteSource": "Remote source"
+            },
+            "delete": {
+                "title": "Delete prompt",
+                "confirm": "Delete “{{title}}”? It will be removed from the current category."
+            },
+            "batchDelete": {
+                "title": "Bulk delete prompts",
+                "confirm_one": "Delete the selected {{value}} prompt? It will be removed from the current category.",
+                "confirm_other": "Delete the selected {{value}} prompts? They will be removed from the current category."
+            },
+            "messages": {
+                "synced": "Remote prompt source synced",
+                "created": "Prompt added",
+                "saved": "Prompt saved",
+                "deleted": "Prompt deleted",
+                "batchDeleted": "Prompts deleted",
+                "batchDeleteFailed": "Bulk delete failed",
+                "loadFailed": "Failed to load prompts"
+            }
+        },
+        "settings": {
+            "tabs": {
+                "public": "Public settings (exposed externally)",
+                "private": "Private settings (not exposed externally)"
+            },
+            "actions": {
+                "saveSettings": "Save settings",
+                "format": "Format",
+                "addModel": "Add model",
+                "selectModels": "Select models"
+            },
+            "editor": {
+                "visual": "Visual editor",
+                "json": "Edit JSON manually",
+                "validJson": "Valid JSON",
+                "publicHint": "These settings are available to the frontend",
+                "privateHint": "These settings are stored only on the backend"
+            },
+            "messages": {
+                "loadFailed": "Failed to load settings",
+                "saved": "Saved",
+                "invalidJson": "Invalid JSON",
+                "invalidPublicJson": "Invalid public settings JSON",
+                "invalidPrivateJson": "Invalid private settings JSON"
+            },
+            "units": {
+                "seconds": "sec"
+            },
+            "public": {
+                "availableModels": {
+                    "label": "System models (configure channels under Private Settings first)",
+                    "hint": "Saving automatically merges models from all enabled private channels. Frontend model selectors read this public list.",
+                    "placeholder": "Select system models"
+                },
+                "defaultModels": {
+                    "default": "Default model",
+                    "image": "Default image model",
+                    "video": "Default video model",
+                    "text": "Default text model",
+                    "audio": "Default audio model"
+                },
+                "capabilityModels": {
+                    "title": "Models by capability",
+                    "description": "Models must be selected explicitly. Unselected models are hidden from the frontend and cannot start platform generation.",
+                    "imageLabel": "Image models",
+                    "imageHint": "Leave empty to offer no image models",
+                    "imagePlaceholder": "Select image models",
+                    "videoLabel": "Video models",
+                    "videoHint": "Leave empty to offer no video models",
+                    "videoPlaceholder": "Select video models",
+                    "textLabel": "Text models",
+                    "textHint": "Leave empty to offer no text models",
+                    "textPlaceholder": "Select text models",
+                    "audioLabel": "Audio models",
+                    "audioHint": "Leave empty to offer no audio models",
+                    "audioPlaceholder": "Select audio models"
+                },
+                "imageRequestFormats": {
+                    "title": "Image request formats",
+                    "description": "Only explicitly configured image models use the selected protocol. Unconfigured models keep the existing default request format.",
+                    "modelRequired": "Select an image model",
+                    "formatRequired": "Select a request format",
+                    "formatPlaceholder": "Select a request format",
+                    "deleteLabel": "Delete image request format for {{model}}"
+                },
+                "systemPrompt": "System prompt",
+                "customChannel": {
+                    "label": "Allow custom user channels",
+                    "hint": "When enabled, the frontend can use backend channels or connect directly through a custom baseUrl. When disabled, the platform forces backend channels, hides user channel and model configuration, and routes generation through the backend proxy using credits."
+                },
+                "registration": {
+                    "label": "Allow user registration",
+                    "hint": "When disabled, the registration entry is hidden and the registration API rejects new accounts"
+                }
+            },
+            "billing": {
+                "title": "Model credits",
+                "description": "Standard models are billed per call. Video models match capability binding IDs and billing rules from Private Settings.",
+                "modes": {
+                    "perCredit": "Per upstream credit",
+                    "perSecond": "Per second",
+                    "perCall": "Per call"
+                },
+                "table": {
+                    "model": "Model",
+                    "displayName": "Display name",
+                    "rule": "Billing rule",
+                    "price": "Price"
+                },
+                "units": {
+                    "pointsPerSecond": "credits/sec",
+                    "perCredit": "Per upstream credit",
+                    "perCall": "Per call",
+                    "points": "credits"
+                }
+            },
+            "private": {
+                "linuxDo": {
+                    "title": "Linux.do sign-in",
+                    "callbackHint": "The callback path is /api/auth/linux-do/callback. Add your site origin in the Linux.do application console.",
+                    "manageApp": "Manage your LinuxDO OAuth App",
+                    "enabled": "Enable Linux.do sign-in",
+                    "clientId": "Linux.do Client ID",
+                    "clientIdPlaceholder": "Enter the Linux.do OAuth App ID",
+                    "clientSecret": "Linux.do Client Secret",
+                    "secretPlaceholder": "Leave blank to keep the saved secret"
+                },
+                "promptSync": {
+                    "title": "Scheduled prompt sync",
+                    "enabled": "Enable scheduled sync",
+                    "cron": "Cron expression",
+                    "hint": "By default, built-in GitHub prompt sources sync every 5 minutes"
+                },
+                "fileLimits": {
+                    "title": "Upload size limits",
+                    "description": "Set the per-file upload limit for each S3 storage category (MB).",
+                    "image": "Images (images)",
+                    "video": "Videos (videos)",
+                    "audio": "Audio (audios)",
+                    "prompt": "Prompts (prompts)"
+                }
+            },
+            "channels": {
+                "actions": {
+                    "add": "Add channel",
+                    "deleteLabel": "Delete channel {{name}}"
+                },
+                "table": {
+                    "name": "Name",
+                    "protocol": "Protocol",
+                    "status": "Status",
+                    "models": "Models",
+                    "weight": "Weight"
+                },
+                "protocols": {
+                    "openai": "OpenAI",
+                    "xvanai": "XvanAI"
+                },
+                "values": {
+                    "unnamed": "Unnamed channel",
+                    "channel": "Channel",
+                    "noModels": "No models configured",
+                    "modelSummary_one": "{{value}} model: {{models}}…",
+                    "modelSummary_other": "{{value}} models: {{models}}…"
+                },
+                "drawer": {
+                    "createTitle": "Add channel",
+                    "editTitle": "Edit channel"
+                },
+                "form": {
+                    "name": "Channel name",
+                    "protocol": "Protocol",
+                    "weight": "Weight",
+                    "baseUrl": "API endpoint",
+                    "apiKey": "API Key",
+                    "apiKeyPlaceholder": "Leave blank to keep the saved API Key",
+                    "models": "Available channel models",
+                    "remark": "Note"
+                },
+                "validation": {
+                    "nameRequired": "Enter a channel name",
+                    "baseUrlRequired": "Enter an API endpoint",
+                    "apiKeyRequired": "Enter an API Key"
+                },
+                "messages": {
+                    "baseUrlRequired": "Enter an API endpoint first",
+                    "apiKeyRequired": "Enter an API Key first",
+                    "noModelsReturned": "The upstream service returned no models. Enter model names manually.",
+                    "modelsFetched_one": "Fetched {{value}} model. Select it and confirm.",
+                    "modelsFetched_other": "Fetched {{value}} models. Select them and confirm.",
+                    "modelsLoadFailed": "Failed to load models",
+                    "testRequirements": "Enter an API endpoint and at least one model first",
+                    "testFailed": "Test failed"
+                }
+            },
+            "generationProfiles": {
+                "title": "Video capability bindings",
+                "description": "Bind actual channel models to Canvas generation capabilities. Standard video uses the Seedance request shape; short drama uses the Vidu Drama request shape.",
+                "channelRequired": "Add and enable a channel with at least one model first.",
+                "empty": "No video capabilities are bound. After adding one, Canvas uses its stable capability name to call the selected upstream model.",
+                "defaultName": "Video binding {{number}}",
+                "types": {
+                    "standardVideo": "Standard video (Seedance)",
+                    "shortDrama": "Short drama (Vidu Drama)"
+                },
+                "actions": {
+                    "add": "Add binding",
+                    "deleteLabel": "Delete {{capability}} binding"
+                },
+                "values": {
+                    "capability": "capability"
+                },
+                "tabs": {
+                    "binding": "Capability binding",
+                    "billing": "Billing rule"
+                },
+                "form": {
+                    "bindingId": "Binding ID",
+                    "capability": "Canvas capability",
+                    "channel": "Channel",
+                    "channelPlaceholder": "Select a channel",
+                    "upstreamModel": "Upstream model",
+                    "modelPlaceholder": "Select a model",
+                    "selectChannelFirst": "Select a channel first",
+                    "maxDuration": "Maximum duration",
+                    "durationPlaceholder": "{{value}} sec",
+                    "resolutions": "Supported resolutions",
+                    "billingMode": "Billing mode"
+                }
+            },
+            "modelSelector": {
+                "title": "Select channel models",
+                "selectedSummary": "{{selected}} / {{total}} selected",
+                "searchPlaceholder": "Search models",
+                "modelPlaceholder": "Enter a model name",
+                "fetchModels": "Fetch model list",
+                "manualHint": "If the upstream service does not provide an OpenAI-compatible /models endpoint, add model names manually here.",
+                "tabs": {
+                    "new_one": "New model ({{value}})",
+                    "new_other": "New models ({{value}})",
+                    "current_one": "Existing model ({{value}})",
+                    "current_other": "Existing models ({{value}})"
+                },
+                "currentSummary": "{{selected}} / {{total}} selected in this list",
+                "selectAll": "Select all in this list",
+                "clearCurrent": "Clear this list",
+                "empty": "No matching models"
+            },
+            "channelTest": {
+                "title": "Model test for {{name}}",
+                "modelCount_one": "{{value}} model total",
+                "modelCount_other": "{{value}} models total",
+                "batchTest_one": "Test {{value}} model",
+                "batchTest_other": "Test {{value}} models",
+                "description": "Standard text models receive a single “hi” message. Agent Plan and Seedance video models only receive configuration validation; no video is generated, and model access is not verified.",
+                "searchPlaceholder": "Search models…",
+                "table": {
+                    "model": "Model",
+                    "status": "Status"
+                },
+                "statuses": {
+                    "testing": "Testing",
+                    "notStarted": "Not started",
+                    "success": "Succeeded"
+                },
+                "duration": "Request duration: {{value}} sec"
+            }
+        }
+    },
+    "errors": {
+        "customChannelDisabled": "Custom channels are disabled by the administrator. Contact an administrator to configure one.",
+        "requestFailed": "Request failed",
+        "requestCancelled": "Request cancelled",
+        "requestFailedWithStatus": "{{fallback}}: {{status}}",
+        "authenticationFailed": "Authentication failed. Check the API key, plan access, and model permissions.",
+        "rateLimited": "The request was rate-limited or the quota is insufficient. Try again later.",
+        "backendProxyFailed": "Backend proxy request failed",
+        "noContentReturned": "No content was returned",
+        "authRequired": "Log in first",
+        "config": {
+            "baseUrlRequired": "Configure the Base URL first",
+            "apiKeyRequired": "Configure the API key first",
+            "videoModelRequired": "Configure a video model first",
+            "audioModelRequired": "Configure an audio model first"
+        },
+        "image": {
+            "invalidSizeFormat": "Unsupported image size. Use auto, 9:16, or 1024x1024.",
+            "invalidRatio": "The image ratio must use positive numbers, for example 9:16.",
+            "invalidDimensions": "Image dimensions must be positive integers, for example 1024x1024.",
+            "dimensionStep": "Image width and height must be multiples of 16.",
+            "edgeTooLarge": "The longest image edge cannot exceed 3840px.",
+            "ratioTooLarge": "The image aspect ratio cannot exceed 3:1.",
+            "pixelRange": "Total image pixels must be between 655360 and 8294400.",
+            "noImageReturned": "The API did not return an image",
+            "noImageReturnedByGemini": "Gemini did not return an image",
+            "readFailed": "Failed to read the image",
+            "geminiRejected": "Gemini rejected the request: {{reason}}",
+            "geminiMaskUnsupported": "The Gemini request format does not support mask editing",
+            "generationFailed": "Image generation failed",
+            "asyncCreateMissingTaskId": "Failed to create the asynchronous image task because task_id was not returned",
+            "asyncCreateFailed": "Failed to create the asynchronous image task",
+            "asyncEditMissingTaskId": "Failed to create the asynchronous image edit task because task_id was not returned",
+            "asyncEditFailed": "Failed to create the asynchronous image edit task",
+            "taskQueryFailed": "Failed to query the image task",
+            "taskSucceededWithoutImage": "The image task succeeded but returned no image",
+            "readModelsFailed": "Failed to load models"
+        },
+        "video": {
+            "timeout": "Video generation timed out. Try again later.",
+            "missingTaskId": "The video API did not return a task ID",
+            "createTaskFailed": "Failed to create the video task",
+            "succeededWithoutUrl": "The video task succeeded but returned no video URL",
+            "queryTaskFailed": "Failed to query the video task",
+            "noPlayableVideo": "The video API returned no playable video",
+            "audioRequiresVisual": "Reference audio cannot be used alone. Add a reference image or video.",
+            "promptOrReferenceRequired": "Enter a video prompt or add an image, video, or audio reference",
+            "negativePromptTooLong": "The negative prompt cannot exceed 500 characters",
+            "readReferenceImageFailed": "Failed to read the reference image. Choose another image or upload it again.",
+            "invalidReferenceVideo": "The reference video must be a public URL, asset ID, or locally saved video",
+            "invalidReferenceAudio": "The reference audio must be a public URL, asset ID, or locally saved audio file",
+            "geminiUnsupported": "The Gemini request format does not support video generation. Use an OpenAI-format channel.",
+            "noTaskReturned": "The video API returned no task",
+            "generationFailed": "Video generation failed",
+            "downloadFailed": "Failed to download the video",
+            "readLocalAssetFailed": "Failed to read the local asset",
+            "cancelFailed": "Failed to cancel the video task",
+            "cancelled": "Video generation was cancelled",
+            "remixFailed": "Failed to remix the video",
+            "emptyResult": "The video result is empty",
+            "firstPartyProfileRequired": "The current model does not support first-party Canvas video generation. Select a configured Model Profile.",
+            "posterLoadFailed": "Unable to load the first video frame",
+            "referenceTooLarge": "{{label}} exceeds 50MB. Compress it and upload again.",
+            "referenceDuration": "{{label}} must be between 2 and 15 seconds",
+            "referenceDimensions": "{{label}} dimensions must be between 300 and 6000px",
+            "referenceRatio": "{{label}} aspect ratio must be between 0.4 and 2.5",
+            "referencePixels": "{{label}} does not meet Seedance pixel requirements. Convert it to 480p, 720p, or 1080p.",
+            "referenceTotalDuration": "Seedance reference videos cannot exceed 15 seconds in total"
+        },
+        "audio": {
+            "generationFailed": "Audio generation failed",
+            "geminiUnsupported": "The Gemini request format does not support audio generation. Use an OpenAI-format channel."
+        },
+        "webdav": {
+            "connectionTestFailed": "WebDAV connection test failed",
+            "readFileFailed": "Failed to read the WebDAV sync file",
+            "readFileTimeout": "Timed out while reading the WebDAV sync file",
+            "emptyUpload": "The upload file is empty. Upload cancelled.",
+            "uploadFileFailed": "Failed to upload the WebDAV sync file",
+            "createDirectoryFailed": "Failed to create the remote WebDAV directory",
+            "requestTimeout": "The WebDAV request timed out. Check the network, proxy, and remote service.",
+            "connectionFailed": "Unable to connect to WebDAV. Check the URL, HTTPS certificate, CORS, and network.",
+            "authenticationFailed": "WebDAV authentication failed. Check the username, password, or app password.",
+            "pathNotFound": "The WebDAV path does not exist. Check the URL and remote directory.",
+            "syncFailed": "WebDAV sync failed",
+            "invalidManifest": "The {{domain}} sync manifest does not belong to this application"
+        },
+        "api": {
+            "connectionFailed": "Unable to reach the API. Confirm the backend service is running.",
+            "notFound": "The API endpoint does not exist. Confirm the backend service is running.",
+            "unexpectedResponse": "The API returned an unexpected response. Try again later."
+        },
+        "upload": {
+            "failed": "Upload failed",
+            "proxyFailed": "Proxy upload failed"
+        }
+    },
+    "seo": {
+        "default": {
+            "title": "Canvan AI Creation Platform",
+            "description": "Canvan — an AI-powered infinite canvas creation platform."
+        },
+        "pages": {
+            "home": {
+                "title": "Canvan AI Creation Platform",
+                "description": "Organize prompts, images, videos, and AI creation workflows on an infinite canvas."
+            },
+            "login": {
+                "title": "Log in | Canvan",
+                "description": "Log in to the Canvan AI creation platform."
+            },
+            "canvas": {
+                "title": "My Canvases | Canvan",
+                "description": "Manage and edit your AI infinite canvas projects."
+            },
+            "image": {
+                "title": "Image Studio | Canvan",
+                "description": "Generate and edit images with AI."
+            },
+            "video": {
+                "title": "Video Studio | Canvan",
+                "description": "Create and manage AI video generation tasks."
+            },
+            "prompts": {
+                "title": "Prompt Library | Canvan",
+                "description": "Browse, search, and reuse AI prompts."
+            },
+            "assets": {
+                "title": "My Assets | Canvan",
+                "description": "Manage your personal AI creation assets."
+            },
+            "assetLibrary": {
+                "title": "Asset Library | Canvan",
+                "description": "Browse and save shared creation assets."
+            },
+            "account": {
+                "title": "Account Settings | Canvan",
+                "description": "Manage your profile, security settings, and usage records."
+            },
+            "enterpriseAssets": {
+                "title": "Enterprise Assets | Canvan",
+                "description": "Manage shared enterprise creation assets."
+            },
+            "admin": {
+                "title": "Admin Console | Canvan",
+                "description": "Manage Canvan users, content, and system settings."
+            },
+            "notFound": {
+                "title": "Page Not Found | Canvan",
+                "description": "The requested page does not exist."
+            }
+        }
+    },
+    "canvas": {
+        "nodeTypes": {
+            "image": "Image",
+            "text": "Text",
+            "config": "Configuration",
+            "video": "Video",
+            "audio": "Audio"
+        },
+        "library": {
+            "states": {
+                "loading": "Loading...",
+                "opening": "Opening canvas...",
+                "loadingProjects": "Loading canvases..."
+            },
+            "header": {
+                "eyebrow": "Canvas library",
+                "title": "Infinite Canvas"
+            },
+            "actions": {
+                "exportSelected": "Export selected",
+                "deleteSelected": "Delete selected",
+                "deleteAll": "Delete all",
+                "import": "Import canvas",
+                "create": "New canvas"
+            },
+            "messages": {
+                "importSuccess_one": "Imported {{value}} canvas",
+                "importSuccess_other": "Imported {{value}} canvases"
+            },
+            "errors": {
+                "importFailed": "Import failed. Select a valid canvas archive."
+            },
+            "empty": {
+                "title": "No canvases yet",
+                "description": "Create a canvas to save its nodes, connections, and appearance independently."
+            },
+            "project": {
+                "defaultTitle": "Infinite Canvas {{index}}",
+                "selectedExportFileName_one": "infinite-canvas-{{value}}-project",
+                "selectedExportFileName_other": "infinite-canvas-{{value}}-projects",
+                "selectLabel": "Select {{title}}",
+                "nodeCount_one": "{{value}} node",
+                "nodeCount_other": "{{value}} nodes",
+                "connectionCount_one": "{{value}} connection",
+                "connectionCount_other": "{{value}} connections",
+                "updatedAt": "Updated {{time}}",
+                "actions": {
+                    "saveName": "Save name",
+                    "cancelRename": "Cancel rename",
+                    "export": "Export",
+                    "rename": "Rename",
+                    "delete": "Delete"
+                }
+            },
+            "deleteDialog": {
+                "title": "Delete canvases?",
+                "cancel": "Cancel",
+                "confirm": "Delete",
+                "description_one": "Delete {{value}} canvas? Its nodes and connections will also be removed.",
+                "description_other": "Delete {{value}} canvases? Their nodes and connections will also be removed."
+            }
+        },
+        "toolbar": {
+            "tools": {
+                "hand": "Move/select",
+                "undo": "Undo",
+                "redo": "Redo",
+                "text": "Text",
+                "image": "Image",
+                "video": "Video",
+                "audio": "Audio",
+                "config": "Generation settings",
+                "upload": "Upload media",
+                "assets": "My assets",
+                "appearance": "Canvas appearance",
+                "deleteSelected": "Delete selected",
+                "clear": "Clear canvas"
+            },
+            "appearance": {
+                "title": "Canvas appearance",
+                "themeMode": "Theme mode",
+                "light": "Light",
+                "dark": "Dark",
+                "gridStyle": "Grid style",
+                "dots": "Dots",
+                "lines": "Lines",
+                "blank": "Blank",
+                "imageInfo": "Image information",
+                "switchTheme": "Switch to {{theme}} theme"
+            },
+            "messages": {
+                "noPrompt": "No prompt is available to copy",
+                "promptCopied": "Prompt copied"
+            },
+            "settings": {
+                "title": "Customize Toolbar",
+                "showLabels": "Show button labels",
+                "description": "Choose the quick tools to show in the image node editor.",
+                "previewTitle": "Node Preview",
+                "previewNode": "Image Node",
+                "toolsLabel": "Quick Tools",
+                "moreTitle": "Configure quick tools",
+                "moreLabel": "More"
+            },
+            "actions": {
+                "info": {
+                    "title": "View node information",
+                    "label": "Info"
+                },
+                "delete": {
+                    "title": "Remove node",
+                    "label": "Delete"
+                },
+                "retry": {
+                    "title": "Generate again",
+                    "label": "Retry"
+                },
+                "saveAsset": {
+                    "title": "Add to My Assets",
+                    "label": "Save Asset"
+                },
+                "download": {
+                    "label": "Download",
+                    "image": "Download image",
+                    "video": "Download video",
+                    "audio": "Download audio"
+                },
+                "edit": {
+                    "title": "Edit",
+                    "label": "Edit"
+                },
+                "editText": {
+                    "title": "Edit text",
+                    "label": "Edit Text"
+                },
+                "generateImage": {
+                    "title": "Generate an image from text",
+                    "label": "Image"
+                },
+                "config": {
+                    "title": "Generation config",
+                    "label": "Config"
+                },
+                "decreaseFont": {
+                    "title": "Decrease font size",
+                    "label": "Smaller"
+                },
+                "increaseFont": {
+                    "title": "Increase font size",
+                    "label": "Larger"
+                },
+                "upload": {
+                    "image": "Upload image",
+                    "video": "Upload video",
+                    "audio": "Upload audio"
+                },
+                "replace": {
+                    "video": "Replace video",
+                    "audio": "Replace audio"
+                }
+            },
+            "imageTools": {
+                "copyPrompt": {
+                    "label": "Copy Prompt",
+                    "title": "Copy the prompt used to generate this image"
+                },
+                "reversePrompt": {
+                    "label": "Reverse Prompt",
+                    "title": "Create text and config nodes to reverse-engineer the image prompt"
+                },
+                "replace": {
+                    "label": "Replace Image",
+                    "title": "Replace image"
+                },
+                "resize": {
+                    "lockedLabel": "Lock Ratio",
+                    "freeLabel": "Free Ratio",
+                    "toLockedTitle": "Switch to proportional resizing",
+                    "toFreeTitle": "Switch to free resizing"
+                },
+                "maskEdit": {
+                    "label": "Local Edit",
+                    "title": "Paint a mask and edit part of the image"
+                },
+                "crop": {
+                    "label": "Crop",
+                    "title": "Crop and create a new node"
+                },
+                "split": {
+                    "label": "Split",
+                    "title": "Split the image by rows and columns"
+                },
+                "upscale": {
+                    "label": "Upscale",
+                    "title": "Increase image resolution"
+                },
+                "superResolve": {
+                    "label": "Super Resolution",
+                    "title": "AI super resolution"
+                },
+                "angle": {
+                    "label": "Angles",
+                    "title": "Generate new camera angles"
+                },
+                "view": {
+                    "label": "View Full Image",
+                    "title": "View image details"
+                }
+            }
+        },
+        "zoom": {
+            "minimap": {
+                "open": "Open minimap",
+                "close": "Close minimap"
+            },
+            "reset": "Reset view",
+            "scale": "Zoom canvas"
+        },
+        "shortcuts": {
+            "title": "Keyboard shortcuts",
+            "gestures": {
+                "dragCanvas": "Drag canvas",
+                "wheel": "Mouse wheel",
+                "drag": "Drag",
+                "click": "Click",
+                "zoomSlider": "Zoom slider",
+                "dropMedia": "Drop image, video, or audio"
+            },
+            "actions": {
+                "pan": "Pan view",
+                "zoom": "Zoom canvas",
+                "preciseZoom": "Adjust zoom precisely",
+                "boxSelect": "Select multiple nodes",
+                "addSelection": "Add nodes to selection",
+                "selectAll": "Select all nodes",
+                "copyPaste": "Copy / paste nodes",
+                "copyPasteClipboard": "Copy / paste nodes or paste clipboard text/images",
+                "undo": "Undo",
+                "redo": "Redo",
+                "deleteSelection": "Delete selected",
+                "cancelOverlays": "Clear selection and close overlays",
+                "upload": "Upload to canvas"
+            }
+        },
+        "contextMenu": {
+            "duplicate": "Duplicate",
+            "delete": "Delete"
+        },
+        "overview": {
+            "label": "Canvas overview",
+            "expand": "Expand overview sidebar",
+            "collapse": "Collapse overview sidebar",
+            "tabs": {
+                "label": "Overview type",
+                "canvas": "Canvas",
+                "assets": "Assets"
+            },
+            "search": {
+                "placeholder": "Search nodes",
+                "ariaLabel": "Search Canvas nodes"
+            },
+            "type": {
+                "all": "All types",
+                "label": "Node type"
+            },
+            "listLabel": "Canvas node list",
+            "batchResults_one": " · {{value}} result",
+            "batchResults_other": " · {{value}} results",
+            "empty": "No matching nodes",
+            "videoPreview": "{{title}} preview",
+            "status": {
+                "processing": "Processing",
+                "failed": "Failed",
+                "completed": "Completed",
+                "ready": "Ready"
+            }
+        },
+        "editor": {
+            "project": {
+                "untitled": "Untitled canvas",
+                "imported": "Imported canvas"
+            },
+            "connectionCreate": {
+                "title": "Generate from this node",
+                "close": "Close",
+                "text": {
+                    "title": "Generate text",
+                    "description": "Scripts, ad copy, and brand content"
+                },
+                "image": "Generate image",
+                "video": "Generate video",
+                "audio": "Audio reference",
+                "config": {
+                    "title": "Configuration node",
+                    "description": "Model, dimensions, quantity, and input order"
+                }
+            },
+            "confirmations": {
+                "continueGeneration": "Continue generating",
+                "stopWaiting": {
+                    "title": "Stop waiting?",
+                    "description": "This only stops waiting on this page. It does not cancel the upstream task, and you can resume polling later.",
+                    "confirm": "Stop"
+                },
+                "cancelGeneration": {
+                    "title": "Cancel generation task?",
+                    "description": "The cancellation request will be sent upstream. The task is cancelled only after the upstream service confirms it.",
+                    "confirm": "Cancel task"
+                }
+            },
+            "errors": {
+                "taskCancelled": "Task cancelled",
+                "configConnection": "Configuration nodes cannot be connected to each other",
+                "emptySaveText": "There is no text to save",
+                "emptySaveVideo": "There is no video to save",
+                "emptySaveImage": "There is no image to save",
+                "emptyImageForReversePrompt": "This image node is empty, so a prompt cannot be reverse-engineered",
+                "maskEditFailed": "Masked edit failed",
+                "generationFailed": "Generation failed",
+                "videoTaskCreateFailed": "Failed to create the video task",
+                "retryPromptMissing": "No prompt was found for this retry",
+                "retryReferenceMissing": "The reference image is missing, so this retry cannot continue",
+                "imageGenerationTimeout": "Image generation timed out. Try again later.",
+                "imageGenerationFailed": "Image generation failed",
+                "videoResultEmpty": "The video result is empty",
+                "videoFileUnavailable": "The video file is unavailable",
+                "videoGenerationFailed": "Video generation failed",
+                "videoGenerationTimeout": "Video generation timed out. Try again later.",
+                "emptyTextForImage": "This text node is empty, so an image cannot be generated",
+                "assetImageUnavailable": "The asset image is temporarily unavailable. Refresh and try again.",
+                "generationInterrupted": "Generation was interrupted by the page refresh. Generate again."
+            },
+            "files": {
+                "clipboardImageName": "clipboard-image.png",
+                "downloadName": "canvas-{{type}}-{{id}}.{{extension}}"
+            },
+            "messages": {
+                "clipboardImageAdded": "Image added from the clipboard",
+                "clipboardTextAdded": "Text added from the clipboard",
+                "assetSaved": "Added to My Assets",
+                "imageSplit_one": "Split into {{value}} child node",
+                "imageSplit_other": "Split into {{value}} child nodes"
+            },
+            "nodes": {
+                "copySuffix": " Copy",
+                "copyTitle": "{{title}} Copy",
+                "clipboardText": "Clipboard text",
+                "canvasText": "Canvas text",
+                "canvasVideo": "Canvas video",
+                "canvasImage": "Canvas image",
+                "reversePrompt": "Reverse-engineered prompt",
+                "reversePromptConfig": "Reverse prompt configuration",
+                "croppedImage": "Cropped image",
+                "splitImageTitle": "{{title}} {{row}}-{{column}}",
+                "maskEditResult": "Masked edit result",
+                "upscaledImage": "Upscaled image",
+                "generatedImage": "Generated image",
+                "prompt": "Prompt",
+                "generatedVideo": "Generated video",
+                "generatedAudio": "Generated audio",
+                "generatedText": "Generated text",
+                "assistantText": "Assistant text"
+            },
+            "prompts": {
+                "reverseImage": "Analyze the reference image and produce a prompt suitable for AI image generation.\n\nRequirements:\n1. Output only the prompt, with no explanation.\n2. Cover the subject, composition, style, lighting, color, materials, camera, and atmosphere.\n3. Write a complete prompt that can be used directly with an image generation model.",
+                "reverseComposer": "Reference image: @[node:{{imageNodeId}}]\nTask instructions: @[node:{{instructionNodeId}}]",
+                "maskEdit": "Modify only the transparent area of the mask and keep every other area unchanged. {{prompt}}",
+                "editText": "Revise the following text according to the instructions.\n\nOriginal text:\n{{sourceText}}\n\nRevision instructions:\n{{prompt}}",
+                "angle": "Generate a new view of the same subject from the reference image. Keep the subject, colors, materials, and visual style consistent instead of applying only a perspective transform. {{angle}}."
+            },
+            "modals": {
+                "superResolution": {
+                    "title": "AI super resolution",
+                    "unavailable": "Not implemented yet"
+                },
+                "imagePreview": {
+                    "title": "Image details"
+                },
+                "clear": {
+                    "title": "Clear canvas?",
+                    "cancel": "Cancel",
+                    "confirm": "Clear",
+                    "description": "This deletes every node and connection on the current canvas."
+                }
+            },
+            "topbar": {
+                "openMenu": "Open canvas menu",
+                "renameHint": "Double-click to rename the canvas",
+                "agent": "Agent",
+                "menu": {
+                    "home": "Home",
+                    "docs": "Documentation",
+                    "projects": "My canvases",
+                    "new": "New canvas",
+                    "delete": "Delete current canvas",
+                    "import": "Import media",
+                    "undo": "Undo",
+                    "redo": "Redo"
+                }
+            },
+            "agent": {
+                "connected": "Connected to local Codex",
+                "connecting": "Connecting",
+                "starting": "Connecting to local Codex",
+                "openPanel": "Open local Codex panel"
+            },
+            "angle": {
+                "horizontal": {
+                    "front": "Front view",
+                    "right": "Rotate {{value}}° right",
+                    "left": "Rotate {{value}}° left"
+                },
+                "pitch": {
+                    "level": "Level view",
+                    "down": "Tilt down {{value}}°",
+                    "up": "Tilt up {{value}}°"
+                },
+                "lens": {
+                    "wide": "wide-angle",
+                    "standard": "standard"
+                },
+                "label": "AI multi-angle: {{horizontal}}, {{pitch}}, camera distance {{distance}}, {{lens}} lens"
+            }
+        },
+        "actions": {
+            "aiGenerate": "Generate with AI",
+            "cancel": "Cancel",
+            "cancelGenerationTask": "Cancel generation task",
+            "cancelTask": "Cancel Task",
+            "generate": "Generate",
+            "reset": "Reset",
+            "resumeQuery": "Resume Status",
+            "retry": "Retry",
+            "save": "Save",
+            "startGeneration": "Start Generation",
+            "stop": "Stop",
+            "stopWaiting": "Stop Waiting"
+        },
+        "common": {
+            "reading": "Loading",
+            "unknown": "Unknown"
+        },
+        "counts": {
+            "items_one": "{{value}} item",
+            "items_other": "{{value}} items",
+            "images_one": "{{value}} image",
+            "images_other": "{{value}} images",
+            "videos_one": "{{value}} video",
+            "videos_other": "{{value}} videos",
+            "audios_one": "{{value}} audio file",
+            "audios_other": "{{value}} audio files",
+            "nodes_one": "{{value}} node",
+            "nodes_other": "{{value}} nodes"
+        },
+        "units": {
+            "degreeSuffix": "°",
+            "pixelDimensions": "{{value}} px",
+            "pixelValue": "{{value}} px"
+        },
+        "assets": {
+            "picker": {
+                "title": "Select Asset",
+                "searchPlaceholder": "Search assets",
+                "empty": "No assets",
+                "insert": "Insert",
+                "previewAria": "{{title}} preview",
+                "filters": {
+                    "all": "All",
+                    "text": "Text",
+                    "image": "Image",
+                    "video": "Video"
+                }
+            }
+        },
+        "composer": {
+            "title": "Compose Prompt",
+            "hint": "Use @ to reference connected assets. References are renumbered from the current connections before generation.",
+            "placeholder": "Enter a prompt and use @ to reference connected images or text",
+            "imagePreviewAlt": "Referenced image preview"
+        },
+        "resources": {
+            "labels": {
+                "text": "Text {{index}}",
+                "image": "Image {{index}}",
+                "video": "Video {{index}}",
+                "audio": "Audio {{index}}"
+            }
+        },
+        "models": {
+            "legacySelection": "Legacy model: {{model}} (select a new model)"
+        },
+        "configNode": {
+            "title": "Generation Config",
+            "modes": {
+                "image": "Image",
+                "text": "Text",
+                "video": "Video",
+                "audio": "Audio"
+            },
+            "inputs": {
+                "prompt": "Prompts",
+                "referenceImage": "Reference Images",
+                "referenceVideo": "Reference Videos",
+                "referenceAudio": "Reference Audio"
+            }
+        },
+        "prompts": {
+            "library": "Prompt Library"
+        },
+        "settings": {
+            "aspectRatioPlaceholder": "Aspect ratio"
+        },
+        "promptEditor": {
+            "promptAria": "Prompt",
+            "resourcesAria": "Resources",
+            "expand": "Expand prompt editor",
+            "collapse": "Collapse prompt editor"
+        },
+        "promptPanel": {
+            "placeholders": {
+                "video": "Describe the video you want to generate",
+                "audio": "Describe the audio you want to generate",
+                "imageEdit": "Describe how you want to edit this image",
+                "imageGenerate": "Describe the image you want to generate",
+                "textEdit": "Describe how you want to revise this text",
+                "textGenerate": "Describe the text you want to generate"
+            },
+            "shortDrama": {
+                "assetsTitle": "Short Drama Asset Roles",
+                "missingRole": "Role required",
+                "roleAria": "Role for {{title}}",
+                "selectRole": "Select role",
+                "roles": {
+                    "character": "Character",
+                    "scene": "Scene",
+                    "tool": "Prop"
+                }
+            }
+        },
+        "node": {
+            "unknown": "Unknown node",
+            "errors": {
+                "generationFailed": "Generation failed"
+            },
+            "placeholders": {
+                "editText": "Double-click to edit text",
+                "emptyImage": "Empty image node",
+                "emptyVideo": "Empty video node",
+                "emptyAudio": "Empty audio node"
+            },
+            "defaultTitles": {
+                "audio": "Audio"
+            },
+            "batch": {
+                "expanded": "Image group expanded",
+                "collapsed": "Image group collapsed"
+            },
+            "actions": {
+                "setPrimary": "Set as Primary"
+            },
+            "types": {
+                "text": "Text",
+                "image": "Image",
+                "config": "Generation Config",
+                "video": "Video",
+                "audio": "Audio"
+            },
+            "status": {
+                "idle": "Ready",
+                "success": "Completed",
+                "loading": "Processing",
+                "error": "Failed"
+            },
+            "info": {
+                "title": "Node Information",
+                "base64ImagePlaceholder": "[base64 image]",
+                "positionValue": "{{x}}, {{y}}",
+                "tabs": {
+                    "info": "Info",
+                    "json": "JSON"
+                },
+                "fields": {
+                    "id": "ID",
+                    "type": "Type",
+                    "size": "Size",
+                    "position": "Position",
+                    "status": "Status",
+                    "batch": "Image Group",
+                    "prompt": "Prompt",
+                    "imageSize": "Image Size"
+                }
+            }
+        },
+        "angle": {
+            "title": "AI Camera Angles",
+            "description": "The left side previews direction only. The result is regenerated from the source image.",
+            "horizontal": "Horizontal",
+            "pitch": "Pitch",
+            "distance": "Camera Distance",
+            "wideAngle": "Wide-angle Lens",
+            "standard": "Standard",
+            "wide": "Wide"
+        },
+        "crop": {
+            "title": "Crop Image",
+            "resizeAria": "Resize crop box",
+            "cropSize": "Crop size: {{value}}",
+            "ratio": "Ratio: {{value}}",
+            "originalSize": "Original: {{value}}",
+            "lockedRatio": "Locked Ratio",
+            "freeRatio": "Free Ratio",
+            "confirm": "Confirm Crop"
+        },
+        "maskEdit": {
+            "title": "Local Mask Edit",
+            "paint": "Brush",
+            "erase": "Erase",
+            "brushSize": "Brush Size",
+            "request": "Edit Request",
+            "placeholder": "For example: change the selected area to metal while preserving the original lighting",
+            "apply": "Apply AI Edit",
+            "errors": {
+                "promptRequired": "Enter an edit request",
+                "maskRequired": "Paint the area you want to edit first"
+            }
+        },
+        "split": {
+            "title": "Split Image",
+            "description_one": "Generate {{value}} image child node and arrange it to the right of the canvas using the source grid.",
+            "description_other": "Generate {{value}} image child nodes and arrange them to the right of the canvas using the source grid.",
+            "original": "Original",
+            "rows": "Rows",
+            "columns": "Columns",
+            "childNodes": "Child Nodes",
+            "approxPiece": "Approx. per Piece",
+            "generate": "Generate Child Nodes"
+        },
+        "upscale": {
+            "title": "Upscale Image",
+            "source": "Source",
+            "targetPixels": "Target Pixels",
+            "algorithm": "Upscaling Algorithm",
+            "outputSize": "Output Size",
+            "generate": "Generate Upscaled Image",
+            "errors": {
+                "reachedMax": "The image is already 4K and does not need upscaling",
+                "reachedTarget": "The image already meets the selected target size"
+            },
+            "algorithms": {
+                "high": {
+                    "title": "High-quality Interpolation",
+                    "description": "Best for photos and detailed images"
+                },
+                "bilinear": {
+                    "title": "Bilinear",
+                    "description": "Smooth and fast"
+                },
+                "nearest": {
+                    "title": "Nearest Neighbor",
+                    "description": "Best for pixel art"
+                }
+            }
+        },
+        "generation": {
+            "errors": {
+                "resourceNotUploaded": "Asset \"{{name}}\" has not been uploaded to the platform file library",
+                "shortDramaTitleRequired": "Enter a short drama title",
+                "shortDramaScriptRequired": "Enter a short drama script",
+                "shortDramaAssetRequired": "Connect at least one short drama asset image",
+                "shortDramaRoleRequired": "Select a role for image \"{{name}}\"",
+                "imageNotUploaded": "Image \"{{name}}\" has not been uploaded to the platform file library"
+            }
+        },
+        "export": {
+            "defaultFileName": "Infinite Canvas"
+        },
+        "agent": {
+            "title": "Agent",
+            "codex": "Codex",
+            "mode": {
+                "online": "Web",
+                "local": "Local"
+            },
+            "tabs": {
+                "setup": "Connect",
+                "chat": "Chat",
+                "history": "History",
+                "logs": "Logs"
+            },
+            "accessibility": {
+                "panel": "Agent panel",
+                "openAiLogo": "OpenAI"
+            },
+            "actions": {
+                "cancel": "Cancel",
+                "clear": "Clear",
+                "configure": "Configure",
+                "connect": "Connect",
+                "copy": "Copy",
+                "delete": "Delete",
+                "deleteRecord": "Delete record",
+                "disconnect": "Disconnect",
+                "newConversation": "New chat",
+                "open": "Open",
+                "refresh": "Refresh",
+                "undo": "Undo"
+            },
+            "chat": {
+                "removeImage": "Remove image",
+                "send": "Send",
+                "uploadImage": "Upload images",
+                "working": "working..."
+            },
+            "composer": {
+                "placeholder": "Ask Codex or tell it to edit the canvas"
+            },
+            "tools": {
+                "approve": "Approve",
+                "call": "Tool call",
+                "confirmTitle": "Confirm tool call",
+                "confirmToggle": "Confirm tools",
+                "detail": "Details",
+                "reject": "Reject",
+                "status": {
+                    "approved": "Approved",
+                    "completed": "Completed",
+                    "failed": "Failed",
+                    "noop": "No changes",
+                    "pending": "Awaiting confirmation",
+                    "rejected": "Rejected"
+                }
+            },
+            "toolNames": {
+                "applyOps": "Canvas operations",
+                "getState": "Read canvas",
+                "getSelection": "Read selection",
+                "exportSnapshot": "Export snapshot",
+                "createNode": "Create node",
+                "createTextNode": "Create text",
+                "createTextNodes": "Create text nodes",
+                "createConfigNode": "Create generation config",
+                "createImagePromptFlow": "Create image flow",
+                "createGenerationFlow": "Create generation flow",
+                "generateText": "Generate text",
+                "generateImage": "Generate image",
+                "generateVideo": "Generate video",
+                "generateAudio": "Generate audio",
+                "updateNode": "Update node",
+                "updateNodeText": "Update text",
+                "moveNodes": "Move nodes",
+                "resizeNode": "Resize node",
+                "deleteNodes": "Delete nodes",
+                "connectNodes": "Connect nodes",
+                "selectNodes": "Select nodes",
+                "setViewport": "Adjust viewport",
+                "runGeneration": "Run generation"
+            },
+            "operations": {
+                "addNode_one": "Add {{value}} node",
+                "addNode_other": "Add {{value}} nodes",
+                "updateNode_one": "Update {{value}} node",
+                "updateNode_other": "Update {{value}} nodes",
+                "deleteNode_one": "Delete {{value}} node",
+                "deleteNode_other": "Delete {{value}} nodes",
+                "deleteConnections_one": "Delete {{value}} connection",
+                "deleteConnections_other": "Delete {{value}} connections",
+                "connectNodes_one": "Create {{value}} connection",
+                "connectNodes_other": "Create {{value}} connections",
+                "setViewport_one": "Adjust the viewport {{value}} time",
+                "setViewport_other": "Adjust the viewport {{value}} times",
+                "selectNodes_one": "Change the selection {{value}} time",
+                "selectNodes_other": "Change the selection {{value}} times",
+                "runGeneration_one": "Run {{value}} generation",
+                "runGeneration_other": "Run {{value}} generations",
+                "unknown_one": "{{operation}} {{value}} time",
+                "unknown_other": "{{operation}} {{value}} times"
+            },
+            "attachments": {
+                "imagesSent": "Sent images",
+                "maxPayload": "Image attachments can total about {{size}} at most.",
+                "payloadTooLarge": "Image attachments exceed {{size}}. Remove some before sending.",
+                "promptContext_one": "The user uploaded {{value}} image attachment: {{names}}.",
+                "promptContext_other": "The user uploaded {{value}} image attachments: {{names}}.",
+                "readFailed": "Failed to read image",
+                "tooLargeTitle": "Images too large"
+            },
+            "deleteDialog": {
+                "title": "Delete conversation",
+                "description": "Delete \"{{name}}\"?"
+            },
+            "diagnostics": {
+                "title": "Infinite Canvas Agent diagnostics",
+                "endpoint": "Canvas Agent: {{value}}",
+                "connection": "connection: {{value}}",
+                "disabled": "disabled",
+                "logs": "logs: {{value}}",
+                "messages": "messages: {{value}}",
+                "none": "none",
+                "online": "online",
+                "pendingTool": "pending tool: {{value}}",
+                "sending": "sending: {{value}}",
+                "status": "status: {{value}}",
+                "waiting": "waiting: {{value}}"
+            },
+            "errors": {
+                "canvasOperationFailed": "Canvas operation failed",
+                "connectionFailed": "Connection failed. Check the address and token.",
+                "connectionLost": "The local Agent connection failed or was disconnected",
+                "deleteConversationFailed": "Failed to delete conversation",
+                "invalidUrl": "The local Agent address is invalid",
+                "newConversationFailed": "Failed to create conversation",
+                "notDiscovered": "No local Agent was found. Use the Codex plugin or start Canvas Agent manually.",
+                "pendingToolExists": "Another canvas tool call is awaiting confirmation",
+                "requestFailed": "Local Agent request failed",
+                "requestRejected": "The local Agent rejected the request",
+                "resumeConversationFailed": "Failed to resume conversation",
+                "toolCancelledByUser": "The user cancelled the canvas tool call",
+                "urlRequired": "Enter the local Agent address"
+            },
+            "history": {
+                "connectToView": "Connect the local Agent to view conversation history",
+                "count_one": "{{value}} conversation",
+                "count_other": "{{value}} conversations",
+                "current": "Current",
+                "defaultWorkspace": "Default canvas directory",
+                "empty": "No history",
+                "messageCount_one": "{{value}} message",
+                "messageCount_other": "{{value}} messages",
+                "untitled": "Untitled conversation",
+                "workspace": "Workspace",
+                "workspaceEmpty": "There are no conversations in this workspace"
+            },
+            "logs": {
+                "agentLog": "Log",
+                "awaitingConfirmation": "Awaiting confirmation",
+                "codexEvent": "Codex event",
+                "codexReply": "Codex reply",
+                "connectionFailed": "Connection failed",
+                "connectionLost": "Connection lost",
+                "copied": "Logs copied",
+                "copyBlocked": "Logs selected. Copy them manually.",
+                "count_one": "{{value}} entry",
+                "count_other": "{{value}} entries",
+                "deleteConversationFailed": "Failed to delete conversation",
+                "empty": "No event logs",
+                "error": "Error",
+                "historyLoadFailed": "Failed to load history",
+                "latestError": "Latest error",
+                "latestErrorCopied": "Latest error copied",
+                "newConversationFailed": "Failed to create conversation",
+                "rawJson": "Raw JSON",
+                "requestAccepted": "Local Agent accepted the request",
+                "resumeConversationFailed": "Failed to resume conversation",
+                "sendFailed": "Send failed",
+                "streamSummary": "Stream summary",
+                "threadCreated": "Codex conversation created",
+                "title": "Runtime logs",
+                "toolCompleted": "{{tool}} completed",
+                "toolInvoked": "Calling tool: {{tool}}",
+                "troubleshooting": "Troubleshooting",
+                "turnCompleted": "Turn completed",
+                "turnFailed": "Turn failed",
+                "turnStarted": "Processing started",
+                "userSent": "User sent"
+            },
+            "messages": {
+                "canvasReadSummary": "Read {{nodes}} nodes and {{connections}} connections",
+                "completed": "Completed",
+                "connected": "Local Agent connected",
+                "errorTitle": "Error",
+                "previousToolOperation": "Previous tool operation",
+                "recordDeleted": "Record deleted",
+                "sendFailed": "Send failed",
+                "toolCallCompleted": "Tool call completed",
+                "toolCompleted": "{{tool}} completed",
+                "toolFailed": "Tool failed",
+                "undone": "Undone"
+            },
+            "setup": {
+                "autoDiscovery": "Local URL and Connect token are discovered automatically. Fill them in manually only if discovery fails.",
+                "commandCopied": "Command copied",
+                "connectToken": "Connection token",
+                "connectTokenTechnical": "Connect token",
+                "copyCommand": "Copy command",
+                "description": "After the Codex plugin is installed, the canvas will try to connect to the local Agent automatically.",
+                "localUrl": "Local address",
+                "localUrlTechnical": "Local URL",
+                "steps": {
+                    "connectCanvas": {
+                        "description": "Return here and connect. The web app will read the local Agent configuration automatically.",
+                        "title": "Connect the canvas"
+                    },
+                    "installPlugin": {
+                        "description": "Install the Infinite Canvas plugin in the Codex app. The plugin starts the local Agent the first time it is used.",
+                        "title": "Install the Codex plugin"
+                    },
+                    "manualStart": {
+                        "description": "Run the command below if automatic discovery fails.",
+                        "title": "Manual fallback"
+                    }
+                },
+                "title": "Connect local Agent",
+                "tokenPlaceholder": "Discover automatically or enter the Connect token",
+                "urlPlaceholder": "For example, http://127.0.0.1:17371",
+                "webConnection": "Web connection"
+            },
+            "status": {
+                "applyingCanvasOps": "Applying canvas operations",
+                "awaitingConfirmation": "Awaiting confirmation",
+                "callingTool": "Calling {{tool}}",
+                "cancelled": "Cancelled",
+                "completed": "Completed",
+                "connected": "Connected",
+                "connecting": "Connecting",
+                "connectionFailed": "Connection failed",
+                "disconnected": "Disconnected",
+                "error": "Error",
+                "executingStep": "Executing step",
+                "messageUpdated": "Message updated",
+                "newConversation": "New conversation",
+                "notConnected": "Not connected",
+                "offline": "Offline",
+                "readingCanvas": "Reading canvas",
+                "ready": "Ready",
+                "sendFailed": "Send failed",
+                "sending": "Sending",
+                "sessionRestored": "Conversation restored",
+                "thinking": "Thinking",
+                "threadCreated": "Conversation created",
+                "toolCompleted": "Tool completed",
+                "toolFailed": "Tool failed",
+                "undone": "Undone"
+            },
+            "usage": {
+                "inputOutput": "{{input}} input / {{output}} output tokens",
+                "tokens_one": "{{value}} token",
+                "tokens_other": "{{value}} tokens"
+            }
+        },
+        "assistant": {
+            "accessibility": {
+                "resizePanel": "Resize the right panel"
+            },
+            "actions": {
+                "collapse": "Collapse chat",
+                "deleteAll": "Delete all"
+            },
+            "composer": {
+                "placeholder": "Describe how you want the Agent to edit the canvas"
+            },
+            "conversations": {
+                "new": "New chat"
+            },
+            "deleteDialog": {
+                "description_one": "Delete {{value}} conversation? This cannot be undone.",
+                "description_other": "Delete {{value}} conversations? This cannot be undone.",
+                "title": "Delete conversation history?"
+            },
+            "diagnostics": {
+                "confirmTools": "confirm tools: {{value}}",
+                "connections": "connections: {{value}}",
+                "logs": "logs: {{value}}",
+                "messages": "messages: {{value}}",
+                "model": "model: {{value}}",
+                "nodes": "nodes: {{value}}",
+                "running": "running: {{value}}",
+                "title": "Infinite Canvas web Agent diagnostics"
+            },
+            "empty": {
+                "brand": "Infinite Canvas",
+                "tagline": "One canvas, infinite ideas"
+            },
+            "errors": {
+                "argumentsMustBeObject": "Tool arguments must be a JSON object",
+                "fieldMustBeArray": "{{field}} must be an array",
+                "fieldMustBeNonEmptyString": "{{field}} must be a non-empty string",
+                "fieldMustBeNumber": "{{field}} must be a number",
+                "fieldMustBeStringArray": "{{field}} must be an array of strings",
+                "fieldMustContainNonEmptyStrings": "{{field}} must contain only non-empty strings",
+                "fieldMustContainObjects": "{{field}} must contain only objects",
+                "invalidArgumentsJson": "Tool arguments are not a valid JSON object",
+                "invalidNodeType": "Node type must be text, image, config, video, or audio",
+                "noToolCall": "The model returned no tool call, so no canvas operation was applied.",
+                "opsMustBeArray": "ops must be an array",
+                "unsupportedOperation": "Unsupported canvas operation type",
+                "unsupportedTool": "Unsupported tool: {{name}}"
+            },
+            "generation": {
+                "promptTitle": "Prompt",
+                "titles": {
+                    "text": "Text generation",
+                    "image": "Image generation",
+                    "video": "Video generation",
+                    "audio": "Audio generation"
+                }
+            },
+            "history": {
+                "description": "Web Agent conversations will appear here"
+            },
+            "logs": {
+                "awaitingConfirmation": "Awaiting user confirmation",
+                "continuationFailed": "Tool continuation failed",
+                "modelToolResponse": "Model tool response",
+                "requestFailed": "Request failed",
+                "requestSent": "Request sent",
+                "stepLimitReached": "Agent tool loop reached the step limit",
+                "toolApproved": "Tool approved",
+                "toolLoopEnded": "Agent tool loop {{step}} ended",
+                "toolLoopReply": "Agent tool loop {{step}} reply",
+                "toolLoopStarted": "Agent tool loop {{step}} started",
+                "toolRejected": "Tool rejected",
+                "toolResults": "Tool results"
+            },
+            "messages": {
+                "autoExecutionCompleted": "Automatic tool execution completed",
+                "canvasOperationApplied": "Canvas operation applied.",
+                "invalidToolArguments": "Invalid tool arguments",
+                "noContent": "No content returned.",
+                "operationFailed": "Operation failed",
+                "previousToolFailed": "The previous tool call failed, so execution stopped.",
+                "selectionCount_one": "{{value}} node is selected.",
+                "selectionCount_other": "{{value}} nodes are selected.",
+                "toolCallCancelled": "Tool call cancelled",
+                "toolContextMissing": "Tool context is incomplete and cannot be executed.",
+                "toolExecutionCompleted": "Tool execution completed",
+                "toolExecutionFailed": "Tool execution failed",
+                "toolsExecuted": "Tools executed.",
+                "waitingForConfirmation": "Ready to run tools. Awaiting confirmation."
+            },
+            "model": {
+                "empty": "No text models",
+                "notConfigured": "No model configured",
+                "select": "Select a text model"
+            },
+            "noop": {
+                "connectNodesNotFound": "The nodes to connect were not found.",
+                "connectionsExist": "Those nodes are already connected.",
+                "connectionsNotFound": "The connections to delete were not found.",
+                "deleteNodesNotFound": "The nodes to delete were not found.",
+                "generationNodesNotFound": "The nodes to generate from were not found.",
+                "noConfigNodes": "There are no generation config nodes to delete.",
+                "noConnections": "There are no connections to delete.",
+                "noOperations": "The model returned no executable canvas operations.",
+                "selectNodesNotFound": "The nodes to select were not found.",
+                "selectionUnchanged": "The selection is already in the requested state.",
+                "stateUnchanged": "The tool ran, but the canvas did not change. Check the Logs tab for the tool arguments and before/after state.",
+                "updateNodesNotFound": "The nodes to update were not found.",
+                "viewportUnchanged": "The viewport is already in the requested state."
+            },
+            "references": {
+                "remove": "Remove reference",
+                "textFallback": "T"
+            },
+            "setup": {
+                "description": "The web Agent uses the text model and API configured in this browser.",
+                "textModel": "Text model",
+                "title": "Connection settings"
+            },
+            "snapshot": {
+                "summary": "The canvas has {{nodes}} nodes and {{connections}} connections: {{text}} text, {{images}} image, {{configs}} generation config, {{videos}} video, and {{audios}} audio nodes."
+            },
+            "subtitle": "Canvas assistant",
+            "tabs": {
+                "setup": "Connection"
+            }
+        }
+    }
+}
