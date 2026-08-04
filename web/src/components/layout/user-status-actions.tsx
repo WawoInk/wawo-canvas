@@ -5,7 +5,9 @@ import { Avatar, Dropdown, Tooltip } from "antd";
 import { CircleUserRound, Keyboard, LogOut, Settings2, Shield } from "lucide-react";
 import type { ItemType } from "antd/es/menu/interface";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { CreditSymbol } from "@/constant/credits";
 import { canvasThemes } from "@/lib/canvas-theme";
@@ -25,6 +27,7 @@ type UserStatusActionsProps = {
 };
 
 export function UserStatusActions({ showConfig = true, variant = "default", onOpenShortcuts, accountOpen, onAccountOpenChange, accountRef, getPopupContainer }: UserStatusActionsProps) {
+    const { t } = useTranslation();
     const theme = useThemeStore((state) => state.theme);
     const setTheme = useThemeStore((state) => state.setTheme);
     const user = useUserStore((state) => state.user);
@@ -40,23 +43,31 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
     const avatarStyle: CSSProperties | undefined = variant === "canvas" ? { borderColor: canvasTheme.toolbar.border, color: canvasTheme.node.text, background: "transparent" } : undefined;
     const menuItems: ItemType[] = [
         { key: "user", disabled: true, label: <span className="font-medium text-current">{userName}</span> },
-        { key: "account", icon: <CircleUserRound className="size-4" />, label: <Link to="/account">账户设置</Link> },
-        ...(user?.role === "admin" ? [{ key: "admin", icon: <Shield className="size-4" />, label: <Link to="/admin">管理后台</Link> }] : []),
-        ...(onOpenShortcuts ? [{ key: "shortcuts", icon: <Keyboard className="size-4" />, label: "快捷键", onClick: onOpenShortcuts }] : []),
+        { key: "account", icon: <CircleUserRound className="size-4" />, label: <Link to="/account">{t("common.accountSettings")}</Link> },
+        ...(user?.role === "admin" ? [{ key: "admin", icon: <Shield className="size-4" />, label: <Link to="/admin">{t("common.adminConsole")}</Link> }] : []),
+        ...(onOpenShortcuts ? [{ key: "shortcuts", icon: <Keyboard className="size-4" />, label: t("common.keyboardShortcuts"), onClick: onOpenShortcuts }] : []),
         { type: "divider" },
-        { key: "logout", icon: <LogOut className="size-4" />, label: "退出登录", onClick: logout },
+        { key: "logout", icon: <LogOut className="size-4" />, label: t("common.logout"), onClick: logout },
     ];
 
     return (
         <div className="inline-flex shrink-0 items-center gap-1">
             {showConfig && user?.role === "admin" ? (
-                <button type="button" className={naturalIconClass} style={iconStyle} onClick={() => openConfigDialog(false)} aria-label="配置" title="配置">
+                <button type="button" className={naturalIconClass} style={iconStyle} onClick={() => openConfigDialog(false)} aria-label={t("common.configuration")} title={t("common.configuration")}>
                     <Settings2 className="size-4" />
                 </button>
             ) : null}
-            <AnimatedThemeToggler theme={theme} onThemeChange={setTheme} className={naturalIconClass} style={iconStyle} aria-label={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"} title={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"} />
+            <LanguageSwitcher className={naturalIconClass} style={iconStyle} getPopupContainer={getPopupContainer} />
+            <AnimatedThemeToggler
+                theme={theme}
+                onThemeChange={setTheme}
+                className={naturalIconClass}
+                style={iconStyle}
+                aria-label={theme === "dark" ? t("common.switchToLightTheme") : t("common.switchToDarkTheme")}
+                title={theme === "dark" ? t("common.switchToLightTheme") : t("common.switchToDarkTheme")}
+            />
             {variant === "canvas" && user ? (
-                <Tooltip title="当前算力点余额" placement="bottom">
+                <Tooltip title={t("common.currentCredits")} placement="bottom">
                     <div className="flex h-8 shrink-0 items-center gap-1.5 px-1.5 text-xs font-medium tabular-nums opacity-75 transition hover:opacity-100" style={{ color: canvasTheme.node.text }}>
                         <CreditSymbol className="text-sm leading-none" />
                         <span>{formatDecimal(credits)}</span>
@@ -64,19 +75,19 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
                 </Tooltip>
             ) : null}
             {!user && onOpenShortcuts ? (
-                <button type="button" className={naturalIconClass} style={iconStyle} onClick={onOpenShortcuts} aria-label="快捷键" title="快捷键">
+                <button type="button" className={naturalIconClass} style={iconStyle} onClick={onOpenShortcuts} aria-label={t("common.keyboardShortcuts")} title={t("common.keyboardShortcuts")}>
                     <Keyboard className="size-4" />
                 </button>
             ) : null}
             {!user ? (
                 <Link to="/login" className="px-1.5 text-sm font-medium !text-muted-foreground underline-offset-4 transition hover:!text-foreground hover:underline" style={iconStyle}>
-                    登录
+                    {t("common.login")}
                 </Link>
             ) : null}
             {user ? (
                 <div ref={accountRef}>
                     <Dropdown open={accountOpen} onOpenChange={onAccountOpenChange} trigger={["click"]} placement="bottomRight" getPopupContainer={getPopupContainer} styles={{ root: { minWidth: 150 } }} menu={{ items: menuItems }}>
-                        <button type="button" className="flex size-7 shrink-0 items-center justify-center rounded-full bg-transparent p-0 text-[0] leading-[0] transition" aria-label="账户菜单">
+                        <button type="button" className="flex size-7 shrink-0 items-center justify-center rounded-full bg-transparent p-0 text-[0] leading-[0] transition" aria-label={t("common.accountMenu")}>
                             <Avatar
                                 size={24}
                                 src={avatarUrl ? <img src={avatarUrl} alt={userName} referrerPolicy="no-referrer" /> : undefined}

@@ -3,14 +3,16 @@
 import { KeyOutlined, PercentageOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, WalletOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { Button, Card, Col, Flex, Form, Input, InputNumber, Modal, Row, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
-import dayjs from "dayjs";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
+import { formatDateTime, formatNumber } from "@/i18n/formatters";
 import type { AdminCreditLog, AdminEnterprise, CreateAdminEnterprise } from "@/services/api/admin";
 import { compareDecimal, formatDecimal } from "@/lib/decimal";
 import { useAdminEnterprises } from "./use-admin-enterprises";
 
 export default function AdminEnterprisesPage() {
+    const { t } = useTranslation();
     const { enterprises, total, keyword, page, pageSize, isLoading, search, reset, changePage, refresh, create, setStatus, setDiscountRate, setOwnerStatus, resetPassword, adjustCredits, loadCreditLogs } = useAdminEnterprises();
     const [keywordText, setKeywordText] = useState(keyword);
     const [creating, setCreating] = useState(false);
@@ -31,7 +33,7 @@ export default function AdminEnterprisesPage() {
 
     const columns: ProColumns<AdminEnterprise>[] = [
         {
-            title: "企业",
+            title: t("admin.enterprises.table.enterprise"),
             dataIndex: "name",
             width: 210,
             render: (_, item) => (
@@ -45,31 +47,33 @@ export default function AdminEnterprisesPage() {
                 </Flex>
             ),
         },
-        { title: "主账号", dataIndex: "ownerName", width: 170, ellipsis: true },
-        { title: "成员", dataIndex: "memberCount", width: 70, render: (_, item) => `${item.memberCount} 人` },
-        { title: "主账号余额", dataIndex: "ownerCredits", width: 105, render: (_, item) => formatDecimal(item.ownerCredits) },
-        { title: "折扣倍率", dataIndex: "discountRate", width: 90, render: (_, item) => `${item.discountRate} 倍` },
+        { title: t("admin.enterprises.table.owner"), dataIndex: "ownerName", width: 170, ellipsis: true },
+        { title: t("admin.enterprises.table.members"), dataIndex: "memberCount", width: 70, render: (_, item) => t("admin.common.counts.people", { count: item.memberCount, value: formatNumber(item.memberCount) }) },
+        { title: t("admin.enterprises.table.ownerBalance"), dataIndex: "ownerCredits", width: 105, render: (_, item) => formatDecimal(item.ownerCredits) },
+        { title: t("admin.enterprises.table.discountRate"), dataIndex: "discountRate", width: 90, render: (_, item) => t("admin.enterprises.values.multiplier", { value: item.discountRate }) },
         {
-            title: "企业状态",
+            title: t("admin.enterprises.table.enterpriseStatus"),
             dataIndex: "status",
             width: 100,
-            render: (_, item) => <Switch size="small" checked={item.status === "active"} checkedChildren="启用" unCheckedChildren="禁用" onChange={(checked) => void setStatus(item, checked)} />,
+            render: (_, item) => <Switch size="small" checked={item.status === "active"} checkedChildren={t("admin.common.statuses.enabled")} unCheckedChildren={t("admin.common.statuses.disabled")} onChange={(checked) => void setStatus(item, checked)} />,
         },
         {
-            title: "主账号状态",
+            title: t("admin.enterprises.table.ownerStatus"),
             dataIndex: "ownerStatus",
             width: 110,
-            render: (_, item) => <Switch size="small" checked={item.ownerStatus === "active"} checkedChildren="启用" unCheckedChildren="禁用" onChange={(checked) => void setOwnerStatus(item, checked)} />,
+            render: (_, item) => (
+                <Switch size="small" checked={item.ownerStatus === "active"} checkedChildren={t("admin.common.statuses.enabled")} unCheckedChildren={t("admin.common.statuses.disabled")} onChange={(checked) => void setOwnerStatus(item, checked)} />
+            ),
         },
-        { title: "创建时间", dataIndex: "createdAt", width: 155, render: (_, item) => <Typography.Text type="secondary">{dayjs(item.createdAt).format("YYYY-MM-DD HH:mm")}</Typography.Text> },
+        { title: t("admin.common.table.createdAt"), dataIndex: "createdAt", width: 155, render: (_, item) => <Typography.Text type="secondary">{formatDateTime(item.createdAt)}</Typography.Text> },
         {
-            title: "操作",
+            title: t("admin.common.table.actions"),
             key: "actions",
             width: 108,
             align: "right",
             render: (_, item) => (
                 <Space size={4}>
-                    <Tooltip title="设置折扣倍率">
+                    <Tooltip title={t("admin.enterprises.actions.setDiscount")}>
                         <Button
                             type="text"
                             size="small"
@@ -80,10 +84,10 @@ export default function AdminEnterprisesPage() {
                             }}
                         />
                     </Tooltip>
-                    <Tooltip title="调整主账号积分">
+                    <Tooltip title={t("admin.enterprises.actions.adjustCredits")}>
                         <Button type="text" size="small" icon={<WalletOutlined />} onClick={() => void openCreditAdjustment(item)} />
                     </Tooltip>
-                    <Tooltip title="重置主账号密码">
+                    <Tooltip title={t("admin.enterprises.actions.resetPassword")}>
                         <Button type="text" size="small" icon={<KeyOutlined />} onClick={() => setResetting(item)} />
                     </Tooltip>
                 </Space>
@@ -98,8 +102,15 @@ export default function AdminEnterprisesPage() {
                     <Form layout="vertical">
                         <Row gutter={16} align="bottom">
                             <Col flex="360px">
-                                <Form.Item label="关键词">
-                                    <Input.Search value={keywordText} placeholder="搜索企业名称或主账号" allowClear enterButton={<SearchOutlined />} onSearch={() => search(keywordText)} onChange={(event) => setKeywordText(event.target.value)} />
+                                <Form.Item label={t("admin.common.filters.keyword")}>
+                                    <Input.Search
+                                        value={keywordText}
+                                        placeholder={t("admin.enterprises.filters.searchPlaceholder")}
+                                        allowClear
+                                        enterButton={<SearchOutlined />}
+                                        onSearch={() => search(keywordText)}
+                                        onChange={(event) => setKeywordText(event.target.value)}
+                                    />
                                 </Form.Item>
                             </Col>
                             <Col flex="none">
@@ -111,10 +122,10 @@ export default function AdminEnterprisesPage() {
                                                 reset();
                                             }}
                                         >
-                                            重置
+                                            {t("admin.common.actions.reset")}
                                         </Button>
                                         <Button type="primary" icon={<ReloadOutlined />} onClick={() => search(keywordText)}>
-                                            查询
+                                            {t("admin.common.actions.query")}
                                         </Button>
                                     </Space>
                                 </Form.Item>
@@ -134,22 +145,30 @@ export default function AdminEnterprisesPage() {
                     cardProps={{ variant: "borderless" }}
                     headerTitle={
                         <Space>
-                            <Typography.Text strong>企业列表</Typography.Text>
-                            <Tag>{total} 家</Tag>
+                            <Typography.Text strong>{t("admin.enterprises.title")}</Typography.Text>
+                            <Tag>{t("admin.common.counts.companies", { count: total, value: formatNumber(total) })}</Tag>
                         </Space>
                     }
                     options={{ density: true, setting: true, reload: () => void refresh() }}
                     toolBarRender={() => [
                         <Button key="add" type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>
-                            创建企业
+                            {t("admin.enterprises.actions.create")}
                         </Button>,
                     ]}
-                    pagination={{ current: page, pageSize, total, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100], showTotal: (value) => `共 ${value} 家`, onChange: changePage }}
+                    pagination={{
+                        current: page,
+                        pageSize,
+                        total,
+                        showSizeChanger: true,
+                        pageSizeOptions: [10, 20, 50, 100],
+                        showTotal: (value) => t("admin.common.pagination.companies", { count: value, value: formatNumber(value) }),
+                        onChange: changePage,
+                    }}
                 />
             </Flex>
 
             <Modal
-                title="创建企业"
+                title={t("admin.enterprises.create.title")}
                 open={creating}
                 width={620}
                 onCancel={() => setCreating(false)}
@@ -159,29 +178,29 @@ export default function AdminEnterprisesPage() {
                     setCreating(false);
                     createForm.resetFields();
                 }}
-                okText="创建"
-                cancelText="取消"
+                okText={t("admin.common.actions.create")}
+                cancelText={t("admin.common.actions.cancel")}
                 destroyOnHidden
             >
                 <Form form={createForm} layout="vertical" requiredMark={false}>
                     <Row gutter={14}>
                         <Col span={12}>
-                            <Form.Item name="name" label="企业名称" rules={[{ required: true, message: "请输入企业名称" }]}>
+                            <Form.Item name="name" label={t("admin.enterprises.form.name")} rules={[{ required: true, message: t("admin.enterprises.validation.nameRequired") }]}>
                                 <Input />
                             </Form.Item>
                         </Col>
                         <Col span={12}>
-                            <Form.Item name="ownerDisplayName" label="主账号昵称">
+                            <Form.Item name="ownerDisplayName" label={t("admin.enterprises.form.ownerDisplayName")}>
                                 <Input />
                             </Form.Item>
                         </Col>
                         <Col span={12}>
-                            <Form.Item name="ownerUsername" label="主账号用户名" rules={[{ required: true, message: "请输入用户名" }]}>
+                            <Form.Item name="ownerUsername" label={t("admin.enterprises.form.ownerUsername")} rules={[{ required: true, message: t("admin.enterprises.validation.ownerUsernameRequired") }]}>
                                 <Input autoComplete="off" />
                             </Form.Item>
                         </Col>
                         <Col span={12}>
-                            <Form.Item name="ownerPassword" label="初始密码" rules={[{ required: true, message: "请输入初始密码" }]}>
+                            <Form.Item name="ownerPassword" label={t("admin.enterprises.form.initialPassword")} rules={[{ required: true, message: t("admin.enterprises.validation.initialPasswordRequired") }]}>
                                 <Input.Password autoComplete="new-password" />
                             </Form.Item>
                         </Col>
@@ -190,7 +209,7 @@ export default function AdminEnterprisesPage() {
             </Modal>
 
             <Modal
-                title={`设置折扣倍率 · ${discounting?.name || ""}`}
+                title={t("admin.enterprises.discount.title", { name: discounting?.name || "" })}
                 open={Boolean(discounting)}
                 confirmLoading={isLoading}
                 onCancel={() => setDiscounting(null)}
@@ -201,26 +220,26 @@ export default function AdminEnterprisesPage() {
                     setDiscounting(null);
                     discountForm.resetFields();
                 }}
-                okText="保存"
-                cancelText="取消"
+                okText={t("admin.common.actions.save")}
+                cancelText={t("admin.common.actions.cancel")}
                 destroyOnHidden
             >
                 <Form form={discountForm} layout="vertical" requiredMark={false}>
                     <Form.Item
                         name="discountRate"
-                        label="折扣倍率"
+                        label={t("admin.enterprises.form.discountRate")}
                         rules={[
-                            { required: true, message: "请输入折扣倍率" },
-                            { validator: (_, value) => (compareDecimal(value, "0.1") >= 0 && compareDecimal(value, "1") <= 0 ? Promise.resolve() : Promise.reject(new Error("折扣倍率必须在 0.1 到 1 之间"))) },
+                            { required: true, message: t("admin.enterprises.validation.discountRequired") },
+                            { validator: (_, value) => (compareDecimal(value, "0.1") >= 0 && compareDecimal(value, "1") <= 0 ? Promise.resolve() : Promise.reject(new Error(t("admin.enterprises.validation.discountRange")))) },
                         ]}
                     >
-                        <InputNumber min={0.1} max={1} step="0.01" stringMode suffix="倍" style={{ width: "100%" }} />
+                        <InputNumber min={0.1} max={1} step="0.01" stringMode suffix={t("admin.enterprises.units.multiplier")} style={{ width: "100%" }} />
                     </Form.Item>
                 </Form>
             </Modal>
 
             <Modal
-                title={`调整主账号积分 · ${adjusting?.ownerName || ""}`}
+                title={t("admin.enterprises.credits.title", { name: adjusting?.ownerName || "" })}
                 open={Boolean(adjusting)}
                 width={760}
                 confirmLoading={isLoading}
@@ -233,32 +252,37 @@ export default function AdminEnterprisesPage() {
                     setCreditLogs(await loadCreditLogs(updated.ownerId));
                     creditForm.resetFields();
                 }}
-                okText="确认调整"
-                cancelText="关闭"
+                okText={t("admin.enterprises.actions.confirmAdjustment")}
+                cancelText={t("admin.common.actions.close")}
                 destroyOnHidden
             >
                 <Typography.Paragraph type="secondary">
-                    当前余额：<Typography.Text strong>{formatDecimal(adjusting?.ownerCredits)}</Typography.Text>。正数增加，负数扣减，扣减后余额不能小于 0。
+                    {t("admin.enterprises.credits.balancePrefix")}
+                    <Typography.Text strong>{formatDecimal(adjusting?.ownerCredits)}</Typography.Text>
+                    {t("admin.enterprises.credits.balanceHint")}
                 </Typography.Paragraph>
                 <Form form={creditForm} layout="vertical" requiredMark={false}>
                     <Row gutter={14}>
                         <Col span={8}>
                             <Form.Item
                                 name="delta"
-                                label="调整数量"
-                                rules={[{ required: true, message: "请输入调整数量" }, { validator: (_, value) => (compareDecimal(value, "0") === 0 ? Promise.reject(new Error("调整数量不能为 0")) : Promise.resolve()) }]}
+                                label={t("admin.enterprises.form.adjustmentAmount")}
+                                rules={[
+                                    { required: true, message: t("admin.enterprises.validation.adjustmentRequired") },
+                                    { validator: (_, value) => (compareDecimal(value, "0") === 0 ? Promise.reject(new Error(t("admin.enterprises.validation.adjustmentNonZero"))) : Promise.resolve()) },
+                                ]}
                             >
-                                <InputNumber step="0.01" stringMode style={{ width: "100%" }} placeholder="例如 100 或 -50.5" />
+                                <InputNumber step="0.01" stringMode style={{ width: "100%" }} placeholder={t("admin.enterprises.form.adjustmentPlaceholder")} />
                             </Form.Item>
                         </Col>
                         <Col span={16}>
-                            <Form.Item name="reason" label="调整原因" rules={[{ required: true, whitespace: true, message: "请输入调整原因" }]}>
-                                <Input maxLength={200} placeholder="例如：线下充值到账" />
+                            <Form.Item name="reason" label={t("admin.enterprises.form.adjustmentReason")} rules={[{ required: true, whitespace: true, message: t("admin.enterprises.validation.reasonRequired") }]}>
+                                <Input maxLength={200} placeholder={t("admin.enterprises.form.reasonPlaceholder")} />
                             </Form.Item>
                         </Col>
                     </Row>
                 </Form>
-                <Typography.Text strong>最近平台调整</Typography.Text>
+                <Typography.Text strong>{t("admin.enterprises.credits.recentAdjustments")}</Typography.Text>
                 <Table<AdminCreditLog>
                     rowKey="id"
                     size="small"
@@ -266,22 +290,22 @@ export default function AdminEnterprisesPage() {
                     dataSource={creditLogs}
                     style={{ marginTop: 12 }}
                     columns={[
-                        { title: "时间", dataIndex: "createdAt", width: 160, render: (value: string) => dayjs(value).format("YYYY-MM-DD HH:mm") },
+                        { title: t("admin.common.table.time"), dataIndex: "createdAt", width: 160, render: (value: string) => formatDateTime(value) },
                         {
-                            title: "变动",
+                            title: t("admin.creditLogs.table.change"),
                             dataIndex: "amount",
                             width: 90,
                             render: (value: string) => <Typography.Text type={compareDecimal(value, "0") >= 0 ? "success" : "danger"}>{compareDecimal(value, "0") > 0 ? `+${formatDecimal(value)}` : formatDecimal(value)}</Typography.Text>,
                         },
-                        { title: "余额", dataIndex: "balance", width: 90, render: (value: string) => formatDecimal(value) },
-                        { title: "原因", dataIndex: "remark", ellipsis: true },
-                        { title: "操作者", dataIndex: "relatedId", width: 160, ellipsis: true },
+                        { title: t("admin.creditLogs.table.balance"), dataIndex: "balance", width: 90, render: (value: string) => formatDecimal(value) },
+                        { title: t("admin.enterprises.credits.reason"), dataIndex: "remark", ellipsis: true },
+                        { title: t("admin.enterprises.credits.operator"), dataIndex: "relatedId", width: 160, ellipsis: true },
                     ]}
                 />
             </Modal>
 
             <Modal
-                title="重置主账号密码"
+                title={t("admin.enterprises.password.title")}
                 open={Boolean(resetting)}
                 onCancel={() => setResetting(null)}
                 onOk={async () => {
@@ -291,13 +315,13 @@ export default function AdminEnterprisesPage() {
                     setResetting(null);
                     passwordForm.resetFields();
                 }}
-                okText="重置"
-                cancelText="取消"
+                okText={t("admin.common.actions.reset")}
+                cancelText={t("admin.common.actions.cancel")}
                 destroyOnHidden
             >
-                <Typography.Paragraph type="secondary">重置「{resetting?.ownerName}」的密码后，该账号现有会话会立即失效。</Typography.Paragraph>
+                <Typography.Paragraph type="secondary">{t("admin.enterprises.password.confirm", { name: resetting?.ownerName })}</Typography.Paragraph>
                 <Form form={passwordForm} layout="vertical" requiredMark={false}>
-                    <Form.Item name="password" label="新密码" rules={[{ required: true, message: "请输入新密码" }]}>
+                    <Form.Item name="password" label={t("admin.enterprises.form.newPassword")} rules={[{ required: true, message: t("admin.enterprises.validation.newPasswordRequired") }]}>
                         <Input.Password autoComplete="new-password" />
                     </Form.Item>
                 </Form>

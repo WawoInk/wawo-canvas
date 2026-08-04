@@ -4,10 +4,13 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { App, Button, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Skeleton, Space, Table, Tabs, Tag } from "antd";
 import type { Dayjs } from "dayjs";
+import type { TFunction } from "i18next";
 import { Download } from "lucide-react";
 import { nanoid } from "nanoid";
+import { useTranslation } from "react-i18next";
 
 import { enterpriseCapabilities } from "@/lib/account-access";
+import { formatDateTime, formatNumber } from "@/i18n/formatters";
 import {
     changeAccountPassword,
     createEnterpriseMember,
@@ -29,31 +32,40 @@ import { compareDecimal, formatDecimal } from "@/lib/decimal";
 import { downloadCsv, fetchAllPages, type CsvColumn } from "./account-log-export";
 import { AccountLogs } from "./account-logs";
 
-const platformRoleLabels = { guest: "访客", user: "普通用户", admin: "平台管理员" } as const;
-const enterpriseRoleLabels = { owner: "企业主账号", member: "企业成员" } as const;
-const enterpriseStatusLabels = { active: "正常", disabled: "已禁用" } as const;
-const creditLogTypeLabels = {
-    admin_adjust: "平台调整",
-    ai_consume: "模型消费",
-    ai_refund: "失败返还",
-    enterprise_allocate: "企业分配",
-    enterprise_reclaim: "企业收回",
+const platformRoleKeys = {
+    guest: "account.roles.platform.guest",
+    user: "account.roles.platform.user",
+    admin: "account.roles.platform.admin",
 } as const;
-const enterpriseCreditCsvColumns: CsvColumn<EnterpriseCreditLog>[] = [
-    { title: "流水 ID", value: (item) => item.id },
-    { title: "成员", value: (item) => item.displayName || item.username },
-    { title: "用户名", value: (item) => item.username },
-    { title: "类型", value: (item) => creditLogTypeLabels[item.type] },
-    { title: "变动", value: (item) => formatDecimal(item.amount) },
-    { title: "余额", value: (item) => formatDecimal(item.balance) },
-    { title: "关联 ID", value: (item) => item.relatedId || item.taskId },
-    { title: "对方 ID", value: (item) => item.counterpartyId },
-    { title: "备注", value: (item) => item.remark },
-    { title: "时间", value: (item) => (item.createdAt ? new Date(item.createdAt).toLocaleString("zh-CN") : "") },
-];
+const enterpriseRoleKeys = { owner: "account.roles.enterprise.owner", member: "account.roles.enterprise.member" } as const;
+const enterpriseStatusKeys = { active: "account.status.active", disabled: "account.status.disabled" } as const;
+const memberStatusKeys = { active: "account.enterprise.members.status.active", ban: "account.enterprise.members.status.disabled" } as const;
+const creditLogTypeKeys: Record<EnterpriseCreditLog["type"], string> = {
+    admin_adjust: "account.logs.creditTypes.adminAdjust",
+    ai_consume: "account.logs.creditTypes.aiConsume",
+    ai_refund: "account.logs.creditTypes.aiRefund",
+    enterprise_allocate: "account.logs.creditTypes.enterpriseAllocate",
+    enterprise_reclaim: "account.logs.creditTypes.enterpriseReclaim",
+};
+
+function createEnterpriseCreditCsvColumns(t: TFunction): CsvColumn<EnterpriseCreditLog>[] {
+    return [
+        { title: t("account.enterprise.creditLogs.csv.logId"), value: (item) => item.id },
+        { title: t("account.enterprise.creditLogs.csv.member"), value: (item) => item.displayName || item.username },
+        { title: t("account.enterprise.creditLogs.csv.username"), value: (item) => item.username },
+        { title: t("account.enterprise.creditLogs.csv.type"), value: (item) => t(creditLogTypeKeys[item.type]) },
+        { title: t("account.enterprise.creditLogs.csv.change"), value: (item) => formatDecimal(item.amount) },
+        { title: t("account.enterprise.creditLogs.csv.balance"), value: (item) => formatDecimal(item.balance) },
+        { title: t("account.enterprise.creditLogs.csv.relatedId"), value: (item) => item.relatedId || item.taskId },
+        { title: t("account.enterprise.creditLogs.csv.counterpartyId"), value: (item) => item.counterpartyId },
+        { title: t("account.enterprise.creditLogs.csv.remark"), value: (item) => item.remark },
+        { title: t("account.enterprise.creditLogs.csv.time"), value: (item) => (item.createdAt ? formatDateTime(item.createdAt) : "") },
+    ];
+}
 
 export default function AccountPage() {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const token = useUserStore((state) => state.token);
     const user = useUserStore((state) => state.user);
@@ -81,13 +93,13 @@ export default function AccountPage() {
                 setSummary(value);
                 enterpriseForm.setFieldsValue({ name: value.name });
             })
-            .catch((error) => current && setSummaryError(error instanceof Error ? error.message : "企业信息加载失败"));
+            .catch((error) => current && setSummaryError(error instanceof Error ? error.message : t("account.enterprise.overview.loadError")));
         return () => {
             current = false;
         };
-    }, [capabilities.showSummary, enterpriseForm, token, user?.id]);
+    }, [capabilities.showSummary, enterpriseForm, t, token, user?.id]);
 
-    if (!user) return <main className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground">正在加载账户...</main>;
+    if (!user) return <main className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground">{t("account.loading")}</main>;
 
     const saveProfile = async (values: { displayName: string; email: string }) => {
         setProfileSaving(true);
@@ -95,9 +107,9 @@ export default function AccountPage() {
             const updated = await updateAccountProfile(token, values);
             setSession(token, updated);
             profileForm.setFieldsValue({ displayName: updated.displayName, email: updated.email });
-            message.success("个人资料已更新");
+            message.success(t("account.profile.messages.updateSuccess"));
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "个人资料更新失败");
+            message.error(error instanceof Error ? error.message : t("account.profile.messages.updateError"));
         } finally {
             setProfileSaving(false);
         }
@@ -108,10 +120,10 @@ export default function AccountPage() {
         try {
             await changeAccountPassword(token, values);
             clearSession();
-            message.success("密码已修改，请重新登录");
+            message.success(t("account.password.messages.updateSuccess"));
             navigate("/login", { replace: true });
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "密码修改失败");
+            message.error(error instanceof Error ? error.message : t("account.password.messages.updateError"));
         } finally {
             setPasswordSaving(false);
         }
@@ -124,9 +136,9 @@ export default function AccountPage() {
             setSummary(updated);
             setSession(token, { ...user, enterpriseName: updated.name });
             enterpriseForm.setFieldsValue({ name: updated.name });
-            message.success("企业名称已更新");
+            message.success(t("account.enterprise.overview.renameSuccess"));
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "企业名称更新失败");
+            message.error(error instanceof Error ? error.message : t("account.enterprise.overview.renameError"));
         } finally {
             setEnterpriseSaving(false);
         }
@@ -136,70 +148,74 @@ export default function AccountPage() {
         <main className="h-full overflow-auto bg-background text-foreground">
             <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-10">
                 <header className="border-b pb-6">
-                    <p className="text-xs text-muted-foreground">账户中心</p>
-                    <h1 className="mt-3 text-3xl font-semibold">账户设置</h1>
+                    <p className="text-xs text-muted-foreground">{t("account.header.eyebrow")}</p>
+                    <h1 className="mt-3 text-3xl font-semibold">{t("account.header.title")}</h1>
                 </header>
 
-                <Tabs activeKey={activeSection} items={[{ key: "account", label: "账户信息" }, { key: "logs", label: "日志记录" }, ...(capabilities.showSummary ? [{ key: "enterprise", label: "企业信息" }] : [])]} onChange={setActiveSection} />
+                <Tabs
+                    activeKey={activeSection}
+                    items={[{ key: "account", label: t("account.tabs.account") }, { key: "logs", label: t("account.tabs.logs") }, ...(capabilities.showSummary ? [{ key: "enterprise", label: t("account.tabs.enterprise") }] : [])]}
+                    onChange={setActiveSection}
+                />
 
                 <section hidden={activeSection !== "account"} className="rounded-2xl border border-border bg-card p-6">
-                    <h2 className="text-lg font-semibold">账户概况</h2>
+                    <h2 className="text-lg font-semibold">{t("account.overview.title")}</h2>
                     <Descriptions
                         className="mt-5"
                         column={{ xs: 1, sm: 2 }}
                         items={[
-                            { key: "username", label: "用户名", children: user.username },
-                            { key: "credits", label: "当前积分", children: formatDecimal(user.credits) },
-                            { key: "role", label: "平台身份", children: platformRoleLabels[user.role] },
-                            { key: "createdAt", label: "注册时间", children: user.createdAt ? new Date(user.createdAt).toLocaleString("zh-CN") : "-" },
+                            { key: "username", label: t("account.overview.fields.username"), children: user.username },
+                            { key: "credits", label: t("account.overview.fields.credits"), children: formatDecimal(user.credits) },
+                            { key: "role", label: t("account.overview.fields.role"), children: t(platformRoleKeys[user.role]) },
+                            { key: "createdAt", label: t("account.overview.fields.registeredAt"), children: user.createdAt ? formatDateTime(user.createdAt) : "-" },
                         ]}
                     />
                 </section>
 
                 <section hidden={activeSection !== "account"} className="rounded-2xl border border-border bg-card p-6">
-                    <h2 className="text-lg font-semibold">个人资料</h2>
+                    <h2 className="text-lg font-semibold">{t("account.profile.title")}</h2>
                     <Form form={profileForm} layout="vertical" requiredMark={false} initialValues={{ displayName: user.displayName, email: user.email }} onFinish={saveProfile} className="mt-5 max-w-xl">
-                        <Form.Item label="昵称" name="displayName">
-                            <Input placeholder="请输入昵称" />
+                        <Form.Item label={t("account.profile.fields.displayName")} name="displayName">
+                            <Input placeholder={t("account.profile.placeholders.displayName")} />
                         </Form.Item>
-                        <Form.Item label="邮箱" name="email" rules={[{ type: "email", message: "请输入有效邮箱" }]}>
-                            <Input placeholder="请输入邮箱" />
+                        <Form.Item label={t("account.profile.fields.email")} name="email" rules={[{ type: "email", message: t("account.profile.validation.email") }]}>
+                            <Input placeholder={t("account.profile.placeholders.email")} />
                         </Form.Item>
                         <Button type="primary" htmlType="submit" loading={profileSaving}>
-                            保存资料
+                            {t("account.profile.actions.save")}
                         </Button>
                     </Form>
                 </section>
 
                 <section hidden={activeSection !== "account"} className="rounded-2xl border border-border bg-card p-6">
-                    <h2 className="text-lg font-semibold">修改密码</h2>
+                    <h2 className="text-lg font-semibold">{t("account.password.title")}</h2>
                     <Form form={passwordForm} layout="vertical" requiredMark={false} onFinish={changePassword} className="mt-5 max-w-xl">
-                        <Form.Item label="当前密码" name="currentPassword" extra="通过第三方账号登录且尚未设置本地密码时可留空">
+                        <Form.Item label={t("account.password.fields.current")} name="currentPassword" extra={t("account.password.currentHint")}>
                             <Input.Password autoComplete="current-password" />
                         </Form.Item>
-                        <Form.Item label="新密码" name="newPassword" rules={[{ required: true, message: "请输入新密码" }]}>
+                        <Form.Item label={t("account.password.fields.new")} name="newPassword" rules={[{ required: true, message: t("account.password.validation.newRequired") }]}>
                             <Input.Password autoComplete="new-password" />
                         </Form.Item>
                         <Form.Item
-                            label="确认新密码"
+                            label={t("account.password.fields.confirm")}
                             name="confirmPassword"
                             dependencies={["newPassword"]}
                             rules={[
-                                { required: true, message: "请再次输入新密码" },
-                                ({ getFieldValue }) => ({ validator: (_, value) => (!value || getFieldValue("newPassword") === value ? Promise.resolve() : Promise.reject(new Error("两次输入的密码不一致"))) }),
+                                { required: true, message: t("account.password.validation.confirmRequired") },
+                                ({ getFieldValue }) => ({ validator: (_, value) => (!value || getFieldValue("newPassword") === value ? Promise.resolve() : Promise.reject(new Error(t("account.password.validation.mismatch")))) }),
                             ]}
                         >
                             <Input.Password autoComplete="new-password" />
                         </Form.Item>
                         <Button type="primary" htmlType="submit" loading={passwordSaving}>
-                            修改密码
+                            {t("account.password.actions.update")}
                         </Button>
                     </Form>
                 </section>
 
                 {capabilities.showSummary ? (
                     <section hidden={activeSection !== "enterprise"} className="rounded-2xl border border-border bg-card p-6">
-                        <h2 className="text-lg font-semibold">企业概况</h2>
+                        <h2 className="text-lg font-semibold">{t("account.enterprise.overview.title")}</h2>
                         {!summary && !summaryError ? <Skeleton active paragraph={{ rows: 2 }} className="mt-5" /> : null}
                         {summaryError ? <p className="mt-5 text-sm text-red-500">{summaryError}</p> : null}
                         {summary ? (
@@ -208,20 +224,32 @@ export default function AccountPage() {
                                     className="mt-5"
                                     column={{ xs: 1, sm: 2 }}
                                     items={[
-                                        { key: "name", label: "企业名称", children: summary.name },
-                                        { key: "role", label: "企业身份", children: enterpriseRoleLabels[summary.role] },
-                                        { key: "status", label: "企业状态", children: enterpriseStatusLabels[summary.status] },
-                                        { key: "members", label: "成员数量", children: `${summary.memberCount} 人` },
-                                        ...(summary.role === "owner" ? [{ key: "discountRate", label: "折扣倍率", children: `${summary.discountRate} 倍` }] : []),
+                                        { key: "name", label: t("account.enterprise.overview.fields.name"), children: summary.name },
+                                        { key: "role", label: t("account.enterprise.overview.fields.role"), children: t(enterpriseRoleKeys[summary.role]) },
+                                        { key: "status", label: t("account.enterprise.overview.fields.status"), children: t(enterpriseStatusKeys[summary.status]) },
+                                        {
+                                            key: "members",
+                                            label: t("account.enterprise.overview.fields.memberCount"),
+                                            children: t("account.enterprise.overview.memberCount", { count: summary.memberCount, value: formatNumber(summary.memberCount) }),
+                                        },
+                                        ...(summary.role === "owner"
+                                            ? [
+                                                  {
+                                                      key: "discountRate",
+                                                      label: t("account.enterprise.overview.fields.discountRate"),
+                                                      children: t("account.enterprise.overview.discountRate", { value: formatDecimal(summary.discountRate) }),
+                                                  },
+                                              ]
+                                            : []),
                                     ]}
                                 />
                                 {capabilities.canRename ? (
                                     <Form form={enterpriseForm} layout="inline" requiredMark={false} onFinish={renameEnterprise} className="mt-6">
-                                        <Form.Item name="name" rules={[{ required: true, message: "请输入企业名称" }]} className="min-w-64 flex-1">
-                                            <Input placeholder="企业名称" />
+                                        <Form.Item name="name" rules={[{ required: true, message: t("account.enterprise.overview.validation.nameRequired") }]} className="min-w-64 flex-1">
+                                            <Input placeholder={t("account.enterprise.overview.placeholders.name")} />
                                         </Form.Item>
                                         <Button type="primary" htmlType="submit" loading={enterpriseSaving}>
-                                            更新企业名称
+                                            {t("account.enterprise.overview.actions.rename")}
                                         </Button>
                                     </Form>
                                 ) : null}
@@ -244,6 +272,7 @@ export default function AccountPage() {
 
 export function EnterpriseCreditLogs() {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const token = useUserStore((state) => state.token);
     const user = useUserStore((state) => state.user);
     const [members, setMembers] = useState<EnterpriseMember[]>([]);
@@ -268,11 +297,11 @@ export function EnterpriseCreditLogs() {
         // ponytail: 500 follows the API cap; use remote member search when an enterprise exceeds it.
         void fetchEnterpriseMembers(token, { page: 1, pageSize: 500 })
             .then((result) => current && setMembers(result.items))
-            .catch((reason) => current && message.error(reason instanceof Error ? reason.message : "成员筛选加载失败"));
+            .catch((reason) => current && message.error(reason instanceof Error ? reason.message : t("account.enterprise.creditLogs.messages.memberFilterLoadError")));
         return () => {
             current = false;
         };
-    }, [message, token, user?.id]);
+    }, [message, t, token, user?.id]);
 
     useEffect(() => {
         let current = true;
@@ -288,7 +317,7 @@ export function EnterpriseCreditLogs() {
             })
             .catch((reason) => {
                 if (!current) return;
-                const detail = reason instanceof Error ? reason.message : "企业积分流水加载失败";
+                const detail = reason instanceof Error ? reason.message : t("account.enterprise.creditLogs.messages.loadError");
                 setLogs([]);
                 setTotal(0);
                 setError(detail);
@@ -297,20 +326,20 @@ export function EnterpriseCreditLogs() {
         return () => {
             current = false;
         };
-    }, [endTime, keyword, memberId, page, pageSize, startTime, token, type, user?.credits, user?.id]);
+    }, [endTime, keyword, memberId, page, pageSize, startTime, t, token, type, user?.credits, user?.id]);
 
     const exportLogs = async () => {
         setExporting(true);
         try {
             const rows = await fetchAllPages((nextPage, nextPageSize) => fetchEnterpriseCreditLogs(token, { memberId, type, keyword, start_time: startTime, end_time: endTime, page: nextPage, pageSize: nextPageSize }));
             if (!rows.length) {
-                message.warning("暂无企业积分流水可导出");
+                message.warning(t("account.enterprise.creditLogs.messages.emptyExport"));
                 return;
             }
-            downloadCsv("企业积分流水.csv", enterpriseCreditCsvColumns, rows);
-            message.success("企业积分流水已导出");
+            downloadCsv(t("account.enterprise.creditLogs.export.fileName"), createEnterpriseCreditCsvColumns(t), rows);
+            message.success(t("account.enterprise.creditLogs.messages.exportSuccess"));
         } catch (reason) {
-            message.error(reason instanceof Error ? reason.message : "企业积分流水导出失败");
+            message.error(reason instanceof Error ? reason.message : t("account.enterprise.creditLogs.messages.exportError"));
         } finally {
             setExporting(false);
         }
@@ -319,19 +348,22 @@ export function EnterpriseCreditLogs() {
     return (
         <section className="rounded-2xl border border-border bg-card p-6">
             <div>
-                <h2 className="text-lg font-semibold">企业积分流水</h2>
-                <p className="mt-1 text-sm text-muted-foreground">查看本企业的积分分配、消费和退款记录</p>
+                <h2 className="text-lg font-semibold">{t("account.enterprise.creditLogs.title")}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{t("account.enterprise.creditLogs.description")}</p>
             </div>
             <Space wrap className="mt-5">
                 <Select
                     allowClear
-                    aria-label="按成员筛选企业积分流水"
+                    aria-label={t("account.enterprise.creditLogs.filters.memberAria")}
                     className="w-48"
-                    placeholder="全部成员"
+                    placeholder={t("account.enterprise.creditLogs.filters.allMembers")}
                     value={memberId || undefined}
                     options={[
-                        ...(user ? [{ value: user.id, label: `${user.displayName || user.username}（主账号）` }] : []),
-                        ...members.map((member) => ({ value: member.id, label: member.displayName ? `${member.displayName}（${member.username}）` : member.username })),
+                        ...(user ? [{ value: user.id, label: t("account.enterprise.creditLogs.filters.mainAccount", { name: user.displayName || user.username }) }] : []),
+                        ...members.map((member) => ({
+                            value: member.id,
+                            label: member.displayName ? t("account.enterprise.creditLogs.filters.memberName", { displayName: member.displayName, username: member.username }) : member.username,
+                        })),
                     ]}
                     onChange={(value) => {
                         setMemberId(value || "");
@@ -340,11 +372,11 @@ export function EnterpriseCreditLogs() {
                 />
                 <Select
                     allowClear
-                    aria-label="按类型筛选企业积分流水"
+                    aria-label={t("account.enterprise.creditLogs.filters.typeAria")}
                     className="w-36"
-                    placeholder="全部类型"
+                    placeholder={t("account.enterprise.creditLogs.filters.allTypes")}
                     value={type || undefined}
-                    options={Object.entries(creditLogTypeLabels).map(([value, label]) => ({ value, label }))}
+                    options={Object.entries(creditLogTypeKeys).map(([value, key]) => ({ value, label: t(key) }))}
                     onChange={(value) => {
                         setType(value || "");
                         setPage(1);
@@ -352,8 +384,8 @@ export function EnterpriseCreditLogs() {
                 />
                 <DatePicker.RangePicker
                     value={range}
-                    format="YYYY-MM-DD"
-                    placeholder={["开始日期", "结束日期"]}
+                    format={t("account.logs.filters.dateFormat")}
+                    placeholder={[t("account.logs.filters.startDate"), t("account.logs.filters.endDate")]}
                     onChange={(value) => {
                         setRange(value as [Dayjs, Dayjs] | null);
                         setPage(1);
@@ -361,9 +393,9 @@ export function EnterpriseCreditLogs() {
                 />
                 <Input.Search
                     allowClear
-                    aria-label="搜索企业积分流水"
+                    aria-label={t("account.enterprise.creditLogs.filters.searchAria")}
                     className="w-72"
-                    placeholder="搜索成员、类型、备注或关联 ID"
+                    placeholder={t("account.enterprise.creditLogs.filters.searchPlaceholder")}
                     value={keywordText}
                     onChange={(event) => {
                         const value = event.target.value;
@@ -379,7 +411,7 @@ export function EnterpriseCreditLogs() {
                     }}
                 />
                 <Button icon={<Download className="size-4" />} loading={exporting} onClick={() => void exportLogs()}>
-                    导出企业积分流水
+                    {t("account.enterprise.creditLogs.export.button")}
                 </Button>
             </Space>
             {error ? <p className="mt-4 text-sm text-red-500">{error}</p> : null}
@@ -401,7 +433,7 @@ export function EnterpriseCreditLogs() {
                 }}
                 columns={[
                     {
-                        title: "成员",
+                        title: t("account.enterprise.creditLogs.table.member"),
                         width: 180,
                         render: (_, item) => (
                             <div>
@@ -410,26 +442,26 @@ export function EnterpriseCreditLogs() {
                             </div>
                         ),
                     },
-                    { title: "类型", dataIndex: "type", width: 120, render: (value: EnterpriseCreditLog["type"]) => <Tag>{creditLogTypeLabels[value]}</Tag> },
+                    { title: t("account.enterprise.creditLogs.table.type"), dataIndex: "type", width: 120, render: (value: EnterpriseCreditLog["type"]) => <Tag>{t(creditLogTypeKeys[value])}</Tag> },
                     {
-                        title: "变动",
+                        title: t("account.enterprise.creditLogs.table.change"),
                         dataIndex: "amount",
                         width: 100,
                         render: (value: string) => <span className={compareDecimal(value, "0") >= 0 ? "text-green-600" : "text-red-500"}>{compareDecimal(value, "0") > 0 ? `+${formatDecimal(value)}` : formatDecimal(value)}</span>,
                     },
-                    { title: "余额", dataIndex: "balance", width: 100, render: (value: string) => formatDecimal(value) },
+                    { title: t("account.enterprise.creditLogs.table.balance"), dataIndex: "balance", width: 100, render: (value: string) => formatDecimal(value) },
                     {
-                        title: "关联信息",
+                        title: t("account.enterprise.creditLogs.table.relatedInfo"),
                         width: 260,
                         render: (_, item) => (
                             <div className="text-xs text-muted-foreground">
                                 <div>{item.relatedId || item.taskId || "-"}</div>
-                                {item.counterpartyId ? <div>对方：{item.counterpartyId}</div> : null}
+                                {item.counterpartyId ? <div>{t("account.enterprise.creditLogs.table.counterparty", { id: item.counterpartyId })}</div> : null}
                             </div>
                         ),
                     },
-                    { title: "备注", dataIndex: "remark", ellipsis: true, render: (value: string) => value || "-" },
-                    { title: "时间", dataIndex: "createdAt", width: 180, render: (value: string) => (value ? new Date(value).toLocaleString("zh-CN") : "-") },
+                    { title: t("account.enterprise.creditLogs.table.remark"), dataIndex: "remark", ellipsis: true, render: (value: string) => value || "-" },
+                    { title: t("account.enterprise.creditLogs.table.time"), dataIndex: "createdAt", width: 180, render: (value: string) => (value ? formatDateTime(value) : "-") },
                 ]}
             />
         </section>
@@ -438,6 +470,7 @@ export function EnterpriseCreditLogs() {
 
 function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const token = useUserStore((state) => state.token);
     const [createForm] = Form.useForm();
     const [passwordForm] = Form.useForm();
@@ -463,12 +496,12 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
                 setMembers(result.items);
                 setTotal(result.total);
             })
-            .catch((error) => current && message.error(error instanceof Error ? error.message : "成员加载失败"))
+            .catch((error) => current && message.error(error instanceof Error ? error.message : t("account.enterprise.members.messages.loadError")))
             .finally(() => current && setLoading(false));
         return () => {
             current = false;
         };
-    }, [keyword, message, page, pageSize, refreshKey, token]);
+    }, [keyword, message, page, pageSize, refreshKey, t, token]);
 
     const create = async (values: { username: string; password: string; displayName?: string; email?: string }) => {
         setSaving(true);
@@ -479,9 +512,9 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
             setPage(1);
             setRefreshKey((value) => value + 1);
             onCreated();
-            message.success("成员已创建");
+            message.success(t("account.enterprise.members.messages.createSuccess"));
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "成员创建失败");
+            message.error(error instanceof Error ? error.message : t("account.enterprise.members.messages.createError"));
         } finally {
             setSaving(false);
         }
@@ -492,9 +525,9 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
         try {
             await setEnterpriseMemberStatus(token, member.id, member.status === "active" ? "ban" : "active");
             setRefreshKey((value) => value + 1);
-            message.success(member.status === "active" ? "成员已禁用" : "成员已启用");
+            message.success(member.status === "active" ? t("account.enterprise.members.messages.disableSuccess") : t("account.enterprise.members.messages.enableSuccess"));
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "成员状态更新失败");
+            message.error(error instanceof Error ? error.message : t("account.enterprise.members.messages.statusError"));
         } finally {
             setSaving(false);
         }
@@ -507,9 +540,9 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
             await resetEnterpriseMemberPassword(token, resetMember.id, password);
             passwordForm.resetFields();
             setResetMember(null);
-            message.success("成员密码已重置");
+            message.success(t("account.enterprise.members.messages.passwordResetSuccess"));
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "密码重置失败");
+            message.error(error instanceof Error ? error.message : t("account.enterprise.members.messages.passwordResetError"));
         } finally {
             setSaving(false);
         }
@@ -525,9 +558,9 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
             if (session.token === token && session.user) session.setSession(token, { ...session.user, credits: result.ownerCredits });
             setCreditsTarget(null);
             creditsForm.resetFields();
-            message.success(result.action === "allocate" ? "积分分配成功" : "积分收回成功");
+            message.success(result.action === "allocate" ? t("account.enterprise.members.messages.allocateSuccess") : t("account.enterprise.members.messages.reclaimSuccess"));
         } catch (error) {
-            message.error(error instanceof Error ? error.message : creditsTarget.action === "allocate" ? "积分分配失败" : "积分收回失败");
+            message.error(error instanceof Error ? error.message : creditsTarget.action === "allocate" ? t("account.enterprise.members.messages.allocateError") : t("account.enterprise.members.messages.reclaimError"));
         } finally {
             setSaving(false);
         }
@@ -537,16 +570,17 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
         <section className="rounded-2xl border border-border bg-card p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 className="text-lg font-semibold">企业成员</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">创建和管理本企业子账号</p>
+                    <h2 className="text-lg font-semibold">{t("account.enterprise.members.title")}</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">{t("account.enterprise.members.description")}</p>
                 </div>
                 <Button type="primary" onClick={() => setCreateOpen(true)}>
-                    创建成员
+                    {t("account.enterprise.members.actions.create")}
                 </Button>
             </div>
             <Input.Search
                 allowClear
-                placeholder="搜索用户名、昵称或邮箱"
+                aria-label={t("account.enterprise.members.searchAria")}
+                placeholder={t("account.enterprise.members.searchPlaceholder")}
                 className="mt-5 max-w-md"
                 onSearch={(value) => {
                     setKeyword(value.trim());
@@ -571,7 +605,7 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
                 }}
                 columns={[
                     {
-                        title: "成员",
+                        title: t("account.enterprise.members.table.member"),
                         render: (_, item) => (
                             <div>
                                 <div>{item.displayName || item.username}</div>
@@ -579,28 +613,32 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
                             </div>
                         ),
                     },
-                    { title: "邮箱", dataIndex: "email", render: (value: string) => value || "-" },
-                    { title: "积分", dataIndex: "credits", render: (value: string) => formatDecimal(value) },
-                    { title: "状态", dataIndex: "status", render: (value: EnterpriseMember["status"]) => <Tag color={value === "active" ? "success" : "default"}>{value === "active" ? "正常" : "已禁用"}</Tag> },
+                    { title: t("account.enterprise.members.table.email"), dataIndex: "email", render: (value: string) => value || "-" },
+                    { title: t("account.enterprise.members.table.credits"), dataIndex: "credits", render: (value: string) => formatDecimal(value) },
                     {
-                        title: "操作",
+                        title: t("account.enterprise.members.table.status"),
+                        dataIndex: "status",
+                        render: (value: EnterpriseMember["status"]) => <Tag color={value === "active" ? "success" : "default"}>{t(memberStatusKeys[value])}</Tag>,
+                    },
+                    {
+                        title: t("account.enterprise.members.table.actions"),
                         fixed: "right",
                         width: 320,
                         render: (_, item) => (
                             <Space size={0}>
                                 <Button type="link" onClick={() => setCreditsTarget({ member: item, action: "allocate", requestId: nanoid() })}>
-                                    分配积分
+                                    {t("account.enterprise.members.actions.allocate")}
                                 </Button>
                                 <Button type="link" onClick={() => setCreditsTarget({ member: item, action: "reclaim", requestId: nanoid() })}>
-                                    收回积分
+                                    {t("account.enterprise.members.actions.reclaim")}
                                 </Button>
-                                <Popconfirm title={item.status === "active" ? "确认禁用该成员？" : "确认启用该成员？"} onConfirm={() => setStatus(item)}>
+                                <Popconfirm title={item.status === "active" ? t("account.enterprise.members.confirm.disable") : t("account.enterprise.members.confirm.enable")} onConfirm={() => setStatus(item)}>
                                     <Button type="link" danger={item.status === "active"} loading={saving}>
-                                        {item.status === "active" ? "禁用" : "启用"}
+                                        {item.status === "active" ? t("account.enterprise.members.actions.disable") : t("account.enterprise.members.actions.enable")}
                                     </Button>
                                 </Popconfirm>
                                 <Button type="link" onClick={() => setResetMember(item)}>
-                                    重置密码
+                                    {t("account.enterprise.members.actions.resetPassword")}
                                 </Button>
                             </Space>
                         ),
@@ -609,7 +647,7 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
             />
 
             <Modal
-                title="创建企业成员"
+                title={t("account.enterprise.members.modals.createTitle")}
                 open={createOpen}
                 footer={null}
                 onCancel={() => {
@@ -618,26 +656,26 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
                 }}
             >
                 <Form form={createForm} layout="vertical" requiredMark={false} onFinish={create}>
-                    <Form.Item label="用户名" name="username" rules={[{ required: true, whitespace: true, message: "请输入用户名" }]}>
+                    <Form.Item label={t("account.enterprise.members.fields.username")} name="username" rules={[{ required: true, whitespace: true, message: t("account.enterprise.members.validation.usernameRequired") }]}>
                         <Input autoComplete="off" />
                     </Form.Item>
-                    <Form.Item label="初始密码" name="password" rules={[{ required: true, message: "请输入初始密码" }]}>
+                    <Form.Item label={t("account.enterprise.members.fields.initialPassword")} name="password" rules={[{ required: true, message: t("account.enterprise.members.validation.initialPasswordRequired") }]}>
                         <Input.Password autoComplete="new-password" />
                     </Form.Item>
-                    <Form.Item label="昵称" name="displayName">
+                    <Form.Item label={t("account.enterprise.members.fields.displayName")} name="displayName">
                         <Input />
                     </Form.Item>
-                    <Form.Item label="邮箱" name="email" rules={[{ type: "email", message: "请输入有效邮箱" }]}>
+                    <Form.Item label={t("account.enterprise.members.fields.email")} name="email" rules={[{ type: "email", message: t("account.enterprise.members.validation.email") }]}>
                         <Input />
                     </Form.Item>
                     <Button type="primary" htmlType="submit" loading={saving}>
-                        创建成员
+                        {t("account.enterprise.members.actions.create")}
                     </Button>
                 </Form>
             </Modal>
 
             <Modal
-                title={`重置密码${resetMember ? `：${resetMember.displayName || resetMember.username}` : ""}`}
+                title={resetMember ? t("account.enterprise.members.modals.resetPasswordFor", { name: resetMember.displayName || resetMember.username }) : t("account.enterprise.members.actions.resetPassword")}
                 open={Boolean(resetMember)}
                 footer={null}
                 onCancel={() => {
@@ -646,20 +684,26 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
                 }}
             >
                 <Form form={passwordForm} layout="vertical" requiredMark={false} onFinish={resetPassword}>
-                    <Form.Item label="新密码" name="password" rules={[{ required: true, message: "请输入新密码" }]}>
+                    <Form.Item label={t("account.enterprise.members.fields.newPassword")} name="password" rules={[{ required: true, message: t("account.enterprise.members.validation.newPasswordRequired") }]}>
                         <Input.Password autoComplete="new-password" />
                     </Form.Item>
                     <Button type="primary" htmlType="submit" loading={saving}>
-                        重置密码
+                        {t("account.enterprise.members.actions.resetPassword")}
                     </Button>
                 </Form>
             </Modal>
 
             <Modal
-                title={`${creditsTarget?.action === "reclaim" ? "收回" : "分配"}积分${creditsTarget ? `：${creditsTarget.member.displayName || creditsTarget.member.username}` : ""}`}
+                title={
+                    creditsTarget
+                        ? t(creditsTarget.action === "reclaim" ? "account.enterprise.members.modals.reclaimFor" : "account.enterprise.members.modals.allocateFor", {
+                              name: creditsTarget.member.displayName || creditsTarget.member.username,
+                          })
+                        : ""
+                }
                 open={Boolean(creditsTarget)}
-                okText={creditsTarget?.action === "reclaim" ? "确认收回" : "确认分配"}
-                cancelText="取消"
+                okText={creditsTarget?.action === "reclaim" ? t("account.enterprise.members.actions.confirmReclaim") : t("account.enterprise.members.actions.confirmAllocate")}
+                cancelText={t("account.enterprise.members.actions.cancel")}
                 confirmLoading={saving}
                 closable={!saving}
                 keyboard={!saving}
@@ -672,8 +716,15 @@ function EnterpriseMembers({ onCreated }: { onCreated: () => void }) {
                 }}
             >
                 <Form form={creditsForm} layout="vertical" requiredMark={false} onFinish={transferCredits}>
-                    <Form.Item label="积分数量" name="amount" rules={[{ required: true, message: "请输入积分数量" }, { validator: (_, value) => (compareDecimal(value, "0") > 0 ? Promise.resolve() : Promise.reject(new Error("积分数量必须为正数"))) }]}>
-                        <InputNumber min={0} step="0.01" stringMode className="w-full" placeholder="请输入积分数量" />
+                    <Form.Item
+                        label={t("account.enterprise.members.fields.creditAmount")}
+                        name="amount"
+                        rules={[
+                            { required: true, message: t("account.enterprise.members.validation.creditAmountRequired") },
+                            { validator: (_, value) => (compareDecimal(value, "0") > 0 ? Promise.resolve() : Promise.reject(new Error(t("account.enterprise.members.validation.creditAmountPositive")))) },
+                        ]}
+                    >
+                        <InputNumber min={0} step="0.01" stringMode className="w-full" placeholder={t("account.enterprise.members.placeholders.creditAmount")} />
                     </Form.Item>
                 </Form>
             </Modal>

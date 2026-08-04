@@ -1,3 +1,5 @@
+import i18n from "@/i18n";
+
 export type GenerationTaskStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export function generationTaskId(metadata?: { generationTaskId?: string; upstreamTaskId?: string }) {
@@ -5,7 +7,7 @@ export function generationTaskId(metadata?: { generationTaskId?: string; upstrea
 }
 
 export function generationStatusLabel(status?: GenerationTaskStatus) {
-    return status === "queued" ? "排队中" : "生成中";
+    return i18n.t(status === "queued" ? "generation.status.queued" : "generation.status.running");
 }
 
 export async function pollGenerationTask<T extends { status: GenerationTaskStatus }>(load: () => Promise<T>, sleep: () => Promise<void>, onStatus?: (task: T) => void, attempts = 360) {
@@ -15,7 +17,7 @@ export async function pollGenerationTask<T extends { status: GenerationTaskStatu
         if (task.status === "succeeded" || task.status === "failed" || task.status === "cancelled") return task;
         if (attempt < attempts - 1) await sleep();
     }
-    throw new Error("视频生成超时，请稍后重试");
+    throw new Error(i18n.t("errors.video.timeout"));
 }
 
 export type GenerationSettingDefinition = {
@@ -101,7 +103,7 @@ export type GenerationCommand = {
 
 export function resolveCanvasVideoSubmission(channelMode: "remote" | "local", profile?: Pick<GenerationProfile, "id">) {
     if (channelMode === "local") return "local-compatibility" as const;
-    if (!profile) throw new Error("当前模型不支持第一方 Canvas 视频生成，请选择已配置的 Model Profile");
+    if (!profile) throw new Error(i18n.t("errors.video.firstPartyProfileRequired"));
     return "first-party" as const;
 }
 

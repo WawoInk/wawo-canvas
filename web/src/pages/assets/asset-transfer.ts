@@ -1,5 +1,6 @@
 import { saveAs } from "file-saver";
 
+import i18n from "@/i18n";
 import { createZip, readZip } from "@/lib/zip";
 import { getMediaBlob, setMediaBlob, getImageBlob, setImageBlob } from "@/services/blob-storage";
 import type { Asset } from "@/stores/use-asset-store";
@@ -38,13 +39,13 @@ export async function exportAssets(assets: Asset[]) {
 
     const data: AssetExportFile = { app: "infinite-canvas", version: 1, exportedAt: new Date().toISOString(), assets, files };
     const zip = await createZip([{ name: "assets.json", data: JSON.stringify(data, null, 2) }, ...zipFiles]);
-    saveAs(zip, "我的素材.zip");
+    saveAs(zip, i18n.t("assets.export.fileName"));
 }
 
 export async function readAssetPackage(file: File) {
     const zip = await readZip(file);
     const assetFile = zip.get("assets.json");
-    if (!assetFile) throw new Error("missing assets.json");
+    if (!assetFile) throw new Error(i18n.t("assets.errors.missingManifest", { fileName: "assets.json" }));
     const data = JSON.parse(await assetFile.text()) as AssetExportFile;
     await Promise.all(
         data.files.map(async (item) => {

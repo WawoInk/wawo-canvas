@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Button, Input, Modal, Slider } from "antd";
 import { Brush, Eraser, RotateCcw, WandSparkles, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { formatDimensions, formatNumber } from "@/i18n/formatters";
 import { readImageMeta } from "@/lib/image-utils";
 
 export type CanvasImageMaskEditPayload = {
@@ -12,12 +14,14 @@ export type CanvasImageMaskEditPayload = {
 };
 
 type DrawMode = "paint" | "erase";
+type MaskEditError = "" | "promptRequired" | "maskRequired";
 
 const defaultBrushSize = 100;
 const maskFillColor = "rgba(37, 99, 235, .38)";
 const maskBorderColor = "rgba(255, 255, 255, .72)";
 
 export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: { dataUrl: string; open: boolean; onClose: () => void; onConfirm: (payload: CanvasImageMaskEditPayload) => void }) {
+    const { t } = useTranslation();
     const maskCanvasRef = useRef<HTMLCanvasElement>(null);
     const previewCanvasRef = useRef<HTMLCanvasElement>(null);
     const drawingRef = useRef<{ active: boolean; last: { x: number; y: number } | null }>({ active: false, last: null });
@@ -25,7 +29,7 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
     const [prompt, setPrompt] = useState("");
     const [brushSize, setBrushSize] = useState(defaultBrushSize);
     const [mode, setMode] = useState<DrawMode>("paint");
-    const [error, setError] = useState("");
+    const [error, setError] = useState<MaskEditError>("");
 
     useEffect(() => {
         if (!open) return;
@@ -94,9 +98,9 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
     const submit = () => {
         const nextPrompt = prompt.trim();
         const canvas = maskCanvasRef.current;
-        if (!nextPrompt) return setError("请输入修改要求");
+        if (!nextPrompt) return setError("promptRequired");
         if (!canvas) return;
-        if (!canvasHasPaint(canvas)) return setError("请先涂抹局部区域");
+        if (!canvasHasPaint(canvas)) return setError("maskRequired");
         onConfirm({ prompt: nextPrompt, maskDataUrl: buildEditMask(canvas) });
     };
 
@@ -126,52 +130,52 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
 
                 <div className="flex min-h-[360px] flex-col gap-5">
                     <div>
-                        <h2 className="text-xl font-semibold">局部遮罩编辑</h2>
-                        <div className="mt-2 text-sm opacity-60">{image ? `${image.width} x ${image.height}px` : "读取中"}</div>
+                        <h2 className="text-xl font-semibold">{t("canvas.maskEdit.title")}</h2>
+                        <div className="mt-2 text-sm opacity-60">{image ? t("canvas.units.pixelDimensions", { value: formatDimensions(image.width, image.height) }) : t("canvas.common.reading")}</div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
                         <Button type={mode === "paint" ? "primary" : "default"} icon={<Brush className="size-4" />} onClick={() => setMode("paint")}>
-                            画笔
+                            {t("canvas.maskEdit.paint")}
                         </Button>
                         <Button type={mode === "erase" ? "primary" : "default"} icon={<Eraser className="size-4" />} onClick={() => setMode("erase")}>
-                            擦除
+                            {t("canvas.maskEdit.erase")}
                         </Button>
                     </div>
 
                     <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
-                            <span className="font-medium opacity-75">笔刷大小</span>
-                            <span className="font-semibold">{brushSize}px</span>
+                            <span className="font-medium opacity-75">{t("canvas.maskEdit.brushSize")}</span>
+                            <span className="font-semibold">{t("canvas.units.pixelValue", { value: formatNumber(brushSize) })}</span>
                         </div>
                         <Slider min={8} max={160} step={2} value={brushSize} onChange={setBrushSize} />
                     </div>
 
                     <div className="space-y-2">
-                        <div className="text-sm font-medium opacity-75">修改要求</div>
+                        <div className="text-sm font-medium opacity-75">{t("canvas.maskEdit.request")}</div>
                         <Input.TextArea
                             rows={6}
                             value={prompt}
-                            status={error && !prompt.trim() ? "error" : undefined}
-                            placeholder="例如：把选中区域改成金属材质，保持原图光影"
+                            status={error === "promptRequired" && !prompt.trim() ? "error" : undefined}
+                            placeholder={t("canvas.maskEdit.placeholder")}
                             onChange={(event) => {
                                 setPrompt(event.target.value);
                                 setError("");
                             }}
                         />
-                        {error ? <div className="text-xs font-medium text-[#ef4444]">{error}</div> : null}
+                        {error ? <div className="text-xs font-medium text-[#ef4444]">{t(`canvas.maskEdit.errors.${error}`)}</div> : null}
                     </div>
 
                     <div className="mt-auto flex items-center justify-between gap-2">
                         <Button icon={<RotateCcw className="size-4" />} onClick={resetMask}>
-                            重置
+                            {t("canvas.actions.reset")}
                         </Button>
                         <div className="flex items-center gap-2">
                             <Button icon={<X className="size-4" />} onClick={onClose}>
-                                取消
+                                {t("canvas.actions.cancel")}
                             </Button>
                             <Button type="primary" icon={<WandSparkles className="size-4" />} onClick={submit}>
-                                AI 修改
+                                {t("canvas.maskEdit.apply")}
                             </Button>
                         </div>
                     </div>

@@ -1,3 +1,5 @@
+import i18n from "@/i18n";
+
 /** Generate a poster image (data URL) from the first frame of a video. */
 export function getVideoPoster(videoUrl: string): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -19,7 +21,7 @@ export function getVideoPoster(videoUrl: string): Promise<string> {
             resolve(canvas.toDataURL("image/jpeg", 0.8));
         });
         video.addEventListener("error", () => {
-            reject(new Error("无法加载视频首帧"));
+            reject(new Error(i18n.t("errors.video.posterLoadFailed")));
         });
     });
 }

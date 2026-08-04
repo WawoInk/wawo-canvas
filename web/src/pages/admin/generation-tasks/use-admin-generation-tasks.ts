@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { App } from "antd";
+import { useTranslation } from "react-i18next";
 
+import { formatNumber } from "@/i18n/formatters";
 import { fetchAdminGenerationTasks, fetchAdminGenerationTaskDetail, deleteAdminGenerationTask, batchDeleteAdminGenerationTasks, type AdminGenerationTask } from "@/services/api/admin";
 import { useUserStore } from "@/stores/use-user-store";
 
@@ -11,6 +13,7 @@ const defaultPageSize = 10;
 
 export function useAdminGenerationTasks() {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const queryClient = useQueryClient();
     const token = useUserStore((state) => state.token);
     const clearSession = useUserStore((state) => state.clearSession);
@@ -29,11 +32,11 @@ export function useAdminGenerationTasks() {
 
     useEffect(() => {
         if (query.isError) {
-            const errorMessage = query.error instanceof Error ? query.error.message : "读取日志失败";
+            const errorMessage = query.error instanceof Error ? query.error.message : t("admin.generationTasks.messages.loadFailed");
             message.error(errorMessage);
             if (errorMessage.includes("未登录") || errorMessage.includes("权限不足") || errorMessage.includes("登录状态无效")) clearSession();
         }
-    }, [clearSession, message, query.error, query.isError]);
+    }, [clearSession, message, query.error, query.isError, t]);
 
     const updateFilters = (next: Partial<{ keyword: string; taskType: string; status: string; page: number; pageSize: number }>) => {
         const queryState = { keyword, taskType, status, page, pageSize, ...next };
@@ -50,22 +53,23 @@ export function useAdminGenerationTasks() {
     const deleteMutation = useMutation({
         mutationFn: (id: string) => deleteAdminGenerationTask(token, id),
         onSuccess: () => {
-            message.success("已删除");
+            message.success(t("admin.generationTasks.messages.deleted"));
             queryClient.invalidateQueries({ queryKey: ["admin", "generation-tasks"] });
         },
         onError: (error: Error) => {
-            message.error(error.message || "删除失败");
+            message.error(error.message || t("admin.common.messages.deleteFailed"));
         },
     });
 
     const batchDeleteMutation = useMutation({
         mutationFn: (ids: string[]) => batchDeleteAdminGenerationTasks(token, ids),
         onSuccess: (data) => {
-            message.success(`已删除 ${data?.deleted || 0} 条记录`);
+            const deleted = data?.deleted || 0;
+            message.success(t("admin.generationTasks.messages.batchDeleted", { count: deleted, value: formatNumber(deleted) }));
             queryClient.invalidateQueries({ queryKey: ["admin", "generation-tasks"] });
         },
         onError: (error: Error) => {
-            message.error(error.message || "批量删除失败");
+            message.error(error.message || t("admin.generationTasks.messages.batchDeleteFailed"));
         },
     });
 

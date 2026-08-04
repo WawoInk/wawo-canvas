@@ -3,6 +3,7 @@
 import { ArrowRight } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { App, Button, Image, Tag } from "antd";
+import { Trans, useTranslation } from "react-i18next";
 
 import { fetchPrompts, type Prompt } from "@/services/api/prompts";
 import { navigationTools } from "@/constant/navigation-tools";
@@ -24,6 +25,7 @@ function Highlighter({ action, color, children }: { action: "highlight" | "under
 
 export default function IndexPage() {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const [primaryTool] = navigationTools;
     const [promptShowcase, setPromptShowcase] = useState<Prompt[]>([]);
     const [previewIndex, setPreviewIndex] = useState(0);
@@ -32,8 +34,8 @@ export default function IndexPage() {
     useEffect(() => {
         void fetchPrompts({ pageSize: 12 })
             .then((data) => setPromptShowcase(data.items))
-            .catch((error) => message.error(error instanceof Error ? error.message : "获取提示词失败"));
-    }, [message]);
+            .catch((error) => message.error(error instanceof Error ? error.message : t("home.showcase.loadError")));
+    }, [message, t]);
 
     return (
         <main className="relative h-full overflow-y-auto bg-background bg-[radial-gradient(var(--dot-grid)_1px,transparent_1px)] [background-size:16px_16px] text-foreground dark:bg-[radial-gradient(var(--dot-grid)_1px,transparent_1px)]">
@@ -43,28 +45,35 @@ export default function IndexPage() {
 
                 <div className="relative flex min-h-[620px] flex-col items-center justify-center pt-10 text-center">
                     <h1 className="max-w-5xl text-balance font-[family-name:var(--font-display)] text-5xl font-medium tracking-[-0.03em] sm:text-7xl lg:text-[100px] lg:leading-[1.05]">
-                        <span className="ai-title-aurora">Canvan</span>
+                        <span className="ai-title-aurora">{t("common.brand")}</span>
                     </h1>
                     <p className="mt-8 max-w-3xl text-balance text-lg leading-8 text-muted-foreground">
-                        在
-                        <Highlighter action="underline" color="#C26B3E">
-                            Canvan
-                        </Highlighter>
-                        中生成、连接和重组
-                        <Highlighter action="highlight" color="#E8956A">
-                            图片、文字与图形
-                        </Highlighter>
-                        ，让创作从单次生成变成连续推演。
+                        <Trans
+                            i18nKey="home.hero.description"
+                            values={{ brand: t("common.brand"), mediaTypes: t("home.hero.mediaTypes") }}
+                            components={{
+                                brand: (
+                                    <Highlighter action="underline" color="#C26B3E">
+                                        {null}
+                                    </Highlighter>
+                                ),
+                                media: (
+                                    <Highlighter action="highlight" color="#E8956A">
+                                        {null}
+                                    </Highlighter>
+                                ),
+                            }}
+                        />
                     </p>
                     <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
                         <div className="relative rounded-[10px] overflow-hidden">
                             <Button type="primary" size="large" href={`/${primaryTool.slug}`} icon={<ArrowRight className="size-4" />} iconPlacement="end">
-                                开始使用
+                                {t("home.hero.start")}
                             </Button>
                             <BorderBeam size={200} duration={6} colorFrom="#E8956A" colorTo="#F0B898" />
                         </div>
                         <Button size="large" href="/canvas">
-                            打开画布
+                            {t("home.hero.openCanvas")}
                         </Button>
                     </div>
                 </div>
@@ -73,11 +82,11 @@ export default function IndexPage() {
                     <div className="mb-8 grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-start">
                         <div />
                         <div className="max-w-2xl text-center">
-                            <h2 className="text-3xl font-semibold text-foreground">沉淀每一次好结果</h2>
-                            <p className="mt-3 text-base leading-7 text-muted-foreground">收藏稳定出图的提示词、参考风格和结果图片，让下一次创作从已有经验开始。</p>
+                            <h2 className="text-3xl font-semibold text-foreground">{t("home.showcase.title")}</h2>
+                            <p className="mt-3 text-base leading-7 text-muted-foreground">{t("home.showcase.description")}</p>
                         </div>
                         <Button type="link" href="/prompts" className="justify-self-center md:justify-self-end" icon={<ArrowRight className="size-4" />} iconPlacement="end">
-                            查看提示词库
+                            {t("home.showcase.browsePrompts")}
                         </Button>
                     </div>
                     <div className="grid auto-rows-[210px] gap-4 md:grid-cols-4">

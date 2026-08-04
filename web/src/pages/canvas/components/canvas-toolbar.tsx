@@ -2,6 +2,7 @@ import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode, RefObject
 import { useRef, useState } from "react";
 import { Button, Segmented, Switch } from "antd";
 import { CircleDot, Eraser, FolderOpen, Grid2x2, Hand, Image as ImageIcon, Info, Moon, Music2, Palette, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { canvasThemes, type CanvasBackgroundMode, type CanvasColorTheme, type CanvasTheme } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
@@ -48,6 +49,7 @@ export function CanvasToolbar({
     onShowImageInfoChange: (show: boolean) => void;
     onOpenMyAssets: () => void;
 }) {
+    const { t } = useTranslation();
     const wrapRef = useRef<HTMLDivElement>(null);
     const colorTheme = useThemeStore((state) => state.theme);
     const setTheme = useThemeStore((state) => state.setTheme);
@@ -59,47 +61,62 @@ export function CanvasToolbar({
     const dockStyle = { background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.item, boxShadow: colorTheme === "dark" ? "0 18px 45px rgba(0,0,0,.32)" : "0 16px 40px rgba(10,108,254,.08)" };
     const hoverStyle = { background: theme.toolbar.itemHover, color: theme.toolbar.activeText };
     const activeStyle = { background: theme.toolbar.activeBg, color: theme.toolbar.activeText };
-    const tip = hovered ? toolLabel(hovered) : "";
+    const toolLabels: Record<string, string> = {
+        "tool-hand": t("canvas.toolbar.tools.hand"),
+        "tool-undo": t("canvas.toolbar.tools.undo"),
+        "tool-redo": t("canvas.toolbar.tools.redo"),
+        "tool-text": t("canvas.toolbar.tools.text"),
+        "tool-image": t("canvas.toolbar.tools.image"),
+        "tool-video": t("canvas.toolbar.tools.video"),
+        "tool-audio": t("canvas.toolbar.tools.audio"),
+        "tool-config": t("canvas.toolbar.tools.config"),
+        "tool-upload": t("canvas.toolbar.tools.upload"),
+        "tool-assets": t("canvas.toolbar.tools.assets"),
+        "tool-style": t("canvas.toolbar.tools.appearance"),
+        "tool-delete": t("canvas.toolbar.tools.deleteSelected"),
+        "tool-clear": t("canvas.toolbar.tools.clear"),
+    };
+    const tip = hovered ? toolLabels[hovered] || "" : "";
 
     return (
         <div className="pointer-events-none absolute bottom-5 z-50 flex justify-center" style={{ left: 300, right: 16 }}>
             {tip ? <DockTip label={tip} x={tipX} theme={theme} /> : null}
             <div ref={wrapRef} className="thin-scrollbar pointer-events-auto flex h-14 max-w-full items-center gap-1 overflow-x-auto rounded-xl border px-2 shadow-lg backdrop-blur [&>*]:shrink-0" style={dockStyle}>
-                <ToolbarButton id="tool-hand" label="移动/选择" active={!selectedCount} hovered={hovered} activeStyle={activeStyle} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onDeselect}>
+                <ToolbarButton id="tool-hand" label={toolLabels["tool-hand"]} active={!selectedCount} hovered={hovered} activeStyle={activeStyle} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onDeselect}>
                     <Hand className="size-4.5" />
                 </ToolbarButton>
-                <ToolbarButton id="tool-undo" label="撤销" disabled={!canUndo} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onUndo}>
+                <ToolbarButton id="tool-undo" label={toolLabels["tool-undo"]} disabled={!canUndo} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onUndo}>
                     <Undo2 className="size-4.5" />
                 </ToolbarButton>
-                <ToolbarButton id="tool-redo" label="重做" disabled={!canRedo} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onRedo}>
+                <ToolbarButton id="tool-redo" label={toolLabels["tool-redo"]} disabled={!canRedo} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onRedo}>
                     <Redo2 className="size-4.5" />
                 </ToolbarButton>
                 <Divider theme={theme} />
-                <ToolbarButton id="tool-text" label="文本" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddText}>
+                <ToolbarButton id="tool-text" label={toolLabels["tool-text"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddText}>
                     <Type className="size-4.5" />
                 </ToolbarButton>
-                <ToolbarButton id="tool-image" label="图片" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddImage}>
+                <ToolbarButton id="tool-image" label={toolLabels["tool-image"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddImage}>
                     <ImageIcon className="size-4.5" />
                 </ToolbarButton>
-                <ToolbarButton id="tool-video" label="视频" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddVideo}>
+                <ToolbarButton id="tool-video" label={toolLabels["tool-video"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddVideo}>
                     <Video className="size-4.5" />
                 </ToolbarButton>
-                <ToolbarButton id="tool-audio" label="音频" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddAudio}>
+                <ToolbarButton id="tool-audio" label={toolLabels["tool-audio"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddAudio}>
                     <Music2 className="size-4.5" />
                 </ToolbarButton>
-                <ToolbarButton id="tool-config" label="生成配置" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddConfig}>
+                <ToolbarButton id="tool-config" label={toolLabels["tool-config"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddConfig}>
                     <Settings2 className="size-4.5" />
                 </ToolbarButton>
-                <ToolbarButton id="tool-upload" label="上传素材" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onUpload}>
+                <ToolbarButton id="tool-upload" label={toolLabels["tool-upload"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onUpload}>
                     <Upload className="size-4.5" />
                 </ToolbarButton>
                 <Divider theme={theme} />
-                <ToolbarButton id="tool-assets" label="我的素材" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onOpenMyAssets}>
+                <ToolbarButton id="tool-assets" label={toolLabels["tool-assets"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onOpenMyAssets}>
                     <FolderOpen className="size-4.5" />
                 </ToolbarButton>
                 <ToolbarButton
                     id="tool-style"
-                    label="画布外观"
+                    label={toolLabels["tool-style"]}
                     active={appearanceOpen}
                     hovered={hovered}
                     activeStyle={activeStyle}
@@ -117,13 +134,13 @@ export function CanvasToolbar({
                 {selectedCount ? (
                     <>
                         <Divider theme={theme} />
-                        <ToolbarButton id="tool-delete" label="删除选中" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onDelete} danger>
+                        <ToolbarButton id="tool-delete" label={toolLabels["tool-delete"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onDelete} danger>
                             <Trash2 className="size-4.5" />
                         </ToolbarButton>
                     </>
                 ) : null}
                 <Divider theme={theme} />
-                <ToolbarButton id="tool-clear" label="清空画布" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onClear} danger>
+                <ToolbarButton id="tool-clear" label={toolLabels["tool-clear"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onClear} danger>
                     <Eraser className="size-4.5" />
                 </ToolbarButton>
             </div>
@@ -133,19 +150,19 @@ export function CanvasToolbar({
                     className="pointer-events-auto absolute bottom-[72px] z-30 w-[248px] -translate-x-1/2 rounded-xl border p-2.5 shadow-xl backdrop-blur"
                     style={{ left: panelX || "50%", background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.item }}
                 >
-                    <div className="px-1 pb-2 text-sm font-medium opacity-65">画布外观</div>
-                    <div className="px-1 pb-1.5 text-[11px] font-medium opacity-50">主题模式</div>
+                    <div className="px-1 pb-2 text-sm font-medium opacity-65">{t("canvas.toolbar.appearance.title")}</div>
+                    <div className="px-1 pb-1.5 text-[11px] font-medium opacity-50">{t("canvas.toolbar.appearance.themeMode")}</div>
                     <div className="grid grid-cols-2 gap-1 rounded-lg p-1" style={{ background: theme.toolbar.itemHover }}>
                         <CanvasThemeButton colorTheme={colorTheme} targetTheme="light" onThemeChange={setTheme}>
                             <Sun className="size-4" />
-                            浅色
+                            {t("canvas.toolbar.appearance.light")}
                         </CanvasThemeButton>
                         <CanvasThemeButton colorTheme={colorTheme} targetTheme="dark" onThemeChange={setTheme}>
                             <Moon className="size-4" />
-                            深色
+                            {t("canvas.toolbar.appearance.dark")}
                         </CanvasThemeButton>
                     </div>
-                    <div className="mt-3 px-1 pb-1.5 text-[11px] font-medium opacity-50">网格样式</div>
+                    <div className="mt-3 px-1 pb-1.5 text-[11px] font-medium opacity-50">{t("canvas.toolbar.appearance.gridStyle")}</div>
                     <Segmented
                         className="w-full !p-1 [&_.ant-segmented-group]:!flex [&_.ant-segmented-item]:!min-h-8 [&_.ant-segmented-item]:!flex-1 [&_.ant-segmented-item-label]:!min-h-8 [&_.ant-segmented-item-label]:!leading-8"
                         value={backgroundMode}
@@ -155,7 +172,8 @@ export function CanvasToolbar({
                                 value: "dots",
                                 label: (
                                     <span className="inline-flex items-center gap-1.5">
-                                        <CircleDot className="size-4" />点
+                                        <CircleDot className="size-4" />
+                                        {t("canvas.toolbar.appearance.dots")}
                                     </span>
                                 ),
                             },
@@ -163,7 +181,8 @@ export function CanvasToolbar({
                                 value: "lines",
                                 label: (
                                     <span className="inline-flex items-center gap-1.5">
-                                        <Grid2x2 className="size-4" />线
+                                        <Grid2x2 className="size-4" />
+                                        {t("canvas.toolbar.appearance.lines")}
                                     </span>
                                 ),
                             },
@@ -172,7 +191,7 @@ export function CanvasToolbar({
                                 label: (
                                     <span className="inline-flex items-center gap-1.5">
                                         <Square className="size-4" />
-                                        空白
+                                        {t("canvas.toolbar.appearance.blank")}
                                     </span>
                                 ),
                             },
@@ -181,7 +200,7 @@ export function CanvasToolbar({
                     <div className="mt-3 flex items-center justify-between gap-3 rounded-lg px-1.5 py-1">
                         <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px] font-medium opacity-65">
                             <Info className="size-3.5" />
-                            图片信息
+                            {t("canvas.toolbar.appearance.imageInfo")}
                         </span>
                         <Switch size="small" checked={showImageInfo} onChange={onShowImageInfoChange} />
                     </div>
@@ -245,9 +264,11 @@ function Divider({ theme }: { theme: CanvasTheme }) {
 }
 
 function CanvasThemeButton({ colorTheme, targetTheme, onThemeChange, children }: { colorTheme: CanvasColorTheme; targetTheme: CanvasColorTheme; onThemeChange: (theme: CanvasColorTheme) => void; children: ReactNode }) {
+    const { t } = useTranslation();
     const theme = canvasThemes[colorTheme];
     const active = colorTheme === targetTheme;
     const activeStyle = colorTheme === "light" ? { background: "#111111", color: "#ffffff" } : { background: theme.toolbar.activeBg, color: theme.toolbar.activeText };
+    const targetThemeLabel = t(targetTheme === "dark" ? "canvas.toolbar.appearance.dark" : "canvas.toolbar.appearance.light");
 
     return (
         <AnimatedThemeToggler
@@ -256,8 +277,8 @@ function CanvasThemeButton({ colorTheme, targetTheme, onThemeChange, children }:
             onThemeChange={onThemeChange}
             className="inline-flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 text-sm transition"
             style={active ? activeStyle : { color: theme.toolbar.item }}
-            aria-label={`切换到${targetTheme === "dark" ? "深色" : "浅色"}主题`}
-            title={`切换到${targetTheme === "dark" ? "深色" : "浅色"}主题`}
+            aria-label={t("canvas.toolbar.appearance.switchTheme", { theme: targetThemeLabel })}
+            title={t("canvas.toolbar.appearance.switchTheme", { theme: targetThemeLabel })}
         >
             {children}
         </AnimatedThemeToggler>
@@ -270,23 +291,6 @@ function DockTip({ label, x, theme }: { label: string; x: number; theme: CanvasT
             {label}
         </span>
     );
-}
-
-function toolLabel(id: string) {
-    if (id === "tool-hand") return "移动/选择";
-    if (id === "tool-undo") return "撤销";
-    if (id === "tool-redo") return "重做";
-    if (id === "tool-text") return "文本";
-    if (id === "tool-image") return "图片";
-    if (id === "tool-video") return "视频";
-    if (id === "tool-audio") return "音频";
-    if (id === "tool-config") return "生成配置";
-    if (id === "tool-upload") return "上传素材";
-    if (id === "tool-assets") return "我的素材";
-    if (id === "tool-style") return "画布外观";
-    if (id === "tool-delete") return "删除选中";
-    if (id === "tool-clear") return "清空画布";
-    return "";
 }
 
 function getTipX(wrap: HTMLDivElement | null, target: HTMLElement) {

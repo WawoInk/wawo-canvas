@@ -3,6 +3,7 @@
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { Menu } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { navigationToolsForUser, type NavigationToolSlug } from "@/constant/navigation-tools";
 import { AppConfigModal } from "@/components/layout/app-config-modal";
@@ -13,6 +14,7 @@ import { useUserStore } from "@/stores/use-user-store";
 import { useState } from "react";
 
 export function AppTopNav() {
+    const { t } = useTranslation();
     const { pathname } = useLocation();
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const hideHeader = /^\/canvas\/[^/]+/.test(pathname);
@@ -28,7 +30,7 @@ export function AppTopNav() {
                 <header className="sticky top-0 z-20 h-16 shrink-0 border-b border-border bg-background/90 backdrop-blur-xl">
                     <div className="mx-auto flex h-full max-w-7xl items-stretch justify-between gap-5 px-6">
                         <div className="flex min-w-0 items-center">
-                            <Link to="/" className="flex h-full shrink-0 items-center gap-2 transition" aria-label="Canvan 首页">
+                            <Link to="/" className="flex h-full shrink-0 items-center gap-2 transition" aria-label={t("navigation.brandHome")}>
                                 <BrandLogo height={64} />
                             </Link>
 
@@ -36,8 +38,8 @@ export function AppTopNav() {
                                 type="button"
                                 className="ml-3 inline-flex size-8 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground md:hidden"
                                 onClick={() => setMobileNavOpen(true)}
-                                aria-label="打开导航菜单"
-                                title="导航菜单"
+                                aria-label={t("navigation.openMenu")}
+                                title={t("navigation.menu")}
                             >
                                 <Menu className="size-5" />
                             </button>
@@ -56,7 +58,7 @@ export function AppTopNav() {
                                             )}
                                         >
                                             <Icon className="size-4" />
-                                            <span className="truncate">{tool.label}</span>
+                                            <span className="truncate">{t(tool.labelKey)}</span>
                                         </Link>
                                     );
                                 })}

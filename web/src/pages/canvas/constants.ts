@@ -4,17 +4,16 @@ import type { CanvasNodeMetadata } from "./types";
 type CanvasNodeSpec = {
     width: number;
     height: number;
-    title: string;
     metadata?: CanvasNodeMetadata;
 };
 
 export const NODE_DEFAULT_SIZE = {
-    [CanvasNodeType.Image]: { width: 340, height: 240, title: "New Generation" },
-    [CanvasNodeType.Text]: { width: 340, height: 240, title: "Note" },
-    [CanvasNodeType.Config]: { width: 340, height: 240, title: "生成配置" },
-    [CanvasNodeType.Video]: { width: 420, height: 236, title: "Video" },
-    [CanvasNodeType.Audio]: { width: 340, height: 120, title: "Audio" },
-} satisfies Record<CanvasNodeType, { width: number; height: number; title: string }>;
+    [CanvasNodeType.Image]: { width: 340, height: 240 },
+    [CanvasNodeType.Text]: { width: 340, height: 240 },
+    [CanvasNodeType.Config]: { width: 340, height: 240 },
+    [CanvasNodeType.Video]: { width: 420, height: 236 },
+    [CanvasNodeType.Audio]: { width: 340, height: 120 },
+} satisfies Record<CanvasNodeType, { width: number; height: number }>;
 
 export const NODE_SPECS = {
     [CanvasNodeType.Image]: {

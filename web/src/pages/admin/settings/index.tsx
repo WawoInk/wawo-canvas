@@ -3,9 +3,12 @@
 import { CheckCircleOutlined, DeleteOutlined, FormatPainterOutlined, LoadingOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from "@ant-design/icons";
 import { json } from "@codemirror/lang-json";
 import { App, Button, Card, Checkbox, Col, Drawer, Flex, Form, Input, InputNumber, Modal, Row, Segmented, Select, Space, Spin, Switch, Table, Tabs, Tag, Typography } from "antd";
+import type { TFunction } from "i18next";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { EditorView } from "@uiw/react-codemirror";
 
+import { formatNumber } from "@/i18n/formatters";
 import { fetchAdminSettings, fetchChannelModels, saveAdminSettings, testChannelModel, type AdminGenerationProfileBinding, type AdminImageRequestFormat, type AdminModelChannel, type AdminModelCost, type AdminSettings } from "@/services/api/admin";
 import { useUserStore } from "@/stores/use-user-store";
 import { modelCostFor, normalizeModelCosts, upsertModelCost, videoBillingRule, type VideoBillingMode } from "./billing-rules";
@@ -55,15 +58,15 @@ const emptySettings: AdminSettings = {
 };
 const emptyChannel: AdminModelChannel = { protocol: "openai", name: "", baseUrl: "", apiKey: "", models: [], weight: 1, enabled: true, remark: "" };
 const generationProfileOptions = [
-    { label: "普通视频（Seedance）", value: "seedance-1-5-pro", durationRange: { min: 4, max: 15 }, resolutionValues: ["480p", "720p", "1080p"] },
-    { label: "短剧（Vidu Drama）", value: "vidu-q3-drama", durationRange: { min: 8, max: 12 }, resolutionValues: ["1080p"] },
+    { labelKey: "admin.settings.generationProfiles.types.standardVideo", value: "seedance-1-5-pro", durationRange: { min: 4, max: 15 }, resolutionValues: ["480p", "720p", "1080p"] },
+    { labelKey: "admin.settings.generationProfiles.types.shortDrama", value: "vidu-q3-drama", durationRange: { min: 8, max: 12 }, resolutionValues: ["1080p"] },
 ];
-const billingModeOptions: Array<{ label: string; value: VideoBillingMode }> = [
-    { label: "按 credits 计费", value: "per_credit" },
-    { label: "按秒计费", value: "per_second" },
-    { label: "按次计费", value: "per_call" },
+const billingModeOptions: Array<{ labelKey: string; value: VideoBillingMode }> = [
+    { labelKey: "admin.settings.billing.modes.perCredit", value: "per_credit" },
+    { labelKey: "admin.settings.billing.modes.perSecond", value: "per_second" },
+    { labelKey: "admin.settings.billing.modes.perCall", value: "per_call" },
 ];
-const billingModeLabels = Object.fromEntries(billingModeOptions.map((item) => [item.value, item.label])) as Record<VideoBillingMode, string>;
+const billingModeLabelKeys = Object.fromEntries(billingModeOptions.map((item) => [item.value, item.labelKey])) as Record<VideoBillingMode, string>;
 const imageRequestFormatOptions: Array<{ label: string; value: AdminImageRequestFormat["format"] }> = [
     { label: "application/json", value: "application/json" },
     { label: "multipart/form-data", value: "multipart/form-data" },
@@ -74,6 +77,7 @@ type EditorMode = "visual" | "json";
 type ModelSelectTabKey = "new" | "current";
 
 export default function AdminSettingsPage() {
+    const { t } = useTranslation();
     const token = useUserStore((state) => state.token);
     const { message } = App.useApp();
     const [form] = Form.useForm<AdminSettings>();
@@ -88,7 +92,7 @@ export default function AdminSettingsPage() {
     const [testKeyword, setTestKeyword] = useState("");
     const [selectedTestModels, setSelectedTestModels] = useState<string[]>([]);
     const [testingModels, setTestingModels] = useState<string[]>([]);
-    const [testResults, setTestResults] = useState<Record<string, { status: "success" | "error"; duration?: string; message: string }>>({});
+    const [testResults, setTestResults] = useState<Record<string, { status: "success" | "error"; durationSeconds?: number; message: string }>>({});
     const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
     const [modelSelectSource, setModelSelectSource] = useState<string[]>([]);
     const [modelSelectExisting, setModelSelectExisting] = useState<string[]>([]);
@@ -126,13 +130,15 @@ export default function AdminSettingsPage() {
     const channelTableData = useMemo(() => channels.map((channel, index) => ({ ...channel, _index: index, _rowKey: `${index}-${channel.name}-${channel.baseUrl}` })), [channels]);
     const activeMode = editorMode[activeTab];
     const activeJsonText = jsonText[activeTab];
-    const jsonError = activeMode === "json" ? getJsonError(activeJsonText) : "";
+    const jsonError = activeMode === "json" ? getJsonError(activeJsonText, t) : "";
     const modelSelectGroups = useMemo(() => buildModelSelectGroups(modelSelectSource, modelSelectExisting), [modelSelectSource, modelSelectExisting]);
     const activeModelSelectModels = useMemo(() => {
         const keyword = modelSelectKeyword.trim().toLowerCase();
         return modelSelectGroups[modelSelectTab].filter((model) => model.toLowerCase().includes(keyword));
     }, [modelSelectGroups, modelSelectKeyword, modelSelectTab]);
     const activeSelectedCount = activeModelSelectModels.filter((model) => modelSelectSelected.includes(model)).length;
+    const generationProfileSelectOptions = generationProfileOptions.map((option) => ({ ...option, label: t(option.labelKey) }));
+    const billingModeSelectOptions = billingModeOptions.map((option) => ({ label: t(option.labelKey), value: option.value }));
 
     const loadSettings = async () => {
         if (!token) return;
@@ -148,7 +154,7 @@ export default function AdminSettingsPage() {
                 private: JSON.stringify(data.private, null, 2),
             });
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "读取设置失败");
+            message.error(error instanceof Error ? error.message : t("admin.settings.messages.loadFailed"));
         } finally {
             setIsLoading(false);
         }
@@ -164,7 +170,7 @@ export default function AdminSettingsPage() {
 
     const saveSettings = async () => {
         if (!token) return;
-        const values = await collectSettings(form, editorMode, jsonText, message);
+        const values = await collectSettings(form, editorMode, jsonText, message, t);
         if (!values) {
             return;
         }
@@ -180,9 +186,9 @@ export default function AdminSettingsPage() {
                 public: JSON.stringify(merged.public, null, 2),
                 private: JSON.stringify(merged.private, null, 2),
             });
-            message.success("已保存");
+            message.success(t("admin.settings.messages.saved"));
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "保存失败");
+            message.error(error instanceof Error ? error.message : t("admin.common.messages.saveFailed"));
         } finally {
             setIsSaving(false);
         }
@@ -199,7 +205,7 @@ export default function AdminSettingsPage() {
         }
         const parsed = parseTabJson(tab, jsonText[tab]);
         if (!parsed) {
-            message.error("JSON 格式不正确");
+            message.error(t("admin.settings.messages.invalidJson"));
             return;
         }
         form.setFieldsValue({ [tab]: parsed } as Partial<AdminSettings>);
@@ -212,7 +218,7 @@ export default function AdminSettingsPage() {
     const formatJson = (tab: SettingsTabKey) => {
         const parsed = parseTabJson(tab, jsonText[tab]);
         if (!parsed) {
-            message.error("JSON 格式不正确");
+            message.error(t("admin.settings.messages.invalidJson"));
             return;
         }
         if (tab === "public") setModelCosts((parsed as AdminSettings["public"]).modelChannel.modelCosts);
@@ -250,11 +256,11 @@ export default function AdminSettingsPage() {
         if (!token) return;
         const channel = channelForm.getFieldsValue();
         if (!channel?.baseUrl) {
-            message.warning("请先填写接口地址");
+            message.warning(t("admin.settings.channels.messages.baseUrlRequired"));
             return;
         }
         if (editingChannelIndex === null && !channel?.apiKey) {
-            message.warning("请先填写 API Key");
+            message.warning(t("admin.settings.channels.messages.apiKeyRequired"));
             return;
         }
         setIsFetchingChannelModels(true);
@@ -263,7 +269,7 @@ export default function AdminSettingsPage() {
             const current = isModelSelectorOpen ? uniqueModels(modelSelectSelected) : uniqueModels(channelForm.getFieldValue("models") || []);
             rememberModels(channelModels);
             if (!channelModels.length) {
-                message.warning("上游未返回模型列表，请手动输入模型名称");
+                message.warning(t("admin.settings.channels.messages.noModelsReturned"));
                 return;
             }
             setModelSelectExisting(current);
@@ -273,9 +279,9 @@ export default function AdminSettingsPage() {
             setModelSelectNewModel("");
             setModelSelectTab("new");
             setIsModelSelectorOpen(true);
-            message.success(`已获取 ${channelModels.length} 个模型，请选择后确认`);
+            message.success(t("admin.settings.channels.messages.modelsFetched", { count: channelModels.length, value: formatNumber(channelModels.length) }));
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "读取模型失败");
+            message.error(error instanceof Error ? error.message : t("admin.settings.channels.messages.modelsLoadFailed"));
         } finally {
             setIsFetchingChannelModels(false);
         }
@@ -369,7 +375,7 @@ export default function AdminSettingsPage() {
     const openTestDialog = (index: number) => {
         const channel = normalizeChannel(channels[index]);
         if (!channel.baseUrl || channel.models.length === 0) {
-            message.warning("请先填写接口地址和至少一个模型");
+            message.warning(t("admin.settings.channels.messages.testRequirements"));
             return;
         }
         setTestChannelIndex(index);
@@ -395,9 +401,9 @@ export default function AdminSettingsPage() {
         try {
             const startedAt = performance.now();
             const result = await testChannelModel(token, { index: testChannelIndex, channel, model });
-            setTestResults((current) => ({ ...current, [model]: { status: "success", duration: `${((performance.now() - startedAt) / 1000).toFixed(2)}s`, message: result } }));
+            setTestResults((current) => ({ ...current, [model]: { status: "success", durationSeconds: (performance.now() - startedAt) / 1000, message: result } }));
         } catch (error) {
-            setTestResults((current) => ({ ...current, [model]: { status: "error", message: error instanceof Error ? error.message : "测试失败" } }));
+            setTestResults((current) => ({ ...current, [model]: { status: "error", message: error instanceof Error ? error.message : t("admin.settings.channels.messages.testFailed") } }));
         } finally {
             setTestingModels((current) => current.filter((item) => item !== model));
         }
@@ -414,7 +420,7 @@ export default function AdminSettingsPage() {
 
     async function persistChannels(nextChannels: AdminModelChannel[]) {
         if (!token) return;
-        const values = await collectSettings(form, editorMode, jsonText, message);
+        const values = await collectSettings(form, editorMode, jsonText, message, t);
         if (!values) return;
         const nextChannelModels = collectChannelModels(nextChannels);
         const nextSettings = normalizeSettings({
@@ -428,7 +434,7 @@ export default function AdminSettingsPage() {
         setModelCosts(merged.public.modelChannel.modelCosts);
         rememberKnownModels(merged);
         form.setFieldsValue(merged);
-        message.success("已保存");
+        message.success(t("admin.settings.messages.saved"));
     }
 
     return (
@@ -440,16 +446,16 @@ export default function AdminSettingsPage() {
                             activeKey={activeTab}
                             onChange={(key) => changeTab(key as SettingsTabKey)}
                             items={[
-                                { key: "public", label: "公开配置（对外暴露）" },
-                                { key: "private", label: "私有配置（不会对外暴露）" },
+                                { key: "public", label: t("admin.settings.tabs.public") },
+                                { key: "private", label: t("admin.settings.tabs.private") },
                             ]}
                         />
                         <Space>
                             <Button icon={<ReloadOutlined />} loading={isLoading} onClick={() => void loadSettings()}>
-                                刷新
+                                {t("admin.common.actions.refresh")}
                             </Button>
                             <Button type="primary" icon={<SaveOutlined />} loading={isSaving} onClick={() => void saveSettings()}>
-                                保存设置
+                                {t("admin.settings.actions.saveSettings")}
                             </Button>
                         </Space>
                     </Flex>
@@ -461,8 +467,8 @@ export default function AdminSettingsPage() {
                             value={activeMode}
                             onChange={(value) => toggleMode(activeTab, value as EditorMode)}
                             options={[
-                                { label: "可视化编辑", value: "visual" },
-                                { label: "手动编辑 JSON", value: "json" },
+                                { label: t("admin.settings.editor.visual"), value: "visual" },
+                                { label: t("admin.settings.editor.json"), value: "json" },
                             ]}
                         />
                         {activeMode === "json" ? (
@@ -471,15 +477,15 @@ export default function AdminSettingsPage() {
                                     <Tag color="error">{jsonError}</Tag>
                                 ) : (
                                     <Tag color="success" icon={<CheckCircleOutlined />}>
-                                        JSON 格式正确
+                                        {t("admin.settings.editor.validJson")}
                                     </Tag>
                                 )}
                                 <Button icon={<FormatPainterOutlined />} onClick={() => formatJson(activeTab)}>
-                                    格式化
+                                    {t("admin.settings.actions.format")}
                                 </Button>
                             </Space>
                         ) : (
-                            <Typography.Text type="secondary">{activeTab === "public" ? "这些配置会暴露给前端读取" : "这些配置只会在后台保存"}</Typography.Text>
+                            <Typography.Text type="secondary">{t(activeTab === "public" ? "admin.settings.editor.publicHint" : "admin.settings.editor.privateHint")}</Typography.Text>
                         )}
                     </Flex>
 
@@ -488,62 +494,62 @@ export default function AdminSettingsPage() {
                             <Form form={form} layout="vertical" initialValues={emptySettings} requiredMark={false}>
                                 <Row gutter={16}>
                                     <Col span={24}>
-                                        <Form.Item name={["public", "modelChannel", "availableModels"]} label="系统可用模型(请先在私有配置里配置渠道)" extra="保存设置时会自动合并所有已启用私有渠道的模型，前台模型下拉会读取这里的公开列表">
-                                            <Select mode="multiple" placeholder="请选择系统可用模型" options={channelModels.map((item) => ({ label: item, value: item }))} />
+                                        <Form.Item name={["public", "modelChannel", "availableModels"]} label={t("admin.settings.public.availableModels.label")} extra={t("admin.settings.public.availableModels.hint")}>
+                                            <Select mode="multiple" placeholder={t("admin.settings.public.availableModels.placeholder")} options={channelModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
                                     <Col xs={24} md={12} lg={4}>
-                                        <Form.Item name={["public", "modelChannel", "defaultModel"]} label="默认模型">
+                                        <Form.Item name={["public", "modelChannel", "defaultModel"]} label={t("admin.settings.public.defaultModels.default")}>
                                             <Select showSearch allowClear options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
                                     <Col xs={24} md={12} lg={4}>
-                                        <Form.Item name={["public", "modelChannel", "defaultImageModel"]} label="默认图片模型">
+                                        <Form.Item name={["public", "modelChannel", "defaultImageModel"]} label={t("admin.settings.public.defaultModels.image")}>
                                             <Select showSearch allowClear options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
                                     <Col xs={24} md={12} lg={4}>
-                                        <Form.Item name={["public", "modelChannel", "defaultVideoModel"]} label="默认视频模型">
+                                        <Form.Item name={["public", "modelChannel", "defaultVideoModel"]} label={t("admin.settings.public.defaultModels.video")}>
                                             <Select showSearch allowClear options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
                                     <Col xs={24} md={12} lg={4}>
-                                        <Form.Item name={["public", "modelChannel", "defaultTextModel"]} label="默认文本模型">
+                                        <Form.Item name={["public", "modelChannel", "defaultTextModel"]} label={t("admin.settings.public.defaultModels.text")}>
                                             <Select showSearch allowClear options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
                                     <Col xs={24} md={12} lg={4}>
-                                        <Form.Item name={["public", "modelChannel", "defaultAudioModel"]} label="默认音频模型">
+                                        <Form.Item name={["public", "modelChannel", "defaultAudioModel"]} label={t("admin.settings.public.defaultModels.audio")}>
                                             <Select showSearch allowClear options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={24}>
-                                        <Typography.Title level={5}>各能力可选模型</Typography.Title>
-                                        <Typography.Text type="secondary">必须显式勾选；未勾选的模型不会在前台展示，也不能发起平台生成。</Typography.Text>
+                                        <Typography.Title level={5}>{t("admin.settings.public.capabilityModels.title")}</Typography.Title>
+                                        <Typography.Text type="secondary">{t("admin.settings.public.capabilityModels.description")}</Typography.Text>
                                     </Col>
                                     <Col xs={24} md={12}>
-                                        <Form.Item name={["public", "modelChannel", "imageModels"]} label="图片模型可选项" extra="留空时前台无图片模型可选">
-                                            <Select mode="multiple" showSearch allowClear placeholder="选择图片模型" options={publicModels.map((item) => ({ label: item, value: item }))} />
+                                        <Form.Item name={["public", "modelChannel", "imageModels"]} label={t("admin.settings.public.capabilityModels.imageLabel")} extra={t("admin.settings.public.capabilityModels.imageHint")}>
+                                            <Select mode="multiple" showSearch allowClear placeholder={t("admin.settings.public.capabilityModels.imagePlaceholder")} options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
                                     <Col xs={24} md={12}>
-                                        <Form.Item name={["public", "modelChannel", "videoModels"]} label="视频模型可选项" extra="留空时前台无视频模型可选">
-                                            <Select mode="multiple" showSearch allowClear placeholder="选择视频模型" options={publicModels.map((item) => ({ label: item, value: item }))} />
+                                        <Form.Item name={["public", "modelChannel", "videoModels"]} label={t("admin.settings.public.capabilityModels.videoLabel")} extra={t("admin.settings.public.capabilityModels.videoHint")}>
+                                            <Select mode="multiple" showSearch allowClear placeholder={t("admin.settings.public.capabilityModels.videoPlaceholder")} options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
                                     <Col xs={24} md={12}>
-                                        <Form.Item name={["public", "modelChannel", "textModels"]} label="文本模型可选项" extra="留空时前台无文本模型可选">
-                                            <Select mode="multiple" showSearch allowClear placeholder="选择文本模型" options={publicModels.map((item) => ({ label: item, value: item }))} />
+                                        <Form.Item name={["public", "modelChannel", "textModels"]} label={t("admin.settings.public.capabilityModels.textLabel")} extra={t("admin.settings.public.capabilityModels.textHint")}>
+                                            <Select mode="multiple" showSearch allowClear placeholder={t("admin.settings.public.capabilityModels.textPlaceholder")} options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
                                     <Col xs={24} md={12}>
-                                        <Form.Item name={["public", "modelChannel", "audioModels"]} label="音频模型可选项" extra="留空时前台无音频模型可选">
-                                            <Select mode="multiple" showSearch allowClear placeholder="选择音频模型" options={publicModels.map((item) => ({ label: item, value: item }))} />
+                                        <Form.Item name={["public", "modelChannel", "audioModels"]} label={t("admin.settings.public.capabilityModels.audioLabel")} extra={t("admin.settings.public.capabilityModels.audioHint")}>
+                                            <Select mode="multiple" showSearch allowClear placeholder={t("admin.settings.public.capabilityModels.audioPlaceholder")} options={publicModels.map((item) => ({ label: item, value: item }))} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={24}>
-                                        <Typography.Title level={5}>图片请求格式</Typography.Title>
-                                        <Typography.Paragraph type="secondary">仅显式配置的图片模型使用指定协议；未配置模型保持现有默认请求格式。</Typography.Paragraph>
+                                        <Typography.Title level={5}>{t("admin.settings.public.imageRequestFormats.title")}</Typography.Title>
+                                        <Typography.Paragraph type="secondary">{t("admin.settings.public.imageRequestFormats.description")}</Typography.Paragraph>
                                         <Form.List name={["public", "modelChannel", "imageRequestFormats"]}>
                                             {(fields, { add, remove }) => (
                                                 <Flex vertical gap={8}>
@@ -552,55 +558,56 @@ export default function AdminSettingsPage() {
                                                         return (
                                                             <Row key={key} gutter={8} align="middle">
                                                                 <Col xs={24} md={11}>
-                                                                    <Form.Item {...restField} name={[name, "model"]} rules={[{ required: true, message: "请选择图片模型" }]} style={{ marginBottom: 0 }}>
+                                                                    <Form.Item {...restField} name={[name, "model"]} rules={[{ required: true, message: t("admin.settings.public.imageRequestFormats.modelRequired") }]} style={{ marginBottom: 0 }}>
                                                                         <Select
                                                                             showSearch
-                                                                            placeholder="选择图片模型"
+                                                                            placeholder={t("admin.settings.public.capabilityModels.imagePlaceholder")}
                                                                             options={imageModels.map((model) => ({ label: model, value: model, disabled: configuredImageRequestModels.has(model) && model !== currentModel }))}
                                                                         />
                                                                     </Form.Item>
                                                                 </Col>
                                                                 <Col xs={20} md={11}>
-                                                                    <Form.Item {...restField} name={[name, "format"]} rules={[{ required: true, message: "请选择请求格式" }]} style={{ marginBottom: 0 }}>
-                                                                        <Select placeholder="选择请求格式" options={imageRequestFormatOptions} />
+                                                                    <Form.Item {...restField} name={[name, "format"]} rules={[{ required: true, message: t("admin.settings.public.imageRequestFormats.formatRequired") }]} style={{ marginBottom: 0 }}>
+                                                                        <Select placeholder={t("admin.settings.public.imageRequestFormats.formatPlaceholder")} options={imageRequestFormatOptions} />
                                                                     </Form.Item>
                                                                 </Col>
                                                                 <Col xs={4} md={2}>
-                                                                    <Button type="text" danger icon={<DeleteOutlined />} aria-label={`删除图片请求格式 ${currentModel || name + 1}`} onClick={() => remove(name)} />
+                                                                    <Button
+                                                                        type="text"
+                                                                        danger
+                                                                        icon={<DeleteOutlined />}
+                                                                        aria-label={t("admin.settings.public.imageRequestFormats.deleteLabel", { model: currentModel || formatNumber(name + 1) })}
+                                                                        onClick={() => remove(name)}
+                                                                    />
                                                                 </Col>
                                                             </Row>
                                                         );
                                                     })}
                                                     <Button type="dashed" icon={<PlusOutlined />} disabled={!nextImageRequestModel} onClick={() => nextImageRequestModel && add({ model: nextImageRequestModel, format: "application/json" })}>
-                                                        添加模型
+                                                        {t("admin.settings.actions.addModel")}
                                                     </Button>
                                                 </Flex>
                                             )}
                                         </Form.List>
                                     </Col>
                                     <Col span={24}>
-                                        <Form.Item name={["public", "modelChannel", "systemPrompt"]} label="系统提示词">
+                                        <Form.Item name={["public", "modelChannel", "systemPrompt"]} label={t("admin.settings.public.systemPrompt")}>
                                             <Input.TextArea rows={4} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={24}>
-                                        <Form.Item
-                                            name={["public", "modelChannel", "allowCustomChannel"]}
-                                            label="允许用户自定义渠道"
-                                            extra="开启后，前端可提供走后端渠道和用户自定义 baseUrl 直连两种模式。关闭后，整个平台强制使用后台渠道，用户不再能自行配置渠道与模型，生成请求统一走后端代理并消耗算力点。"
-                                            valuePropName="checked"
-                                        >
+                                        <Form.Item name={["public", "modelChannel", "allowCustomChannel"]} label={t("admin.settings.public.customChannel.label")} extra={t("admin.settings.public.customChannel.hint")} valuePropName="checked">
                                             <Switch />
                                         </Form.Item>
                                     </Col>
                                     <Col span={24}>
-                                        <Form.Item name={["public", "auth", "allowRegister"]} label="是否允许用户注册" extra="关闭后隐藏注册入口，注册接口也会拒绝新用户创建" valuePropName="checked">
+                                        <Form.Item name={["public", "auth", "allowRegister"]} label={t("admin.settings.public.registration.label")} extra={t("admin.settings.public.registration.hint")} valuePropName="checked">
                                             <Switch />
                                         </Form.Item>
                                     </Col>
                                     <Col span={24}>
-                                        <Typography.Title level={5}>模型算力点</Typography.Title>
-                                        <Typography.Paragraph type="secondary">普通模型按次计费；视频模型按私有配置中的能力绑定 ID 和计费规则匹配。</Typography.Paragraph>
+                                        <Typography.Title level={5}>{t("admin.settings.billing.title")}</Typography.Title>
+                                        <Typography.Paragraph type="secondary">{t("admin.settings.billing.description")}</Typography.Paragraph>
                                         <Table
                                             rowKey="model"
                                             pagination={false}
@@ -618,7 +625,7 @@ export default function AdminSettingsPage() {
                                             })}
                                             columns={[
                                                 {
-                                                    title: "模型",
+                                                    title: t("admin.settings.billing.table.model"),
                                                     dataIndex: "model",
                                                     render: (_, item) => (
                                                         <Flex vertical>
@@ -628,7 +635,7 @@ export default function AdminSettingsPage() {
                                                     ),
                                                 },
                                                 {
-                                                    title: "展示名称",
+                                                    title: t("admin.settings.billing.table.displayName"),
                                                     width: 220,
                                                     render: (_, item) => (
                                                         <Input
@@ -639,12 +646,12 @@ export default function AdminSettingsPage() {
                                                     ),
                                                 },
                                                 {
-                                                    title: "计费规则",
+                                                    title: t("admin.settings.billing.table.rule"),
                                                     width: 140,
-                                                    render: (_, item) => <Tag>{billingModeLabels[item.rule.mode]}</Tag>,
+                                                    render: (_, item) => <Tag>{t(billingModeLabelKeys[item.rule.mode])}</Tag>,
                                                 },
                                                 {
-                                                    title: "定价",
+                                                    title: t("admin.settings.billing.table.price"),
                                                     width: 620,
                                                     render: (_, item) =>
                                                         item.rule.mode === "per_second" ? (
@@ -656,7 +663,7 @@ export default function AdminSettingsPage() {
                                                                         step="0.01"
                                                                         stringMode
                                                                         addonBefore={resolution}
-                                                                        addonAfter="点/秒"
+                                                                        addonAfter={t("admin.settings.billing.units.pointsPerSecond")}
                                                                         style={{ width: 190 }}
                                                                         value={item.cost.resolutionCredits?.[resolution] || "0"}
                                                                         onChange={(value) =>
@@ -672,8 +679,8 @@ export default function AdminSettingsPage() {
                                                                 min="0"
                                                                 step="0.01"
                                                                 stringMode
-                                                                addonBefore={item.rule.mode === "per_credit" ? "每 credits" : "每次调用"}
-                                                                addonAfter="点"
+                                                                addonBefore={t(item.rule.mode === "per_credit" ? "admin.settings.billing.units.perCredit" : "admin.settings.billing.units.perCall")}
+                                                                addonAfter={t("admin.settings.billing.units.points")}
                                                                 style={{ width: 240 }}
                                                                 value={item.cost.credits}
                                                                 onChange={(value) => setModelPricing(item.model, { credits: nonNegativeDecimal(value) })}
@@ -708,116 +715,121 @@ export default function AdminSettingsPage() {
                                     title={
                                         <Space>
                                             <img src="/icons/linuxdo.svg" alt="" width={18} height={18} />
-                                            Linux.do 登录
+                                            {t("admin.settings.private.linuxDo.title")}
                                         </Space>
                                     }
                                 >
                                     <Flex vertical gap={14}>
                                         <Typography.Text type="secondary">
-                                            本项目接口回调地址是 /api/auth/linux-do/callback，请在 Linux.do 应用后台自行拼接站点前缀。
+                                            {t("admin.settings.private.linuxDo.callbackHint")}
                                             <Typography.Link href="https://connect.linux.do" target="_blank" rel="noreferrer">
-                                                点击此处管理你的 LinuxDO OAuth App
+                                                {t("admin.settings.private.linuxDo.manageApp")}
                                             </Typography.Link>
                                         </Typography.Text>
                                         <Row gutter={16}>
                                             <Col xs={24} md={6}>
-                                                <Form.Item name={["public", "auth", "linuxDo", "enabled"]} label="开启 Linux.do 登录" valuePropName="checked">
+                                                <Form.Item name={["public", "auth", "linuxDo", "enabled"]} label={t("admin.settings.private.linuxDo.enabled")} valuePropName="checked">
                                                     <Switch />
                                                 </Form.Item>
                                             </Col>
                                             <Col xs={24} md={9}>
-                                                <Form.Item name={["private", "auth", "linuxDo", "clientId"]} label="Linux.do Client ID">
-                                                    <Input placeholder="输入 Linux.do OAuth App 的 ID" />
+                                                <Form.Item name={["private", "auth", "linuxDo", "clientId"]} label={t("admin.settings.private.linuxDo.clientId")}>
+                                                    <Input placeholder={t("admin.settings.private.linuxDo.clientIdPlaceholder")} />
                                                 </Form.Item>
                                             </Col>
                                             <Col xs={24} md={9}>
-                                                <Form.Item name={["private", "auth", "linuxDo", "clientSecret"]} label="Linux.do Client Secret">
-                                                    <Input.Password placeholder="留空则沿用已保存的密钥" />
+                                                <Form.Item name={["private", "auth", "linuxDo", "clientSecret"]} label={t("admin.settings.private.linuxDo.clientSecret")}>
+                                                    <Input.Password placeholder={t("admin.settings.private.linuxDo.secretPlaceholder")} />
                                                 </Form.Item>
                                             </Col>
                                         </Row>
                                     </Flex>
                                 </Card>
-                                <Card size="small" title="提示词定时同步">
+                                <Card size="small" title={t("admin.settings.private.promptSync.title")}>
                                     <Row gutter={16} align="middle">
                                         <Col xs={24} md={8}>
-                                            <Form.Item name={["private", "promptSync", "enabled"]} label="开启定时同步" valuePropName="checked">
+                                            <Form.Item name={["private", "promptSync", "enabled"]} label={t("admin.settings.private.promptSync.enabled")} valuePropName="checked">
                                                 <Switch />
                                             </Form.Item>
                                         </Col>
                                         <Col xs={24} md={16}>
-                                            <Form.Item name={["private", "promptSync", "cron"]} label="Cron 表达式" extra="默认每 5 分钟同步内置 GitHub 远程提示词源">
+                                            <Form.Item name={["private", "promptSync", "cron"]} label={t("admin.settings.private.promptSync.cron")} extra={t("admin.settings.private.promptSync.hint")}>
                                                 <Input placeholder="*/5 * * * *" />
                                             </Form.Item>
                                         </Col>
                                     </Row>
                                 </Card>
-                                <Card size="small" title="文件上传大小限制">
+                                <Card size="small" title={t("admin.settings.private.fileLimits.title")}>
                                     <Typography.Text type="secondary" style={{ display: "block", marginBottom: 16 }}>
-                                        设置各类型文件上传到 S3 存储桶的单个文件大小上限（单位：MB）。
+                                        {t("admin.settings.private.fileLimits.description")}
                                     </Typography.Text>
                                     <Row gutter={16}>
                                         <Col xs={24} md={6}>
-                                            <Form.Item name={["private", "fileSizeLimits", "image"]} label="图片（images）" getValueFromEvent={mbValue} getValueProps={mbProps}>
+                                            <Form.Item name={["private", "fileSizeLimits", "image"]} label={t("admin.settings.private.fileLimits.image")} getValueFromEvent={mbValue} getValueProps={mbProps}>
                                                 <InputNumber min={1} step={1} className="!w-full" />
                                             </Form.Item>
                                         </Col>
                                         <Col xs={24} md={6}>
-                                            <Form.Item name={["private", "fileSizeLimits", "video"]} label="视频（videos）" getValueFromEvent={mbValue} getValueProps={mbProps}>
+                                            <Form.Item name={["private", "fileSizeLimits", "video"]} label={t("admin.settings.private.fileLimits.video")} getValueFromEvent={mbValue} getValueProps={mbProps}>
                                                 <InputNumber min={1} step={1} className="!w-full" />
                                             </Form.Item>
                                         </Col>
                                         <Col xs={24} md={6}>
-                                            <Form.Item name={["private", "fileSizeLimits", "audio"]} label="音频（audios）" getValueFromEvent={mbValue} getValueProps={mbProps}>
+                                            <Form.Item name={["private", "fileSizeLimits", "audio"]} label={t("admin.settings.private.fileLimits.audio")} getValueFromEvent={mbValue} getValueProps={mbProps}>
                                                 <InputNumber min={1} step={1} className="!w-full" />
                                             </Form.Item>
                                         </Col>
                                         <Col xs={24} md={6}>
-                                            <Form.Item name={["private", "fileSizeLimits", "prompt"]} label="提示词（prompts）" getValueFromEvent={mbValue} getValueProps={mbProps}>
+                                            <Form.Item name={["private", "fileSizeLimits", "prompt"]} label={t("admin.settings.private.fileLimits.prompt")} getValueFromEvent={mbValue} getValueProps={mbProps}>
                                                 <InputNumber min={1} step={1} className="!w-full" />
                                             </Form.Item>
                                         </Col>
                                     </Row>
                                 </Card>
                                 <Button type="primary" icon={<PlusOutlined />} onClick={() => openChannelDrawer(null)}>
-                                    新增渠道
+                                    {t("admin.settings.channels.actions.add")}
                                 </Button>
                                 <Table
                                     rowKey="_rowKey"
                                     pagination={false}
                                     dataSource={channelTableData}
                                     columns={[
-                                        { title: "名称", dataIndex: "name", render: (value) => value || "未命名渠道" },
-                                        { title: "协议", dataIndex: "protocol", width: 96, render: (value) => <Tag>{value || "openai"}</Tag> },
-                                        { title: "状态", dataIndex: "enabled", width: 96, render: (value) => <Tag color={value ? "success" : "default"}>{value ? "已启用" : "已停用"}</Tag> },
+                                        { title: t("admin.settings.channels.table.name"), dataIndex: "name", render: (value) => value || t("admin.settings.channels.values.unnamed") },
+                                        { title: t("admin.settings.channels.table.protocol"), dataIndex: "protocol", width: 96, render: (value) => <Tag>{value || "openai"}</Tag> },
                                         {
-                                            title: "模型",
+                                            title: t("admin.settings.channels.table.status"),
+                                            dataIndex: "enabled",
+                                            width: 96,
+                                            render: (value) => <Tag color={value ? "success" : "default"}>{t(value ? "admin.common.statuses.enabled" : "admin.common.statuses.disabled")}</Tag>,
+                                        },
+                                        {
+                                            title: t("admin.settings.channels.table.models"),
                                             dataIndex: "models",
                                             render: (value: string[]) => (
                                                 <Typography.Text ellipsis style={{ maxWidth: 360 }}>
-                                                    {modelSummary(value || [])}
+                                                    {modelSummary(value || [], t)}
                                                 </Typography.Text>
                                             ),
                                         },
-                                        { title: "权重", dataIndex: "weight", width: 88 },
+                                        { title: t("admin.settings.channels.table.weight"), dataIndex: "weight", width: 88 },
                                         {
-                                            title: "操作",
+                                            title: t("admin.common.table.actions"),
                                             key: "actions",
                                             width: 220,
                                             align: "right",
                                             render: (_, item) => (
                                                 <Space size={4}>
                                                     <Button size="small" onClick={() => openTestDialog(item._index)}>
-                                                        测试
+                                                        {t("admin.common.actions.test")}
                                                     </Button>
                                                     <Button size="small" onClick={() => openChannelDrawer(item._index)}>
-                                                        编辑
+                                                        {t("admin.common.actions.edit")}
                                                     </Button>
                                                     <Button
                                                         danger
                                                         size="small"
                                                         icon={<DeleteOutlined />}
-                                                        aria-label={`删除渠道 ${item.name || "未命名渠道"}`}
+                                                        aria-label={t("admin.settings.channels.actions.deleteLabel", { name: item.name || t("admin.settings.channels.values.unnamed") })}
                                                         onClick={() => {
                                                             const nextChannels = [...channels];
                                                             nextChannels.splice(item._index, 1);
@@ -831,18 +843,18 @@ export default function AdminSettingsPage() {
                                 />
                                 <Card
                                     size="small"
-                                    title="视频能力绑定"
+                                    title={t("admin.settings.generationProfiles.title")}
                                     extra={
                                         <Button size="small" icon={<PlusOutlined />} disabled={!channelOptions.length} onClick={addGenerationProfile}>
-                                            新增绑定
+                                            {t("admin.settings.generationProfiles.actions.add")}
                                         </Button>
                                     }
                                 >
                                     <Typography.Text type="secondary" style={{ display: "block", marginBottom: generationProfileBindings.length ? 16 : 0 }}>
-                                        将渠道中的实际模型绑定到画布支持的生成能力。普通视频使用 Seedance 请求结构，短剧使用 Vidu Drama 请求结构。
+                                        {t("admin.settings.generationProfiles.description")}
                                     </Typography.Text>
                                     {!channelOptions.length ? (
-                                        <Typography.Text type="secondary">请先新增并启用一个包含模型的渠道。</Typography.Text>
+                                        <Typography.Text type="secondary">{t("admin.settings.generationProfiles.channelRequired")}</Typography.Text>
                                     ) : generationProfileBindings.length ? (
                                         <Flex vertical gap={12}>
                                             {generationProfileBindings.map((binding: AdminGenerationProfileBinding, index: number) => {
@@ -852,15 +864,17 @@ export default function AdminSettingsPage() {
                                                 return (
                                                     <section key={`${binding.profileId}-${index}`} style={{ border: "1px solid var(--ant-color-border)", borderRadius: 6, padding: "12px 12px 4px" }}>
                                                         <Flex justify="space-between" align="center" gap={12} style={{ marginBottom: 4 }}>
-                                                            <Typography.Text strong>{binding.id || `视频绑定 ${index + 1}`}</Typography.Text>
+                                                            <Typography.Text strong>{binding.id || t("admin.settings.generationProfiles.defaultName", { number: formatNumber(index + 1) })}</Typography.Text>
                                                             <Space size={8}>
-                                                                <Typography.Text type="secondary">启用</Typography.Text>
+                                                                <Typography.Text type="secondary">{t("admin.common.statuses.enable")}</Typography.Text>
                                                                 <Switch checked={binding.enabled !== false} onChange={(enabled) => updateGenerationProfile(index, { enabled })} />
                                                                 <Button
                                                                     danger
                                                                     type="text"
                                                                     icon={<DeleteOutlined />}
-                                                                    aria-label={`删除${generationProfileOptions.find((option) => option.value === binding.profileId)?.label || "能力"}绑定`}
+                                                                    aria-label={t("admin.settings.generationProfiles.actions.deleteLabel", {
+                                                                        capability: t(generationProfileOptions.find((option) => option.value === binding.profileId)?.labelKey || "admin.settings.generationProfiles.values.capability"),
+                                                                    })}
                                                                     onClick={() => removeGenerationProfile(index)}
                                                                 />
                                                             </Space>
@@ -870,36 +884,36 @@ export default function AdminSettingsPage() {
                                                             items={[
                                                                 {
                                                                     key: "binding",
-                                                                    label: "能力绑定",
+                                                                    label: t("admin.settings.generationProfiles.tabs.binding"),
                                                                     children: (
                                                                         <Row gutter={12} align="middle">
                                                                             <Col xs={24} md={8} xl={4}>
-                                                                                <Form.Item label="绑定 ID">
+                                                                                <Form.Item label={t("admin.settings.generationProfiles.form.bindingId")}>
                                                                                     <Input value={binding.id} placeholder="stable-profile-id" onChange={(event) => updateGenerationProfile(index, { id: event.target.value })} />
                                                                                 </Form.Item>
                                                                             </Col>
                                                                             <Col xs={24} md={8} xl={5}>
-                                                                                <Form.Item label="画布能力">
-                                                                                    <Select value={binding.profileId} options={generationProfileOptions} onChange={(profileId) => updateGenerationProfile(index, { profileId, limitOverrides: {} })} />
+                                                                                <Form.Item label={t("admin.settings.generationProfiles.form.capability")}>
+                                                                                    <Select value={binding.profileId} options={generationProfileSelectOptions} onChange={(profileId) => updateGenerationProfile(index, { profileId, limitOverrides: {} })} />
                                                                                 </Form.Item>
                                                                             </Col>
                                                                             <Col xs={24} md={8} xl={4}>
-                                                                                <Form.Item label="渠道">
+                                                                                <Form.Item label={t("admin.settings.generationProfiles.form.channel")}>
                                                                                     <Select
                                                                                         showSearch
                                                                                         value={binding.channelName || undefined}
-                                                                                        placeholder="选择渠道"
+                                                                                        placeholder={t("admin.settings.generationProfiles.form.channelPlaceholder")}
                                                                                         options={channelOptions}
                                                                                         onChange={(channelName) => updateGenerationProfile(index, { channelName, upstreamModel: "", upstreamModels: undefined })}
                                                                                     />
                                                                                 </Form.Item>
                                                                             </Col>
                                                                             <Col xs={24} md={8} xl={6}>
-                                                                                <Form.Item label="上游模型">
+                                                                                <Form.Item label={t("admin.settings.generationProfiles.form.upstreamModel")}>
                                                                                     <Select
                                                                                         showSearch
                                                                                         value={binding.upstreamModel || undefined}
-                                                                                        placeholder={binding.channelName ? "选择模型" : "请先选择渠道"}
+                                                                                        placeholder={t(binding.channelName ? "admin.settings.generationProfiles.form.modelPlaceholder" : "admin.settings.generationProfiles.form.selectChannelFirst")}
                                                                                         disabled={!binding.channelName}
                                                                                         options={modelOptions}
                                                                                         onChange={(upstreamModel) => updateGenerationProfile(index, { upstreamModel, upstreamModels: undefined, ...(!binding.id ? { id: upstreamModel } : {}) })}
@@ -907,7 +921,7 @@ export default function AdminSettingsPage() {
                                                                                 </Form.Item>
                                                                             </Col>
                                                                             <Col xs={12} md={8} xl={3}>
-                                                                                <Form.Item label="最大时长">
+                                                                                <Form.Item label={t("admin.settings.generationProfiles.form.maxDuration")}>
                                                                                     <InputNumber
                                                                                         min={profileOption.durationRange.min}
                                                                                         max={profileOption.durationRange.max}
@@ -915,8 +929,8 @@ export default function AdminSettingsPage() {
                                                                                         precision={0}
                                                                                         className="!w-full"
                                                                                         value={binding.limitOverrides?.durationSecondsMax}
-                                                                                        placeholder={`${profileOption.durationRange.max}s`}
-                                                                                        addonAfter="秒"
+                                                                                        placeholder={t("admin.settings.generationProfiles.form.durationPlaceholder", { value: formatNumber(profileOption.durationRange.max) })}
+                                                                                        addonAfter={t("admin.settings.units.seconds")}
                                                                                         onChange={(durationSecondsMax) =>
                                                                                             updateGenerationProfile(index, {
                                                                                                 limitOverrides: { ...binding.limitOverrides, durationSecondsMax: durationSecondsMax ?? undefined },
@@ -926,7 +940,7 @@ export default function AdminSettingsPage() {
                                                                                 </Form.Item>
                                                                             </Col>
                                                                             <Col xs={24} md={12} xl={5}>
-                                                                                <Form.Item label="支持分辨率">
+                                                                                <Form.Item label={t("admin.settings.generationProfiles.form.resolutions")}>
                                                                                     <Select
                                                                                         mode="multiple"
                                                                                         value={billingRule.resolutions}
@@ -946,13 +960,13 @@ export default function AdminSettingsPage() {
                                                                 },
                                                                 {
                                                                     key: "billing",
-                                                                    label: "计费规则",
+                                                                    label: t("admin.settings.generationProfiles.tabs.billing"),
                                                                     children: (
-                                                                        <Form.Item label="计费方式" className="mb-3">
+                                                                        <Form.Item label={t("admin.settings.generationProfiles.form.billingMode")} className="mb-3">
                                                                             <Segmented
                                                                                 block
                                                                                 value={billingRule.mode}
-                                                                                options={billingModeOptions}
+                                                                                options={billingModeSelectOptions}
                                                                                 onChange={(billingMode) => updateGenerationProfile(index, { billingMode: billingMode as VideoBillingMode })}
                                                                             />
                                                                         </Form.Item>
@@ -965,7 +979,7 @@ export default function AdminSettingsPage() {
                                             })}
                                         </Flex>
                                     ) : (
-                                        <Typography.Text type="secondary">尚未绑定视频能力。新增绑定后，画布会使用稳定的能力名称调用所选上游模型。</Typography.Text>
+                                        <Typography.Text type="secondary">{t("admin.settings.generationProfiles.empty")}</Typography.Text>
                                     )}
                                 </Card>
                             </Flex>
@@ -987,15 +1001,15 @@ export default function AdminSettingsPage() {
                     )}
                 </Card>
                 <Drawer
-                    title={editingChannelIndex === null ? "新增渠道" : "编辑渠道"}
+                    title={t(editingChannelIndex === null ? "admin.settings.channels.drawer.createTitle" : "admin.settings.channels.drawer.editTitle")}
                     open={isChannelDrawerOpen}
                     size={560}
                     onClose={closeChannelDrawer}
                     extra={
                         <Space>
-                            <Button onClick={closeChannelDrawer}>取消</Button>
+                            <Button onClick={closeChannelDrawer}>{t("admin.common.actions.cancel")}</Button>
                             <Button type="primary" onClick={() => void saveChannel()}>
-                                保存
+                                {t("admin.common.actions.save")}
                             </Button>
                         </Space>
                     }
@@ -1004,52 +1018,52 @@ export default function AdminSettingsPage() {
                     <Form form={channelForm} layout="vertical" requiredMark={false} initialValues={emptyChannel}>
                         <Row gutter={16}>
                             <Col span={12}>
-                                <Form.Item name="name" label="渠道名称" rules={[{ required: true, message: "请输入渠道名称" }]}>
+                                <Form.Item name="name" label={t("admin.settings.channels.form.name")} rules={[{ required: true, message: t("admin.settings.channels.validation.nameRequired") }]}>
                                     <Input />
                                 </Form.Item>
                             </Col>
                             <Col span={12}>
-                                <Form.Item name="protocol" label="协议">
+                                <Form.Item name="protocol" label={t("admin.settings.channels.form.protocol")}>
                                     <Select
                                         options={[
-                                            { label: "OpenAI", value: "openai" },
-                                            { label: "XvanAI", value: "xvanai" },
+                                            { label: t("admin.settings.channels.protocols.openai"), value: "openai" },
+                                            { label: t("admin.settings.channels.protocols.xvanai"), value: "xvanai" },
                                         ]}
                                     />
                                 </Form.Item>
                             </Col>
                             <Col span={12}>
-                                <Form.Item name="weight" label="权重">
+                                <Form.Item name="weight" label={t("admin.settings.channels.form.weight")}>
                                     <InputNumber min={1} step={1} className="!w-full" />
                                 </Form.Item>
                             </Col>
                             <Col span={12}>
-                                <Form.Item name="enabled" label="启用" valuePropName="checked">
+                                <Form.Item name="enabled" label={t("admin.common.statuses.enable")} valuePropName="checked">
                                     <Switch />
                                 </Form.Item>
                             </Col>
                             <Col span={24}>
-                                <Form.Item name="baseUrl" label="接口地址" rules={[{ required: true, message: "请输入接口地址" }]}>
+                                <Form.Item name="baseUrl" label={t("admin.settings.channels.form.baseUrl")} rules={[{ required: true, message: t("admin.settings.channels.validation.baseUrlRequired") }]}>
                                     <Input />
                                 </Form.Item>
                             </Col>
                             <Col span={24}>
-                                <Form.Item name="apiKey" label="API Key" rules={editingChannelIndex === null ? [{ required: true, message: "请输入 API Key" }] : []}>
-                                    <Input.Password placeholder={editingChannelIndex === null ? "" : "留空则沿用已保存的 API Key"} />
+                                <Form.Item name="apiKey" label={t("admin.settings.channels.form.apiKey")} rules={editingChannelIndex === null ? [{ required: true, message: t("admin.settings.channels.validation.apiKeyRequired") }] : []}>
+                                    <Input.Password placeholder={editingChannelIndex === null ? "" : t("admin.settings.channels.form.apiKeyPlaceholder")} />
                                 </Form.Item>
                             </Col>
                             <Col span={24}>
-                                <Form.Item label="渠道可用模型">
+                                <Form.Item label={t("admin.settings.channels.form.models")}>
                                     <Space.Compact style={{ width: "100%" }}>
                                         <Form.Item name="models" noStyle>
                                             <Select mode="tags" maxTagCount="responsive" tokenSeparators={[",", "\n"]} options={knownModels.map((model) => ({ label: model, value: model }))} />
                                         </Form.Item>
-                                        <Button onClick={() => openChannelModelSelector()}>选择模型</Button>
+                                        <Button onClick={() => openChannelModelSelector()}>{t("admin.settings.actions.selectModels")}</Button>
                                     </Space.Compact>
                                 </Form.Item>
                             </Col>
                             <Col span={24}>
-                                <Form.Item name="remark" label="备注">
+                                <Form.Item name="remark" label={t("admin.settings.channels.form.remark")}>
                                     <Input.TextArea rows={3} />
                                 </Form.Item>
                             </Col>
@@ -1059,9 +1073,12 @@ export default function AdminSettingsPage() {
                 <Modal
                     title={
                         <Space size={12}>
-                            选择渠道模型
+                            {t("admin.settings.modelSelector.title")}
                             <Typography.Text type="secondary">
-                                已选择 {modelSelectSelected.length} / {uniqueModels([...modelSelectSource, ...modelSelectExisting]).length}
+                                {t("admin.settings.modelSelector.selectedSummary", {
+                                    selected: formatNumber(modelSelectSelected.length),
+                                    total: formatNumber(uniqueModels([...modelSelectSource, ...modelSelectExisting]).length),
+                                })}
                             </Typography.Text>
                         </Space>
                     }
@@ -1070,9 +1087,9 @@ export default function AdminSettingsPage() {
                     onCancel={closeChannelModelSelector}
                     footer={
                         <Space>
-                            <Button onClick={closeChannelModelSelector}>取消</Button>
+                            <Button onClick={closeChannelModelSelector}>{t("admin.common.actions.cancel")}</Button>
                             <Button type="primary" onClick={confirmChannelModelSelector}>
-                                确定
+                                {t("admin.common.actions.confirm")}
                             </Button>
                         </Space>
                     }
@@ -1080,34 +1097,32 @@ export default function AdminSettingsPage() {
                 >
                     <Flex vertical gap={14}>
                         <Flex gap={12} wrap>
-                            <Input.Search placeholder="搜索模型" allowClear value={modelSelectKeyword} onChange={(event) => setModelSelectKeyword(event.target.value)} style={{ flex: "1 1 260px" }} />
+                            <Input.Search placeholder={t("admin.settings.modelSelector.searchPlaceholder")} allowClear value={modelSelectKeyword} onChange={(event) => setModelSelectKeyword(event.target.value)} style={{ flex: "1 1 260px" }} />
                             <Space.Compact style={{ flex: "1 1 320px" }}>
-                                <Input value={modelSelectNewModel} placeholder="输入模型名称" onChange={(event) => setModelSelectNewModel(event.target.value)} onPressEnter={addModelInSelector} />
-                                <Button onClick={addModelInSelector}>增加模型</Button>
+                                <Input value={modelSelectNewModel} placeholder={t("admin.settings.modelSelector.modelPlaceholder")} onChange={(event) => setModelSelectNewModel(event.target.value)} onPressEnter={addModelInSelector} />
+                                <Button onClick={addModelInSelector}>{t("admin.settings.actions.addModel")}</Button>
                                 <Button icon={<ReloadOutlined />} loading={isFetchingChannelModels} onClick={() => void fetchChannelModelList()}>
-                                    拉取模型列表
+                                    {t("admin.settings.modelSelector.fetchModels")}
                                 </Button>
                             </Space.Compact>
                         </Flex>
-                        <Typography.Text type="secondary">如果上游不提供 OpenAI /models 模型列表接口，请在这里手动增加模型名称。</Typography.Text>
+                        <Typography.Text type="secondary">{t("admin.settings.modelSelector.manualHint")}</Typography.Text>
                         <Tabs
                             activeKey={modelSelectTab}
                             onChange={(key) => setModelSelectTab(key as ModelSelectTabKey)}
                             items={[
-                                { key: "new", label: `新获取的模型 (${modelSelectGroups.new.length})` },
-                                { key: "current", label: `已有的模型 (${modelSelectGroups.current.length})` },
+                                { key: "new", label: t("admin.settings.modelSelector.tabs.new", { count: modelSelectGroups.new.length, value: formatNumber(modelSelectGroups.new.length) }) },
+                                { key: "current", label: t("admin.settings.modelSelector.tabs.current", { count: modelSelectGroups.current.length, value: formatNumber(modelSelectGroups.current.length) }) },
                             ]}
                         />
                         <Flex justify="space-between" align="center" gap={12} wrap>
-                            <Typography.Text type="secondary">
-                                当前列表已选择 {activeSelectedCount} / {activeModelSelectModels.length}
-                            </Typography.Text>
+                            <Typography.Text type="secondary">{t("admin.settings.modelSelector.currentSummary", { selected: formatNumber(activeSelectedCount), total: formatNumber(activeModelSelectModels.length) })}</Typography.Text>
                             <Space size={8}>
                                 <Button size="small" disabled={!activeModelSelectModels.length || activeSelectedCount === activeModelSelectModels.length} onClick={selectActiveModels}>
-                                    全选当前列表
+                                    {t("admin.settings.modelSelector.selectAll")}
                                 </Button>
                                 <Button size="small" disabled={!activeSelectedCount} onClick={clearActiveModels}>
-                                    取消当前列表
+                                    {t("admin.settings.modelSelector.clearCurrent")}
                                 </Button>
                             </Space>
                         </Flex>
@@ -1122,7 +1137,7 @@ export default function AdminSettingsPage() {
                                 </div>
                             ) : (
                                 <div style={{ padding: "48px 0", textAlign: "center" }}>
-                                    <Typography.Text type="secondary">没有匹配的模型</Typography.Text>
+                                    <Typography.Text type="secondary">{t("admin.settings.modelSelector.empty")}</Typography.Text>
                                 </div>
                             )}
                         </div>
@@ -1131,7 +1146,8 @@ export default function AdminSettingsPage() {
                 <Modal
                     title={
                         <Space>
-                            {testChannel?.name || "渠道"} 渠道的模型测试<Typography.Text type="secondary">共 {testChannel?.models.length || 0} 个模型</Typography.Text>
+                            {t("admin.settings.channelTest.title", { name: testChannel?.name || t("admin.settings.channels.values.channel") })}
+                            <Typography.Text type="secondary">{t("admin.settings.channelTest.modelCount", { count: testChannel?.models.length || 0, value: formatNumber(testChannel?.models.length || 0) })}</Typography.Text>
                         </Space>
                     }
                     open={testChannelIndex !== null}
@@ -1139,17 +1155,17 @@ export default function AdminSettingsPage() {
                     onCancel={closeTestDialog}
                     footer={
                         <Space>
-                            <Button onClick={closeTestDialog}>取消</Button>
+                            <Button onClick={closeTestDialog}>{t("admin.common.actions.cancel")}</Button>
                             <Button type="primary" disabled={!selectedTestModels.length || testingModels.length > 0} onClick={() => void batchTestModels()}>
-                                批量测试 {selectedTestModels.length} 个模型
+                                {t("admin.settings.channelTest.batchTest", { count: selectedTestModels.length, value: formatNumber(selectedTestModels.length) })}
                             </Button>
                         </Space>
                     }
                     destroyOnHidden
                 >
                     <Flex vertical gap={12}>
-                        <Typography.Text type="secondary">普通文本模型会发送一条 hi；Agent Plan / Seedance 视频模型只做配置格式检查，不会发起视频生成，也不代表模型权限已验证。</Typography.Text>
-                        <Input.Search placeholder="搜索模型..." allowClear value={testKeyword} onChange={(event) => setTestKeyword(event.target.value)} />
+                        <Typography.Text type="secondary">{t("admin.settings.channelTest.description")}</Typography.Text>
+                        <Input.Search placeholder={t("admin.settings.channelTest.searchPlaceholder")} allowClear value={testKeyword} onChange={(event) => setTestKeyword(event.target.value)} />
                         <Table
                             rowKey="model"
                             pagination={false}
@@ -1160,19 +1176,23 @@ export default function AdminSettingsPage() {
                                 onChange: (keys) => setSelectedTestModels(keys.map(String)),
                             }}
                             columns={[
-                                { title: "模型名称", dataIndex: "model", render: (value) => <Typography.Text strong>{value}</Typography.Text> },
+                                { title: t("admin.settings.channelTest.table.model"), dataIndex: "model", render: (value) => <Typography.Text strong>{value}</Typography.Text> },
                                 {
-                                    title: "状态",
+                                    title: t("admin.settings.channelTest.table.status"),
                                     dataIndex: "model",
                                     width: 260,
                                     render: (value) => {
-                                        if (testingModels.includes(value)) return <Tag icon={<LoadingOutlined className="animate-spin" />}>测试中</Tag>;
+                                        if (testingModels.includes(value)) return <Tag icon={<LoadingOutlined className="animate-spin" />}>{t("admin.settings.channelTest.statuses.testing")}</Tag>;
                                         const result = testResults[value];
-                                        if (!result) return <Tag>未开始</Tag>;
+                                        if (!result) return <Tag>{t("admin.settings.channelTest.statuses.notStarted")}</Tag>;
                                         return result.status === "success" ? (
                                             <Space size={6} wrap>
-                                                <Tag color="success">成功</Tag>
-                                                <Typography.Text type="secondary">请求时长: {result.duration}</Typography.Text>
+                                                <Tag color="success">{t("admin.settings.channelTest.statuses.success")}</Tag>
+                                                <Typography.Text type="secondary">
+                                                    {t("admin.settings.channelTest.duration", {
+                                                        value: formatNumber(result.durationSeconds || 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                                                    })}
+                                                </Typography.Text>
                                             </Space>
                                         ) : (
                                             <Typography.Text type="danger">{result.message}</Typography.Text>
@@ -1180,13 +1200,13 @@ export default function AdminSettingsPage() {
                                     },
                                 },
                                 {
-                                    title: "操作",
+                                    title: t("admin.common.table.actions"),
                                     key: "actions",
                                     width: 120,
                                     align: "right",
                                     render: (_, item) => (
                                         <Button size="small" loading={testingModels.includes(item.model)} onClick={() => void testModelOnline(item.model)}>
-                                            测试
+                                            {t("admin.common.actions.test")}
                                         </Button>
                                     ),
                                 },
@@ -1321,10 +1341,10 @@ function uniqueModels(models: string[]) {
     return Array.from(new Set(models.filter(Boolean)));
 }
 
-function modelSummary(models: string[]) {
-    if (!models.length) return "未配置模型";
+function modelSummary(models: string[], t: TFunction) {
+    if (!models.length) return t("admin.settings.channels.values.noModels");
     const preview = models.slice(0, 3).join(", ");
-    return models.length > 3 ? `${models.length} 个模型：${preview}...` : preview;
+    return models.length > 3 ? t("admin.settings.channels.values.modelSummary", { count: models.length, value: formatNumber(models.length), models: preview }) : preview;
 }
 
 function parseTabJson(tab: "public", value: string): AdminSettings["public"] | null;
@@ -1338,12 +1358,12 @@ function parseTabJson(tab: SettingsTabKey, value: string): AdminSettings[Setting
     }
 }
 
-async function collectSettings(form: any, editorMode: Record<SettingsTabKey, EditorMode>, jsonText: Record<SettingsTabKey, string>, message: { error: (value: string) => void }) {
+async function collectSettings(form: any, editorMode: Record<SettingsTabKey, EditorMode>, jsonText: Record<SettingsTabKey, string>, message: { error: (value: string) => void }, t: TFunction) {
     const values = normalizeSettings(form.getFieldsValue(true) as AdminSettings);
     if (editorMode.public === "json") {
         const publicSetting = parseTabJson("public", jsonText.public);
         if (!publicSetting) {
-            message.error("公开配置 JSON 格式不正确");
+            message.error(t("admin.settings.messages.invalidPublicJson"));
             return null;
         }
         values.public = publicSetting;
@@ -1351,7 +1371,7 @@ async function collectSettings(form: any, editorMode: Record<SettingsTabKey, Edi
     if (editorMode.private === "json") {
         const privateSetting = parseTabJson("private", jsonText.private);
         if (!privateSetting) {
-            message.error("私有配置 JSON 格式不正确");
+            message.error(t("admin.settings.messages.invalidPrivateJson"));
             return null;
         }
         values.private = privateSetting;
@@ -1360,11 +1380,11 @@ async function collectSettings(form: any, editorMode: Record<SettingsTabKey, Edi
     return normalizeSettings(values);
 }
 
-function getJsonError(value: string) {
+function getJsonError(value: string, t: TFunction) {
     try {
         JSON.parse(value);
         return "";
     } catch (error) {
-        return error instanceof Error ? error.message : "JSON 格式不正确";
+        return error instanceof Error ? error.message : t("admin.settings.messages.invalidJson");
     }
 }

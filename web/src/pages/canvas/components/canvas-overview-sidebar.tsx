@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import { Input, Select } from "antd";
 import { FileText, Image as ImageIcon, Layers3, Library, Music2, PanelLeftClose, PanelLeftOpen, Search, SlidersHorizontal, Video } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { formatNumber } from "@/i18n/formatters";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { CanvasNodeData } from "../types";
@@ -19,32 +21,32 @@ type Props = {
     onInsertAsset: (payload: InsertAssetPayload) => void;
 };
 
-const typeOptions = [
-    { value: "all", label: "全部类型" },
-    { value: "image", label: "图片" },
-    { value: "text", label: "文本" },
-    { value: "config", label: "配置" },
-    { value: "video", label: "视频" },
-    { value: "audio", label: "音频" },
-];
-
 export function CanvasOverviewSidebar({ nodes, selectedNodeIds, collapsed, onCollapsedChange, onSelectNode, onInsertAsset }: Props) {
+    const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const [tab, setTab] = useState<"canvas" | "assets">("canvas");
     const [keyword, setKeyword] = useState("");
     const [type, setType] = useState("all");
     const visibleNodes = useMemo(() => filterOverviewNodes(nodes, keyword, type), [keyword, nodes, type]);
+    const typeOptions = [
+        { value: "all", label: t("canvas.overview.type.all") },
+        { value: "image", label: t("canvas.nodeTypes.image") },
+        { value: "text", label: t("canvas.nodeTypes.text") },
+        { value: "config", label: t("canvas.nodeTypes.config") },
+        { value: "video", label: t("canvas.nodeTypes.video") },
+        { value: "audio", label: t("canvas.nodeTypes.audio") },
+    ];
 
     if (collapsed)
         return (
-            <aside className="relative z-[70] hidden w-10 shrink-0 justify-center border-r pt-3 md:flex" style={{ background: theme.canvas.background, borderColor: theme.toolbar.border }} aria-label="画布总览">
+            <aside className="relative z-[70] hidden w-10 shrink-0 justify-center border-r pt-3 md:flex" style={{ background: theme.canvas.background, borderColor: theme.toolbar.border }} aria-label={t("canvas.overview.label")}>
                 <button
                     type="button"
                     className="grid size-8 place-items-center rounded-md transition hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2"
                     style={{ color: theme.node.text }}
                     onClick={() => onCollapsedChange(false)}
-                    aria-label="展开总览侧栏"
-                    title="展开总览侧栏"
+                    aria-label={t("canvas.overview.expand")}
+                    title={t("canvas.overview.expand")}
                 >
                     <PanelLeftOpen className="size-4" />
                 </button>
@@ -52,20 +54,25 @@ export function CanvasOverviewSidebar({ nodes, selectedNodeIds, collapsed, onCol
         );
 
     return (
-        <aside data-canvas-no-zoom className="relative z-[70] hidden w-[280px] shrink-0 flex-col border-r md:flex" style={{ background: theme.canvas.background, borderColor: theme.toolbar.border, color: theme.node.text }} aria-label="画布总览">
-            <div className="flex h-12 shrink-0 items-center gap-1 border-b px-2" style={{ borderColor: theme.toolbar.border }} role="tablist" aria-label="总览类型">
+        <aside
+            data-canvas-no-zoom
+            className="relative z-[70] hidden w-[280px] shrink-0 flex-col border-r md:flex"
+            style={{ background: theme.canvas.background, borderColor: theme.toolbar.border, color: theme.node.text }}
+            aria-label={t("canvas.overview.label")}
+        >
+            <div className="flex h-12 shrink-0 items-center gap-1 border-b px-2" style={{ borderColor: theme.toolbar.border }} role="tablist" aria-label={t("canvas.overview.tabs.label")}>
                 <TabButton active={tab === "canvas"} theme={theme} icon={<Layers3 className="size-3.5" />} onClick={() => setTab("canvas")}>
-                    Canvas
+                    {t("canvas.overview.tabs.canvas")}
                 </TabButton>
                 <TabButton active={tab === "assets"} theme={theme} icon={<Library className="size-3.5" />} onClick={() => setTab("assets")}>
-                    Assets
+                    {t("canvas.overview.tabs.assets")}
                 </TabButton>
                 <button
                     type="button"
                     className="ml-auto grid size-8 place-items-center rounded-md transition hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2"
                     onClick={() => onCollapsedChange(true)}
-                    aria-label="折叠总览侧栏"
-                    title="折叠总览侧栏"
+                    aria-label={t("canvas.overview.collapse")}
+                    title={t("canvas.overview.collapse")}
                 >
                     <PanelLeftClose className="size-4" />
                 </button>
@@ -73,9 +80,17 @@ export function CanvasOverviewSidebar({ nodes, selectedNodeIds, collapsed, onCol
             <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
                 {tab === "canvas" ? (
                     <div className="space-y-3">
-                        <Input size="small" prefix={<Search className="size-3.5" />} placeholder="搜索节点" value={keyword} allowClear onChange={(event) => setKeyword(event.target.value)} aria-label="搜索 Canvas 节点" />
-                        <Select size="small" className="w-full" value={type} options={typeOptions} onChange={setType} aria-label="节点类型" />
-                        <ul className="space-y-1" aria-label="Canvas 节点列表">
+                        <Input
+                            size="small"
+                            prefix={<Search className="size-3.5" />}
+                            placeholder={t("canvas.overview.search.placeholder")}
+                            value={keyword}
+                            allowClear
+                            onChange={(event) => setKeyword(event.target.value)}
+                            aria-label={t("canvas.overview.search.ariaLabel")}
+                        />
+                        <Select size="small" className="w-full" value={type} options={typeOptions} onChange={setType} aria-label={t("canvas.overview.type.label")} />
+                        <ul className="space-y-1" aria-label={t("canvas.overview.listLabel")}>
                             {visibleNodes.map((node) => (
                                 <li key={node.id}>
                                     <button
@@ -88,11 +103,13 @@ export function CanvasOverviewSidebar({ nodes, selectedNodeIds, collapsed, onCol
                                     >
                                         <NodePreview node={node} theme={theme} />
                                         <span className="min-w-0 flex-1">
-                                            <span className="block truncate text-xs font-medium">{node.title || nodeTypeLabel(node.type)}</span>
+                                            <span className="block truncate text-xs font-medium">{node.title || t(`canvas.nodeTypes.${node.type}`)}</span>
                                             <span className="mt-1 flex items-center gap-1.5 text-[10px]" style={{ color: theme.node.muted }}>
                                                 <span className="size-1.5 rounded-full" style={{ background: statusColor(node.metadata?.status, theme) }} />
-                                                {statusLabel(node.metadata?.status)}
-                                                {node.metadata?.isBatchRoot && node.metadata.batchChildIds?.length ? ` · ${node.metadata.batchChildIds.length} 个结果` : null}
+                                                {t(`canvas.overview.status.${statusKey(node.metadata?.status)}`)}
+                                                {node.metadata?.isBatchRoot && node.metadata.batchChildIds?.length
+                                                    ? t("canvas.overview.batchResults", { count: node.metadata.batchChildIds.length, value: formatNumber(node.metadata.batchChildIds.length) })
+                                                    : null}
                                             </span>
                                         </span>
                                     </button>
@@ -101,7 +118,7 @@ export function CanvasOverviewSidebar({ nodes, selectedNodeIds, collapsed, onCol
                         </ul>
                         {!visibleNodes.length ? (
                             <div className="py-10 text-center text-xs" style={{ color: theme.node.muted }}>
-                                没有匹配节点
+                                {t("canvas.overview.empty")}
                             </div>
                         ) : null}
                     </div>
@@ -130,23 +147,30 @@ function TabButton({ active, theme, icon, onClick, children }: { active: boolean
 }
 
 function NodePreview({ node, theme }: { node: CanvasNodeData; theme: (typeof canvasThemes)[keyof typeof canvasThemes] }) {
+    const { t } = useTranslation();
     const Icon = node.type === "image" ? ImageIcon : node.type === "video" ? Video : node.type === "audio" ? Music2 : node.type === "config" ? SlidersHorizontal : FileText;
     const preview = overviewPreviewKind(node);
     return (
         <span className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-md border" style={{ background: theme.node.fill, borderColor: theme.node.stroke, color: theme.node.muted }}>
             <Icon className="size-4" />
             {preview === "image" ? <img src={node.metadata?.content} alt="" className="absolute inset-0 size-full object-cover" onError={(event) => event.currentTarget.remove()} /> : null}
-            {preview === "video" ? <video src={node.metadata?.content} aria-label={`${node.title}预览`} className="absolute inset-0 size-full object-cover" muted playsInline preload="auto" onError={(event) => event.currentTarget.remove()} /> : null}
+            {preview === "video" ? (
+                <video
+                    src={node.metadata?.content}
+                    aria-label={t("canvas.overview.videoPreview", { title: node.title })}
+                    className="absolute inset-0 size-full object-cover"
+                    muted
+                    playsInline
+                    preload="auto"
+                    onError={(event) => event.currentTarget.remove()}
+                />
+            ) : null}
         </span>
     );
 }
 
-function nodeTypeLabel(type: CanvasNodeData["type"]) {
-    return type === "image" ? "图片" : type === "video" ? "视频" : type === "audio" ? "音频" : type === "config" ? "配置" : "文本";
-}
-
-function statusLabel(status?: string) {
-    return status === "loading" ? "处理中" : status === "error" ? "失败" : status === "success" ? "已完成" : "就绪";
+function statusKey(status?: string) {
+    return status === "loading" ? "processing" : status === "error" ? "failed" : status === "success" ? "completed" : "ready";
 }
 
 function statusColor(status: string | undefined, theme: (typeof canvasThemes)[keyof typeof canvasThemes]) {

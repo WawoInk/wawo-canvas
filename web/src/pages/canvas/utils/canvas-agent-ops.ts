@@ -1,5 +1,7 @@
 import { nanoid } from "nanoid";
 
+import i18n from "@/i18n";
+import { formatList, formatNumber } from "@/i18n/formatters";
 import { getNodeSpec } from "../constants";
 import { CanvasNodeType, type CanvasConnection, type CanvasNodeData, type CanvasNodeMetadata, type ViewportTransform } from "../types";
 
@@ -28,9 +30,16 @@ export function summarizeCanvasAgentOps(ops?: CanvasAgentOp[]) {
         acc[op.type] = (acc[op.type] || 0) + 1;
         return acc;
     }, {});
-    return Object.entries(counts)
-        .map(([type, count]) => `${opLabel(type)} ${count}`)
-        .join("，");
+    return formatList(
+        Object.entries(counts).map(([type, count]) =>
+            i18n.t(opLabelKey(type), {
+                count,
+                operation: type,
+                value: formatNumber(count),
+            }),
+        ),
+        { style: "short", type: "conjunction" },
+    );
 }
 
 export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasAgentOp[]) {
@@ -47,7 +56,7 @@ export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasA
             const node: CanvasNodeData = {
                 id: op.id || `${nodeType}-${Date.now()}-${index}`,
                 type: nodeType,
-                title: op.title || spec.title,
+                title: op.title || i18n.t(`canvas.nodeTypes.${nodeType}`),
                 position: op.position || { x: op.x ?? index * 36, y: op.y ?? index * 36 },
                 width: op.width || spec.width,
                 height: op.height || spec.height,
@@ -83,14 +92,14 @@ export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasA
     return { ...snapshot, nodes, connections, selectedNodeIds, viewport };
 }
 
-function opLabel(type: string) {
-    if (type === "add_node") return "新增节点";
-    if (type === "update_node") return "更新节点";
-    if (type === "delete_node") return "删除节点";
-    if (type === "delete_connections") return "删除连线";
-    if (type === "connect_nodes") return "连接";
-    if (type === "set_viewport") return "调整视图";
-    if (type === "select_nodes") return "选择节点";
-    if (type === "run_generation") return "触发生成";
-    return type;
+function opLabelKey(type: string) {
+    if (type === "add_node") return "canvas.agent.operations.addNode";
+    if (type === "update_node") return "canvas.agent.operations.updateNode";
+    if (type === "delete_node") return "canvas.agent.operations.deleteNode";
+    if (type === "delete_connections") return "canvas.agent.operations.deleteConnections";
+    if (type === "connect_nodes") return "canvas.agent.operations.connectNodes";
+    if (type === "set_viewport") return "canvas.agent.operations.setViewport";
+    if (type === "select_nodes") return "canvas.agent.operations.selectNodes";
+    if (type === "run_generation") return "canvas.agent.operations.runGeneration";
+    return "canvas.agent.operations.unknown";
 }

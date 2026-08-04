@@ -7,7 +7,9 @@ GlobalRegistrator.register({ url: "http://localhost" });
 
 const { act, useState } = await import("react");
 const { createRoot } = await import("react-dom/client");
+const { default: i18n } = await import("@/i18n");
 const { CanvasPromptChipEditor } = await import("./canvas-prompt-chip-editor");
+await i18n.changeLanguage("zh-CN");
 
 test("video references keep their preview in the mention menu and chip", async () => {
     const container = document.createElement("div");
@@ -25,7 +27,7 @@ test("video references keep their preview in the mention menu and chip", async (
     try {
         await act(async () => root.render(<Harness />));
 
-        const editor = required(document.querySelector<HTMLElement>('[role="textbox"][aria-label="提示词"]'));
+        const editor = required(document.querySelector<HTMLElement>(`[role="textbox"][aria-label="${i18n.t("canvas.promptEditor.promptAria")}"]`));
         const mention = document.createTextNode("@");
         editor.replaceChildren(mention);
         setCaret(mention, 1);
@@ -64,13 +66,13 @@ test("prompt keeps resource-chip caret and content while expanding and shrinking
     const root = createRoot(container);
     await act(async () => root.render(<Harness />));
 
-    let editor = required(document.querySelector<HTMLElement>('[role="textbox"][aria-label="提示词"]'));
+    let editor = required(document.querySelector<HTMLElement>(`[role="textbox"][aria-label="${i18n.t("canvas.promptEditor.promptAria")}"]`));
     const chip = required(editor.querySelector<HTMLElement>("[data-prompt-label='图片1']"));
     setCaret(editor, Array.from(editor.childNodes).indexOf(chip) + 1);
 
-    await act(async () => click(required(document.querySelector<HTMLButtonElement>('button[aria-label="放大输入框"]'))));
+    await act(async () => click(required(document.querySelector<HTMLButtonElement>(`button[aria-label="${i18n.t("canvas.promptEditor.expand")}"]`))));
 
-    editor = required(document.querySelector<HTMLElement>('[role="textbox"][aria-label="提示词"]'));
+    editor = required(document.querySelector<HTMLElement>(`[role="textbox"][aria-label="${i18n.t("canvas.promptEditor.promptAria")}"]`));
     assert.equal(document.activeElement, editor);
     assertCaret(editor, 2);
 
@@ -80,9 +82,9 @@ test("prompt keeps resource-chip caret and content while expanding and shrinking
     setCaret(inserted, inserted.data.length);
     await act(async () => editor.dispatchEvent(new Event("input", { bubbles: true })));
 
-    await act(async () => click(required(document.querySelector<HTMLButtonElement>('button[aria-label="缩小输入框"]'))));
+    await act(async () => click(required(document.querySelector<HTMLButtonElement>(`button[aria-label="${i18n.t("canvas.promptEditor.collapse")}"]`))));
 
-    editor = required(document.querySelector<HTMLElement>('[role="textbox"][aria-label="提示词"]'));
+    editor = required(document.querySelector<HTMLElement>(`[role="textbox"][aria-label="${i18n.t("canvas.promptEditor.promptAria")}"]`));
     assert.equal(document.activeElement, editor);
     assert.equal(currentRange().startContainer.textContent, "清晰 站在这里");
     assert.equal(currentRange().startOffset, "清晰".length);

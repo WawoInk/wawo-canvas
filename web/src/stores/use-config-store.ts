@@ -6,6 +6,8 @@ import { persist } from "zustand/middleware";
 import { nanoid } from "nanoid";
 
 import { fetchPublicSettings, type ImageRequestFormatSetting, type PublicSettings } from "@/services/api/settings";
+import i18n from "@/i18n";
+import { formatNumber } from "@/i18n/formatters";
 
 export type ApiCallFormat = "openai" | "gemini" | "xvanai";
 
@@ -77,7 +79,7 @@ export const defaultConfig: AiConfig = {
     channels: [
         {
             id: "default",
-            name: "默认渠道",
+            name: i18n.t("config.channels.defaultName"),
             baseUrl: OPENAI_BASE_URL,
             apiKey: "",
             apiFormat: "openai",
@@ -351,7 +353,7 @@ export function createModelChannel(channel?: Partial<ModelChannel>): ModelChanne
     const apiFormat = normalizeApiFormat(channel?.apiFormat);
     return {
         id: channel?.id?.trim() || nanoid(),
-        name: channel?.name?.trim() || "新渠道",
+        name: channel?.name?.trim() || i18n.t("config.channels.newName"),
         baseUrl: channel?.baseUrl?.trim() || defaultBaseUrlForApiFormat(apiFormat),
         apiKey: channel?.apiKey || "",
         apiFormat,
@@ -383,7 +385,7 @@ export function modelOptionLabel(config: AiConfig, value: string) {
     const label = config.channelMode === "remote" ? config.modelDisplayNames?.[model] || model : model;
     if (!decoded) return label;
     const channel = config.channels.find((item) => item.id === decoded.channelId);
-    return channel ? `${label}（${channel.name}）` : label;
+    return channel ? i18n.t("config.channels.modelWithChannel", { model: label, channel: channel.name }) : label;
 }
 
 export function modelOptionsFromChannels(channels: ModelChannel[]) {
@@ -407,7 +409,7 @@ export function resolveModelChannel(config: AiConfig, value: string) {
     const decoded = decodeChannelModel(value);
     const model = decoded?.model || value;
     const matched = decoded ? config.channels.find((channel) => channel.id === decoded.channelId) : config.channels.find((channel) => channel.models.includes(model));
-    return matched || config.channels[0] || createModelChannel({ id: "default", name: "默认渠道", baseUrl: config.baseUrl, apiKey: config.apiKey, apiFormat: config.apiFormat, models: config.models.map(modelOptionName) });
+    return matched || config.channels[0] || createModelChannel({ id: "default", name: i18n.t("config.channels.defaultName"), baseUrl: config.baseUrl, apiKey: config.apiKey, apiFormat: config.apiFormat, models: config.models.map(modelOptionName) });
 }
 
 export function resolveModelRequestConfig(config: AiConfig, value: string) {
@@ -427,7 +429,7 @@ function normalizeChannels(config: AiConfig) {
         createModelChannel({
             ...channel,
             id: channel.id || (index === 0 ? "default" : `channel-${index + 1}`),
-            name: channel.name || (index === 0 ? "默认渠道" : `渠道 ${index + 1}`),
+            name: channel.name || (index === 0 ? i18n.t("config.channels.defaultName") : i18n.t("config.channels.generatedName", { index: formatNumber(index + 1, { useGrouping: false }) })),
             models: uniqueRawModels(channel.models || []),
         }),
     );
@@ -435,7 +437,7 @@ function normalizeChannels(config: AiConfig) {
         channels.push(
             createModelChannel({
                 id: "default",
-                name: "默认渠道",
+                name: i18n.t("config.channels.defaultName"),
                 baseUrl: config.baseUrl || defaultConfig.baseUrl,
                 apiKey: config.apiKey || "",
                 apiFormat: config.apiFormat || defaultConfig.apiFormat,

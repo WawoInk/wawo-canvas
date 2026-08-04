@@ -1,5 +1,6 @@
 import { ApiError, apiGet, apiPost } from "./request";
 
+import i18n from "@/i18n";
 import { useUserStore } from "@/stores/use-user-store";
 import {
     buildGenerationCommand,
@@ -108,7 +109,7 @@ export async function waitForGeneration(taskId: string, signal?: AbortSignal, on
     throw new GenerationTaskError(
         task.error || {
             code: task.status === "cancelled" ? "GENERATION_CANCELLED" : "GENERATION_FAILED",
-            message: `视频生成${task.status === "cancelled" ? "已取消" : "失败"}`,
+            message: i18n.t(task.status === "cancelled" ? "errors.video.cancelled" : "errors.video.generationFailed"),
             retryable: false,
         },
     );

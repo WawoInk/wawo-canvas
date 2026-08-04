@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import { Compass, Focus, HelpCircle } from "lucide-react";
 import { useState } from "react";
 import { Button, Modal, Tooltip } from "antd";
+import { useTranslation } from "react-i18next";
 
+import { formatNumber } from "@/i18n/formatters";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 
@@ -15,6 +17,7 @@ type CanvasZoomControlsProps = {
 };
 
 export function CanvasZoomControls({ scale, onScaleChange, onReset, isMiniMapOpen, onToggleMiniMap }: CanvasZoomControlsProps) {
+    const { t } = useTranslation();
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
     const colorTheme = useThemeStore((state) => state.theme);
     const theme = canvasThemes[colorTheme];
@@ -24,20 +27,20 @@ export function CanvasZoomControls({ scale, onScaleChange, onReset, isMiniMapOpe
     return (
         <div className="absolute bottom-5 left-5 z-50" onMouseDown={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
             <div className="flex h-14 items-center gap-1 rounded-xl border px-2 shadow-lg backdrop-blur" style={dockStyle}>
-                <Tooltip title={isMiniMapOpen ? "关闭小地图" : "打开小地图"}>
+                <Tooltip title={t(isMiniMapOpen ? "canvas.zoom.minimap.close" : "canvas.zoom.minimap.open")}>
                     <Button
                         type="text"
                         className="!h-8 !w-8 !min-w-8 !p-0"
                         style={isMiniMapOpen ? activeStyle : { color: theme.toolbar.item }}
                         icon={<Compass className="size-4" />}
                         onClick={onToggleMiniMap}
-                        aria-label={isMiniMapOpen ? "关闭小地图" : "打开小地图"}
+                        aria-label={t(isMiniMapOpen ? "canvas.zoom.minimap.close" : "canvas.zoom.minimap.open")}
                     />
                 </Tooltip>
-                <Tooltip title="重置视图">
-                    <Button type="text" className="!h-8 !w-8 !min-w-8 !p-0" style={{ color: theme.toolbar.item }} icon={<Focus className="size-4" />} onClick={onReset} aria-label="重置视图" />
+                <Tooltip title={t("canvas.zoom.reset")}>
+                    <Button type="text" className="!h-8 !w-8 !min-w-8 !p-0" style={{ color: theme.toolbar.item }} icon={<Focus className="size-4" />} onClick={onReset} aria-label={t("canvas.zoom.reset")} />
                 </Tooltip>
-                <Tooltip title="放大/缩小画布">
+                <Tooltip title={t("canvas.zoom.scale")}>
                     <input
                         type="range"
                         min="5"
@@ -47,24 +50,31 @@ export function CanvasZoomControls({ scale, onScaleChange, onReset, isMiniMapOpe
                         className="w-24"
                         style={{ accentColor: theme.node.activeStroke }}
                         onChange={(event) => onScaleChange(Number(event.target.value) / 100)}
-                        aria-label="放大/缩小画布"
+                        aria-label={t("canvas.zoom.scale")}
                     />
                 </Tooltip>
                 <span className="w-10 text-right text-xs tabular-nums" style={{ color: theme.node.muted }}>
-                    {Math.round(scale * 100)}%
+                    {formatNumber(scale, { style: "percent", maximumFractionDigits: 0 })}
                 </span>
-                <Tooltip title="快捷键">
-                    <Button type="text" className="!h-8 !w-8 !min-w-8 !p-0" style={shortcutsOpen ? activeStyle : { color: theme.toolbar.item }} icon={<HelpCircle className="size-4" />} onClick={() => setShortcutsOpen(true)} aria-label="快捷键" />
+                <Tooltip title={t("canvas.shortcuts.title")}>
+                    <Button
+                        type="text"
+                        className="!h-8 !w-8 !min-w-8 !p-0"
+                        style={shortcutsOpen ? activeStyle : { color: theme.toolbar.item }}
+                        icon={<HelpCircle className="size-4" />}
+                        onClick={() => setShortcutsOpen(true)}
+                        aria-label={t("canvas.shortcuts.title")}
+                    />
                 </Tooltip>
             </div>
-            <Modal title="快捷键" open={shortcutsOpen} onCancel={() => setShortcutsOpen(false)} footer={null} centered>
+            <Modal title={t("canvas.shortcuts.title")} open={shortcutsOpen} onCancel={() => setShortcutsOpen(false)} footer={null} centered>
                 <div className="space-y-3 border-t pt-4 text-sm" style={{ borderColor: theme.node.stroke }}>
-                    <Shortcut label="拖动画布" value="平移视图" />
-                    <Shortcut label="滚轮" value="缩放画布" />
-                    <Shortcut label="Ctrl / Cmd + 拖动" value="框选多个节点" />
-                    <Shortcut label="Shift / Ctrl / Cmd + 点击" value="追加选择节点" />
-                    <Shortcut label="Ctrl / Cmd + C / V" value="复制 / 粘贴节点" />
-                    <Shortcut label="Delete / Backspace" value="删除选中" />
+                    <Shortcut label={t("canvas.shortcuts.gestures.dragCanvas")} value={t("canvas.shortcuts.actions.pan")} />
+                    <Shortcut label={t("canvas.shortcuts.gestures.wheel")} value={t("canvas.shortcuts.actions.zoom")} />
+                    <Shortcut label={`Ctrl / Cmd + ${t("canvas.shortcuts.gestures.drag")}`} value={t("canvas.shortcuts.actions.boxSelect")} />
+                    <Shortcut label={`Shift / Ctrl / Cmd + ${t("canvas.shortcuts.gestures.click")}`} value={t("canvas.shortcuts.actions.addSelection")} />
+                    <Shortcut label="Ctrl / Cmd + C / V" value={t("canvas.shortcuts.actions.copyPaste")} />
+                    <Shortcut label="Delete / Backspace" value={t("canvas.shortcuts.actions.deleteSelection")} />
                 </div>
             </Modal>
         </div>

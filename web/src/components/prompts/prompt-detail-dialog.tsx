@@ -1,11 +1,13 @@
 "use client";
 
 import { Copy, FolderPlus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button, Modal, Space, Tag } from "antd";
 
 import { formatPromptDate, type Prompt } from "@/services/api/prompts";
 
 export function PromptDetailDialog({ prompt, onClose, onCopy, onSaveAsset }: { prompt: Prompt | null; onClose: () => void; onCopy: (prompt: string) => void; onSaveAsset?: (prompt: Prompt) => void }) {
+    const { t } = useTranslation();
     return (
         <>
             <Modal title={prompt?.title} open={Boolean(prompt)} onCancel={onClose} footer={null} width={860}>
@@ -25,16 +27,14 @@ export function PromptDetailDialog({ prompt, onClose, onCopy, onSaveAsset }: { p
                                     ))}
                                 </div>
                                 <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-stone-800 dark:text-stone-300">{prompt.prompt}</p>
-                                <div className="mt-4 text-xs text-stone-500 dark:text-stone-400">
-                                    创建：{formatPromptDate(prompt.createdAt)} · 更新：{formatPromptDate(prompt.updatedAt)}
-                                </div>
+                                <div className="mt-4 text-xs text-stone-500 dark:text-stone-400">{t("prompts.detail.dates", { createdAt: formatPromptDate(prompt.createdAt), updatedAt: formatPromptDate(prompt.updatedAt) })}</div>
                                 <Space wrap className="mt-5">
                                     <Button type="primary" icon={<Copy className="size-4" />} onClick={() => onCopy(prompt.prompt)}>
-                                        复制提示词
+                                        {t("prompts.actions.copy")}
                                     </Button>
                                     {onSaveAsset ? (
                                         <Button icon={<FolderPlus className="size-4" />} onClick={() => onSaveAsset(prompt)}>
-                                            加入我的素材
+                                            {t("common.actions.addToMyAssets")}
                                         </Button>
                                     ) : null}
                                 </Space>

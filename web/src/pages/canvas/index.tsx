@@ -4,7 +4,9 @@ import { Suspense, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { App, Button } from "antd";
 import { Download, FileUp, Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { formatNumber } from "@/i18n/formatters";
 import { readZip } from "@/lib/zip";
 import { setMediaBlob, setImageBlob } from "@/services/blob-storage";
 import { CanvasDeleteProjectsDialog } from "./components/canvas-delete-projects-dialog";
@@ -16,8 +18,10 @@ import { exportCanvasProjects } from "./utils/canvas-export";
 import { useUserStore } from "@/stores/use-user-store";
 
 export default function Page() {
+    const { t } = useTranslation();
+
     return (
-        <Suspense fallback={<main className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground">正在加载...</main>}>
+        <Suspense fallback={<main className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground">{t("canvas.library.states.loading")}</main>}>
             <CanvasPage />
         </Suspense>
     );
@@ -25,6 +29,7 @@ export default function Page() {
 
 function CanvasPage() {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const inputRef = useRef<HTMLInputElement>(null);
@@ -44,7 +49,7 @@ function CanvasPage() {
     const enterProject = (id: string) => {
         navigate(`/canvas/${id}${agentQuery}`);
     };
-    const createAndEnter = () => enterProject(createProject(`无限画布 ${projects.length + 1}`));
+    const createAndEnter = () => enterProject(createProject(t("canvas.library.project.defaultTitle", { index: formatNumber(projects.length + 1, { useGrouping: false }) })));
     const importCanvas = async (file?: File) => {
         if (!file) return;
         try {
@@ -63,9 +68,9 @@ function CanvasPage() {
                 ),
             );
             data.projects.forEach((item) => importProject(item.project));
-            message.success(`已导入 ${data.projects.length} 个画布`);
+            message.success(t("canvas.library.messages.importSuccess", { count: data.projects.length, value: formatNumber(data.projects.length) }));
         } catch {
-            message.error("导入失败，请选择有效的画布压缩包");
+            message.error(t("canvas.library.errors.importFailed"));
         } finally {
             if (inputRef.current) inputRef.current.value = "";
         }
@@ -74,8 +79,9 @@ function CanvasPage() {
     useEffect(() => {
         if (!hydrated || autoOpenRef.current || (mode !== "new" && mode !== "recent")) return;
         autoOpenRef.current = true;
-        enterProject(mode === "new" ? createProject(`无限画布 ${projects.length + 1}`) : projects[0]?.id || createProject(`无限画布 ${projects.length + 1}`));
-    }, [createProject, hydrated, mode, projects]);
+        const defaultTitle = t("canvas.library.project.defaultTitle", { index: formatNumber(projects.length + 1, { useGrouping: false }) });
+        enterProject(mode === "new" ? createProject(defaultTitle) : projects[0]?.id || createProject(defaultTitle));
+    }, [createProject, hydrated, mode, projects, t]);
 
     // Sync from backend when hydrated and user is logged in
     useEffect(() => {
@@ -84,15 +90,15 @@ function CanvasPage() {
         }
     }, [hydrated, user?.id, syncFromBackend]);
 
-    if (hydrated && (mode === "new" || mode === "recent")) return <main className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground">正在打开画布...</main>;
+    if (hydrated && (mode === "new" || mode === "recent")) return <main className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground">{t("canvas.library.states.opening")}</main>;
 
     return (
         <main className="h-full overflow-auto bg-background text-foreground">
             <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-10">
                 <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-6">
                     <div>
-                        <p className="text-xs text-muted-foreground">画布库</p>
-                        <h1 className="mt-3 text-3xl font-semibold">无限画布</h1>
+                        <p className="text-xs text-muted-foreground">{t("canvas.library.header.eyebrow")}</p>
+                        <h1 className="mt-3 text-3xl font-semibold">{t("canvas.library.header.title")}</h1>
                     </div>
                     <div className="flex items-center gap-2">
                         {selectedIds.length ? (
@@ -103,33 +109,33 @@ function CanvasPage() {
                                     onClick={() =>
                                         void exportCanvasProjects(
                                             projects.filter((project) => selectedIds.includes(project.id)),
-                                            `无限画布-${selectedIds.length}个项目`,
+                                            t("canvas.library.project.selectedExportFileName", { count: selectedIds.length, value: formatNumber(selectedIds.length) }),
                                         )
                                     }
                                 >
-                                    导出选中
+                                    {t("canvas.library.actions.exportSelected")}
                                 </Button>
                                 <Button disabled={!hydrated} onClick={() => setDeleteIds(selectedIds)}>
-                                    删除选中
+                                    {t("canvas.library.actions.deleteSelected")}
                                 </Button>
                             </>
                         ) : null}
                         {projects.length ? (
                             <Button disabled={!hydrated} onClick={() => setDeleteIds(projects.map((project) => project.id))}>
-                                删除全部
+                                {t("canvas.library.actions.deleteAll")}
                             </Button>
                         ) : null}
                         <Button disabled={!hydrated} icon={<FileUp className="size-4" />} onClick={() => inputRef.current?.click()}>
-                            导入画布
+                            {t("canvas.library.actions.import")}
                         </Button>
                         <Button disabled={!hydrated} type="primary" icon={<Plus className="size-4" />} onClick={createAndEnter}>
-                            新建画布
+                            {t("canvas.library.actions.create")}
                         </Button>
                     </div>
                 </header>
 
                 {!hydrated ? (
-                    <section className="flex min-h-[360px] items-center justify-center border-y text-sm text-muted-foreground">正在加载画布...</section>
+                    <section className="flex min-h-[360px] items-center justify-center border-y text-sm text-muted-foreground">{t("canvas.library.states.loadingProjects")}</section>
                 ) : projects.length ? (
                     <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                         {projects.map((project) => (
@@ -138,10 +144,10 @@ function CanvasPage() {
                     </div>
                 ) : (
                     <section className="flex min-h-[360px] flex-col items-center justify-center border-y text-center">
-                        <h2 className="text-xl font-medium">还没有画布</h2>
-                        <p className="mt-3 text-sm text-muted-foreground">新建一个画布后，就可以独立保存节点、连线和画布外观。</p>
+                        <h2 className="text-xl font-medium">{t("canvas.library.empty.title")}</h2>
+                        <p className="mt-3 text-sm text-muted-foreground">{t("canvas.library.empty.description")}</p>
                         <Button type="primary" className="mt-6" icon={<Plus className="size-4" />} onClick={createAndEnter}>
-                            新建画布
+                            {t("canvas.library.actions.create")}
                         </Button>
                     </section>
                 )}

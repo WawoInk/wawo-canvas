@@ -3,23 +3,15 @@ import { Button, Flex, Layout, Menu, Typography, theme } from "antd";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { adminLayoutStyle } from "@/lib/app-theme";
 import { useUserStore } from "@/stores/use-user-store";
 
-const adminMenus = [
-    { key: "/admin/enterprises", icon: <TeamOutlined />, label: "企业管理" },
-    { key: "/admin/users", icon: <UserOutlined />, label: "用户管理" },
-    { key: "/admin/credit-logs", icon: <TransactionOutlined />, label: "算力点日志" },
-    { key: "/admin/generation-tasks", icon: <ExperimentOutlined />, label: "使用日志" },
-    { key: "/admin/prompts", icon: <FileTextOutlined />, label: "提示词管理" },
-    { key: "/admin/assets", icon: <PictureOutlined />, label: "素材库" },
-    { key: "/admin/settings", icon: <SettingOutlined />, label: "系统设置" },
-];
-
 export default function AdminLayout({ children }: { children: ReactNode }) {
+    const { t } = useTranslation();
     const { token: antToken } = theme.useToken();
     const navigate = useNavigate();
     const { pathname } = useLocation();
@@ -27,6 +19,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     const user = useUserStore((state) => state.user);
     const isReady = useUserStore((state) => state.isReady);
     const logout = useUserStore((state) => state.clearSession);
+    const adminMenus = [
+        { key: "/admin/enterprises", icon: <TeamOutlined />, label: t("admin.menus.enterprises") },
+        { key: "/admin/users", icon: <UserOutlined />, label: t("admin.menus.users") },
+        { key: "/admin/credit-logs", icon: <TransactionOutlined />, label: t("admin.menus.creditLogs") },
+        { key: "/admin/generation-tasks", icon: <ExperimentOutlined />, label: t("admin.menus.generationTasks") },
+        { key: "/admin/prompts", icon: <FileTextOutlined />, label: t("admin.menus.prompts") },
+        { key: "/admin/assets", icon: <PictureOutlined />, label: t("admin.menus.assets") },
+        { key: "/admin/settings", icon: <SettingOutlined />, label: t("admin.menus.settings") },
+    ];
     const activeKey = pathname.startsWith("/admin/enterprises")
         ? "/admin/enterprises"
         : pathname.startsWith("/admin/settings")
@@ -43,18 +44,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     ? "/admin/users"
                     : "";
     const pageTitle = pathname.startsWith("/admin/enterprises")
-        ? "企业管理"
+        ? t("admin.menus.enterprises")
         : pathname.startsWith("/admin/settings")
-          ? "系统设置"
+          ? t("admin.menus.settings")
           : pathname.startsWith("/admin/assets")
-            ? "素材库管理"
+            ? t("admin.menus.assetsManagement")
             : pathname.startsWith("/admin/generation-tasks")
-              ? "使用日志"
+              ? t("admin.menus.generationTasks")
               : pathname.startsWith("/admin/prompts")
-                ? "提示词管理"
+                ? t("admin.menus.prompts")
                 : pathname.startsWith("/admin/credit-logs")
-                  ? "算力点日志"
-                  : "用户管理";
+                  ? t("admin.menus.creditLogs")
+                  : t("admin.menus.users");
 
     useEffect(() => {
         if (!isReady) return;
@@ -81,7 +82,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 <Flex align="center" gap={12} style={{ height: adminLayoutStyle.brandHeight, padding: "0 20px", borderBottom: `1px solid ${antToken.colorBorderSecondary}` }}>
                     <BrandLogo variant="mark" height={28} />
                     <Typography.Text strong style={{ fontSize: 18, letterSpacing: 0, color: antToken.colorText }}>
-                        Canvan
+                        {t("common.brand")}
                     </Typography.Text>
                 </Flex>
                 <Menu
@@ -100,10 +101,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 />
                 <Flex vertical gap={8} style={{ position: "absolute", bottom: 0, insetInline: 0, padding: 12, borderTop: `1px solid ${antToken.colorBorder}`, background: antToken.colorBgContainer }}>
                     <Button block icon={<HomeOutlined />} href="/canvas" target="_blank" rel="noreferrer">
-                        前往画布
+                        {t("common.goToCanvas")}
                     </Button>
                     <Button block icon={<LogoutOutlined />} onClick={logout}>
-                        退出登录
+                        {t("common.logout")}
                     </Button>
                 </Flex>
             </Layout.Sider>

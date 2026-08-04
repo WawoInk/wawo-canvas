@@ -5,8 +5,14 @@ import { useEffect } from "react";
 import { ProConfigProvider } from "@ant-design/pro-components";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App, ConfigProvider } from "antd";
+import enUS from "antd/locale/en_US";
 import zhCN from "antd/locale/zh_CN";
+import dayjs from "dayjs";
+import "dayjs/locale/en";
+import "dayjs/locale/zh-cn";
+import { useTranslation } from "react-i18next";
 
+import { resolveLanguage } from "@/i18n";
 import { getAntThemeConfig } from "@/lib/app-theme";
 import { sessionChanged } from "@/lib/account-storage";
 import { useThemeStore } from "@/stores/use-theme-store";
@@ -23,13 +29,21 @@ const queryClient = new QueryClient({
 });
 
 export function AppProviders({ children }: { children: ReactNode }) {
+    const { i18n } = useTranslation();
     const theme = useThemeStore((state) => state.theme);
     const dark = theme === "dark";
+    const language = resolveLanguage(i18n.resolvedLanguage || i18n.language);
+    const antLocale = language === "en-US" ? enUS : zhCN;
 
     useEffect(() => {
         document.documentElement.classList.toggle("dark", dark);
         document.documentElement.style.colorScheme = theme;
     }, [dark, theme]);
+
+    useEffect(() => {
+        document.documentElement.lang = language;
+        dayjs.locale(language === "en-US" ? "en" : "zh-cn");
+    }, [language]);
 
     useEffect(() => {
         let previous = { token: useUserStore.getState().token, userId: useUserStore.getState().user?.id };
@@ -41,7 +55,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
     }, []);
 
     return (
-        <ConfigProvider locale={zhCN} theme={getAntThemeConfig(dark)}>
+        <ConfigProvider locale={antLocale} theme={getAntThemeConfig(dark)}>
             <ProConfigProvider dark={dark}>
                 <App>
                     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>

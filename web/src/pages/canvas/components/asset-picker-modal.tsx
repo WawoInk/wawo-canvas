@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Empty, Input, Modal, Pagination, Tag } from "antd";
 import { Play, Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 import { LazyImage } from "@/components/lazy-media";
@@ -22,14 +23,17 @@ type Props = {
 };
 
 export function AssetPickerModal({ open, defaultTab: _defaultTab, onInsert, onClose }: Props) {
+    const { t } = useTranslation();
+
     return (
-        <Modal title="选择素材" open={open} onCancel={onClose} footer={null} width={860} destroyOnHidden styles={{ body: { padding: "0 24px 24px", minHeight: 480 } }}>
+        <Modal title={t("canvas.assets.picker.title")} open={open} onCancel={onClose} footer={null} width={860} destroyOnHidden styles={{ body: { padding: "0 24px 24px", minHeight: 480 } }}>
             <MyAssetsPanel active={open} onInsert={onInsert} />
         </Modal>
     );
 }
 
 export function MyAssetsPanel({ active, compact = false, onInsert }: { active: boolean; compact?: boolean; onInsert: (payload: InsertAssetPayload) => void }) {
+    const { t } = useTranslation();
     const assets = useAssetStore((state) => state.assets);
     const refreshAssetUrls = useAssetStore((state) => state.refreshAssetUrls);
     const fileIdsKey = useMemo(() => assetFileIdsToRefresh(active, assets).join("\0"), [active, assets]);
@@ -42,6 +46,12 @@ export function MyAssetsPanel({ active, compact = false, onInsert }: { active: b
     }, [fileIdsKey, refreshAssetUrls]);
 
     const pageSize = compact ? 6 : 8;
+    const kindOptions = [
+        { label: t("canvas.assets.picker.filters.all"), value: "all" },
+        { label: t("canvas.assets.picker.filters.text"), value: "text" },
+        { label: t("canvas.assets.picker.filters.image"), value: "image" },
+        { label: t("canvas.assets.picker.filters.video"), value: "video" },
+    ];
     const filtered = useMemo(() => {
         const query = keyword.trim().toLowerCase();
         return assets
@@ -62,7 +72,7 @@ export function MyAssetsPanel({ active, compact = false, onInsert }: { active: b
                     className={compact ? "w-full" : "w-56"}
                     size="small"
                     prefix={<Search className="size-3.5 text-muted-foreground" />}
-                    placeholder="搜索素材"
+                    placeholder={t("canvas.assets.picker.searchPlaceholder")}
                     value={keyword}
                     allowClear
                     onChange={(event) => {
@@ -100,7 +110,7 @@ export function MyAssetsPanel({ active, compact = false, onInsert }: { active: b
                     ))}
                 </div>
             ) : (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有素材" className="py-12" />
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("canvas.assets.picker.empty")} className="py-12" />
             )}
             {filtered.length > pageSize ? (
                 <div className="flex justify-center">
@@ -111,14 +121,8 @@ export function MyAssetsPanel({ active, compact = false, onInsert }: { active: b
     );
 }
 
-const kindOptions = [
-    { label: "全部", value: "all" },
-    { label: "文本", value: "text" },
-    { label: "图片", value: "image" },
-    { label: "视频", value: "video" },
-];
-
 function PickerCard({ title, kind, source, compact = false, onClick }: { title: string; kind: string; source: string; compact?: boolean; onClick: () => void }) {
+    const { t } = useTranslation();
     const preview = assetPreviewKind(kind, source);
     return (
         <button
@@ -129,15 +133,19 @@ function PickerCard({ title, kind, source, compact = false, onClick }: { title: 
             <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-muted dark:bg-card">
                 {kind === "video" ? <Play className="size-6 text-muted-foreground" /> : preview === "icon" ? <span className="p-3 text-center text-xs leading-5 text-muted-foreground">{title}</span> : null}
                 {preview === "image" ? <LazyImage src={source} alt={title} className="absolute inset-0 size-full" /> : null}
-                {preview === "video" ? <video src={source} aria-label={`${title}预览`} className="absolute inset-0 size-full object-cover" muted playsInline preload="auto" onError={(event) => event.currentTarget.remove()} /> : null}
+                {preview === "video" ? (
+                    <video src={source} aria-label={t("canvas.assets.picker.previewAria", { title })} className="absolute inset-0 size-full object-cover" muted playsInline preload="auto" onError={(event) => event.currentTarget.remove()} />
+                ) : null}
             </div>
             <div className={compact ? "p-1.5" : "p-2.5"}>
                 <div className="flex items-center justify-between gap-2">
                     <span className="line-clamp-1 text-xs font-medium text-foreground dark:text-foreground">{title}</span>
-                    {!compact ? <Tag className="m-0 shrink-0 text-[10px]">{kind === "image" ? "图片" : kind === "video" ? "视频" : "文本"}</Tag> : null}
+                    {!compact ? <Tag className="m-0 shrink-0 text-[10px]">{t(`canvas.assets.picker.filters.${kind === "image" || kind === "video" ? kind : "text"}`)}</Tag> : null}
                 </div>
             </div>
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-foreground/0 text-sm font-medium text-white opacity-0 transition group-hover:bg-foreground/55 group-hover:opacity-100">插入</div>
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-foreground/0 text-sm font-medium text-white opacity-0 transition group-hover:bg-foreground/55 group-hover:opacity-100">
+                {t("canvas.assets.picker.insert")}
+            </div>
         </button>
     );
 }

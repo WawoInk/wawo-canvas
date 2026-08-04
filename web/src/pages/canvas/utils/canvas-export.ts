@@ -1,11 +1,12 @@
 import { saveAs } from "file-saver";
 
+import i18n from "@/i18n";
 import { createZip } from "@/lib/zip";
 import { getMediaBlob, getImageBlob } from "@/services/blob-storage";
 import type { CanvasExportAsset, CanvasExportFile } from "../export-types";
 import type { CanvasProject } from "../stores/use-canvas-store";
 
-export async function exportCanvasProjects(projects: CanvasProject[], fileName = "无限画布") {
+export async function exportCanvasProjects(projects: CanvasProject[], fileName = i18n.t("canvas.export.defaultFileName")) {
     const zipFiles: { name: string; data: BlobPart }[] = [];
     const exportedProjects = await Promise.all(
         projects.map(async (project) => {

@@ -2,6 +2,7 @@
 
 import { Copy } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Button, Card, Tag } from "antd";
 
 import { formatPromptDate, type Prompt } from "@/services/api/prompts";
@@ -10,7 +11,7 @@ export function PromptCard({
     item,
     onOpen,
     onCopy,
-    actionLabel = "复制",
+    actionLabel,
     actionIcon = <Copy className="size-3.5" />,
     actionType = "text",
     extraAction,
@@ -23,6 +24,7 @@ export function PromptCard({
     actionType?: "text" | "primary";
     extraAction?: ReactNode;
 }) {
+    const { t } = useTranslation();
     return (
         <Card
             hoverable
@@ -52,7 +54,7 @@ export function PromptCard({
             </button>
             <div className="flex items-center gap-2 px-4 pb-4">
                 <Button block={actionType === "primary"} type={actionType} size="small" icon={actionIcon} onClick={onCopy}>
-                    {actionLabel}
+                    {actionLabel || t("common.actions.copy")}
                 </Button>
                 {extraAction}
             </div>

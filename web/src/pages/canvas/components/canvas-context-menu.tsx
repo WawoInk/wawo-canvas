@@ -3,12 +3,14 @@
 import { useEffect } from "react";
 import type { ReactNode } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { ContextMenuState } from "../types";
 
 export function CanvasNodeContextMenu({ menu, onClose, onDuplicate, onDelete }: { menu: ContextMenuState; onClose: () => void; onDuplicate: () => void; onDelete: () => void }) {
+    const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
 
     useEffect(() => {
@@ -27,8 +29,8 @@ export function CanvasNodeContextMenu({ menu, onClose, onDuplicate, onDelete }: 
             style={{ left: menu.x, top: menu.y, background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
             onPointerDown={(event) => event.stopPropagation()}
         >
-            {menu.type === "node" ? <MenuButton icon={<Plus className="size-4" />} label="Duplicate" onClick={onDuplicate} /> : null}
-            <MenuButton icon={<Trash2 className="size-4" />} label="Delete" onClick={onDelete} danger />
+            {menu.type === "node" ? <MenuButton icon={<Plus className="size-4" />} label={t("canvas.contextMenu.duplicate")} onClick={onDuplicate} /> : null}
+            <MenuButton icon={<Trash2 className="size-4" />} label={t("canvas.contextMenu.delete")} onClick={onDelete} danger />
         </div>
     );
 }

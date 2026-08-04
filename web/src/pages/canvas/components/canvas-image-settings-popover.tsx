@@ -4,8 +4,10 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Settings2 } from "lucide-react";
 import { Button } from "antd";
+import { useTranslation } from "react-i18next";
 
 import { ImageSettingsPanel, imageQualityLabel, imageSizeLabel } from "@/components/image-settings-panel";
+import { formatNumber } from "@/i18n/formatters";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { AiConfig } from "@/stores/use-config-store";
@@ -22,6 +24,7 @@ type CanvasImageSettingsPopoverProps = {
 };
 
 export function CanvasImageSettingsPopover({ config, onConfigChange, onOpenChange, buttonClassName, placement = "topLeft" }: CanvasImageSettingsPopoverProps) {
+    const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const buttonRef = useRef<HTMLSpanElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
@@ -72,7 +75,7 @@ export function CanvasImageSettingsPopover({ config, onConfigChange, onOpenChang
                     onClick={() => updateOpen(!open)}
                 >
                     <span className="truncate">
-                        {imageQualityLabel(quality)} · {imageSizeLabel(activeSize)} · {count} 张
+                        {imageQualityLabel(quality)} · {imageSizeLabel(activeSize)} · {t("canvas.counts.images", { count, value: formatNumber(count) })}
                     </span>
                 </Button>
             </span>

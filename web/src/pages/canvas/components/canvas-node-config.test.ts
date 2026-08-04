@@ -33,6 +33,7 @@ const defaults: AiConfig = {
     videoModels: [],
     textModels: [],
     audioModels: [],
+    imageRequestFormats: [],
     quality: "auto",
     size: "auto",
     count: "1",

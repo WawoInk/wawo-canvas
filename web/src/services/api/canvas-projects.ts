@@ -1,3 +1,4 @@
+import i18n from "@/i18n";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/services/api/request";
 import { useUserStore } from "@/stores/use-user-store";
 
@@ -26,13 +27,13 @@ function authToken() {
 
 export async function fetchCanvasProjects(): Promise<CanvasProjectItem[]> {
     const token = authToken();
-    if (!token) throw new Error("未登录");
+    if (!token) throw new Error(i18n.t("errors.authRequired"));
     return apiGet<CanvasProjectItem[]>("/api/v1/canvas/projects", undefined, token);
 }
 
 export async function fetchCanvasProject(id: string): Promise<CanvasProjectDetail> {
     const token = authToken();
-    if (!token) throw new Error("未登录");
+    if (!token) throw new Error(i18n.t("errors.authRequired"));
     return apiGet<CanvasProjectDetail>(`/api/v1/canvas/projects/${encodeURIComponent(id)}`, undefined, token);
 }
 

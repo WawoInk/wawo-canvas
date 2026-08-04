@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { App } from "antd";
+import { useTranslation } from "react-i18next";
 
 import {
     adjustAdminEnterpriseCredits,
@@ -20,6 +21,7 @@ import { useUserStore } from "@/stores/use-user-store";
 
 export function useAdminEnterprises() {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const queryClient = useQueryClient();
     const token = useUserStore((state) => state.token);
     const [keyword, setKeyword] = useState("");
@@ -31,7 +33,7 @@ export function useAdminEnterprises() {
         onSuccess: async () => {
             await Promise.all([queryClient.invalidateQueries({ queryKey: ["admin", "enterprises"] }), queryClient.invalidateQueries({ queryKey: ["admin", "users"] }), queryClient.invalidateQueries({ queryKey: ["admin", "credit-logs"] })]);
         },
-        onError: (error) => message.error(error instanceof Error ? error.message : "操作失败"),
+        onError: (error) => message.error(error instanceof Error ? error.message : t("admin.common.messages.operationFailed")),
     });
 
     return {
@@ -64,7 +66,7 @@ export function useAdminEnterprises() {
             try {
                 return (await fetchAdminCreditLogs(token, { keyword: ownerId, type: "admin_adjust", pageSize: 20 })).items.filter((item) => item.userId === ownerId);
             } catch (error) {
-                message.error(error instanceof Error ? error.message : "读取充值记录失败");
+                message.error(error instanceof Error ? error.message : t("admin.enterprises.messages.creditLogsLoadFailed"));
                 return [];
             }
         },

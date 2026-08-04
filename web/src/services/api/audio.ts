@@ -4,6 +4,7 @@ import { audioMimeType, normalizeAudioFormatValue, normalizeAudioSpeedValue, nor
 import { uploadMediaFile, type UploadedFile } from "@/services/blob-storage";
 import { buildApiUrl, resolveModelRequestConfig, type AiConfig } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
+import i18n from "@/i18n";
 
 type RequestOptions = { signal?: AbortSignal };
 
@@ -47,7 +48,7 @@ export async function requestAudioGeneration(config: AiConfig, prompt: string, o
         await assertAudioBlob(response.data);
         return response.data.type.startsWith("audio/") ? response.data : new Blob([response.data], { type: audioMimeType(format) });
     } catch (error) {
-        throw new Error(readAxiosError(error, "音频生成失败"));
+        throw new Error(readAxiosError(error, i18n.t("errors.audio.generationFailed")));
     }
 }
 
@@ -57,12 +58,12 @@ export async function storeGeneratedAudio(blob: Blob, format = "mp3"): Promise<U
 }
 
 function assertAudioConfig(config: AiConfig, model: string) {
-    if (!model) throw new Error("请先配置音频模型");
+    if (!model) throw new Error(i18n.t("errors.config.audioModelRequired"));
     if (config.channelMode !== "remote") {
-        if (!config.baseUrl.trim()) throw new Error("请先配置 Base URL");
-        if (!config.apiKey.trim()) throw new Error("请先配置 API Key");
+        if (!config.baseUrl.trim()) throw new Error(i18n.t("errors.config.baseUrlRequired"));
+        if (!config.apiKey.trim()) throw new Error(i18n.t("errors.config.apiKeyRequired"));
     }
-    if (config.apiFormat === "gemini") throw new Error("Gemini 调用格式暂不支持音频生成，请使用 OpenAI 格式渠道");
+    if (config.apiFormat === "gemini") throw new Error(i18n.t("errors.audio.geminiUnsupported"));
 }
 
 async function assertAudioBlob(blob: Blob) {
@@ -73,12 +74,12 @@ async function assertAudioBlob(blob: Blob) {
     } catch {
         return;
     }
-    if (typeof payload.code === "number" && payload.code !== 0) throw new Error(payload.msg || "音频生成失败");
+    if (typeof payload.code === "number" && payload.code !== 0) throw new Error(payload.msg || i18n.t("errors.audio.generationFailed"));
     if (payload.error?.message) throw new Error(payload.error.message);
 }
 
 function readAxiosError(error: unknown, fallback: string) {
-    if (axios.isCancel(error)) return "请求已取消";
+    if (axios.isCancel(error)) return i18n.t("errors.requestCancelled");
     if (axios.isAxiosError<{ error?: { message?: string }; msg?: string; code?: number }>(error)) {
         const responseData = error.response?.data;
         return responseData?.msg || responseData?.error?.message || statusMessage(error.response?.status, fallback);
@@ -87,7 +88,7 @@ function readAxiosError(error: unknown, fallback: string) {
 }
 
 function statusMessage(status: number | undefined, fallback: string) {
-    if (status === 401 || status === 403) return "鉴权失败，请检查 API Key、套餐权限或模型权限";
-    if (status === 429) return "请求被限流或额度不足，请稍后重试";
-    return status ? `${fallback}（${status}）` : fallback;
+    if (status === 401 || status === 403) return i18n.t("errors.authenticationFailed");
+    if (status === 429) return i18n.t("errors.rateLimited");
+    return status ? i18n.t("errors.requestFailedWithStatus", { fallback, status }) : fallback;
 }

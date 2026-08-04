@@ -3,6 +3,7 @@
 import localforage from "localforage";
 import { nanoid } from "nanoid";
 import { readImageMeta } from "@/lib/image-utils";
+import i18n from "@/i18n";
 
 export type StoredImage = { url: string; storageKey: string; width: number; height: number; bytes: number; mimeType: string };
 export type StoredFile = { url: string; storageKey: string; bytes: number; mimeType: string; width?: number; height?: number; durationMs?: number };
@@ -182,7 +183,7 @@ function blobToDataUrl(blob: Blob) {
     return new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = () => reject(new Error("读取图片失败"));
+        reader.onerror = () => reject(new Error(i18n.t("errors.image.readFailed")));
         reader.readAsDataURL(blob);
     });
 }

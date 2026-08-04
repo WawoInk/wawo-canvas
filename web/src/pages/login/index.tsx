@@ -4,6 +4,7 @@ import { LockOutlined, UserOutlined } from "@ant-design/icons";
 import { App, Button, Form, Input, Segmented, Space } from "antd";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Suspense, useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { BorderBeam } from "@/components/ui/border-beam";
@@ -37,6 +38,7 @@ export default function LoginPage() {
 
 function LoginContent() {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const login = useUserStore((state) => state.login);
@@ -55,11 +57,11 @@ function LoginContent() {
         if (!token) return;
         void fetchCurrentUser(token).then((user) => {
             setSession(token, user);
-            message.success("登录成功");
+            message.success(t("auth.messages.loginSuccess"));
             navigate(redirect, { replace: true });
             window.location.reload();
         });
-    }, [message, redirect, navigate, searchParams, setSession]);
+    }, [message, redirect, navigate, searchParams, setSession, t]);
 
     useEffect(() => {
         if (!allowRegister && mode === "register") setMode("login");
@@ -68,21 +70,21 @@ function LoginContent() {
     const submit = async (values: LoginFormValues) => {
         try {
             if (mode === "register" && !allowRegister) {
-                message.error("当前未开放注册");
+                message.error(t("auth.messages.registrationDisabled"));
                 return;
             }
             if (mode === "register" && values.password !== values.confirmPassword) {
-                message.error("两次输入的密码不一致");
+                message.error(t("auth.validation.passwordMismatch"));
                 return;
             }
             const action = mode === "register" ? register : login;
             const user = await action({ username: values.username, password: values.password });
-            message.success(mode === "register" ? "注册成功" : "登录成功");
+            message.success(mode === "register" ? t("auth.messages.registerSuccess") : t("auth.messages.loginSuccess"));
             navigate(redirect, { replace: true });
             window.location.reload();
             if (user.role !== "admin") navigate("/", { replace: true });
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "登录失败");
+            message.error(error instanceof Error ? error.message : t("auth.messages.loginFailed"));
         }
     };
 
@@ -91,8 +93,8 @@ function LoginContent() {
             <section className="relative w-full max-w-[420px] rounded-[16px] overflow-hidden">
                 <div className="mb-7 text-center">
                     <BrandLogo variant="full" height={64} className="mx-auto mb-4" />
-                    <h1 className="text-3xl font-semibold tracking-normal text-foreground">账号登录</h1>
-                    <p className="mt-3 text-base leading-7 text-muted-foreground">支持账号密码和 Linux.do 登录。</p>
+                    <h1 className="text-3xl font-semibold tracking-normal text-foreground">{t("auth.title")}</h1>
+                    <p className="mt-3 text-base leading-7 text-muted-foreground">{t("auth.description")}</p>
                 </div>
 
                 <Form<LoginFormValues> layout="vertical" size="large" requiredMark={false} onFinish={submit}>
@@ -104,31 +106,31 @@ function LoginContent() {
                             options={
                                 allowRegister
                                     ? [
-                                          { label: "登录", value: "login" },
-                                          { label: "注册", value: "register" },
+                                          { label: t("common.login"), value: "login" },
+                                          { label: t("common.register"), value: "register" },
                                       ]
-                                    : [{ label: "登录", value: "login" }]
+                                    : [{ label: t("common.login"), value: "login" }]
                             }
                         />
                     </Form.Item>
-                    <Form.Item name="username" label={<span className="font-medium text-foreground">用户名</span>} rules={[{ required: true, message: "请输入用户名" }]}>
+                    <Form.Item name="username" label={<span className="font-medium text-foreground">{t("auth.fields.username")}</span>} rules={[{ required: true, message: t("auth.validation.usernameRequired") }]}>
                         <Input prefix={<UserOutlined />} autoComplete="username" />
                     </Form.Item>
-                    <Form.Item name="password" label={<span className="font-medium text-foreground">密码</span>} rules={[{ required: true, message: "请输入密码" }]}>
+                    <Form.Item name="password" label={<span className="font-medium text-foreground">{t("auth.fields.password")}</span>} rules={[{ required: true, message: t("auth.validation.passwordRequired") }]}>
                         <Input.Password prefix={<LockOutlined />} autoComplete="current-password" />
                     </Form.Item>
                     {mode === "register" ? (
-                        <Form.Item name="confirmPassword" label={<span className="font-medium text-foreground">确认密码</span>} rules={[{ required: true, message: "请再次输入密码" }]}>
+                        <Form.Item name="confirmPassword" label={<span className="font-medium text-foreground">{t("auth.fields.confirmPassword")}</span>} rules={[{ required: true, message: t("auth.validation.confirmPasswordRequired") }]}>
                             <Input.Password prefix={<LockOutlined />} autoComplete="new-password" />
                         </Form.Item>
                     ) : null}
                     <Space orientation="vertical" size={12} style={{ width: "100%" }}>
                         <Button block type="primary" htmlType="submit" loading={isLoading}>
-                            {mode === "register" ? "注册" : "登录"}
+                            {mode === "register" ? t("common.register") : t("common.login")}
                         </Button>
                         {linuxDoEnabled ? (
                             <Button block href={`/api/auth/linux-do/authorize?redirect=${encodeURIComponent(redirect)}`} icon={<img src="/icons/linuxdo.svg" alt="" width={18} height={18} />}>
-                                使用 Linux.do 登录
+                                {t("auth.actions.loginWithLinuxDo")}
                             </Button>
                         ) : null}
                     </Space>

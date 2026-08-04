@@ -1,3 +1,4 @@
+import i18n from "@/i18n";
 import { apiDelete, apiGet, apiPost, apiPut, compactApiParams } from "@/services/api/request";
 import type { AssetLibraryItem } from "@/services/api/assets";
 
@@ -81,13 +82,13 @@ export async function downloadEnterpriseFile(token: string, id: string) {
     try {
         response = await fetch(`/api/v1/enterprise/files/${encodeURIComponent(id)}/content`, { headers: { Authorization: `Bearer ${token}` } });
     } catch {
-        throw new Error("接口连接失败，请确认后端服务已启动");
+        throw new Error(i18n.t("errors.api.connectionFailed"));
     }
     if (response.headers.get("content-type")?.includes("application/json")) {
         const result = (await response.json()) as { msg?: string };
-        throw new Error(result.msg || "下载失败");
+        throw new Error(result.msg || i18n.t("enterpriseAssets.errors.downloadFailed"));
     }
-    if (!response.ok) throw new Error("下载失败");
+    if (!response.ok) throw new Error(i18n.t("enterpriseAssets.errors.downloadFailed"));
     return response.blob();
 }
 
@@ -99,9 +100,9 @@ async function submitEnterpriseFile(token: string, url: string, method: "POST" |
     try {
         response = await fetch(url, { method, body: form, headers: { Authorization: `Bearer ${token}` } });
     } catch {
-        throw new Error("接口连接失败，请确认后端服务已启动");
+        throw new Error(i18n.t("errors.api.connectionFailed"));
     }
     const result = (await response.json()) as { code: number; data: EnterpriseFile; msg: string };
-    if (!response.ok || result.code !== 0) throw new Error(result.msg || "文件上传失败");
+    if (!response.ok || result.code !== 0) throw new Error(result.msg || i18n.t("enterpriseAssets.errors.uploadFailed"));
     return result.data;
 }

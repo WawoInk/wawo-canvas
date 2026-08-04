@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import i18n from "@/i18n";
 import { buildShortDramaGenerationIntent, buildVideoGenerationIntent, cleanShortDramaAssetMappings, locateGenerationError, prepareFirstPartyCanvasVideoRun } from "./canvas-node-generation.ts";
 
 const image = {
@@ -36,7 +37,9 @@ test("compiles Canvas media and settings as a first-party intent", () => {
 test("rejects connected first-party media without a platform file", () => {
     const settings = { aspectRatio: "9:16", resolution: "1080p", durationSeconds: 10, generateAudio: false, watermark: true };
     const localOnly = { ...image, metadata: { ...image.metadata, fileId: undefined } };
-    assert.throws(() => buildVideoGenerationIntent("video-1", [localOnly, videoTarget], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], "prompt", settings), /尚未上传到平台文件库/);
+    assertTranslatedError(() => buildVideoGenerationIntent("video-1", [localOnly, videoTarget], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], "prompt", settings), "canvas.generation.errors.resourceNotUploaded", {
+        name: image.title,
+    });
 });
 
 test("prepares a durable first-party Canvas video run", () => {
@@ -129,7 +132,24 @@ test("locates structured generation errors without parsing provider codes", () =
 
 test("rejects incomplete Drama intent before submission", () => {
     const settings = { aspectRatio: "9:16", resolution: "1080p", durationSeconds: "auto", quality: "high" };
-    assert.throws(() => buildShortDramaGenerationIntent("video-1", [image, { ...videoTarget, title: "" }], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], "脚本", settings), /短剧标题/);
-    assert.throws(() => buildShortDramaGenerationIntent("video-1", [image, { ...videoTarget, title: "短剧" }], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], "", settings), /短剧脚本/);
-    assert.throws(() => buildShortDramaGenerationIntent("video-1", [image, { ...videoTarget, title: "短剧", metadata: {} }], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], "完整脚本", settings), /为图片「人物参考」选择角色/);
+    assertTranslatedError(
+        () => buildShortDramaGenerationIntent("video-1", [image, { ...videoTarget, title: "" }], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], "脚本", settings),
+        "canvas.generation.errors.shortDramaTitleRequired",
+    );
+    assertTranslatedError(
+        () => buildShortDramaGenerationIntent("video-1", [image, { ...videoTarget, title: "短剧" }], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], "", settings),
+        "canvas.generation.errors.shortDramaScriptRequired",
+    );
+    assertTranslatedError(
+        () => buildShortDramaGenerationIntent("video-1", [image, { ...videoTarget, title: "短剧", metadata: {} }], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], "完整脚本", settings),
+        "canvas.generation.errors.shortDramaRoleRequired",
+        { name: image.title },
+    );
 });
+
+function assertTranslatedError(callback, key, options) {
+    assert.throws(callback, (error) => {
+        assert.equal(error.message, i18n.t(key, options));
+        return true;
+    });
+}
