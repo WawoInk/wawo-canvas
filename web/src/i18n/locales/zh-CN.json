@@ -1710,12 +1710,13 @@
             },
             "generationProfiles": {
                 "title": "视频能力绑定",
-                "description": "将渠道中的实际模型绑定到画布支持的生成能力。普通视频使用 Seedance 请求结构，短剧使用 Vidu Drama 请求结构。",
+                "description": "将渠道中的实际模型绑定到画布支持的生成能力。普通视频支持 Seedance 和 Sora 请求结构，短剧使用 Vidu Drama 请求结构。",
                 "channelRequired": "请先新增并启用一个包含模型的渠道。",
                 "empty": "尚未绑定视频能力。新增绑定后，画布会使用稳定的能力名称调用所选上游模型。",
                 "defaultName": "视频绑定 {{number}}",
                 "types": {
                     "standardVideo": "普通视频（Seedance）",
+                    "soraVideo": "普通视频（Sora）",
                     "shortDrama": "短剧（Vidu Drama）"
                 },
                 "actions": {

@@ -23,6 +23,9 @@ func TestGenerationProfilesAreValid(t *testing.T) {
 	if err := ValidateGenerationProfiles(); err != nil {
 		t.Fatalf("ValidateGenerationProfiles: %v", err)
 	}
+	if _, ok := generationAdapterFor("sora-videos-v1"); !ok {
+		t.Fatal("Sora generation adapter is not registered")
+	}
 }
 
 func TestViduAdapterRecordsUpstreamCreditsIncludingExplicitNull(t *testing.T) {
@@ -1119,6 +1122,74 @@ func TestSeedanceAdapterCreatesPromptOnlyTask(t *testing.T) {
 	}
 	if !jsonEqual(gotBody, want) {
 		t.Fatalf("body = %#v, want %#v", gotBody, want)
+	}
+}
+
+func TestSoraAdapterCreatesVideoTask(t *testing.T) {
+	var gotMethod, gotPath, gotAuthorization string
+	var gotForm map[string][]string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotAuthorization = r.Header.Get("Authorization")
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Fatalf("parse upstream request: %v", err)
+		}
+		gotForm = r.MultipartForm.Value
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"video_sora_create","status":"queued","model":"sora-2-pro","seconds":"8","size":"1280x720"}`))
+	}))
+	defer upstream.Close()
+
+	adapter := NewSoraVideosV1Adapter(upstream.Client())
+	ref, err := adapter.Create(context.Background(), AdapterCreateRequest{
+		Profile: model.GenerationProfile{ID: "sora-video", AdapterKey: "sora-videos-v1", UpstreamModel: "sora-2-pro", Capabilities: soraCapabilities()},
+		Channel: model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"},
+		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "人物走进雨夜街道", Settings: model.ScalarSettings{
+			"aspectRatio": "16:9", "resolution": "720p", "durationSeconds": 8,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if ref.ID != "video_sora_create" || ref.Status != model.TaskStatusRunning {
+		t.Fatalf("provider task = %#v", ref)
+	}
+	if gotMethod != http.MethodPost || gotPath != "/v1/videos" || gotAuthorization != "Bearer secret" {
+		t.Fatalf("method=%q path=%q Authorization=%q", gotMethod, gotPath, gotAuthorization)
+	}
+	want := map[string][]string{
+		"model":   {"sora-2-pro"},
+		"prompt":  {"人物走进雨夜街道"},
+		"size":    {"1280x720"},
+		"seconds": {"8"},
+	}
+	if !jsonEqual(gotForm, want) {
+		t.Fatalf("form = %#v, want %#v", gotForm, want)
+	}
+}
+
+func TestSoraAdapterPollsCompletedVideoTask(t *testing.T) {
+	var gotMethod, gotPath, gotAuthorization string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotAuthorization = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"video_sora_poll","status":"completed","model":"sora-2-pro","output":{"url":"https://cdn.example/video.mp4"}}`))
+	}))
+	defer upstream.Close()
+
+	adapter := NewSoraVideosV1Adapter(upstream.Client())
+	ref, err := adapter.Poll(context.Background(), model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"}, "video_sora_poll")
+	if err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+	if gotMethod != http.MethodGet || gotPath != "/v1/videos/video_sora_poll" || gotAuthorization != "Bearer secret" {
+		t.Fatalf("method=%q path=%q Authorization=%q", gotMethod, gotPath, gotAuthorization)
+	}
+	if ref.ID != "video_sora_poll" || ref.Status != model.TaskStatusSucceeded || ref.VideoURL != "https://cdn.example/video.mp4" {
+		t.Fatalf("provider task = %#v", ref)
 	}
 }
 

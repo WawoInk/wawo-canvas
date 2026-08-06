@@ -79,8 +79,8 @@ export type VideoGenerationSettings = {
     aspectRatio: "adaptive" | "16:9" | "9:16" | "1:1" | "4:3" | "3:4" | "21:9";
     resolution: "480p" | "720p" | "1080p";
     durationSeconds: number;
-    generateAudio: boolean;
-    watermark: boolean;
+    generateAudio?: boolean;
+    watermark?: boolean;
 };
 export type ShortDramaAssetRole = "character" | "scene" | "tool";
 export type ShortDramaAsset = { sourceNodeId: string; role: ShortDramaAssetRole; name: string; description?: string; reference: PlatformMediaReference };
@@ -157,8 +157,8 @@ export function buildVideoGenerationSettings(profile: GenerationProfile, provide
         aspectRatio: enumValue("aspectRatio") as VideoGenerationSettings["aspectRatio"],
         resolution: enumValue("resolution") as VideoGenerationSettings["resolution"],
         durationSeconds,
-        generateAudio: typeof provided.generateAudio === "boolean" ? provided.generateAudio : Boolean(settings.generateAudio.default),
-        watermark: typeof provided.watermark === "boolean" ? provided.watermark : Boolean(settings.watermark.default),
+        ...(settings.generateAudio ? { generateAudio: typeof provided.generateAudio === "boolean" ? provided.generateAudio : Boolean(settings.generateAudio.default) } : {}),
+        ...(settings.watermark ? { watermark: typeof provided.watermark === "boolean" ? provided.watermark : Boolean(settings.watermark.default) } : {}),
     };
 }
 import type { DecimalValue } from "@/lib/decimal";
