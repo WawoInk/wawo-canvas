@@ -96,6 +96,10 @@ func CreateGeneration(ctx context.Context, user model.AuthUser, command model.Ge
 	if err != nil {
 		return model.FirstPartyGenerationTask{}, err
 	}
+	storedBody, err := json.Marshal(storedGenerationCommand{GenerationCommand: command, UpstreamMetadata: profile.Metadata})
+	if err != nil {
+		return model.FirstPartyGenerationTask{}, err
+	}
 	hash := sha256.Sum256(body)
 	commandHash := hex.EncodeToString(hash[:])
 	if existing, found, err := repository.GetGenerationTaskByClientRequestID(user.ID, command.ClientRequestID); err != nil {
@@ -152,7 +156,7 @@ func CreateGeneration(ctx context.Context, user model.AuthUser, command model.Ge
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	}
-	payload := model.GenerationPayload{ID: "genpayload-" + uuid.NewString(), CommandBody: string(body), CreatedAt: now}
+	payload := model.GenerationPayload{ID: "genpayload-" + uuid.NewString(), CommandBody: string(storedBody), CreatedAt: now}
 	if err := repository.CreateGenerationTaskWithCharge(&task, payload, user.ID, profile.UpstreamModel, "/api/v1/generations", credits, DisplayModelName(profile.ID, profile.UpstreamModel)); err != nil {
 		if existing, found, lookupErr := repository.GetGenerationTaskByClientRequestID(user.ID, command.ClientRequestID); lookupErr == nil && found {
 			if existing.CommandHash == commandHash {
@@ -174,6 +178,11 @@ func validGenerationSource(source string) bool {
 	default:
 		return false
 	}
+}
+
+type storedGenerationCommand struct {
+	model.GenerationCommand
+	UpstreamMetadata map[string]string `json:"upstreamMetadata,omitempty"`
 }
 
 func generationCommandSummary(command model.GenerationCommand) model.GenerationCommandSummary {
@@ -412,7 +421,7 @@ func executeGeneration(ctx context.Context, task model.GenerationTask, profile m
 	if err == nil && isTerminalGenerationStatus(stored.Status) {
 		return
 	}
-	intent, references, err := generationIntentFromTask(ctx, task)
+	intent, references, metadata, err := generationIntentFromTask(ctx, task)
 	if err != nil {
 		failGenerationTask(task, profile, "MEDIA_REFERENCE_UNAVAILABLE", err)
 		return
@@ -430,7 +439,7 @@ func executeGeneration(ctx context.Context, task model.GenerationTask, profile m
 		if task.CallbackToken != "" && strings.TrimSpace(config.Cfg.PublicBaseURL) != "" {
 			callbackURL = strings.TrimRight(config.Cfg.PublicBaseURL, "/") + "/api/v1/generations/callback?token=" + task.CallbackToken
 		}
-		ref, err = adapter.Create(ctx, AdapterCreateRequest{Profile: profile, Channel: channel, Intent: intent, References: references, CallbackURL: callbackURL})
+		ref, err = adapter.Create(ctx, AdapterCreateRequest{Profile: profile, Channel: channel, Intent: intent, References: references, Metadata: metadata, CallbackURL: callbackURL})
 	}
 	persistGenerationAudit(task.ID, ref.Audit)
 	if err != nil {
@@ -490,18 +499,19 @@ func executeGeneration(ctx context.Context, task model.GenerationTask, profile m
 	_ = resolveGenerationTask(ctx, task, profile, ref, "poll")
 }
 
-func generationIntentFromTask(ctx context.Context, task model.GenerationTask) (model.GenerationIntent, AdapterMediaReferences, error) {
+func generationIntentFromTask(ctx context.Context, task model.GenerationTask) (model.GenerationIntent, AdapterMediaReferences, map[string]string, error) {
 	payload, err := repository.GetGenerationPayloadByTaskID(task.ID)
 	if err != nil {
-		return model.GenerationIntent{}, AdapterMediaReferences{}, err
+		return model.GenerationIntent{}, AdapterMediaReferences{}, nil, err
 	}
 	if strings.TrimSpace(payload.CommandBody) == "" {
 		payload.CommandBody = payload.RequestBody
 	}
-	var command model.GenerationCommand
-	if err := json.Unmarshal([]byte(payload.CommandBody), &command); err != nil {
-		return model.GenerationIntent{}, AdapterMediaReferences{}, err
+	var stored storedGenerationCommand
+	if err := json.Unmarshal([]byte(payload.CommandBody), &stored); err != nil {
+		return model.GenerationIntent{}, AdapterMediaReferences{}, nil, err
 	}
+	command := stored.GenerationCommand
 	references := AdapterMediaReferences{}
 	imageReferences := command.Intent.References.Images
 	if command.Intent.Kind == model.IntentVideoShortDrama {
@@ -522,19 +532,19 @@ func generationIntentFromTask(ctx context.Context, task model.GenerationTask) (m
 		for _, reference := range group.items {
 			item, ok, err := repository.GetUserFileByID(strings.TrimSpace(reference.FileID), task.UserID)
 			if err != nil {
-				return model.GenerationIntent{}, AdapterMediaReferences{}, err
+				return model.GenerationIntent{}, AdapterMediaReferences{}, nil, err
 			}
 			if !ok || !generationFileMatchesMediaType(item.FileType, group.fileType) {
-				return model.GenerationIntent{}, AdapterMediaReferences{}, ErrGenerationMediaForbidden
+				return model.GenerationIntent{}, AdapterMediaReferences{}, nil, ErrGenerationMediaForbidden
 			}
 			url, err := generationPresign(ctx, item.S3Key, presignExpiry)
 			if err != nil {
-				return model.GenerationIntent{}, AdapterMediaReferences{}, err
+				return model.GenerationIntent{}, AdapterMediaReferences{}, nil, err
 			}
 			*group.target = append(*group.target, url)
 		}
 	}
-	return command.Intent, references, nil
+	return command.Intent, references, stored.UpstreamMetadata, nil
 }
 
 func failGenerationTask(task model.GenerationTask, profile model.GenerationProfile, code string, err error) {

@@ -72,6 +72,25 @@ test("uses public Profile defaults for legacy Canvas nodes without video metadat
     });
 });
 
+test("builds only Sora-declared first-party video settings", () => {
+    const profile = {
+        id: "sora-pro",
+        capabilities: {
+            settings: {
+                aspectRatio: { type: "enum", values: ["16:9", "9:16"], default: "16:9" },
+                resolution: { type: "enum", values: ["720p", "1080p"], default: "720p" },
+                durationSeconds: { type: "duration", min: 4, max: 20, default: 4 },
+            },
+        },
+    };
+
+    assert.deepEqual(buildVideoGenerationSettings(profile, { aspectRatio: "9:16", resolution: "1080p", durationSeconds: 8, generateAudio: true, watermark: true }), {
+        aspectRatio: "9:16",
+        resolution: "1080p",
+        durationSeconds: 8,
+    });
+});
+
 test("builds a first-party video command with typed platform settings", () => {
     const settings = { aspectRatio: "9:16", resolution: "1080p", durationSeconds: 10, generateAudio: false, watermark: true };
     const command = buildGenerationCommand({

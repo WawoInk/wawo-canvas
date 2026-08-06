@@ -1710,17 +1710,20 @@
             },
             "generationProfiles": {
                 "title": "Video capability bindings",
-                "description": "Bind actual channel models to Canvas generation capabilities. Standard video uses the Seedance request shape; short drama uses the Vidu Drama request shape.",
+                "description": "Bind actual channel models to Canvas generation capabilities. Standard video supports Seedance and Sora request shapes; short drama uses the Vidu Drama request shape.",
                 "channelRequired": "Add and enable a channel with at least one model first.",
                 "empty": "No video capabilities are bound. After adding one, Canvas uses its stable capability name to call the selected upstream model.",
                 "defaultName": "Video binding {{number}}",
                 "types": {
                     "standardVideo": "Standard video (Seedance)",
+                    "soraVideo": "Standard video (Sora)",
                     "shortDrama": "Short drama (Vidu Drama)"
                 },
                 "actions": {
                     "add": "Add binding",
-                    "deleteLabel": "Delete {{capability}} binding"
+                    "deleteLabel": "Delete {{capability}} binding",
+                    "addMetadata": "Add metadata",
+                    "deleteMetadataLabel": "Delete metadata {{key}}"
                 },
                 "values": {
                     "capability": "capability"
@@ -1740,7 +1743,10 @@
                     "maxDuration": "Maximum duration",
                     "durationPlaceholder": "{{value}} sec",
                     "resolutions": "Supported resolutions",
-                    "billingMode": "Billing mode"
+                    "billingMode": "Billing mode",
+                    "metadata": "Metadata",
+                    "metadataKey": "Key",
+                    "metadataValue": "Value"
                 }
             },
             "modelSelector": {

@@ -305,6 +305,35 @@ func TestResolveGenerationProfilesRoutesDynamicModelsThroughOneChannel(t *testin
 	}
 }
 
+func TestResolveGenerationProfilesRoutesSoraBinding(t *testing.T) {
+	private := normalizePrivateSetting(model.PrivateSetting{
+		Channels: []model.ModelChannel{{
+			Protocol: "openai", Name: "openai", BaseURL: "https://api.openai.com", APIKey: "secret", Enabled: true,
+			Models: []string{"sora-2-pro"},
+		}},
+		GenerationProfiles: []model.GenerationProfileBinding{
+			{
+				ID: "sora-pro", ProfileID: "sora-2", UpstreamModel: "sora-2-pro", ChannelName: "openai", Enabled: true,
+				Metadata: map[string]string{"action": "videogen"},
+			},
+		},
+	})
+
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, model.PublicSetting{})
+	if err != nil {
+		t.Fatalf("resolveGenerationProfiles: %v", err)
+	}
+	if len(profiles) != 1 || profiles[0].AdapterKey != "sora-videos-v1" || profiles[0].UpstreamModel != "sora-2-pro" || profiles[0].DisplayName != "sora-2-pro" {
+		t.Fatalf("profiles = %#v", profiles)
+	}
+	if _, ok := profiles[0].Capabilities.Settings["generateAudio"]; ok {
+		t.Fatalf("Sora profile exposed unsupported audio setting: %#v", profiles[0].Capabilities.Settings)
+	}
+	if profiles[0].Metadata["action"] != "videogen" {
+		t.Fatalf("Sora profile metadata = %#v", profiles[0].Metadata)
+	}
+}
+
 func TestResolveGenerationProfilesRejectsMultiModelBinding(t *testing.T) {
 	private := normalizePrivateSetting(model.PrivateSetting{
 		Channels: []model.ModelChannel{{Name: "xvanai", Enabled: true, Models: []string{"seedance-2.0", "vidu-i2v"}}},

@@ -29,6 +29,8 @@ var generationAdapterFor = func(key string) (GenerationAdapter, bool) {
 		return NewSeedanceContentsV1Adapter(generationHTTPClient), true
 	case "vidu-short-drama-v1":
 		return NewViduShortDramaV1Adapter(generationHTTPClient), true
+	case "sora-videos-v1":
+		return NewSoraVideosV1Adapter(generationHTTPClient), true
 	default:
 		return nil, false
 	}

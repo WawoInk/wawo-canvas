@@ -65,6 +65,15 @@ func GenerationProfiles() []model.GenerationProfile {
 			Intents:       []model.GenerationIntentKind{model.IntentVideoShortDrama},
 			Capabilities:  viduDramaCapabilities(),
 		},
+		{
+			ID:            "sora-2",
+			Version:       1,
+			DisplayName:   "Sora 2",
+			AdapterKey:    "sora-videos-v1",
+			UpstreamModel: "sora-2",
+			Intents:       []model.GenerationIntentKind{model.IntentVideoGenerate},
+			Capabilities:  soraCapabilities(),
+		},
 	}
 }
 
@@ -100,6 +109,17 @@ func viduDramaCapabilities() model.GenerationCapabilities {
 	}
 }
 
+func soraCapabilities() model.GenerationCapabilities {
+	return model.GenerationCapabilities{
+		Settings: map[string]model.GenerationSettingDefinition{
+			"aspectRatio":     {Type: model.GenerationSettingEnum, Values: []string{"16:9", "9:16"}, Default: "16:9"},
+			"resolution":      {Type: model.GenerationSettingEnum, Values: []string{"720p", "1080p"}, Default: "720p"},
+			"durationSeconds": {Type: model.GenerationSettingDuration, Min: intPtr(4), Max: intPtr(20), Default: 4},
+		},
+		Completion: []string{"poll"},
+	}
+}
+
 func ValidateGenerationProfiles() error {
 	seen := map[string]bool{}
 	for _, profile := range GenerationProfiles() {
@@ -121,6 +141,7 @@ func validateGenerationProfile(profile model.GenerationProfile) error {
 	intentByAdapter := map[string]model.GenerationIntentKind{
 		"seedance-contents-v1": model.IntentVideoGenerate,
 		"vidu-short-drama-v1":  model.IntentVideoShortDrama,
+		"sora-videos-v1":       model.IntentVideoGenerate,
 	}
 	intent, ok := intentByAdapter[profile.AdapterKey]
 	if !ok || len(profile.Intents) != 1 || !profileSupportsIntent(profile, intent) {
@@ -212,6 +233,7 @@ func resolveGenerationProfiles(templates []model.GenerationProfile, private mode
 		profile.ChannelName = strings.TrimSpace(binding.ChannelName)
 		profile.ID = binding.ID
 		profile.DisplayName = ResolveModelDisplayName(public, binding.ID, upstreamModel)
+		profile.Metadata = normalizeGenerationMetadata(binding.Metadata)
 		if seen[profile.ID] {
 			return nil, safeMessageError{message: fmt.Sprintf("duplicate generation profile binding %q", profile.ID)}
 		}

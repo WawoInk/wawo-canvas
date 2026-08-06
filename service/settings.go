@@ -322,9 +322,28 @@ func normalizePrivateSetting(setting model.PrivateSetting) model.PrivateSetting 
 		default:
 			binding.BillingMode = model.BillingModePerCall
 		}
+		binding.Metadata = normalizeGenerationMetadata(binding.Metadata)
 	}
 	setting.FileSizeLimits = normalizeFileSizeLimits(setting.FileSizeLimits)
 	return setting
+}
+
+func normalizeGenerationMetadata(metadata map[string]string) map[string]string {
+	if len(metadata) == 0 {
+		return nil
+	}
+	normalized := make(map[string]string, len(metadata))
+	for key, value := range metadata {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		normalized[key] = value
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
 }
 
 func normalizeFileSizeLimits(f model.FileSizeLimits) model.FileSizeLimits {
