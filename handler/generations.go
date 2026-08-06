@@ -52,6 +52,20 @@ func GetGeneration(w http.ResponseWriter, r *http.Request, id string) {
 	OK(w, task)
 }
 
+func GetGenerationByClientRequestID(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	task, err := service.GetGenerationByClientRequestID(user.ID, id)
+	if err != nil {
+		Fail(w, "查询任务失败")
+		return
+	}
+	OK(w, task)
+}
+
 func CancelGeneration(w http.ResponseWriter, r *http.Request, id string) {
 	user, ok := service.UserFromContext(r.Context())
 	if !ok {

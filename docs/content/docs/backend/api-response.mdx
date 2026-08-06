@@ -46,6 +46,8 @@ description: 后端统一响应信封与结构化生成错误
 
 取消、回调等操作错误至少返回稳定的 `data.code`。异步失败通过 `GET /api/v1/generations/{id}` 的任务 `error` 字段返回同一套归一化信息。
 
+第一方生成创建响应丢失时，已认证客户端可调用 `GET /api/v1/generations/client-requests/{clientRequestId}`，按当前用户和幂等请求 ID 找回同一任务。不存在或不属于当前用户时成功响应的 `data` 为 `null`；该查询不会创建新任务或改变任务状态。
+
 积分、价格、折扣倍率和上游 credits 等十进制字段在 JSON 中统一使用字符串，避免 JavaScript `number` 丢失精度；客户端提交这类字段时也应发送十进制字符串，例如 `"2.5"`。
 
 ## 企业基础接口

@@ -10,12 +10,37 @@ export function generationStatusLabel(status?: GenerationTaskStatus) {
     return i18n.t(status === "queued" ? "generation.status.queued" : "generation.status.running");
 }
 
-export async function pollGenerationTask<T extends { status: GenerationTaskStatus }>(load: () => Promise<T>, sleep: () => Promise<void>, onStatus?: (task: T) => void, attempts = 360) {
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-        const task = await load();
+export class GenerationPollingPausedError extends Error {
+    constructor(public readonly queryError: unknown) {
+        super(queryError instanceof Error ? queryError.message : i18n.t("errors.requestFailed"));
+        this.name = "GenerationPollingPausedError";
+    }
+}
+
+export async function pollGenerationTask<T extends { status: GenerationTaskStatus }>(
+    load: () => Promise<T>,
+    sleep: () => Promise<void>,
+    onStatus?: (task: T) => void,
+    attempts = 360,
+    retryableError?: (error: unknown) => boolean,
+    maxConsecutiveErrors = 20,
+) {
+    for (let attempt = 0, consecutiveErrors = 0; attempt < attempts; ) {
+        let task: T;
+        try {
+            task = await load();
+            consecutiveErrors = 0;
+        } catch (error) {
+            consecutiveErrors += 1;
+            if (!retryableError?.(error)) throw error;
+            if (consecutiveErrors >= maxConsecutiveErrors) throw new GenerationPollingPausedError(error);
+            await sleep();
+            continue;
+        }
+        attempt += 1;
         onStatus?.(task);
         if (task.status === "succeeded" || task.status === "failed" || task.status === "cancelled") return task;
-        if (attempt < attempts - 1) await sleep();
+        if (attempt < attempts) await sleep();
     }
     throw new Error(i18n.t("errors.video.timeout"));
 }

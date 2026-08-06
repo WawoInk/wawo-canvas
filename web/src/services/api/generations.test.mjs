@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import i18n from "../../i18n/index.ts";
-import { buildGenerationCommand, buildVideoGenerationSettings, buildShortDramaGenerationSettings, generationStatusLabel, generationTaskId, pollGenerationTask, readGeneratedVideoFile, resolveCanvasVideoSubmission } from "./generation-contract.ts";
+import { buildGenerationCommand, buildVideoGenerationSettings, buildShortDramaGenerationSettings, GenerationPollingPausedError, generationStatusLabel, generationTaskId, pollGenerationTask, readGeneratedVideoFile, resolveCanvasVideoSubmission } from "./generation-contract.ts";
+import { retryableGenerationQueryError } from "./generations.ts";
+import { ApiError } from "./request.ts";
 
 await i18n.changeLanguage("en-US");
 
@@ -145,6 +147,61 @@ test("keeps polling through the 30-minute default window", async () => {
 
     assert.equal(polls, 360);
     assert.equal(terminal.status, "succeeded");
+});
+
+test("resets retryable query errors after a valid running response", async () => {
+    const retryableError = new Error("temporary connection failure");
+    const responses = [...Array(19).fill(retryableError), { status: "running" }, ...Array(19).fill(retryableError), { status: "succeeded" }];
+    const terminal = await pollGenerationTask(
+        async () => {
+            const next = responses.shift();
+            if (next instanceof Error) throw next;
+            return next;
+        },
+        async () => {},
+        undefined,
+        2,
+        () => true,
+        20,
+    );
+
+    assert.equal(terminal.status, "succeeded");
+});
+
+test("pauses local observation after twenty consecutive retryable query errors", async () => {
+    const queryError = new Error("temporary connection failure");
+    let loads = 0;
+
+    await assert.rejects(
+        pollGenerationTask(
+            async () => {
+                loads += 1;
+                throw queryError;
+            },
+            async () => {},
+            undefined,
+            1,
+            () => true,
+            20,
+        ),
+        (error) => {
+            assert.ok(error instanceof GenerationPollingPausedError);
+            assert.equal(error.queryError, queryError);
+            return true;
+        },
+    );
+    assert.equal(loads, 20);
+});
+
+test("retries only temporary generation query errors", () => {
+    assert.equal(retryableGenerationQueryError(new Error("network")), true);
+    assert.equal(retryableGenerationQueryError(new DOMException("Aborted", "AbortError")), false);
+    for (const status of [200, 408, 425, 429, 500, 503]) {
+        assert.equal(retryableGenerationQueryError(new ApiError("temporary", status, null)), true);
+    }
+    for (const status of [401, 403, 404]) {
+        assert.equal(retryableGenerationQueryError(new ApiError("permanent", status, null)), false);
+    }
 });
 
 test("selects the Canvas video submission boundary without remote fallback", () => {

@@ -332,6 +332,15 @@ func GetGeneration(userID, taskID string) (model.FirstPartyGenerationTask, error
 	return firstPartyTask(task), nil
 }
 
+func GetGenerationByClientRequestID(userID, clientRequestID string) (*model.FirstPartyGenerationTask, error) {
+	task, found, err := repository.GetGenerationTaskByClientRequestID(userID, clientRequestID)
+	if err != nil || !found {
+		return nil, err
+	}
+	result := firstPartyTask(task)
+	return &result, nil
+}
+
 func findGenerationProfile(profiles []model.GenerationProfile, id string) (model.GenerationProfile, bool) {
 	for _, profile := range profiles {
 		if profile.ID == id {

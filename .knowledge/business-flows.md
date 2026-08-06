@@ -345,7 +345,7 @@ Video workbench or local-compatible Canvas
 | 操作 | 行为 |
 | --- | --- |
 | Stop Observing | abort 前端等待；任务继续 |
-| Resume Observing | 从 metadata 中 task ID 继续查询 |
+| Resume Observing | 从 metadata 中 task ID 继续查询；first-party 创建响应丢失时可按 client request ID 找回同一任务 |
 | Cancel Run | 调 cancel endpoint；等待上游和终态仲裁 |
 | Retry Run | 复制旧输入，创建新的 request ID 和 task |
 

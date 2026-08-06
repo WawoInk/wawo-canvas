@@ -74,12 +74,21 @@ func TestGenerationHTTPSeam(t *testing.T) {
 	default:
 	}
 
+	clientRequestID := "upstream-failure-" + uuid.NewString()
 	created := postGeneration(t, server.URL, owner.Token, model.GenerationCommand{
-		CommandVersion: 1, ClientRequestID: "upstream-failure-" + uuid.NewString(), ModelProfileID: "seedance-1-5-pro", Source: string(model.SourceCanvas),
+		CommandVersion: 1, ClientRequestID: clientRequestID, ModelProfileID: "seedance-1-5-pro", Source: string(model.SourceCanvas),
 		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "人物走进雨夜街道"},
 	})
 	if created.Code != 0 || created.Data.Task.ID == "" || created.Data.Task.Status != model.TaskStatusQueued {
 		t.Fatalf("create response = %#v", created)
+	}
+	recovered := getGenerationByClientRequestID(t, server.URL, owner.Token, clientRequestID)
+	if recovered.Code != 0 || recovered.Data.Task.ID != created.Data.Task.ID {
+		t.Fatalf("client request lookup = %#v", recovered)
+	}
+	foreignRecovered := getGenerationByClientRequestID(t, server.URL, other.Token, clientRequestID)
+	if foreignRecovered.Code != 0 || foreignRecovered.Data.Task.ID != "" {
+		t.Fatalf("foreign client request lookup = %#v", foreignRecovered)
 	}
 	select {
 	case request := <-upstreamRequests:
@@ -144,6 +153,11 @@ func postGeneration(t *testing.T, baseURL, token string, command model.Generatio
 func getGeneration(t *testing.T, baseURL, token, taskID string) apiResponse[generationData] {
 	t.Helper()
 	return doJSON[generationData](t, http.MethodGet, baseURL+"/api/v1/generations/"+taskID, token, nil)
+}
+
+func getGenerationByClientRequestID(t *testing.T, baseURL, token, clientRequestID string) apiResponse[generationData] {
+	t.Helper()
+	return doJSON[generationData](t, http.MethodGet, baseURL+"/api/v1/generations/client-requests/"+clientRequestID, token, nil)
 }
 
 func waitForGeneration(t *testing.T, baseURL, token, taskID string) model.FirstPartyGenerationTask {

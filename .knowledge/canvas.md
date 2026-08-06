@@ -143,7 +143,8 @@ flowchart TB
 - 图片数量大于 1 时，根节点和子节点通过 `batchRootId/batchChildIds/primaryImageId` 组织。
 - 工作流没有独立实体；它就是项目中的节点和连线。
 - `Stop Observing` 只停止本地等待，不取消任务。
-- 刷新后通过 metadata 中的 `generationTaskId/upstreamTaskId` 恢复观察。
+- 刷新后兼容任务通过 `upstreamTaskId` 恢复；尚未物化成功的 first-party 视频通过 `generationTaskId` 或 `generationClientRequestId` 重新向后端证实，已有平台 `fileId` 的成功视频不再查询任务。
+- first-party 视频连续 20 次可重试查询错误只暂停当前本地观察周期，不把任务写为失败；刷新或 Resume Observing 可继续观察同一 Generation Run。
 - 旧 loading 节点如果没有可恢复任务 ID，会被标记为中断错误。
 - `Retry Run` 必须创建新任务，不能伪装成 resume。
 

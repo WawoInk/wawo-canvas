@@ -56,8 +56,20 @@ export async function getGeneration(taskId: string) {
     return apiGet<FirstPartyGenerationTask>(`/api/v1/generations/${encodeURIComponent(taskId)}`, undefined, useUserStore.getState().token);
 }
 
+export async function getGenerationByClientRequestId(clientRequestId: string) {
+    const task = await apiGet<FirstPartyGenerationTask | null>(`/api/v1/generations/client-requests/${encodeURIComponent(clientRequestId)}`, undefined, useUserStore.getState().token);
+    if (!task) throw new ApiError(i18n.t("errors.api.notFound"), 404, null);
+    return task;
+}
+
 export async function cancelGeneration(taskId: string) {
     return apiPost<FirstPartyGenerationTask>(`/api/v1/generations/${encodeURIComponent(taskId)}/cancel`, undefined, useUserStore.getState().token);
+}
+
+export function retryableGenerationQueryError(error: unknown) {
+    if (error instanceof Error && error.name === "AbortError") return false;
+    if (!(error instanceof ApiError)) return true;
+    return error.status === 200 || error.status === 408 || error.status === 425 || error.status === 429 || error.status >= 500;
 }
 
 export function readGenerationError(error: unknown): GenerationError | null {
@@ -85,11 +97,13 @@ export function generationErrorFrom(error: unknown): GenerationError | null {
     return readGenerationError(error);
 }
 
-export async function waitForGeneration(taskId: string, signal?: AbortSignal, onStatus?: (task: FirstPartyGenerationTask) => void) {
+export async function waitForGeneration(taskId: string, signal?: AbortSignal, onStatus?: (task: FirstPartyGenerationTask) => void, clientRequestId = "") {
     const task = await pollGenerationTask(
         () => {
             if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-            return getGeneration(taskId);
+            if (taskId) return getGeneration(taskId);
+            if (clientRequestId) return getGenerationByClientRequestId(clientRequestId);
+            throw new ApiError(i18n.t("errors.api.notFound"), 404, null);
         },
         () =>
             new Promise<void>((resolve, reject) => {
@@ -104,6 +118,8 @@ export async function waitForGeneration(taskId: string, signal?: AbortSignal, on
                 );
             }),
         onStatus,
+        360,
+        retryableGenerationQueryError,
     );
     if (task.status === "succeeded") return task;
     throw new GenerationTaskError(

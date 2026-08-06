@@ -83,6 +83,7 @@ pageSize
 | --- | --- | --- | --- | --- |
 | `GET /api/v1/model-profiles` | U | 无 | 当前可用公开 `GenerationProfile[]` | `handler/generations.go` |
 | `POST /api/v1/generations` | U | `GenerationCommand` | `FirstPartyGenerationTask`；幂等创建 queued task | generations handler -> orchestrator |
+| `GET /api/v1/generations/client-requests/:id` | U | `clientRequestId` | 当前用户按幂等请求 ID 找回 first-party task；不存在或不属于当前用户时 `data=null` | generations handler -> orchestrator |
 | `GET /api/v1/generations/:id` | U | task ID | 当前用户的 first-party task projection | orchestrator |
 | `POST /api/v1/generations/:id/cancel` | U | task ID | 取消后的 task 或稳定操作错误 | lifecycle |
 | `POST /api/v1/generations/callback?token=...` | W | <=1MB provider callback body | Adapter 校验后推进任务，返回 `true` | generations handler -> lifecycle |
