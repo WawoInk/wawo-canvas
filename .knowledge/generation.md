@@ -294,6 +294,8 @@ Canvas metadata 持久化：
 - `taskModel`
 - 当前 status/error
 
+视频 Materialized Result 通过 `commitCanvasVideoResult` 写回节点；页面只有在账号隔离 Canvas Replica durable commit 完成后才发布成功状态。等待期间若有更晚的节点编辑，结果会重新应用到最新 accepted nodes；服务端 Canvas PUT 也只消费已本地持久化的项目快照。
+
 刷新页面后 `canvasGenerationResume` 决定：
 
 - image compatibility

@@ -76,6 +76,7 @@ function createState(project: Partial<Project> | null = {}) {
                       },
                   ],
         tombstones: [] as string[],
+        waitForLocalPersistence: async () => {},
         acknowledgeProject: (_id: string, localVersion: number, patch: Pick<Project, "revision" | "updatedAt">) => {
             state.projects[0] = { ...state.projects[0], ...patch, dirty: state.projects[0].localVersion !== localVersion };
         },
