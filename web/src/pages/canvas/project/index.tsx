@@ -12,7 +12,18 @@ import { formatNumber } from "@/i18n/formatters";
 import { createAsyncImageTask, createAsyncImageEditTask, pollAsyncImageTask, cancelAsyncImageTask, requestEdit, requestImageQuestion } from "@/services/api/image";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { createVideoGenerationTask, pollVideoGenerationTask, cancelVideoGenerationTask, storeGeneratedVideo } from "@/services/api/video";
-import { cancelGeneration, createGeneration, GenerationPollingPausedError, generationErrorFrom, generationTaskId, getGenerationProfiles, readGeneratedVideoFile, readGenerationError, resolveCanvasVideoSubmission, waitForGeneration } from "@/services/api/generations";
+import {
+    cancelGeneration,
+    createGeneration,
+    GenerationPollingPausedError,
+    generationErrorFrom,
+    generationTaskId,
+    getGenerationProfiles,
+    readGeneratedVideoFile,
+    readGenerationError,
+    resolveCanvasVideoSubmission,
+    waitForGeneration,
+} from "@/services/api/generations";
 import { DOCS_URL } from "@/constant/env";
 import { defaultConfig, modelOptionName, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { resolveImageUrl, uploadImage, getImageBlob, type UploadedImage, resolveMediaUrl, type UploadedFile } from "@/services/blob-storage";
@@ -2748,9 +2759,16 @@ function InfiniteCanvasPage() {
         const controller = new AbortController();
         startGenerationRequest(nodeId, nodeId, nodeId, controller);
         try {
-            const task = await waitForGeneration(taskId, controller.signal, (current) => {
-                setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, generationTaskId: current.id, generationTaskStatus: current.status, generationPollingPaused: false, status: NODE_STATUS_LOADING } } : node)));
-            }, clientRequestId);
+            const task = await waitForGeneration(
+                taskId,
+                controller.signal,
+                (current) => {
+                    setNodes((prev) =>
+                        prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, generationTaskId: current.id, generationTaskStatus: current.status, generationPollingPaused: false, status: NODE_STATUS_LOADING } } : node)),
+                    );
+                },
+                clientRequestId,
+            );
             const file = readGeneratedVideoFile(task.result);
             if (!file) throw new Error(t("canvas.editor.errors.videoResultEmpty"));
             const raw = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
@@ -3693,7 +3711,11 @@ function getInputSummary(inputs: NodeGenerationInput[]) {
 
 function resetInterruptedGeneration(nodes: CanvasNodeData[]) {
     // ponytail: first-party task IDs moved fields; old projects still resume from upstreamTaskId
-    return nodes.map((node) => (node.metadata?.status === "loading" && !generationTaskId(node.metadata) && !node.metadata.generationClientRequestId ? { ...node, metadata: { ...node.metadata, status: "error" as const, errorDetails: i18n.t("canvas.editor.errors.generationInterrupted") } } : node));
+    return nodes.map((node) =>
+        node.metadata?.status === "loading" && !generationTaskId(node.metadata) && !node.metadata.generationClientRequestId
+            ? { ...node, metadata: { ...node.metadata, status: "error" as const, errorDetails: i18n.t("canvas.editor.errors.generationInterrupted") } }
+            : node,
+    );
 }
 
 function isGenerationCanceled(error: unknown) {

@@ -2,7 +2,17 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import i18n from "../../i18n/index.ts";
-import { buildGenerationCommand, buildVideoGenerationSettings, buildShortDramaGenerationSettings, GenerationPollingPausedError, generationStatusLabel, generationTaskId, pollGenerationTask, readGeneratedVideoFile, resolveCanvasVideoSubmission } from "./generation-contract.ts";
+import {
+    buildGenerationCommand,
+    buildVideoGenerationSettings,
+    buildShortDramaGenerationSettings,
+    GenerationPollingPausedError,
+    generationStatusLabel,
+    generationTaskId,
+    pollGenerationTask,
+    readGeneratedVideoFile,
+    resolveCanvasVideoSubmission,
+} from "./generation-contract.ts";
 import { retryableGenerationQueryError } from "./generations.ts";
 import { ApiError } from "./request.ts";
 
