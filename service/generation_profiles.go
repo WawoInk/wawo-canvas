@@ -233,6 +233,7 @@ func resolveGenerationProfiles(templates []model.GenerationProfile, private mode
 		profile.ChannelName = strings.TrimSpace(binding.ChannelName)
 		profile.ID = binding.ID
 		profile.DisplayName = ResolveModelDisplayName(public, binding.ID, upstreamModel)
+		profile.Metadata = normalizeGenerationMetadata(binding.Metadata)
 		if seen[profile.ID] {
 			return nil, safeMessageError{message: fmt.Sprintf("duplicate generation profile binding %q", profile.ID)}
 		}

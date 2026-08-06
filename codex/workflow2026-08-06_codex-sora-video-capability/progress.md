@@ -21,6 +21,7 @@
 - [x] Implemented the smallest compatible adapter/profile change.
 - [x] Ran focused verification and recorded results.
 - [x] Commit implementation and workflow documents.
+- [x] Added follow-up binding-level metadata Key/Value configuration and private task snapshotting.
 
 ## Current Changes
 
@@ -28,6 +29,7 @@
 - `service/generation_adapter.go`, `generation_profiles.go`, `generation_lifecycle.go`: added Sora create/poll normalization, profile capabilities, validation, and adapter routing.
 - `web/src/pages/admin/settings/index.tsx`, locales, and generation contract/tests: exposed the Sora binding and omitted unsupported output settings.
 - `docs/content/docs/progress/pending-test.mdx`: added the user-testable Sora capability item.
+- Binding metadata follow-up: updated settings models, admin KV editor, private Generation Payload snapshot, and all create Adapters.
 - Workflow records updated with investigation, decisions, verification, and acceptance results.
 
 ## Blockers / Next Step

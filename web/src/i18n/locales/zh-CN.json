@@ -1721,7 +1721,9 @@
                 },
                 "actions": {
                     "add": "新增绑定",
-                    "deleteLabel": "删除{{capability}}绑定"
+                    "deleteLabel": "删除{{capability}}绑定",
+                    "addMetadata": "新增 Metadata",
+                    "deleteMetadataLabel": "删除 Metadata {{key}}"
                 },
                 "values": {
                     "capability": "能力"
@@ -1741,7 +1743,10 @@
                     "maxDuration": "最大时长",
                     "durationPlaceholder": "{{value}} 秒",
                     "resolutions": "支持分辨率",
-                    "billingMode": "计费方式"
+                    "billingMode": "计费方式",
+                    "metadata": "Metadata 配置",
+                    "metadataKey": "Key",
+                    "metadataValue": "Value"
                 }
             },
             "modelSelector": {

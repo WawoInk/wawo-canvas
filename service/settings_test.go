@@ -292,7 +292,10 @@ func TestResolveGenerationProfilesRoutesSoraBinding(t *testing.T) {
 			Models: []string{"sora-2-pro"},
 		}},
 		GenerationProfiles: []model.GenerationProfileBinding{
-			{ID: "sora-pro", ProfileID: "sora-2", UpstreamModel: "sora-2-pro", ChannelName: "openai", Enabled: true},
+			{
+				ID: "sora-pro", ProfileID: "sora-2", UpstreamModel: "sora-2-pro", ChannelName: "openai", Enabled: true,
+				Metadata: map[string]string{"action": "videogen"},
+			},
 		},
 	})
 
@@ -305,6 +308,9 @@ func TestResolveGenerationProfilesRoutesSoraBinding(t *testing.T) {
 	}
 	if _, ok := profiles[0].Capabilities.Settings["generateAudio"]; ok {
 		t.Fatalf("Sora profile exposed unsupported audio setting: %#v", profiles[0].Capabilities.Settings)
+	}
+	if profiles[0].Metadata["action"] != "videogen" {
+		t.Fatalf("Sora profile metadata = %#v", profiles[0].Metadata)
 	}
 }
 

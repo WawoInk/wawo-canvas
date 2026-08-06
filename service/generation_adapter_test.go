@@ -599,7 +599,11 @@ func TestCreateGenerationRunsMediaSeedanceTask(t *testing.T) {
 		generationDispatch = previousDispatch
 	}()
 	generationProfiles = func() []model.GenerationProfile {
-		return []model.GenerationProfile{{ID: "seedance-media", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "seedance-media", Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}}
+		return []model.GenerationProfile{{
+			ID: "seedance-media", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "seedance-media",
+			Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities(),
+			Metadata: map[string]string{"action": "videogen"},
+		}}
 	}
 	generationChannel = func(string) (model.ModelChannel, error) {
 		return model.ModelChannel{Name: "test", Protocol: "openai", BaseURL: upstream.URL, APIKey: "secret", Enabled: true}, nil
@@ -647,8 +651,8 @@ func TestCreateGenerationRunsMediaSeedanceTask(t *testing.T) {
 	if !ok || len(content) != 4 {
 		t.Fatalf("content = %#v", gotBody["content"])
 	}
-	if _, exists := gotBody["metadata"]; exists {
-		t.Fatalf("empty negative prompt added metadata: %#v", gotBody["metadata"])
+	if !jsonEqual(gotBody["metadata"], map[string]any{"action": "videogen"}) {
+		t.Fatalf("upstream metadata = %#v", gotBody["metadata"])
 	}
 	body, _ := json.Marshal(gotBody)
 	for _, forbidden := range []string{"fileId", "sourceNodeId", "node-images", "node-videos", "node-audios"} {
@@ -1092,8 +1096,9 @@ func TestSeedanceAdapterCreatesPromptOnlyTask(t *testing.T) {
 			AdapterKey:    "seedance-contents-v1",
 			UpstreamModel: "seedance-1-5-pro",
 		},
-		Channel: model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"},
-		Intent:  model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "人物走进雨夜街道", NegativePrompt: "低质量，模糊"},
+		Channel:  model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"},
+		Intent:   model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "人物走进雨夜街道", NegativePrompt: "低质量，模糊"},
+		Metadata: map[string]string{"action": "videogen"},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -1117,6 +1122,7 @@ func TestSeedanceAdapterCreatesPromptOnlyTask(t *testing.T) {
 		"generate_audio": true,
 		"watermark":      false,
 		"metadata": map[string]any{
+			"action":       "videogen",
 			"extra_params": map[string]any{"negative_prompt": "低质量，模糊"},
 		},
 	}
@@ -1148,6 +1154,7 @@ func TestSoraAdapterCreatesVideoTask(t *testing.T) {
 		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "人物走进雨夜街道", Settings: model.ScalarSettings{
 			"aspectRatio": "16:9", "resolution": "720p", "durationSeconds": 8,
 		}},
+		Metadata: map[string]string{"action": "videogen"},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -1159,10 +1166,11 @@ func TestSoraAdapterCreatesVideoTask(t *testing.T) {
 		t.Fatalf("method=%q path=%q Authorization=%q", gotMethod, gotPath, gotAuthorization)
 	}
 	want := map[string][]string{
-		"model":   {"sora-2-pro"},
-		"prompt":  {"人物走进雨夜街道"},
-		"size":    {"1280x720"},
-		"seconds": {"8"},
+		"model":    {"sora-2-pro"},
+		"prompt":   {"人物走进雨夜街道"},
+		"size":     {"1280x720"},
+		"seconds":  {"8"},
+		"metadata": {`{"action":"videogen"}`},
 	}
 	if !jsonEqual(gotForm, want) {
 		t.Fatalf("form = %#v, want %#v", gotForm, want)
@@ -1246,6 +1254,7 @@ func TestViduShortDramaAdapterCreatesGoldenPayloads(t *testing.T) {
 				Channel:    model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"},
 				Intent:     testCase.intent,
 				References: AdapterMediaReferences{Images: testCase.imageURLs},
+				Metadata:   map[string]string{"action": "videogen"},
 			})
 			if err != nil {
 				t.Fatalf("Create: %v", err)
@@ -1257,6 +1266,7 @@ func TestViduShortDramaAdapterCreatesGoldenPayloads(t *testing.T) {
 				"model": "viduq3-drama-oversea", "action": "short-play", "script_name": testCase.intent.Title,
 				"content": []any{map[string]any{"type": "text", "text": testCase.intent.Script}}, "assets": testCase.wantAssets,
 				"duration": float64(0), "ratio": "9:16", "resolution": "1080p", "quality": "high",
+				"metadata": map[string]any{"action": "videogen"},
 			}
 			if !jsonEqual(gotBody, want) {
 				t.Fatalf("body = %#v, want %#v", gotBody, want)
@@ -1277,7 +1287,11 @@ func TestCreateGenerationStoresOnlyLongTermCommandSummary(t *testing.T) {
 		generationDispatch = previousDispatch
 	}()
 	generationProfiles = func() []model.GenerationProfile {
-		return []model.GenerationProfile{{ID: "summary-profile", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "summary-model", Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}}
+		return []model.GenerationProfile{{
+			ID: "summary-profile", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "summary-model",
+			Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities(),
+			Metadata: map[string]string{"action": "videogen"},
+		}}
 	}
 	generationChannel = func(string) (model.ModelChannel, error) {
 		return model.ModelChannel{Name: "summary-channel", Protocol: "openai", BaseURL: "https://example.com", APIKey: "secret", Enabled: true}, nil
@@ -1305,7 +1319,7 @@ func TestCreateGenerationStoresOnlyLongTermCommandSummary(t *testing.T) {
 		t.Fatalf("long-term metadata = %s", stored.Metadata)
 	}
 	payload, err := repository.GetGenerationPayloadByTaskID(task.ID)
-	if err != nil || !strings.Contains(payload.CommandBody, "private full prompt") || payload.RequestBody != "" {
+	if err != nil || !strings.Contains(payload.CommandBody, "private full prompt") || !strings.Contains(payload.CommandBody, `"upstreamMetadata":{"action":"videogen"}`) || payload.RequestBody != "" {
 		t.Fatalf("TTL payload=%#v err=%v", payload, err)
 	}
 }

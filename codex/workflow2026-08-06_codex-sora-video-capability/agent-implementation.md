@@ -1,7 +1,5 @@
 # Agent Implementation
 
-# Agent Implementation
-
 ## Investigation
 
 - First-party normal video already flows through `GenerationProfile` -> task route snapshot -> `generationAdapterFor` -> `GenerationAdapter.Create/Poll` -> existing lifecycle and result materialization.
@@ -25,6 +23,13 @@
 - Completed result parsing accepts direct `url` and `output.url`, then hands the URL to the unchanged platform materialization flow.
 - The Sora profile exposes only aspect ratio, resolution, duration, poll completion, and no cancellation. Frontend video settings now omit optional output fields when the profile does not declare them.
 - Admin settings now offers the distinct "普通视频（Sora）" template while retaining "普通视频（Seedance）" and "短剧（Vidu Drama）".
+
+## Metadata Follow-up
+
+- Every generation binding now accepts administrator-defined string metadata Key/Value pairs.
+- Metadata is snapshotted into the private stored Generation Command and passed to the Adapter when the run is submitted.
+- Seedance and Vidu receive a JSON `metadata` object; Sora receives the same object JSON-encoded in its multipart `metadata` field.
+- Existing system metadata is preserved and wins over an administrator value using the same key.
 
 ## Documentation Check
 

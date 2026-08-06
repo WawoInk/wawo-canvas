@@ -20,6 +20,7 @@ type AdapterCreateRequest struct {
 	Channel     model.ModelChannel
 	Intent      model.GenerationIntent
 	References  AdapterMediaReferences
+	Metadata    map[string]string
 	CallbackURL string
 }
 
@@ -105,6 +106,7 @@ func (a SeedanceContentsV1Adapter) Create(ctx context.Context, req AdapterCreate
 	if req.Intent.NegativePrompt != "" {
 		payload["metadata"] = map[string]any{"extra_params": map[string]any{"negative_prompt": req.Intent.NegativePrompt}}
 	}
+	mergeGenerationMetadata(payload, req.Metadata)
 	if req.CallbackURL != "" {
 		payload["callback_url"] = req.CallbackURL
 	}
@@ -118,10 +120,21 @@ func (a SoraVideosV1Adapter) Create(ctx context.Context, req AdapterCreateReques
 		"size":    soraVideoSize(req),
 		"seconds": fmt.Sprint(generationSetting(req, "durationSeconds", 4)),
 	}
+	if len(req.Metadata) > 0 {
+		metadata, err := json.Marshal(req.Metadata)
+		if err != nil {
+			return ProviderTaskRef{}, err
+		}
+		fields["metadata"] = string(metadata)
+	}
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	for _, key := range []string{"model", "prompt", "size", "seconds"} {
-		if err := writer.WriteField(key, fields[key]); err != nil {
+	for _, key := range []string{"model", "prompt", "size", "seconds", "metadata"} {
+		value, ok := fields[key]
+		if !ok {
+			continue
+		}
+		if err := writer.WriteField(key, value); err != nil {
 			return ProviderTaskRef{}, err
 		}
 	}
@@ -174,10 +187,27 @@ func (a ViduShortDramaV1Adapter) Create(ctx context.Context, req AdapterCreateRe
 		"duration": duration, "ratio": generationSetting(req, "aspectRatio", "9:16"),
 		"resolution": generationSetting(req, "resolution", "1080p"), "quality": generationSetting(req, "quality", "high"),
 	}
+	mergeGenerationMetadata(payload, req.Metadata)
 	if req.CallbackURL != "" {
 		payload["callback_url"] = req.CallbackURL
 	}
 	return createContentsGenerationTask(ctx, a.client, req.Channel, payload)
+}
+
+func mergeGenerationMetadata(payload map[string]any, metadata map[string]string) {
+	if len(metadata) == 0 {
+		return
+	}
+	merged := make(map[string]any, len(metadata)+1)
+	for key, value := range metadata {
+		merged[key] = value
+	}
+	if existing, ok := payload["metadata"].(map[string]any); ok {
+		for key, value := range existing {
+			merged[key] = value
+		}
+	}
+	payload["metadata"] = merged
 }
 
 func createContentsGenerationTask(ctx context.Context, client *http.Client, channel model.ModelChannel, payload any) (ProviderTaskRef, error) {

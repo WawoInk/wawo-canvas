@@ -8,6 +8,9 @@
 - [x] Sora task responses are normalized into the existing `ProviderTaskRef` lifecycle.
 - [x] Existing Seedance/Vidu adapter behavior is unchanged.
 - [x] Focused tests pass.
+- [x] Every current Canvas generation binding accepts arbitrary string metadata Key/Value pairs.
+- [x] Binding metadata is snapshotted privately when a Generation Run is created.
+- [x] Seedance, Sora, and Vidu create requests include the configured metadata.
 
 ## Verification
 
@@ -19,6 +22,9 @@
 - `npx --yes tsx --test src/services/api/generations.test.mjs` passed from `web/` with 12 tests.
 - Frontend type check passed with a temporary config excluding the branch baseline duplicate property in `canvas-node-config.test.ts`; the unmodified branch baseline fails the full project command on that unrelated file.
 - `git diff --check` passed.
+- Metadata red test: the focused Go test command failed before the binding, snapshot, and Adapter metadata fields existed.
+- Metadata green tests: focused metadata tests, `go test ./service -count=1`, and `go test ./model -count=1` passed.
+- Metadata frontend: scoped TypeScript checking, Prettier checking, and the i18n test passed. The full baseline TypeScript command still reports only the pre-existing duplicate property in `canvas-node-config.test.ts`.
 
 ## Residual Risk
 

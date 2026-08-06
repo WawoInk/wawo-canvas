@@ -1721,7 +1721,9 @@
                 },
                 "actions": {
                     "add": "Add binding",
-                    "deleteLabel": "Delete {{capability}} binding"
+                    "deleteLabel": "Delete {{capability}} binding",
+                    "addMetadata": "Add metadata",
+                    "deleteMetadataLabel": "Delete metadata {{key}}"
                 },
                 "values": {
                     "capability": "capability"
@@ -1741,7 +1743,10 @@
                     "maxDuration": "Maximum duration",
                     "durationPlaceholder": "{{value}} sec",
                     "resolutions": "Supported resolutions",
-                    "billingMode": "Billing mode"
+                    "billingMode": "Billing mode",
+                    "metadata": "Metadata",
+                    "metadataKey": "Key",
+                    "metadataValue": "Value"
                 }
             },
             "modelSelector": {

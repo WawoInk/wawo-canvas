@@ -350,7 +350,7 @@ export default function AdminSettingsPage() {
     function addGenerationProfile() {
         const profiles = currentGenerationProfiles(form);
         const profileId = generationProfileOptions[0].value;
-        updateGenerationProfiles([...profiles, { id: "", profileId, upstreamModel: "", channelName: "", billingMode: "per_call", enabled: true, limitOverrides: {} }]);
+        updateGenerationProfiles([...profiles, { id: "", profileId, upstreamModel: "", channelName: "", billingMode: "per_call", enabled: true, limitOverrides: {}, metadata: {} }]);
     }
 
     function updateGenerationProfile(index: number, patch: Partial<AdminGenerationProfileBinding>) {
@@ -358,6 +358,26 @@ export default function AdminSettingsPage() {
         if (!profiles[index]) return;
         profiles[index] = { ...profiles[index], ...patch };
         updateGenerationProfiles(profiles);
+    }
+
+    function updateGenerationProfileMetadata(profileIndex: number, metadataIndex: number, patch: Partial<{ key: string; value: string }>) {
+        const entries = Object.entries(currentGenerationProfiles(form)[profileIndex]?.metadata || {});
+        const current = entries[metadataIndex];
+        if (!current) return;
+        entries[metadataIndex] = [patch.key ?? current[0], patch.value ?? current[1]];
+        updateGenerationProfile(profileIndex, { metadata: Object.fromEntries(entries) });
+    }
+
+    function addGenerationProfileMetadata(profileIndex: number) {
+        const entries = Object.entries(currentGenerationProfiles(form)[profileIndex]?.metadata || {});
+        if (entries.some(([key]) => !key)) return;
+        updateGenerationProfile(profileIndex, { metadata: Object.fromEntries([...entries, ["", ""]]) });
+    }
+
+    function removeGenerationProfileMetadata(profileIndex: number, metadataIndex: number) {
+        const entries = Object.entries(currentGenerationProfiles(form)[profileIndex]?.metadata || {});
+        entries.splice(metadataIndex, 1);
+        updateGenerationProfile(profileIndex, { metadata: Object.fromEntries(entries) });
     }
 
     function removeGenerationProfile(index: number) {
@@ -956,6 +976,38 @@ export default function AdminSettingsPage() {
                                                                                     />
                                                                                 </Form.Item>
                                                                             </Col>
+                                                                            <Col span={24}>
+                                                                                <Form.Item label={t("admin.settings.generationProfiles.form.metadata")}>
+                                                                                    <Flex vertical gap={8}>
+                                                                                        {Object.entries(binding.metadata || {}).map(([key, value], metadataIndex) => (
+                                                                                            <Space.Compact key={metadataIndex} block>
+                                                                                                <Input
+                                                                                                    value={key}
+                                                                                                    aria-label={t("admin.settings.generationProfiles.form.metadataKey")}
+                                                                                                    placeholder={t("admin.settings.generationProfiles.form.metadataKey")}
+                                                                                                    onChange={(event) => updateGenerationProfileMetadata(index, metadataIndex, { key: event.target.value })}
+                                                                                                />
+                                                                                                <Input
+                                                                                                    value={value}
+                                                                                                    aria-label={t("admin.settings.generationProfiles.form.metadataValue")}
+                                                                                                    placeholder={t("admin.settings.generationProfiles.form.metadataValue")}
+                                                                                                    onChange={(event) => updateGenerationProfileMetadata(index, metadataIndex, { value: event.target.value })}
+                                                                                                />
+                                                                                                <Button
+                                                                                                    danger
+                                                                                                    type="text"
+                                                                                                    icon={<DeleteOutlined />}
+                                                                                                    aria-label={t("admin.settings.generationProfiles.actions.deleteMetadataLabel", { key: key || metadataIndex + 1 })}
+                                                                                                    onClick={() => removeGenerationProfileMetadata(index, metadataIndex)}
+                                                                                                />
+                                                                                            </Space.Compact>
+                                                                                        ))}
+                                                                                        <Button type="dashed" icon={<PlusOutlined />} onClick={() => addGenerationProfileMetadata(index)}>
+                                                                                            {t("admin.settings.generationProfiles.actions.addMetadata")}
+                                                                                        </Button>
+                                                                                    </Flex>
+                                                                                </Form.Item>
+                                                                            </Col>
                                                                         </Row>
                                                                     ),
                                                                 },
@@ -1266,6 +1318,11 @@ function normalizePrivateSetting(setting: Partial<AdminSettings["private"]> = {}
                 ...(binding.credits == null ? {} : { credits: nonNegativeDecimal(binding.credits) }),
                 enabled: binding.enabled !== false,
                 limitOverrides: binding.limitOverrides || {},
+                metadata: Object.fromEntries(
+                    Object.entries(binding.metadata || {})
+                        .map(([key, value]) => [String(key).trim(), String(value || "")])
+                        .filter(([key]) => key),
+                ),
             })) ?? null,
         promptSync: {
             enabled: setting.promptSync?.enabled !== false,
