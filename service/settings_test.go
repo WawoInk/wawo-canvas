@@ -106,6 +106,26 @@ func TestNormalizeSettingsPublishesEnabledChannelModelsAndRepairsDefaults(t *tes
 	}
 }
 
+func TestNormalizeSettingsDropsCostsForUnselectedChannelModels(t *testing.T) {
+	settings := normalizeSettings(model.Settings{
+		Public: model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{
+			ModelCosts: []model.ModelCost{
+				{Model: "gpt-image-1", Credits: credit(1)},
+				{Model: "gpt-image-2-open-1-gen", Credits: credit(2)},
+			},
+		}},
+		Private: model.PrivateSetting{Channels: []model.ModelChannel{{
+			Enabled: true,
+			Models:  []string{"gpt-image-1"},
+		}}},
+	})
+
+	want := []model.ModelCost{{Model: "gpt-image-1", Credits: credit(1)}}
+	if got := settings.Public.ModelChannel.ModelCosts; !reflect.DeepEqual(got, want) {
+		t.Fatalf("model costs = %#v, want %#v", got, want)
+	}
+}
+
 func TestResolveModelDisplayNameUsesConfiguredNameAndFallsBackToUpstreamModel(t *testing.T) {
 	public := model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{ModelCosts: []model.ModelCost{
 		{Model: "public-video", DisplayName: "精品视频模型"},

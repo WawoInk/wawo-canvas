@@ -6,6 +6,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { App } from "antd";
 import { useTranslation } from "react-i18next";
 
+import { appPathname } from "@/i18n";
 import { createModelChannel, useConfigStore } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 import { useAssetStore } from "@/stores/use-asset-store";
@@ -21,6 +22,7 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     const navigate = useNavigate();
     const handledConfigParams = useRef(false);
     const { pathname } = useLocation();
+    const appPath = appPathname(pathname);
     const hydrateUser = useUserStore((state) => state.hydrateUser);
     const userId = useUserStore((state) => state.user?.id);
     const loadPublicSettings = useConfigStore((state) => state.loadPublicSettings);
@@ -28,13 +30,13 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     const updateConfig = useConfigStore((state) => state.updateConfig);
     const config = useConfigStore((state) => state.config);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
-    const isLoginPage = pathname === "/login" || pathname === "/admin/login";
+    const isLoginPage = appPath === "/login" || appPath === "/admin/login";
 
     useEffect(() => {
-        const page = seoPage(pathname);
+        const page = seoPage(appPath);
         document.title = t(`seo.pages.${page}.title`, { defaultValue: t("seo.default.title") });
         document.querySelector('meta[name="description"]')?.setAttribute("content", t(`seo.pages.${page}.description`, { defaultValue: t("seo.default.description") }));
-    }, [pathname, t]);
+    }, [appPath, t]);
 
     useEffect(() => {
         void loadPublicSettings();

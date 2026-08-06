@@ -1,6 +1,8 @@
-import { createBrowserRouter, Outlet } from "react-router-dom";
+import { useLayoutEffect } from "react";
+import { createBrowserRouter, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { ClientRootInit } from "@/components/layout/client-root-init";
+import i18n, { localeFromPathname, localeHref, resolveLanguage } from "@/i18n";
 
 import UserLayout from "@/layouts/user-layout";
 import AdminLayout from "@/layouts/admin-layout";
@@ -25,13 +27,31 @@ import AdminAssets from "@/pages/admin/assets";
 import AdminSettings from "@/pages/admin/settings";
 import NotFound from "@/pages/not-found";
 
+function LocaleBoundary() {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const locale = localeFromPathname(location.pathname);
+    const language = resolveLanguage(i18n.resolvedLanguage || i18n.language);
+
+    useLayoutEffect(() => {
+        if (!locale) {
+            navigate(localeHref(location, language), { replace: true });
+            return;
+        }
+        if (locale !== language) void i18n.changeLanguage(locale);
+    }, [language, locale, location, navigate]);
+
+    return (
+        <ClientRootInit>
+            <Outlet />
+        </ClientRootInit>
+    );
+}
+
 export const router = createBrowserRouter([
     {
-        element: (
-            <ClientRootInit>
-                <Outlet />
-            </ClientRootInit>
-        ),
+        path: "/:locale?",
+        element: <LocaleBoundary />,
         children: [
             {
                 element: (
@@ -40,17 +60,17 @@ export const router = createBrowserRouter([
                     </UserLayout>
                 ),
                 children: [
-                    { path: "/", element: <HomePage /> },
-                    { path: "/login", element: <LoginPage /> },
-                    { path: "/canvas", element: <CanvasListPage /> },
-                    { path: "/canvas/:id", element: <CanvasProjectPage /> },
-                    { path: "/image", element: <ImagePage /> },
-                    { path: "/video", element: <VideoPage /> },
-                    { path: "/prompts", element: <PromptsPage /> },
-                    { path: "/assets", element: <AssetsPage /> },
-                    { path: "/asset-library", element: <AssetLibraryPage /> },
-                    { path: "/account", element: <AccountPage /> },
-                    { path: "/enterprise-assets", element: <EnterpriseAssetsPage /> },
+                    { index: true, element: <HomePage /> },
+                    { path: "login", element: <LoginPage /> },
+                    { path: "canvas", element: <CanvasListPage /> },
+                    { path: "canvas/:id", element: <CanvasProjectPage /> },
+                    { path: "image", element: <ImagePage /> },
+                    { path: "video", element: <VideoPage /> },
+                    { path: "prompts", element: <PromptsPage /> },
+                    { path: "assets", element: <AssetsPage /> },
+                    { path: "asset-library", element: <AssetLibraryPage /> },
+                    { path: "account", element: <AccountPage /> },
+                    { path: "enterprise-assets", element: <EnterpriseAssetsPage /> },
                 ],
             },
             {
@@ -60,14 +80,14 @@ export const router = createBrowserRouter([
                     </AdminLayout>
                 ),
                 children: [
-                    { path: "/admin", element: <AdminDashboard /> },
-                    { path: "/admin/users", element: <AdminUsers /> },
-                    { path: "/admin/enterprises", element: <AdminEnterprises /> },
-                    { path: "/admin/credit-logs", element: <AdminCreditLogs /> },
-                    { path: "/admin/generation-tasks", element: <AdminGenerationTasks /> },
-                    { path: "/admin/prompts", element: <AdminPrompts /> },
-                    { path: "/admin/assets", element: <AdminAssets /> },
-                    { path: "/admin/settings", element: <AdminSettings /> },
+                    { path: "admin", element: <AdminDashboard /> },
+                    { path: "admin/users", element: <AdminUsers /> },
+                    { path: "admin/enterprises", element: <AdminEnterprises /> },
+                    { path: "admin/credit-logs", element: <AdminCreditLogs /> },
+                    { path: "admin/generation-tasks", element: <AdminGenerationTasks /> },
+                    { path: "admin/prompts", element: <AdminPrompts /> },
+                    { path: "admin/assets", element: <AdminAssets /> },
+                    { path: "admin/settings", element: <AdminSettings /> },
                 ],
             },
             { path: "*", element: <NotFound /> },

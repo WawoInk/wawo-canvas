@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { AppTopNav } from "@/components/layout/app-top-nav";
+import { appPathname } from "@/i18n";
 import { canRenderProtectedData } from "@/lib/account-storage";
 import { useUserStore } from "@/stores/use-user-store";
 
@@ -22,19 +23,20 @@ function safeRedirect(value: string): string {
 export default function UserLayout({ children }: { children: ReactNode }) {
     const navigate = useNavigate();
     const { pathname } = useLocation();
+    const appPath = appPathname(pathname);
     const token = useUserStore((state) => state.token);
     const user = useUserStore((state) => state.user);
     const isReady = useUserStore((state) => state.isReady);
 
     useEffect(() => {
         if (!isReady) return;
-        const isPublic = PUBLIC_PATHS.has(pathname) || pathname === "/admin/login";
+        const isPublic = PUBLIC_PATHS.has(appPath) || appPath === "/admin/login";
         if (!user && !isPublic) {
             navigate(`/login?redirect=${encodeURIComponent(safeRedirect(pathname))}`, { replace: true });
         }
-    }, [isReady, user, pathname, navigate]);
+    }, [appPath, isReady, user, pathname, navigate]);
 
-    const isPublic = PUBLIC_PATHS.has(pathname) || pathname === "/admin/login";
+    const isPublic = PUBLIC_PATHS.has(appPath) || appPath === "/admin/login";
     if (!isPublic && !canRenderProtectedData(isReady, Boolean(token && user))) {
         return <div className="flex h-dvh items-center justify-center bg-background" />;
     }

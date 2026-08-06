@@ -9,6 +9,7 @@ import { navigationToolsForUser, type NavigationToolSlug } from "@/constant/navi
 import { AppConfigModal } from "@/components/layout/app-config-modal";
 import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
 import { UserStatusActions } from "@/components/layout/user-status-actions";
+import { appPathname } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/stores/use-user-store";
 import { useState } from "react";
@@ -17,8 +18,9 @@ export function AppTopNav() {
     const { t } = useTranslation();
     const { pathname } = useLocation();
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
-    const hideHeader = /^\/canvas\/[^/]+/.test(pathname);
-    const slug = pathname.split("/").filter(Boolean)[0];
+    const appPath = appPathname(pathname);
+    const hideHeader = /^\/canvas\/[^/]+/.test(appPath);
+    const slug = appPath.split("/").filter(Boolean)[0];
     const user = useUserStore((state) => state.user);
     const tools = navigationToolsForUser(user);
     const activeToolSlug = tools.some((tool) => tool.slug === slug) ? (slug as NavigationToolSlug) : undefined;

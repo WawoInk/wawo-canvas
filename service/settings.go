@@ -23,12 +23,14 @@ func SaveSettings(settings model.Settings) (model.Settings, error) {
 	if err != nil {
 		return model.Settings{}, err
 	}
+	hasChannelConfig := settings.Private.Channels != nil
 	settings = normalizeSettings(settings)
 	saved = normalizeSettings(saved)
 	keepPrivateAPIKeys(&settings, saved)
 	keepPrivateAuthSecrets(&settings, saved)
 	keepLegacyGenerationCredits(&settings, saved)
 	migrateLegacyGenerationCosts(&settings)
+	filterModelCosts(&settings, hasChannelConfig)
 	if err := ValidateGenerationBindings(settings); err != nil {
 		return model.Settings{}, err
 	}
@@ -40,6 +42,7 @@ func SaveSettings(settings model.Settings) (model.Settings, error) {
 }
 
 func normalizeSettings(settings model.Settings) model.Settings {
+	hasChannelConfig := settings.Private.Channels != nil
 	settings.Private = normalizePrivateSetting(settings.Private)
 	settings.Public = normalizePublicSettingWithChannels(settings.Public, settings.Private.Channels)
 	migrateLegacyGenerationCosts(&settings)
@@ -54,7 +57,30 @@ func normalizeSettings(settings model.Settings) model.Settings {
 		settings.Public.ModelChannel.AvailableModels = replaceBoundUpstreamModels(settings.Public.ModelChannel.AvailableModels, bindingIDsByUpstreamModel)
 		settings.Public.ModelChannel.VideoModels = replaceBoundUpstreamModels(settings.Public.ModelChannel.VideoModels, bindingIDsByUpstreamModel)
 	}
+	filterModelCosts(&settings, hasChannelConfig)
 	return settings
+}
+
+func filterModelCosts(settings *model.Settings, hasChannelConfig bool) {
+	if !hasChannelConfig {
+		return
+	}
+	allowed := map[string]bool{}
+	for _, modelName := range enabledChannelModels(settings.Private.Channels) {
+		allowed[modelName] = true
+	}
+	for _, binding := range settings.Private.GenerationProfiles {
+		if binding.Enabled && allowed[binding.UpstreamModel] {
+			allowed[binding.ID] = true
+		}
+	}
+	costs := settings.Public.ModelChannel.ModelCosts[:0]
+	for _, cost := range settings.Public.ModelChannel.ModelCosts {
+		if allowed[cost.Model] {
+			costs = append(costs, cost)
+		}
+	}
+	settings.Public.ModelChannel.ModelCosts = costs
 }
 
 func migrateLegacyGenerationCosts(settings *model.Settings) {

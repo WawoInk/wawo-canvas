@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { UserStatusActions } from "@/components/layout/user-status-actions";
+import { appPathname } from "@/i18n";
 import { adminLayoutStyle } from "@/lib/app-theme";
 import { useUserStore } from "@/stores/use-user-store";
 
@@ -15,6 +16,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     const { token: antToken } = theme.useToken();
     const navigate = useNavigate();
     const { pathname } = useLocation();
+    const appPath = appPathname(pathname);
     const token = useUserStore((state) => state.token);
     const user = useUserStore((state) => state.user);
     const isReady = useUserStore((state) => state.isReady);
@@ -28,32 +30,32 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         { key: "/admin/assets", icon: <PictureOutlined />, label: t("admin.menus.assets") },
         { key: "/admin/settings", icon: <SettingOutlined />, label: t("admin.menus.settings") },
     ];
-    const activeKey = pathname.startsWith("/admin/enterprises")
+    const activeKey = appPath.startsWith("/admin/enterprises")
         ? "/admin/enterprises"
-        : pathname.startsWith("/admin/settings")
+        : appPath.startsWith("/admin/settings")
           ? "/admin/settings"
-          : pathname.startsWith("/admin/assets")
+          : appPath.startsWith("/admin/assets")
             ? "/admin/assets"
-            : pathname.startsWith("/admin/generation-tasks")
+            : appPath.startsWith("/admin/generation-tasks")
               ? "/admin/generation-tasks"
-              : pathname.startsWith("/admin/prompts")
+              : appPath.startsWith("/admin/prompts")
                 ? "/admin/prompts"
-                : pathname.startsWith("/admin/credit-logs")
+                : appPath.startsWith("/admin/credit-logs")
                   ? "/admin/credit-logs"
-                  : pathname.startsWith("/admin/users")
+                  : appPath.startsWith("/admin/users")
                     ? "/admin/users"
                     : "";
-    const pageTitle = pathname.startsWith("/admin/enterprises")
+    const pageTitle = appPath.startsWith("/admin/enterprises")
         ? t("admin.menus.enterprises")
-        : pathname.startsWith("/admin/settings")
+        : appPath.startsWith("/admin/settings")
           ? t("admin.menus.settings")
-          : pathname.startsWith("/admin/assets")
+          : appPath.startsWith("/admin/assets")
             ? t("admin.menus.assetsManagement")
-            : pathname.startsWith("/admin/generation-tasks")
+            : appPath.startsWith("/admin/generation-tasks")
               ? t("admin.menus.generationTasks")
-              : pathname.startsWith("/admin/prompts")
+              : appPath.startsWith("/admin/prompts")
                 ? t("admin.menus.prompts")
-                : pathname.startsWith("/admin/credit-logs")
+                : appPath.startsWith("/admin/credit-logs")
                   ? t("admin.menus.creditLogs")
                   : t("admin.menus.users");
 

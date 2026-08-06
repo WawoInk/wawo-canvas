@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { BorderBeam } from "@/components/ui/border-beam";
+import { appPathname } from "@/i18n";
 import { fetchCurrentUser } from "@/services/api/auth";
 import { useConfigStore } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
@@ -48,7 +49,8 @@ function LoginContent() {
     const linuxDoEnabled = useConfigStore((state) => state.publicSettings?.auth?.linuxDo?.enabled === true);
     const allowRegister = useConfigStore((state) => state.publicSettings?.auth?.allowRegister !== false);
     const [mode, setMode] = useState<"login" | "register">("login");
-    const redirect = safeRedirect(searchParams.get("redirect"));
+    const requestedRedirect = safeRedirect(searchParams.get("redirect"));
+    const redirect = ["/login", "/admin/login"].includes(appPathname(new URL(requestedRedirect, window.location.origin).pathname)) ? "/" : requestedRedirect;
 
     useEffect(() => {
         const token = searchParams.get("token");
