@@ -969,6 +969,7 @@ export async function pollAsyncImageTask(config: AiConfig, task: AsyncImageTask,
             code?: number;
             msg?: string;
             status?: string;
+            data?: Array<Record<string, unknown>>;
             result?: { data?: Array<Record<string, unknown>> };
             error?: { code?: string; message?: string };
         }>(aiApiUrl(requestConfig, `/tasks/${encodeURIComponent(task.id)}`), {
@@ -980,15 +981,16 @@ export async function pollAsyncImageTask(config: AiConfig, task: AsyncImageTask,
         // ponytail: backend wraps errors; unwrap before inspecting task fields
         if (typeof body.code === "number" && body.code !== 0) return { status: "failed", error: body.msg || i18n.t("errors.image.taskQueryFailed") };
         if (body.error?.message) return { status: "failed", error: body.error.message };
-        if (body.status === "completed") {
-            const images = (body.result?.data || [])
+        if (body.status === "failed" || body.status === "cancelled") return { status: "failed", error: body.error?.message || i18n.t("errors.image.generationFailed") };
+        const imageData = body.result?.data ?? body.data;
+        if (body.status === "completed" || imageData) {
+            const images = (imageData || [])
                 .map(resolveImageDataUrl)
                 .filter((dataUrl): dataUrl is string => Boolean(dataUrl))
                 .map((dataUrl) => ({ dataUrl }));
             if (!images.length) return { status: "failed", error: i18n.t("errors.image.taskSucceededWithoutImage") };
             return { status: "succeeded", images };
         }
-        if (body.status === "failed" || body.status === "cancelled") return { status: "failed", error: body.error?.message || i18n.t("errors.image.generationFailed") };
         return { status: "pending" };
     } catch (error) {
         throw new Error(readAxiosError(error, i18n.t("errors.image.taskQueryFailed")));

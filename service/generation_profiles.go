@@ -113,7 +113,7 @@ func soraCapabilities() model.GenerationCapabilities {
 	return model.GenerationCapabilities{
 		Settings: map[string]model.GenerationSettingDefinition{
 			"aspectRatio":     {Type: model.GenerationSettingEnum, Values: []string{"adaptive", "16:9", "9:16"}, Default: "16:9"},
-			"resolution":      {Type: model.GenerationSettingEnum, Values: []string{"720p", "1080p"}, Default: "720p"},
+			"resolution":      {Type: model.GenerationSettingEnum, Values: []string{"480p", "720p", "1080p"}, Default: "720p"},
 			"durationSeconds": {Type: model.GenerationSettingDuration, Min: intPtr(4), Max: intPtr(20), Default: 4},
 		},
 		Completion: []string{"poll"},

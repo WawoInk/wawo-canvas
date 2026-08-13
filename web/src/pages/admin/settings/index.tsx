@@ -59,7 +59,7 @@ const emptySettings: AdminSettings = {
 const emptyChannel: AdminModelChannel = { protocol: "openai", name: "", baseUrl: "", apiKey: "", models: [], weight: 1, enabled: true, remark: "" };
 const generationProfileOptions = [
     { labelKey: "admin.settings.generationProfiles.types.standardVideo", value: "seedance-1-5-pro", durationRange: { min: 4, max: 15 }, resolutionValues: ["480p", "720p", "1080p"] },
-    { labelKey: "admin.settings.generationProfiles.types.soraVideo", value: "sora-2", durationRange: { min: 4, max: 20 }, resolutionValues: ["720p", "1080p"] },
+    { labelKey: "admin.settings.generationProfiles.types.soraVideo", value: "sora-2", durationRange: { min: 4, max: 20 }, resolutionValues: ["480p", "720p", "1080p"] },
     { labelKey: "admin.settings.generationProfiles.types.shortDrama", value: "vidu-q3-drama", durationRange: { min: 8, max: 12 }, resolutionValues: ["1080p"] },
 ];
 const billingModeOptions: Array<{ labelKey: string; value: VideoBillingMode }> = [

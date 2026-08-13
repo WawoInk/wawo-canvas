@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -68,6 +69,9 @@ func TestModelProfilesExposeVideoAdaptersWithoutSecrets(t *testing.T) {
 	}
 	if sora.Capabilities.Cancellation || len(sora.Capabilities.Completion) != 1 || sora.Capabilities.Completion[0] != "poll" || sora.Capabilities.Settings["aspectRatio"].Default != "16:9" || sora.Capabilities.Settings["resolution"].Default != "720p" || sora.Capabilities.Settings["durationSeconds"].Default != float64(4) {
 		t.Fatalf("sora capabilities = %#v", sora.Capabilities)
+	}
+	if resolutions := sora.Capabilities.Settings["resolution"].Values; !slices.Equal(resolutions, []string{"480p", "720p", "1080p"}) {
+		t.Fatalf("sora resolutions = %#v", resolutions)
 	}
 	payload := res.Body.String()
 	for _, secret := range []string{"apiKey", "baseUrl", "channelId", "upstreamModel"} {
