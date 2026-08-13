@@ -226,32 +226,42 @@ func SaveCreditLog(log model.CreditLog) (model.CreditLog, error) {
 	return log, db.Save(&log).Error
 }
 
-func ListCreditLogs(q model.Query) ([]model.CreditLog, int64, error) {
+type AdminCreditLogWithUser struct {
+	model.CreditLog
+	Username string `json:"username"`
+}
+
+func ListCreditLogs(q model.Query) ([]AdminCreditLogWithUser, int64, error) {
 	db, err := DB()
 	if err != nil {
 		return nil, 0, err
 	}
 	q.Normalize()
-	tx := db.Model(&model.CreditLog{})
+	tx := db.Table("credit_logs AS log").
+		Joins("LEFT JOIN users AS account ON account.id = log.user_id")
 	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
 		like := "%" + keyword + "%"
-		tx = tx.Where("user_id LIKE ? OR type LIKE ? OR remark LIKE ? OR related_id LIKE ?", like, like, like, like)
+		tx = tx.Where("log.user_id LIKE ? OR log.type LIKE ? OR log.remark LIKE ? OR log.related_id LIKE ?", like, like, like, like)
 	}
 	if q.Type != "" {
-		tx = tx.Where("type = ?", q.Type)
+		tx = tx.Where("log.type = ?", q.Type)
 	}
 	if q.StartTime != "" {
-		tx = tx.Where("created_at::timestamptz >= ?::timestamptz", q.StartTime)
+		tx = tx.Where("log.created_at::timestamptz >= ?::timestamptz", q.StartTime)
 	}
 	if q.EndTime != "" {
-		tx = tx.Where("created_at::timestamptz <= ?::timestamptz", q.EndTime)
+		tx = tx.Where("log.created_at::timestamptz <= ?::timestamptz", q.EndTime)
 	}
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	var logs []model.CreditLog
-	err = tx.Order("created_at desc").Offset(q.Offset()).Limit(q.PageSize).Find(&logs).Error
+	var logs []AdminCreditLogWithUser
+	err = tx.Select("log.*, account.username AS username").
+		Order("log.created_at DESC").
+		Offset(q.Offset()).
+		Limit(q.PageSize).
+		Scan(&logs).Error
 	return logs, total, err
 }
 

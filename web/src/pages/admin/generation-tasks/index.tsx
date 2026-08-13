@@ -2,7 +2,8 @@
 
 import { DeleteOutlined, EyeOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import { Button, Card, Col, Form, Input, Modal, Row, Select, Space, Tag, Tooltip, Typography } from "antd";
+import { Button, Card, Col, DatePicker, Form, Input, Modal, Row, Select, Space, Tag, Tooltip, Typography } from "antd";
+import type { Dayjs } from "dayjs";
 import type { TFunction } from "i18next";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -29,7 +30,7 @@ const taskTypeColors: Record<string, string> = {
 
 export default function AdminGenerationTasksPage() {
     const { t } = useTranslation();
-    const { tasks, keyword, taskType, status, page, pageSize, total, isLoading, isDeleting, searchLogs, filterByType, filterByStatus, changePage, changePageSize, resetFilters, refreshLogs, fetchDetail, deleteTask, batchDeleteTasks } =
+    const { tasks, keyword, taskType, status, dateRange, page, pageSize, total, isLoading, isDeleting, searchLogs, filterByType, filterByStatus, filterByDateRange, changePage, changePageSize, resetFilters, refreshLogs, fetchDetail, deleteTask, batchDeleteTasks } =
         useAdminGenerationTasks();
     const [keywordText, setKeywordText] = useState(keyword);
     const [detail, setDetail] = useState<AdminGenerationTaskDetailResponse | null>(null);
@@ -223,6 +224,16 @@ export default function AdminGenerationTasksPage() {
                                             { label: t("admin.generationTasks.statuses.cancelled"), value: "cancelled" },
                                         ]}
                                         onChange={(value) => filterByStatus(value || "")}
+                                    />
+                                </Form.Item>
+                            </Col>
+                            <Col flex="260px">
+                                <Form.Item label={t("admin.common.filters.dateRange")}>
+                                    <DatePicker.RangePicker
+                                        value={dateRange}
+                                        format={t("admin.common.filters.dateFormat")}
+                                        placeholder={[t("admin.common.filters.startDate"), t("admin.common.filters.endDate")]}
+                                        onChange={(value) => filterByDateRange(value as [Dayjs, Dayjs] | null)}
                                     />
                                 </Form.Item>
                             </Col>

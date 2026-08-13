@@ -2,7 +2,8 @@
 
 import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import { Button, Card, Col, Form, Input, InputNumber, Modal, Row, Space, Tag, Tooltip, Typography } from "antd";
+import { Button, Card, Col, DatePicker, Form, Input, InputNumber, Modal, Row, Space, Tag, Tooltip, Typography } from "antd";
+import type { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -23,7 +24,7 @@ const creditLogTypeKeys: Record<string, string> = {
 
 export default function AdminCreditLogsPage() {
     const { t } = useTranslation();
-    const { logs, keyword, page, pageSize, total, isLoading, searchLogs, changePage, changePageSize, resetFilters, refreshLogs, saveLog: saveAdminLog, deleteLog } = useAdminCreditLogs();
+    const { logs, keyword, dateRange, page, pageSize, total, isLoading, searchLogs, filterByDateRange, changePage, changePageSize, resetFilters, refreshLogs, saveLog: saveAdminLog, deleteLog } = useAdminCreditLogs();
     const [form] = Form.useForm<CreditLogFormValues>();
     const [keywordText, setKeywordText] = useState(keyword);
     const [editingLog, setEditingLog] = useState<Partial<AdminCreditLog> | null>(null);
@@ -47,6 +48,12 @@ export default function AdminCreditLogsPage() {
             dataIndex: "userId",
             width: 220,
             render: (_, item) => <Typography.Text copyable>{item.userId}</Typography.Text>,
+        },
+        {
+            title: t("admin.creditLogs.table.username"),
+            dataIndex: "username",
+            width: 140,
+            render: (_, item) => <Typography.Text>{item.username || "-"}</Typography.Text>,
         },
         {
             title: t("admin.creditLogs.table.relatedId"),
@@ -117,6 +124,16 @@ export default function AdminCreditLogsPage() {
                                         enterButton={<SearchOutlined />}
                                         onSearch={() => searchLogs(keywordText)}
                                         onChange={(event) => setKeywordText(event.target.value)}
+                                    />
+                                </Form.Item>
+                            </Col>
+                            <Col flex="260px">
+                                <Form.Item label={t("admin.common.filters.dateRange")}>
+                                    <DatePicker.RangePicker
+                                        value={dateRange}
+                                        format={t("admin.common.filters.dateFormat")}
+                                        placeholder={[t("admin.common.filters.startDate"), t("admin.common.filters.endDate")]}
+                                        onChange={(value) => filterByDateRange(value as [Dayjs, Dayjs] | null)}
                                     />
                                 </Form.Item>
                             </Col>

@@ -1114,7 +1114,11 @@
             },
             "filters": {
                 "all": "All",
-                "keyword": "Keyword"
+                "keyword": "Keyword",
+                "dateRange": "Date range",
+                "dateFormat": "MM/DD/YYYY",
+                "startDate": "Start date",
+                "endDate": "End date"
             },
             "messages": {
                 "adjustFailed": "Adjustment failed",
@@ -1292,6 +1296,7 @@
             },
             "table": {
                 "userId": "User ID",
+                "username": "Username",
                 "relatedId": "Operator / Related ID",
                 "type": "Type",
                 "change": "Change",

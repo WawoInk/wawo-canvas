@@ -1114,7 +1114,11 @@
             },
             "filters": {
                 "all": "全部",
-                "keyword": "关键词"
+                "keyword": "关键词",
+                "dateRange": "日期范围",
+                "dateFormat": "YYYY-MM-DD",
+                "startDate": "开始日期",
+                "endDate": "结束日期"
             },
             "messages": {
                 "adjustFailed": "调整失败",
@@ -1292,6 +1296,7 @@
             },
             "table": {
                 "userId": "用户 ID",
+                "username": "用户名",
                 "relatedId": "操作者 / 关联 ID",
                 "type": "类型",
                 "change": "变动",

@@ -63,7 +63,9 @@ description: 后端统一响应信封与结构化生成错误
 | `POST` | `/api/admin/enterprises/{id}/owner/password` | 重置主账号密码并使旧会话失效 |
 | `POST` | `/api/admin/enterprises/{id}/credits` | 使用 `{ delta, reason }` 按增量调整主账号积分；`delta` 不能为 0，扣减后余额不能为负 |
 
-企业积分调整不接受客户端提交最终余额。服务端锁定主账号余额后应用 `delta`，并在同一数据库事务中写入 `admin_adjust` 流水；流水的 `userId` 是目标主账号，`relatedId` 是平台管理员，`remark` 保存调整原因。`GET /api/admin/credit-logs` 可使用 `type=admin_adjust` 筛选平台调整记录。企业账号不能再通过 `/api/admin/users/{id}/credits` 覆盖余额。
+企业积分调整不接受客户端提交最终余额。服务端锁定主账号余额后应用 `delta`，并在同一数据库事务中写入 `admin_adjust` 流水；流水的 `userId` 是目标主账号，`relatedId` 是平台管理员，`remark` 保存调整原因。`GET /api/admin/credit-logs` 支持 `keyword/type/start_time/end_time/page/pageSize`，日期按闭区间筛选 `createdAt`，每条记录附带当前对应用户的 `username`；使用 `type=admin_adjust` 可筛选平台调整记录。企业账号不能再通过 `/api/admin/users/{id}/credits` 覆盖余额。
+
+管理后台使用日志 `GET /api/admin/generation-tasks` 同样支持 `start_time/end_time` 日期闭区间筛选。前端日期范围会按本地首日开始时间和末日结束时间转换为 ISO 时间戳。
 
 `/api/auth/login` 和 `/api/auth/me` 的公开用户信息可包含 `enterpriseId`、`enterpriseName`、`enterpriseRole` 和 `enterpriseStatus`。企业范围由服务端当前用户推导，不接受客户端提交企业 ID 来切换身份。
 

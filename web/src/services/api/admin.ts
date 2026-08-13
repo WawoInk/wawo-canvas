@@ -66,6 +66,7 @@ export type AdminEnterpriseListResponse = {
 export type AdminCreditLog = {
     id: string;
     userId: string;
+    username?: string;
     type: string;
     amount: DecimalValue;
     balance: DecimalValue;
@@ -78,6 +79,15 @@ export type AdminCreditLog = {
 export type AdminCreditLogListResponse = {
     items: AdminCreditLog[];
     total: number;
+};
+
+export type AdminCreditLogQuery = {
+    keyword?: string;
+    type?: string;
+    start_time?: string;
+    end_time?: string;
+    page?: number;
+    pageSize?: number;
 };
 
 export type AdminUserQuery = {
@@ -131,7 +141,7 @@ export async function deleteAdminUser(token: string, id: string) {
     return apiDelete<boolean>(`/api/admin/users/${encodeURIComponent(id)}`, token);
 }
 
-export async function fetchAdminCreditLogs(token: string, query: AdminUserQuery = {}) {
+export async function fetchAdminCreditLogs(token: string, query: AdminCreditLogQuery = {}) {
     return apiGet<AdminCreditLogListResponse>("/api/admin/credit-logs", compactApiParams(query), token);
 }
 

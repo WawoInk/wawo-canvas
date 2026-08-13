@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { App } from "antd";
+import type { Dayjs } from "dayjs";
 import { useTranslation } from "react-i18next";
 
 import { formatNumber } from "@/i18n/formatters";
@@ -10,6 +11,7 @@ import { fetchAdminGenerationTasks, fetchAdminGenerationTaskDetail, deleteAdminG
 import { useUserStore } from "@/stores/use-user-store";
 
 const defaultPageSize = 10;
+type LogDateRange = [Dayjs, Dayjs] | null;
 
 export function useAdminGenerationTasks() {
     const { message } = App.useApp();
@@ -20,12 +22,15 @@ export function useAdminGenerationTasks() {
     const [keyword, setKeyword] = useState("");
     const [taskType, setTaskType] = useState("");
     const [status, setStatus] = useState("");
+    const [dateRange, setDateRange] = useState<LogDateRange>(null);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(defaultPageSize);
+    const startTime = dateRange?.[0].startOf("day").toISOString();
+    const endTime = dateRange?.[1].endOf("day").toISOString();
 
     const query = useQuery({
-        queryKey: ["admin", "generation-tasks", token, keyword, taskType, status, page, pageSize],
-        queryFn: () => fetchAdminGenerationTasks(token, { user_id: keyword || undefined, task_type: taskType || undefined, status: status || undefined, page, pageSize }),
+        queryKey: ["admin", "generation-tasks", token, keyword, taskType, status, startTime, endTime, page, pageSize],
+        queryFn: () => fetchAdminGenerationTasks(token, { user_id: keyword || undefined, task_type: taskType || undefined, status: status || undefined, start_time: startTime, end_time: endTime, page, pageSize }),
         enabled: Boolean(token),
         retry: false,
     });
@@ -38,12 +43,13 @@ export function useAdminGenerationTasks() {
         }
     }, [clearSession, message, query.error, query.isError, t]);
 
-    const updateFilters = (next: Partial<{ keyword: string; taskType: string; status: string; page: number; pageSize: number }>) => {
-        const queryState = { keyword, taskType, status, page, pageSize, ...next };
-        if (next.keyword !== undefined || next.taskType !== undefined || next.status !== undefined || next.pageSize !== undefined) queryState.page = 1;
+    const updateFilters = (next: Partial<{ keyword: string; taskType: string; status: string; dateRange: LogDateRange; page: number; pageSize: number }>) => {
+        const queryState = { keyword, taskType, status, dateRange, page, pageSize, ...next };
+        if (next.keyword !== undefined || next.taskType !== undefined || next.status !== undefined || next.dateRange !== undefined || next.pageSize !== undefined) queryState.page = 1;
         setKeyword(queryState.keyword);
         setTaskType(queryState.taskType);
         setStatus(queryState.status);
+        setDateRange(queryState.dateRange);
         setPage(queryState.page);
         setPageSize(queryState.pageSize);
     };
@@ -78,6 +84,7 @@ export function useAdminGenerationTasks() {
         keyword,
         taskType,
         status,
+        dateRange,
         page,
         pageSize,
         total: data?.total || 0,
@@ -85,9 +92,10 @@ export function useAdminGenerationTasks() {
         searchLogs: (value = keyword) => updateFilters({ keyword: value }),
         filterByType: (value: string) => updateFilters({ taskType: value }),
         filterByStatus: (value: string) => updateFilters({ status: value }),
+        filterByDateRange: (value: LogDateRange) => updateFilters({ dateRange: value }),
         changePage: (value: number) => updateFilters({ page: value }),
         changePageSize: (value: number) => updateFilters({ pageSize: value }),
-        resetFilters: () => updateFilters({ keyword: "", taskType: "", status: "", page: 1, pageSize: defaultPageSize }),
+        resetFilters: () => updateFilters({ keyword: "", taskType: "", status: "", dateRange: null, page: 1, pageSize: defaultPageSize }),
         refreshLogs: () => query.refetch(),
         fetchDetail: async (id: string) => {
             try {
