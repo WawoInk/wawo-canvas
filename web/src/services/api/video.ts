@@ -216,7 +216,7 @@ function videoTaskFailureMessage(task: SeedanceTask) {
     if (task.status === "cancelled") return i18n.t("errors.video.cancelled");
     const providerReason = providerVideoFailureMessage(task.error?.code, task.error?.message);
     if (providerReason) return providerReason;
-    return task.error?.message || i18n.t(task.status === "cancelled" ? "errors.video.cancelled" : "errors.video.generationFailed");
+    return task.error?.message || i18n.t("errors.video.generationFailed");
 }
 
 function unwrapEnvelope<T>(payload: ApiEnvelope<T>, emptyMessage: string): T {

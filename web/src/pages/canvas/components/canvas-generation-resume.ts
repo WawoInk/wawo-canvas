@@ -9,5 +9,5 @@ export function canvasGenerationResume(node?: ResumableNode) {
     }
     if (!node || !taskId) return null;
     const kind = node.type === "image" ? "image" : node.type === "video" ? "video" : null;
-    return kind ? { kind, taskId, model: node.metadata?.taskModel || "" } : null;
+    return kind ? ({ kind, taskId, model: node.metadata?.taskModel || "" } as const) : null;
 }
