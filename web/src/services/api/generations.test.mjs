@@ -13,7 +13,7 @@ import {
     readGeneratedVideoFile,
     resolveCanvasVideoSubmission,
 } from "./generation-contract.ts";
-import { retryableGenerationQueryError } from "./generations.ts";
+import { generationErrorMessage, generationQueryErrorMessage, generationRequestErrorMessage, readGenerationError, retryableGenerationQueryError } from "./generations.ts";
 import { ApiError } from "./request.ts";
 
 await i18n.changeLanguage("en-US");
@@ -230,6 +230,70 @@ test("retries only temporary generation query errors", () => {
     }
     for (const status of [401, 403, 404]) {
         assert.equal(retryableGenerationQueryError(new ApiError("permanent", status, null)), false);
+    }
+});
+
+test("shows the stable video failure reason instead of a coarse backend message", async () => {
+    const language = i18n.language;
+    try {
+        await i18n.changeLanguage("zh-CN");
+        assert.equal(generationErrorMessage({ code: "GENERATION_TIMEOUT", message: "上游拒绝生成", retryable: false }), "视频生成超时");
+        assert.equal(generationErrorMessage({ code: "TASK_SYNC_TIMEOUT", message: "后端服务失败", retryable: false }), "视频任务状态同步超时");
+        assert.equal(generationErrorMessage({ code: "UPSTREAM_RATE_LIMITED", message: "操作失败", retryable: true }), "上游服务限流");
+        assert.equal(generationErrorMessage({ code: "UPSTREAM_UNAVAILABLE", message: "后端服务未启用", retryable: true }), "上游服务暂时不可用");
+        assert.equal(generationErrorMessage({ code: "UPSTREAM_TIMEOUT", message: "上游拒绝生成", retryable: false }), "视频生成超时");
+        assert.equal(generationErrorMessage({ code: "CONTENT_REJECTED", message: "上游拒绝生成", retryable: false }), "生成内容未通过安全审核");
+        assert.equal(generationErrorMessage({ code: "INVALID_REQUEST", message: "操作失败", retryable: false }), "生成参数或输入无效");
+        assert.equal(generationErrorMessage({ code: "UPSTREAM_AUTH_FAILED", message: "操作失败", retryable: false }), "上游服务认证失败");
+        assert.equal(generationErrorMessage({ code: "UPSTREAM_PERMISSION_DENIED", message: "操作失败", retryable: false }), "上游服务无访问权限");
+        assert.equal(generationErrorMessage({ code: "MODEL_CONFIGURATION_INVALID", message: "后端服务未启用", retryable: false }), "生成模型配置不可用");
+        assert.equal(generationErrorMessage({ code: "MEDIA_REFERENCE_UNAVAILABLE", message: "操作失败", retryable: false }), "参考素材暂时不可用");
+        assert.equal(generationErrorMessage({ code: "UPSTREAM_NOT_FOUND", message: "操作失败", retryable: false }), "上游任务或生成接口不存在");
+        assert.equal(generationErrorMessage({ code: "RESULT_PERSIST_FAILED", message: "操作失败", retryable: true }), "生成结果暂时无法保存");
+        assert.equal(generationErrorMessage({ code: "RESULT_FILE_MISSING", message: "操作失败", retryable: false }), "生成结果文件保存失败");
+    } finally {
+        await i18n.changeLanguage(language);
+    }
+});
+
+test("keeps a stable generation error code when retryable is omitted", () => {
+    const error = new ApiError("操作失败", 200, { code: "MODEL_CONFIGURATION_INVALID" });
+    assert.deepEqual(readGenerationError(error), {
+        code: "MODEL_CONFIGURATION_INVALID",
+        message: "操作失败",
+        retryable: false,
+    });
+});
+
+test("shows the concrete query failure when first-party polling is paused", async () => {
+    const language = i18n.language;
+    try {
+        await i18n.changeLanguage("zh-CN");
+        assert.equal(generationQueryErrorMessage(new ApiError("后端服务失败", 504, null)), "视频任务查询超时");
+        assert.equal(generationQueryErrorMessage(new ApiError("操作失败", 429, null)), "上游服务限流");
+        assert.equal(generationQueryErrorMessage(new ApiError("操作失败", 500, null)), "视频生成服务异常");
+        assert.equal(generationQueryErrorMessage(new ApiError("操作失败", 401, null)), "上游服务认证失败");
+        assert.equal(generationQueryErrorMessage(new ApiError("操作失败", 403, null)), "上游服务无访问权限");
+        assert.equal(generationQueryErrorMessage(new ApiError("操作失败", 404, null)), "上游任务或生成接口不存在");
+        assert.equal(generationQueryErrorMessage(new Error("temporary connection failure")), "视频任务查询暂时失败，已暂停自动查询");
+    } finally {
+        await i18n.changeLanguage(language);
+    }
+});
+
+test("replaces unstructured first-party coarse failures before writing the video node", async () => {
+    const language = i18n.language;
+    try {
+        await i18n.changeLanguage("zh-CN");
+        assert.equal(generationRequestErrorMessage(new ApiError("操作失败", 500, null), "视频任务创建失败"), "视频生成服务异常");
+        assert.equal(generationRequestErrorMessage(new ApiError("后端服务未启用", 200, null), "视频任务创建失败"), "视频生成服务未配置或未启用");
+        assert.equal(generationRequestErrorMessage(new ApiError("操作失败", 401, null), "视频任务创建失败"), "上游服务认证失败");
+        assert.equal(generationRequestErrorMessage(new ApiError("操作失败", 403, null), "视频任务创建失败"), "上游服务无访问权限");
+        assert.equal(generationRequestErrorMessage(new ApiError("操作失败", 404, null), "视频任务创建失败"), "上游任务或生成接口不存在");
+        assert.equal(generationRequestErrorMessage(new Error("操作失败"), "视频任务创建失败"), "视频任务创建失败");
+        assert.equal(generationRequestErrorMessage(new Error("参考素材已失效"), "视频任务创建失败"), "参考素材已失效");
+    } finally {
+        await i18n.changeLanguage(language);
     }
 });
 

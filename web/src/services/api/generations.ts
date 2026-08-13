@@ -75,11 +75,11 @@ export function retryableGenerationQueryError(error: unknown) {
 export function readGenerationError(error: unknown): GenerationError | null {
     if (!(error instanceof ApiError) || !error.data || typeof error.data !== "object") return null;
     const data = error.data as Partial<Omit<GenerationError, "message">>;
-    if (typeof data.code !== "string" || typeof data.retryable !== "boolean") return null;
+    if (typeof data.code !== "string") return null;
     return {
         code: data.code,
         message: error.message,
-        retryable: data.retryable,
+        retryable: typeof data.retryable === "boolean" ? data.retryable : false,
         ...(typeof data.fieldPath === "string" ? { fieldPath: data.fieldPath } : {}),
         ...(typeof data.resourceId === "string" ? { resourceId: data.resourceId } : {}),
     };
@@ -95,6 +95,67 @@ export class GenerationTaskError extends Error {
 export function generationErrorFrom(error: unknown): GenerationError | null {
     if (error instanceof GenerationTaskError) return error.generationError;
     return readGenerationError(error);
+}
+
+export function generationErrorMessage(error: GenerationError) {
+    const reasons: Record<string, string> = {
+        GENERATION_TIMEOUT: "timeout",
+        TASK_SYNC_TIMEOUT: "syncTimeout",
+        UPSTREAM_TIMEOUT: "timeout",
+        UPSTREAM_RATE_LIMITED: "rateLimited",
+        UPSTREAM_UNAVAILABLE: "upstreamUnavailable",
+        UPSTREAM_AUTH_FAILED: "upstreamAuthFailed",
+        UPSTREAM_PERMISSION_DENIED: "upstreamPermissionDenied",
+        CONTENT_REJECTED: "contentRejected",
+        INVALID_REQUEST: "invalidRequest",
+        MODEL_CONFIGURATION_INVALID: "modelConfigurationInvalid",
+        MEDIA_REFERENCE_UNAVAILABLE: "mediaReferenceUnavailable",
+        UPSTREAM_NOT_FOUND: "upstreamNotFound",
+        RESULT_PERSIST_FAILED: "resultPersistFailed",
+        RESULT_FILE_MISSING: "resultFileMissing",
+    };
+    const reason = reasons[error.code];
+    return reason ? i18n.t(`errors.video.failureReasons.${reason}`) : error.message;
+}
+
+function generationHTTPErrorMessage(error: ApiError) {
+    if (error.status === 401) return i18n.t("errors.video.failureReasons.upstreamAuthFailed");
+    if (error.status === 403) return i18n.t("errors.video.failureReasons.upstreamPermissionDenied");
+    if (error.status === 404) return i18n.t("errors.video.failureReasons.upstreamNotFound");
+    if (error.status === 408 || error.status === 504) return i18n.t("errors.video.failureReasons.requestTimeout");
+    if (error.status === 429) return i18n.t("errors.video.failureReasons.rateLimited");
+    if (error.status === 502 || error.status === 503) return i18n.t("errors.video.failureReasons.upstreamUnavailable");
+    if (error.status >= 500) return i18n.t("errors.video.failureReasons.serviceFailed");
+    const message = error.message.trim();
+    if (message === "后端服务未启用" || message.toLowerCase() === "backend service is not enabled") return i18n.t("errors.video.failureReasons.serviceDisabled");
+    if (message === "后端服务失败" || message.toLowerCase() === "backend service failed") return i18n.t("errors.video.failureReasons.serviceFailed");
+    return "";
+}
+
+export function generationQueryErrorMessage(error: unknown) {
+    const generationError = generationErrorFrom(error);
+    if (generationError) return generationErrorMessage(generationError);
+    if (error instanceof ApiError) {
+        const statusMessage = generationHTTPErrorMessage(error);
+        if (statusMessage) return statusMessage;
+        const message = error.message.trim();
+        if (message && message !== "操作失败" && message.toLowerCase() !== "operation failed") return message;
+    }
+    return i18n.t("errors.video.failureReasons.queryPaused");
+}
+
+export function generationRequestErrorMessage(error: unknown, fallback: string) {
+    const generationError = generationErrorFrom(error);
+    if (generationError) return generationErrorMessage(generationError);
+    if (error instanceof ApiError) {
+        const statusMessage = generationHTTPErrorMessage(error);
+        if (statusMessage) return statusMessage;
+    }
+    const message = error instanceof Error ? error.message.trim() : "";
+    if (message === "后端服务未启用" || message.toLowerCase() === "backend service is not enabled") return i18n.t("errors.video.failureReasons.serviceDisabled");
+    if (message === "后端服务失败" || message.toLowerCase() === "backend service failed") return i18n.t("errors.video.failureReasons.serviceFailed");
+    if (!message || message === "操作失败" || message.toLowerCase() === "operation failed") return fallback;
+    return message;
 }
 
 export async function waitForGeneration(taskId: string, signal?: AbortSignal, onStatus?: (task: FirstPartyGenerationTask) => void, clientRequestId = "") {

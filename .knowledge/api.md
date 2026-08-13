@@ -263,7 +263,7 @@ Canvas 客户端必须把服务端缺少记录和明确 delete tombstone 区分�
 | `POST /api/admin/users` | A | `Partial<User> + password?` | 新/更新 User |
 | `POST /api/admin/users/:id/credits` | A | `{credits}` 最终余额 | 更新 User；企业 owner 不走此接口 |
 | `DELETE /api/admin/users/:id` | A | user ID | `true` |
-| `GET /api/admin/credit-logs` | A | 通用 Query | 全局 `CreditLogList` |
+| `GET /api/admin/credit-logs` | A | `keyword/type/start_time/end_time/page/pageSize` | 全局积分流水；每条附带当前用户 `username` |
 | `POST /api/admin/credit-logs` | A | `CreditLog` | 保存后的流水 |
 | `DELETE /api/admin/credit-logs/:id` | A | log ID | `true` |
 

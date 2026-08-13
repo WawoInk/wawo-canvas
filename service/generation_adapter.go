@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -114,41 +115,38 @@ func (a SeedanceContentsV1Adapter) Create(ctx context.Context, req AdapterCreate
 }
 
 func (a SoraVideosV1Adapter) Create(ctx context.Context, req AdapterCreateRequest) (ProviderTaskRef, error) {
-	fields := map[string]string{
-		"model":   req.Profile.UpstreamModel,
-		"prompt":  req.Intent.Prompt,
-		"size":    soraVideoSize(req),
-		"seconds": fmt.Sprint(generationSetting(req, "durationSeconds", 4)),
+	metadata := make(map[string]any, len(req.Metadata)+1)
+	for key, value := range req.Metadata {
+		metadata[key] = value
 	}
-	if len(req.Metadata) > 0 {
-		metadata, err := json.Marshal(req.Metadata)
-		if err != nil {
-			return ProviderTaskRef{}, err
-		}
-		fields["metadata"] = string(metadata)
+	metadata["aspect_ratio"] = generationSetting(req, "aspectRatio", "16:9")
+	payload := map[string]any{
+		"model":    req.Profile.UpstreamModel,
+		"prompt":   req.Intent.Prompt,
+		"duration": generationSetting(req, "durationSeconds", 4),
+		"size":     generationSetting(req, "resolution", "720p"),
+		"metadata": metadata,
 	}
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	for _, key := range []string{"model", "prompt", "size", "seconds", "metadata"} {
-		value, ok := fields[key]
-		if !ok {
-			continue
-		}
-		if err := writer.WriteField(key, value); err != nil {
-			return ProviderTaskRef{}, err
-		}
+	if len(req.References.Images) > 0 {
+		payload["images"] = req.References.Images
 	}
-	if err := writer.Close(); err != nil {
+	if len(req.References.Videos) > 0 {
+		metadata["video_urls"] = req.References.Videos
+	}
+	if len(req.References.Audios) > 0 {
+		metadata["audio_urls"] = req.References.Audios
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
 		return ProviderTaskRef{}, err
 	}
-	auditBody, _ := json.Marshal(fields)
-	audit := GenerationAudit{RequestHeaders: `{"Authorization":"[REDACTED]","Content-Type":"multipart/form-data"}`, RequestBody: sanitizeGenerationAuditJSON(string(auditBody))}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, BuildModelChannelURL(req.Channel, "/videos"), &body)
+	audit := GenerationAudit{RequestHeaders: `{"Authorization":"[REDACTED]","Content-Type":"application/json"}`, RequestBody: sanitizeGenerationAuditJSON(string(body))}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, BuildModelChannelURL(req.Channel, "/videos"), bytes.NewReader(body))
 	if err != nil {
 		return ProviderTaskRef{Audit: audit}, err
 	}
 	request.Header.Set("Authorization", modelChannelAuthorization(req.Channel.APIKey))
-	request.Header.Set("Content-Type", writer.FormDataContentType())
+	request.Header.Set("Content-Type", "application/json")
 	return requestSoraVideoTask(a.client, request, audit)
 }
 
@@ -225,18 +223,18 @@ func createContentsGenerationTask(ctx context.Context, client *http.Client, chan
 	response, err := client.Do(request)
 	if err != nil {
 		audit.RawError = err.Error()
-		return ProviderTaskRef{Error: generationTransportError(), Audit: audit}, err
+		return ProviderTaskRef{Error: generationTransportErrorFrom(err), Audit: audit}, err
 	}
 	defer response.Body.Close()
 	responseBody, err := io.ReadAll(response.Body)
 	if err != nil {
 		audit.RawError = err.Error()
-		return ProviderTaskRef{Error: generationTransportError(), Audit: audit}, err
+		return ProviderTaskRef{Error: generationTransportErrorFrom(err), Audit: audit}, err
 	}
 	audit.ResponseHeaders = sanitizeGenerationAuditHeaders(response.Header)
 	audit.ResponseBody = sanitizeGenerationAuditJSON(string(responseBody))
 	if response.StatusCode >= http.StatusBadRequest {
-		ref := ProviderTaskRef{Error: mapGenerationHTTPError(response.StatusCode), Audit: audit}
+		ref := ProviderTaskRef{Error: mapGenerationHTTPResponseError(response.StatusCode, responseBody), Audit: audit}
 		return ref, fmt.Errorf("upstream returned %d", response.StatusCode)
 	}
 	ref, err := parseContentsGenerationTask(responseBody)
@@ -306,37 +304,22 @@ func (a SoraVideosV1Adapter) Cancel(context.Context, model.ModelChannel, string)
 	return ProviderTaskRef{}, GenerationOperationError{Code: "CANCEL_UNSUPPORTED", Message: "该模型不支持取消生成任务"}
 }
 
-func soraVideoSize(req AdapterCreateRequest) string {
-	resolution := fmt.Sprint(generationSetting(req, "resolution", "720p"))
-	portrait := fmt.Sprint(generationSetting(req, "aspectRatio", "16:9")) == "9:16"
-	if resolution == "1080p" {
-		if portrait {
-			return "1080x1920"
-		}
-		return "1920x1080"
-	}
-	if portrait {
-		return "720x1280"
-	}
-	return "1280x720"
-}
-
 func requestSoraVideoTask(client *http.Client, request *http.Request, audit GenerationAudit) (ProviderTaskRef, error) {
 	response, err := client.Do(request)
 	if err != nil {
 		audit.RawError = err.Error()
-		return ProviderTaskRef{Error: generationTransportError(), Audit: audit}, err
+		return ProviderTaskRef{Error: generationTransportErrorFrom(err), Audit: audit}, err
 	}
 	defer response.Body.Close()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		audit.RawError = err.Error()
-		return ProviderTaskRef{Error: generationTransportError(), Audit: audit}, err
+		return ProviderTaskRef{Error: generationTransportErrorFrom(err), Audit: audit}, err
 	}
 	audit.ResponseHeaders = sanitizeGenerationAuditHeaders(response.Header)
 	audit.ResponseBody = sanitizeGenerationAuditJSON(string(body))
 	if response.StatusCode >= http.StatusBadRequest {
-		return ProviderTaskRef{Error: mapGenerationHTTPError(response.StatusCode), Audit: audit}, fmt.Errorf("upstream returned %d", response.StatusCode)
+		return ProviderTaskRef{Error: mapGenerationHTTPResponseError(response.StatusCode, body), Audit: audit}, fmt.Errorf("upstream returned %d", response.StatusCode)
 	}
 	ref, err := parseSoraVideoTask(body)
 	if err != nil {
@@ -360,6 +343,9 @@ func parseSoraVideoTask(body []byte) (ProviderTaskRef, error) {
 		Output *struct {
 			URL string `json:"url"`
 		} `json:"output"`
+		Metadata *struct {
+			URL string `json:"url"`
+		} `json:"metadata"`
 		Error *struct {
 			Code    string `json:"code"`
 			Message string `json:"message"`
@@ -372,8 +358,15 @@ func parseSoraVideoTask(body []byte) (ProviderTaskRef, error) {
 	if ref.VideoURL == "" && result.Output != nil {
 		ref.VideoURL = result.Output.URL
 	}
+	if ref.VideoURL == "" && result.Metadata != nil {
+		ref.VideoURL = result.Metadata.URL
+	}
 	if ref.Status == model.TaskStatusFailed {
-		ref.Error = &model.GenerationError{Code: "UPSTREAM_REJECTED", Message: "上游拒绝了生成请求", Retryable: false}
+		code, message := "", ""
+		if result.Error != nil {
+			code, message = result.Error.Code, result.Error.Message
+		}
+		ref.Error = normalizeProviderGenerationError(result.Status, code, message)
 	}
 	return ref, nil
 }
@@ -388,18 +381,18 @@ func pollContentsGenerationTask(ctx context.Context, client *http.Client, channe
 	response, err := client.Do(request)
 	if err != nil {
 		audit.RawError = err.Error()
-		return ProviderTaskRef{Error: generationTransportError(), Audit: audit}, err
+		return ProviderTaskRef{Error: generationTransportErrorFrom(err), Audit: audit}, err
 	}
 	defer response.Body.Close()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		audit.RawError = err.Error()
-		return ProviderTaskRef{Error: generationTransportError(), Audit: audit}, err
+		return ProviderTaskRef{Error: generationTransportErrorFrom(err), Audit: audit}, err
 	}
 	audit.ResponseHeaders = sanitizeGenerationAuditHeaders(response.Header)
 	audit.ResponseBody = sanitizeGenerationAuditJSON(string(body))
 	if response.StatusCode >= http.StatusBadRequest {
-		ref := ProviderTaskRef{Error: mapGenerationHTTPError(response.StatusCode), Audit: audit}
+		ref := ProviderTaskRef{Error: mapGenerationHTTPResponseError(response.StatusCode, body), Audit: audit}
 		return ref, fmt.Errorf("upstream returned %d", response.StatusCode)
 	}
 	ref, err := parseContentsGenerationTask(body)
@@ -468,7 +461,19 @@ func parseContentsGenerationTask(body []byte) (ProviderTaskRef, error) {
 		}
 	}
 	if ref.Status == model.TaskStatusFailed {
-		ref.Error = &model.GenerationError{Code: "UPSTREAM_REJECTED", Message: "上游拒绝了生成请求", Retryable: false}
+		code, message := "", ""
+		if result.Error != nil {
+			code, message = result.Error.Code, result.Error.Message
+		}
+		if result.Task != nil {
+			if code == "" {
+				code = result.Task.Meta.ErrCode
+			}
+			if message == "" {
+				message = result.Task.Meta.ErrMsg
+			}
+		}
+		ref.Error = normalizeProviderGenerationError(result.Status, code, message)
 	}
 	return ref, nil
 }
@@ -492,15 +497,89 @@ func generationTransportError() *model.GenerationError {
 	return &model.GenerationError{Code: "UPSTREAM_UNAVAILABLE", Message: "上游服务暂时不可用", Retryable: true}
 }
 
-func mapGenerationHTTPError(status int) *model.GenerationError {
-	switch status {
-	case http.StatusTooManyRequests:
-		return &model.GenerationError{Code: "UPSTREAM_RATE_LIMITED", Message: "上游服务繁忙，请稍后重试", Retryable: true}
-	case http.StatusRequestTimeout, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+func generationTransportErrorFrom(err error) *model.GenerationError {
+	var networkError net.Error
+	message := ""
+	if err != nil {
+		message = strings.ToLower(err.Error())
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.As(err, &networkError) && networkError.Timeout() || strings.Contains(message, "timeout") || strings.Contains(message, "timed out") || strings.Contains(message, "deadline exceeded") {
+		return &model.GenerationError{Code: "UPSTREAM_TIMEOUT", Message: "上游请求超时", Retryable: true}
+	}
+	return generationTransportError()
+}
+
+func normalizeProviderGenerationError(status, code, message string) *model.GenerationError {
+	text := strings.ToLower(strings.TrimSpace(status + " " + code + " " + message))
+	switch {
+	case strings.Contains(text, "timeout"), strings.Contains(text, "timed out"), strings.Contains(text, "deadline"), strings.Contains(text, "expired"):
+		return &model.GenerationError{Code: "UPSTREAM_TIMEOUT", Message: "上游视频生成超时", Retryable: false}
+	case strings.Contains(text, "rate limit"), strings.Contains(text, "rate_limit"), strings.Contains(text, "too many requests"), strings.Contains(text, "over quota"):
+		return &model.GenerationError{Code: "UPSTREAM_RATE_LIMITED", Message: "上游服务限流", Retryable: true}
+	case strings.Contains(text, "unauthorized"), strings.Contains(text, "authentication"), strings.Contains(text, "invalid api key"), strings.Contains(text, "invalid_api_key"):
+		return &model.GenerationError{Code: "UPSTREAM_AUTH_FAILED", Message: "上游服务认证失败", Retryable: false}
+	case strings.Contains(text, "forbidden"), strings.Contains(text, "permission denied"), strings.Contains(text, "access denied"), strings.Contains(text, "access_denied"):
+		return &model.GenerationError{Code: "UPSTREAM_PERMISSION_DENIED", Message: "上游服务拒绝访问", Retryable: false}
+	case strings.Contains(text, "sensitive"), strings.Contains(text, "content policy"), strings.Contains(text, "moderation"), strings.Contains(text, "safety"), strings.Contains(text, "privacy"), strings.Contains(text, "nsfw"), strings.Contains(text, "prohibited"):
+		return &model.GenerationError{Code: "CONTENT_REJECTED", Message: "生成内容未通过上游安全审核", Retryable: false}
+	case strings.Contains(text, "invalid"), strings.Contains(text, "parameter"), strings.Contains(text, "argument"), strings.Contains(text, "unsupported"), strings.Contains(text, "too long"), strings.Contains(text, "too short"), strings.Contains(text, "required"):
+		return &model.GenerationError{Code: "INVALID_REQUEST", Message: "生成参数或输入不符合上游要求", Retryable: false}
+	case strings.Contains(text, "unavailable"), strings.Contains(text, "overloaded"), strings.Contains(text, "internal error"), strings.Contains(text, "connection"):
 		return generationTransportError()
 	default:
 		return &model.GenerationError{Code: "UPSTREAM_REJECTED", Message: "上游拒绝了生成请求", Retryable: false}
 	}
+}
+
+func mapGenerationHTTPError(status int) *model.GenerationError {
+	switch status {
+	case http.StatusUnauthorized:
+		return &model.GenerationError{Code: "UPSTREAM_AUTH_FAILED", Message: "上游服务认证失败", Retryable: false}
+	case http.StatusForbidden:
+		return &model.GenerationError{Code: "UPSTREAM_PERMISSION_DENIED", Message: "上游服务拒绝访问", Retryable: false}
+	case http.StatusNotFound:
+		return &model.GenerationError{Code: "UPSTREAM_NOT_FOUND", Message: "上游任务或生成接口不存在", Retryable: false}
+	case http.StatusBadRequest, http.StatusConflict, http.StatusUnprocessableEntity:
+		return &model.GenerationError{Code: "INVALID_REQUEST", Message: "生成参数或输入不符合上游要求", Retryable: false}
+	case http.StatusRequestTimeout, http.StatusGatewayTimeout:
+		return &model.GenerationError{Code: "UPSTREAM_TIMEOUT", Message: "上游请求超时", Retryable: true}
+	case http.StatusTooManyRequests:
+		return &model.GenerationError{Code: "UPSTREAM_RATE_LIMITED", Message: "上游服务限流", Retryable: true}
+	case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable:
+		return generationTransportError()
+	default:
+		return &model.GenerationError{Code: "UPSTREAM_REJECTED", Message: "上游拒绝了生成请求", Retryable: false}
+	}
+}
+
+func mapGenerationHTTPResponseError(status int, body []byte) *model.GenerationError {
+	var payload struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+		Msg     string `json:"msg"`
+		Error   *struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &payload) == nil {
+		code, message := payload.Code, payload.Message
+		if message == "" {
+			message = payload.Msg
+		}
+		if payload.Error != nil {
+			if payload.Error.Code != "" {
+				code = payload.Error.Code
+			}
+			if payload.Error.Message != "" {
+				message = payload.Error.Message
+			}
+		}
+		if normalized := normalizeProviderGenerationError("", code, message); normalized.Code != "UPSTREAM_REJECTED" {
+			return normalized
+		}
+	}
+	return mapGenerationHTTPError(status)
 }
 
 func sanitizeGenerationAuditHeaders(headers http.Header) string {

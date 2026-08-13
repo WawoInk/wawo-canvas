@@ -17,6 +17,9 @@ import {
     createGeneration,
     GenerationPollingPausedError,
     generationErrorFrom,
+    generationErrorMessage,
+    generationQueryErrorMessage,
+    generationRequestErrorMessage,
     generationTaskId,
     getGenerationProfiles,
     readGeneratedVideoFile,
@@ -30,11 +33,14 @@ import { resolveImageUrl, uploadImage, getImageBlob, type UploadedImage, resolve
 import { uploadBlob, uploadUrlToS3, type UploadResult } from "@/services/upload-blob";
 import { nanoid } from "nanoid";
 import { getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
+import { isCurrentSession } from "@/lib/account-storage";
 import { boolConfig, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution } from "@/lib/seedance-video";
 import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
 import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { useAssetStore } from "@/stores/use-asset-store";
+import { useUserStore } from "@/stores/use-user-store";
 import { useThemeStore } from "@/stores/use-theme-store";
+import { resolveFileUrls } from "@/services/resolve-file-urls";
 import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "../utils/canvas-image-data";
 import { findImageEditSourceNode } from "../utils/canvas-image-edit-source";
 import { fitNodeSize, nodeSizeFromRatio } from "../utils/canvas-node-size";
@@ -1704,17 +1710,8 @@ function InfiniteCanvasPage() {
             let url = node.metadata.content;
             // ponytail: fileId-backed content — fetch fresh presigned URL before download
             if (node.metadata?.fileId) {
-                try {
-                    const raw = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
-                    const token = JSON.parse(raw)?.state?.token || "";
-                    if (token) {
-                        const resp = await fetch(`/api/v1/files/${encodeURIComponent(node.metadata.fileId)}`, { headers: { Authorization: `Bearer ${token}` } });
-                        const json = await resp.json();
-                        if (json.code === 0 && json.data?.url) url = json.data.url;
-                    }
-                } catch {
-                    /* use existing url */
-                }
+                const resolved = await resolveFileUrls([node.metadata.fileId]);
+                url = resolved.get(node.metadata.fileId) || url;
             }
             saveAs(
                 url,
@@ -1743,17 +1740,8 @@ function InfiniteCanvasPage() {
                 // the fileId so the asset system can refresh the URL later
                 let assetUrl = node.metadata.content;
                 if (node.metadata?.fileId) {
-                    try {
-                        const raw = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
-                        const token = JSON.parse(raw)?.state?.token || "";
-                        if (token) {
-                            const resp = await fetch(`/api/v1/files/${encodeURIComponent(node.metadata.fileId)}`, { headers: { Authorization: `Bearer ${token}` } });
-                            const json = await resp.json();
-                            if (json.code === 0 && json.data?.url) assetUrl = json.data.url;
-                        }
-                    } catch {
-                        /* use existing */
-                    }
+                    const resolved = await resolveFileUrls([node.metadata.fileId]);
+                    assetUrl = resolved.get(node.metadata.fileId) || assetUrl;
                 }
                 addAsset({
                     kind: "video",
@@ -2432,7 +2420,7 @@ function InfiniteCanvasPage() {
                     } catch (error) {
                         if (!isGenerationCanceled(error)) {
                             const generationError = readGenerationError(error);
-                            const errorDetails = generationError?.message || (error instanceof Error ? error.message : t("canvas.editor.errors.videoTaskCreateFailed"));
+                            const errorDetails = generationRequestErrorMessage(error, t("canvas.editor.errors.videoTaskCreateFailed"));
                             const location = generationError ? locateGenerationError(generationError) : {};
                             message.error(errorDetails);
                             setNodes((prev) =>
@@ -2771,11 +2759,8 @@ function InfiniteCanvasPage() {
             );
             const file = readGeneratedVideoFile(task.result);
             if (!file) throw new Error(t("canvas.editor.errors.videoResultEmpty"));
-            const raw = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
-            const token = JSON.parse(raw)?.state?.token || "";
-            const response = await fetch(`/api/v1/files/${encodeURIComponent(file.fileId)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-            const body = await response.json();
-            if (body.code !== 0 || !body.data?.url) throw new Error(body.msg || t("canvas.editor.errors.videoFileUnavailable"));
+            const fileUrl = (await resolveFileUrls([file.fileId])).get(file.fileId);
+            if (!fileUrl) throw new Error(t("canvas.editor.errors.videoFileUnavailable"));
             const defaultSize = spec || NODE_DEFAULT_SIZE[CanvasNodeType.Video];
             const videoSize = fitNodeSize(file.width || defaultSize.width, file.height || defaultSize.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
             const committedNodes = await commitCanvasVideoResult({
@@ -2783,7 +2768,7 @@ function InfiniteCanvasPage() {
                 nodeId,
                 nodes: nodesRef.current,
                 display: videoSize,
-                file: { url: body.data.url, ...file },
+                file: { url: fileUrl, ...file },
                 generationTaskStatus: "succeeded",
             });
             nodesRef.current = committedNodes;
@@ -2791,12 +2776,13 @@ function InfiniteCanvasPage() {
         } catch (error) {
             if (isGenerationCanceled(error)) return;
             if (error instanceof GenerationPollingPausedError) {
-                message.warning(error.message);
-                setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, metadata: { ...n.metadata, status: NODE_STATUS_ERROR, generationPollingPaused: true, errorDetails: error.message } } : n)));
+                const errorDetails = generationQueryErrorMessage(error.queryError);
+                message.warning(errorDetails);
+                setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, metadata: { ...n.metadata, status: NODE_STATUS_ERROR, generationPollingPaused: true, errorDetails } } : n)));
                 return;
             }
             const generationError = generationErrorFrom(error);
-            const errorDetails = generationError?.message || (error instanceof Error ? error.message : t("canvas.editor.errors.videoGenerationFailed"));
+            const errorDetails = generationRequestErrorMessage(error, t("canvas.editor.errors.videoGenerationFailed"));
             const location = generationError ? locateGenerationError(generationError) : {};
             message.error(errorDetails);
             setNodes((prev) =>
@@ -3625,19 +3611,8 @@ async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
             const fid = node.metadata?.fileId;
             // ponytail: fileId-backed content needs fresh presigned URL (S3 URLs expire)
             if (fid && !node.metadata?.storageKey) {
-                try {
-                    const raw = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
-                    const token = JSON.parse(raw)?.state?.token || "";
-                    if (token) {
-                        const resp = await fetch(`/api/v1/files/${encodeURIComponent(fid)}`, { headers: { Authorization: `Bearer ${token}` } });
-                        const json = await resp.json();
-                        if (json.code === 0 && json.data?.url) {
-                            return { ...node, metadata: { ...node.metadata, content: json.data.url } };
-                        }
-                    }
-                } catch {
-                    /* fall through */
-                }
+                const url = (await resolveFileUrls([fid])).get(fid);
+                if (url) return { ...node, metadata: { ...node.metadata, content: url } };
             }
             if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && node.metadata?.storageKey) return { ...node, metadata: { ...node.metadata, content: await resolveMediaUrl(node.metadata.storageKey, content) } };
             if (node.type !== CanvasNodeType.Image || !content) return node;
@@ -3755,11 +3730,12 @@ async function resolveSourceImageFile(node: CanvasNodeData | null): Promise<File
     const { content, storageKey, fileId, mimeType } = node.metadata;
     let blob: Blob | null = storageKey ? await getImageBlob(storageKey) : null;
     if (!blob && fileId) {
-        const raw = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
-        const token = JSON.parse(raw)?.state?.token || "";
-        if (token) {
+        const { token, user } = useUserStore.getState();
+        if (token && user?.id) {
+            const session = { token, userId: user.id };
             const response = await fetch(`/api/v1/files/${encodeURIComponent(fileId)}/content`, { headers: { Authorization: `Bearer ${token}` } });
-            if (response.ok) blob = await response.blob();
+            const current = useUserStore.getState();
+            if (isCurrentSession(session, { token: current.token, userId: current.user?.id }) && response.ok) blob = await response.blob();
         }
     }
     if (!blob && (content.startsWith("data:") || content.startsWith("blob:") || /^https?:\/\//i.test(content))) blob = await (await fetch(content)).blob();

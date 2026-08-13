@@ -6,15 +6,15 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { App } from "antd";
 import { useTranslation } from "react-i18next";
 
-import { appPathname } from "@/i18n";
+import i18n, { appPathname, localeFromPathname, resolveLanguage } from "@/i18n";
 import { createModelChannel, useConfigStore } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { syncScheduler } from "@/services/sync-scheduler";
 import { syncClient } from "@/services/sync-client";
-import { fetchCurrentUser } from "@/services/api/auth";
+import { AUTH_TOKEN_KEY, fetchCurrentUser } from "@/services/api/auth";
 import { startCreditBalanceSync } from "@/services/credit-balance-sync";
-import { revalidateSession, startSessionMonitor } from "@/services/session-monitor";
+import { revalidateSession, startAuthStorageMonitor, startSessionMonitor } from "@/services/session-monitor";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
     const { message } = App.useApp();
@@ -72,6 +72,19 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     useEffect(() => {
         syncScheduler.start();
         const stopCreditBalanceSync = startCreditBalanceSync();
+        const stopAuthStorageMonitor = startAuthStorageMonitor(
+            AUTH_TOKEN_KEY,
+            () => {
+                const { token, user } = useUserStore.getState();
+                return { token, userId: user?.id };
+            },
+            (current, next) => {
+                if (current.userId !== next.userId) {
+                    const language = localeFromPathname(window.location.pathname) || resolveLanguage(i18n.resolvedLanguage || i18n.language);
+                    window.location.replace(`/${language}/`);
+                } else window.location.reload();
+            },
+        );
         const stopSessionMonitor = startSessionMonitor(() => {
             const { token, clearSession } = useUserStore.getState();
             return revalidateSession(token, fetchCurrentUser, () => {
@@ -83,6 +96,7 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
         return () => {
             syncScheduler.stop();
             stopCreditBalanceSync();
+            stopAuthStorageMonitor();
             stopSessionMonitor();
         };
     }, [navigate]);

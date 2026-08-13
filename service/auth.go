@@ -496,12 +496,17 @@ func RefundUserCreditsWithTask(userID string, modelName string, credits model.De
 	return nil
 }
 
-func ListCreditLogs(q model.Query) (model.CreditLogList, error) {
+type AdminCreditLogListWithUser struct {
+	Items []repository.AdminCreditLogWithUser `json:"items"`
+	Total int64                               `json:"total"`
+}
+
+func ListCreditLogs(q model.Query) (AdminCreditLogListWithUser, error) {
 	logs, total, err := repository.ListCreditLogs(q)
 	if err != nil {
-		return model.CreditLogList{}, err
+		return AdminCreditLogListWithUser{}, err
 	}
-	return model.CreditLogList{Items: logs, Total: int(total)}, nil
+	return AdminCreditLogListWithUser{Items: logs, Total: total}, nil
 }
 
 // ListUserCreditLogs 查询当前用户的积分流水。

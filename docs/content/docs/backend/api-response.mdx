@@ -44,6 +44,21 @@ description: 后端统一响应信封与结构化生成错误
 - `fieldPath`：命令中的错误字段路径；没有具体字段时可省略。
 - `resourceId`：关联的 Canvas 节点或平台资源 ID；不适用时省略。
 
+视频 Generation Run 会把可判断的上游失败归一为稳定错误码，原始供应商错误只保留在脱敏审计中：
+
+| 错误码 | 含义 |
+| --- | --- |
+| `UPSTREAM_TIMEOUT` | 上游请求或视频生成超时 |
+| `UPSTREAM_RATE_LIMITED` | 上游限流或额度繁忙 |
+| `UPSTREAM_UNAVAILABLE` | 上游服务或网络暂时不可用 |
+| `UPSTREAM_AUTH_FAILED` | 上游认证失败 |
+| `UPSTREAM_PERMISSION_DENIED` | 上游拒绝当前凭据访问 |
+| `UPSTREAM_NOT_FOUND` | 上游任务或生成接口不存在 |
+| `CONTENT_REJECTED` | 内容未通过上游安全审核 |
+| `INVALID_REQUEST` | 生成参数、输入或接口要求不匹配 |
+
+Canvas 还会按已有平台错误码区分 `GENERATION_TIMEOUT`、`TASK_SYNC_TIMEOUT`、`MODEL_CONFIGURATION_INVALID`、`RESULT_PERSIST_FAILED` 和 `RESULT_FILE_MISSING`。客户端收到稳定 `code` 时优先按错误码显示具体原因；旧响应缺少 `retryable` 时按 `false` 处理。
+
 取消、回调等操作错误至少返回稳定的 `data.code`。异步失败通过 `GET /api/v1/generations/{id}` 的任务 `error` 字段返回同一套归一化信息。
 
 第一方生成创建响应丢失时，已认证客户端可调用 `GET /api/v1/generations/client-requests/{clientRequestId}`，按当前用户和幂等请求 ID 找回同一任务。不存在或不属于当前用户时成功响应的 `data` 为 `null`；该查询不会创建新任务或改变任务状态。
@@ -63,7 +78,9 @@ description: 后端统一响应信封与结构化生成错误
 | `POST` | `/api/admin/enterprises/{id}/owner/password` | 重置主账号密码并使旧会话失效 |
 | `POST` | `/api/admin/enterprises/{id}/credits` | 使用 `{ delta, reason }` 按增量调整主账号积分；`delta` 不能为 0，扣减后余额不能为负 |
 
-企业积分调整不接受客户端提交最终余额。服务端锁定主账号余额后应用 `delta`，并在同一数据库事务中写入 `admin_adjust` 流水；流水的 `userId` 是目标主账号，`relatedId` 是平台管理员，`remark` 保存调整原因。`GET /api/admin/credit-logs` 可使用 `type=admin_adjust` 筛选平台调整记录。企业账号不能再通过 `/api/admin/users/{id}/credits` 覆盖余额。
+企业积分调整不接受客户端提交最终余额。服务端锁定主账号余额后应用 `delta`，并在同一数据库事务中写入 `admin_adjust` 流水；流水的 `userId` 是目标主账号，`relatedId` 是平台管理员，`remark` 保存调整原因。`GET /api/admin/credit-logs` 支持 `keyword/type/start_time/end_time/page/pageSize`，日期按闭区间筛选 `createdAt`，每条记录附带当前对应用户的 `username`；使用 `type=admin_adjust` 可筛选平台调整记录。企业账号不能再通过 `/api/admin/users/{id}/credits` 覆盖余额。
+
+管理后台使用日志 `GET /api/admin/generation-tasks` 同样支持 `start_time/end_time` 日期闭区间筛选。前端日期范围会按本地首日开始时间和末日结束时间转换为 ISO 时间戳。
 
 `/api/auth/login` 和 `/api/auth/me` 的公开用户信息可包含 `enterpriseId`、`enterpriseName`、`enterpriseRole` 和 `enterpriseStatus`。企业范围由服务端当前用户推导，不接受客户端提交企业 ID 来切换身份。
 

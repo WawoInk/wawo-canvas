@@ -90,7 +90,7 @@ export async function pollVideoGenerationTask(config: AiConfig, task: VideoGener
             if (!url) return { status: "failed", error: i18n.t("errors.video.succeededWithoutUrl") };
             return { status: "completed", result: await videoResultFromUrl(url, options) };
         }
-        if (state.status === "failed" || state.status === "cancelled" || state.status === "expired") return { status: "failed", error: state.error?.message || i18n.t(state.status === "expired" ? "errors.video.timeout" : "errors.video.generationFailed") };
+        if (state.status === "failed" || state.status === "cancelled" || state.status === "expired") return { status: "failed", error: videoTaskFailureMessage(state) };
         return { status: "pending" };
     } catch (error) {
         throw new Error(readAxiosError(error, i18n.t("errors.video.queryTaskFailed")));
@@ -197,6 +197,28 @@ function unwrapSeedanceTask(payload: ApiEnvelope<SeedanceTask>) {
     return unwrapEnvelope(payload, i18n.t("errors.video.noTaskReturned"));
 }
 
+function providerVideoFailureMessage(code?: string, message?: string) {
+    const text = `${code || ""} ${message || ""}`.toLowerCase();
+    if (text.includes("timeout") || text.includes("timed out") || text.includes("deadline") || text.includes("expired")) return i18n.t("errors.video.failureReasons.timeout");
+    if (text.includes("rate limit") || text.includes("rate_limit") || text.includes("too many requests") || text.includes("over quota")) return i18n.t("errors.video.failureReasons.rateLimited");
+    if (text.includes("unauthorized") || text.includes("authentication") || text.includes("invalid api key") || text.includes("invalid_api_key")) return i18n.t("errors.video.failureReasons.upstreamAuthFailed");
+    if (text.includes("forbidden") || text.includes("permission denied") || text.includes("access denied") || text.includes("access_denied")) return i18n.t("errors.video.failureReasons.upstreamPermissionDenied");
+    if (text.includes("sensitive") || text.includes("content policy") || text.includes("moderation") || text.includes("safety") || text.includes("privacy") || text.includes("nsfw") || text.includes("prohibited"))
+        return i18n.t("errors.video.failureReasons.contentRejected");
+    if (text.includes("invalid") || text.includes("parameter") || text.includes("argument") || text.includes("unsupported") || text.includes("too long") || text.includes("too short") || text.includes("required"))
+        return i18n.t("errors.video.failureReasons.invalidRequest");
+    if (text.includes("unavailable") || text.includes("overloaded") || text.includes("internal error") || text.includes("connection")) return i18n.t("errors.video.failureReasons.upstreamUnavailable");
+    return "";
+}
+
+function videoTaskFailureMessage(task: SeedanceTask) {
+    if (task.status === "expired") return i18n.t("errors.video.failureReasons.expired");
+    if (task.status === "cancelled") return i18n.t("errors.video.cancelled");
+    const providerReason = providerVideoFailureMessage(task.error?.code, task.error?.message);
+    if (providerReason) return providerReason;
+    return task.error?.message || i18n.t(task.status === "cancelled" ? "errors.video.cancelled" : "errors.video.generationFailed");
+}
+
 function unwrapEnvelope<T>(payload: ApiEnvelope<T>, emptyMessage: string): T {
     if (!payload) throw new Error(emptyMessage);
     if (typeof payload === "object" && "code" in payload && typeof payload.code === "number") {
@@ -209,18 +231,37 @@ function unwrapEnvelope<T>(payload: ApiEnvelope<T>, emptyMessage: string): T {
 
 function readAxiosError(error: unknown, fallback: string) {
     if (axios.isCancel(error)) return i18n.t("errors.requestCancelled");
-    if (axios.isAxiosError<{ error?: { message?: string }; msg?: string; code?: number }>(error)) {
+    if (axios.isAxiosError<{ error?: { code?: string; message?: string }; msg?: string; code?: number }>(error)) {
         const responseData = error.response?.data;
-        return responseData?.msg || responseData?.error?.message || statusMessage(error.response?.status, fallback);
+        const statusError = statusMessage(error.response?.status);
+        if (statusError) return statusError;
+        if (error.code === "ECONNABORTED" || error.code === "ETIMEDOUT") return i18n.t("errors.video.failureReasons.requestTimeout");
+        if (!error.response || error.code === "ERR_NETWORK" || error.code === "ECONNREFUSED" || error.code === "ENOTFOUND" || error.code === "EHOSTUNREACH") return i18n.t("errors.video.failureReasons.upstreamUnavailable");
+        const providerReason = providerVideoFailureMessage(responseData?.error?.code, responseData?.error?.message);
+        if (providerReason) return providerReason;
+        return concreteVideoServiceError(responseData?.error?.message || responseData?.msg, fallback);
     }
     if (error instanceof DOMException && error.name === "AbortError") return i18n.t("errors.requestCancelled");
-    return error instanceof Error ? error.message : fallback;
+    return concreteVideoServiceError(error instanceof Error ? error.message : "", fallback);
 }
 
-function statusMessage(status: number | undefined, fallback: string) {
-    if (status === 401 || status === 403) return i18n.t("errors.authenticationFailed");
-    if (status === 429) return i18n.t("errors.rateLimited");
-    return status ? i18n.t("errors.requestFailedWithStatus", { fallback, status }) : fallback;
+function concreteVideoServiceError(message: string | undefined, fallback: string) {
+    const normalized = (message || "").trim().toLowerCase();
+    if (normalized === "后端服务未启用" || normalized === "backend service is not enabled") return i18n.t("errors.video.failureReasons.serviceDisabled");
+    if (normalized === "后端服务失败" || normalized === "backend service failed") return i18n.t("errors.video.failureReasons.serviceFailed");
+    if (normalized === "操作失败" || normalized === "operation failed") return fallback;
+    return message || fallback;
+}
+
+function statusMessage(status: number | undefined) {
+    if (status === 401) return i18n.t("errors.video.failureReasons.upstreamAuthFailed");
+    if (status === 403) return i18n.t("errors.video.failureReasons.upstreamPermissionDenied");
+    if (status === 404) return i18n.t("errors.video.failureReasons.upstreamNotFound");
+    if (status === 408 || status === 504) return i18n.t("errors.video.failureReasons.requestTimeout");
+    if (status === 429) return i18n.t("errors.video.failureReasons.rateLimited");
+    if (status === 502 || status === 503) return i18n.t("errors.video.failureReasons.upstreamUnavailable");
+    if (status && status >= 500) return i18n.t("errors.video.failureReasons.serviceFailed");
+    return "";
 }
 
 async function assertVideoBlob(blob: Blob) {

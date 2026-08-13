@@ -1,4 +1,6 @@
 import { readImageMeta } from "@/lib/image-utils";
+import { isCurrentSession } from "@/lib/account-storage";
+import { useUserStore } from "@/stores/use-user-store";
 import i18n from "@/i18n";
 
 export type UploadResult = {
@@ -14,16 +16,13 @@ export type UploadResult = {
 const fileTypeValues = ["images", "videos", "audios", "results/images", "results/videos", "results/audios"] as const;
 type FileType = (typeof fileTypeValues)[number];
 
-function authHeader(): Record<string, string> {
-    try {
-        const raw = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
-        const parsed = JSON.parse(raw);
-        const token = parsed?.state?.token || "";
-        if (!token) return {};
-        return { Authorization: `Bearer ${token}` };
-    } catch {
-        return {};
-    }
+function currentSession() {
+    const { token, user } = useUserStore.getState();
+    return { token, userId: user?.id };
+}
+
+function assertCurrentSession(session: ReturnType<typeof currentSession>) {
+    if (!session.token || !session.userId || !isCurrentSession(session, currentSession())) throw new Error(i18n.t("errors.authRequired"));
 }
 
 function videoMeta(blob: Blob): Promise<{ width: number; height: number; durationMs?: number }> {
@@ -56,26 +55,32 @@ function audioMeta(blob: Blob): Promise<{ durationMs?: number }> {
 
 /** Upload a blob to S3 via backend multipart (no CORS). */
 async function uploadBlobServer(blob: Blob, fileType: FileType): Promise<UploadResult> {
+    const session = currentSession();
+    assertCurrentSession(session);
     const form = new FormData();
     form.set("fileType", fileType);
     form.set("file", blob, `generated-${Date.now()}.${blob.type.split("/")[1] || "png"}`);
-    const headers = { ...authHeader() };
-    const resp = await fetch("/api/v1/files", { method: "POST", body: form, headers });
+    const resp = await fetch("/api/v1/files", { method: "POST", body: form, headers: { Authorization: `Bearer ${session.token}` } });
     const json = await resp.json();
+    assertCurrentSession(session);
     if (json.code !== 0) throw new Error(json.msg || i18n.t("errors.upload.failed"));
     const { id, url, mimeType, bytes } = json.data;
     if (fileType === "images" || fileType === "results/images") {
         const meta = await readImageMeta(URL.createObjectURL(blob));
+        assertCurrentSession(session);
         return { fileId: id, url, width: meta.width, height: meta.height, bytes: bytes || blob.size, mimeType: mimeType || blob.type };
     }
     if (fileType === "videos" || fileType === "results/videos") {
         const meta = await videoMeta(blob);
+        assertCurrentSession(session);
         return { fileId: id, url, width: meta.width, height: meta.height, bytes: bytes || blob.size, mimeType: mimeType || blob.type, durationMs: meta.durationMs };
     }
     if (fileType === "audios" || fileType === "results/audios") {
         const meta = await audioMeta(blob);
+        assertCurrentSession(session);
         return { fileId: id, url, width: 0, height: 0, bytes: bytes || blob.size, mimeType: mimeType || blob.type, durationMs: meta.durationMs };
     }
+    assertCurrentSession(session);
     return { fileId: id, url, width: 0, height: 0, bytes: bytes || blob.size, mimeType: mimeType || blob.type };
 }
 
@@ -87,16 +92,19 @@ export async function uploadBlob(blob: Blob, fileType: FileType): Promise<Upload
 
 /** Download a URL via the backend proxy (handles CORS-restricted sources) and upload to S3. */
 export async function uploadUrlToS3(url: string, fileType: FileType): Promise<UploadResult> {
+    const session = currentSession();
+    assertCurrentSession(session);
     const ext = fileType.endsWith("videos") ? "mp4" : "png";
     const fileName = `generated-${Date.now()}.${ext}`;
-    const headers = { "Content-Type": "application/json", ...authHeader() };
     const resp = await fetch("/api/v1/files/proxy-upload", {
         method: "POST",
         body: JSON.stringify({ url, fileType, fileName }),
-        headers,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` },
     });
     const json = await resp.json();
+    assertCurrentSession(session);
     if (json.code !== 0) throw new Error(json.msg || i18n.t("errors.upload.proxyFailed"));
     const meta = fileType.endsWith("images") ? await readImageMeta(json.data.url) : { width: 0, height: 0 };
+    assertCurrentSession(session);
     return { fileId: json.data.id, url: json.data.url, width: meta.width, height: meta.height, bytes: json.data.bytes || 0, mimeType: json.data.mimeType || "application/octet-stream" };
 }
