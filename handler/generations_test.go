@@ -35,8 +35,8 @@ func TestModelProfilesExposeVideoAdaptersWithoutSecrets(t *testing.T) {
 	if body.Code != 0 {
 		t.Fatalf("code = %d, want 0; body=%s", body.Code, res.Body.String())
 	}
-	if len(body.Data) != 2 {
-		t.Fatalf("profiles = %d, want 2", len(body.Data))
+	if len(body.Data) != 3 {
+		t.Fatalf("profiles = %d, want 3", len(body.Data))
 	}
 	profile := body.Data[0]
 	if profile.ID != "seedance-1-5-pro" || profile.AdapterKey != "seedance-contents-v1" {
@@ -61,6 +61,13 @@ func TestModelProfilesExposeVideoAdaptersWithoutSecrets(t *testing.T) {
 	}
 	if drama.Capabilities.Title == nil || drama.Capabilities.Title.MaxLength != 20 || drama.Capabilities.Script == nil || drama.Capabilities.Script.MinLength != 20 || drama.Capabilities.Assets == nil || drama.Capabilities.Assets.Max != 14 || len(drama.Capabilities.Assets.Roles) != 3 || drama.Capabilities.Settings["durationSeconds"].Default != "auto" {
 		t.Fatalf("drama capabilities = %#v", drama.Capabilities)
+	}
+	sora := body.Data[2]
+	if sora.ID != "sora-2" || sora.AdapterKey != "sora-videos-v1" || len(sora.Intents) != 1 || sora.Intents[0] != model.IntentVideoGenerate {
+		t.Fatalf("sora profile = %#v", sora)
+	}
+	if sora.Capabilities.Cancellation || len(sora.Capabilities.Completion) != 1 || sora.Capabilities.Completion[0] != "poll" || sora.Capabilities.Settings["aspectRatio"].Default != "16:9" || sora.Capabilities.Settings["resolution"].Default != "720p" || sora.Capabilities.Settings["durationSeconds"].Default != float64(4) {
+		t.Fatalf("sora capabilities = %#v", sora.Capabilities)
 	}
 	payload := res.Body.String()
 	for _, secret := range []string{"apiKey", "baseUrl", "channelId", "upstreamModel"} {
