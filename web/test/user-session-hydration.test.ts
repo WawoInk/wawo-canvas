@@ -58,6 +58,40 @@ test("session hydration keeps the token on transient failures and clears an inva
     }
 });
 
+test("a stale hydration response cannot replace a newer account session", async () => {
+    const originalAdapter = axios.defaults.adapter;
+    let releaseResponse = () => {};
+    const responseGate = new Promise<void>((resolve) => {
+        releaseResponse = resolve;
+    });
+    const newerUser = { ...user, id: "user-2", username: "newer-user", displayName: "Newer User" };
+
+    useUserStore.setState({ token: "token-a", user, isReady: false, isLoading: false });
+    axios.defaults.adapter = async (config) => {
+        await responseGate;
+        return {
+            config,
+            data: { code: 0, data: user, msg: "" },
+            headers: {},
+            status: 200,
+            statusText: "OK",
+        };
+    };
+
+    try {
+        const pendingHydration = useUserStore.getState().hydrateUser();
+        useUserStore.getState().setSession("token-b", newerUser);
+        releaseResponse();
+        await pendingHydration;
+
+        assert.equal(useUserStore.getState().token, "token-b");
+        assert.equal(useUserStore.getState().user?.id, "user-2");
+        assert.equal(useUserStore.getState().isLoading, false);
+    } finally {
+        axios.defaults.adapter = originalAdapter;
+    }
+});
+
 test("backend generation requests refresh the shared balance after charges and refunds", async () => {
     const originalAdapter = axios.defaults.adapter;
     const requests: string[] = [];

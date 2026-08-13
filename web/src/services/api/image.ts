@@ -918,13 +918,13 @@ export async function createAsyncImageTask(config: AiConfig, prompt: string, cou
     };
 
     try {
-        const response = await axios.post<{ task_id?: string; status?: string; error?: { message?: string } }>(aiApiUrl(requestConfig, "/async/images/generations"), imageRequestBody(body, format), {
+        const response = await axios.post<{ id?: string; status?: string; error?: { message?: string } }>(aiApiUrl(requestConfig, "/async/images/generations"), imageRequestBody(body, format), {
             headers: { ...imageRequestHeaders(requestConfig, format), "X-Source": "canvas" },
         });
         const data = response.data;
         if (data.error?.message) throw new Error(data.error.message);
-        if (!data.task_id) throw new Error(i18n.t("errors.image.asyncCreateMissingTaskId"));
-        return { id: data.task_id, model: requestConfig.model };
+        if (!data.id) throw new Error(i18n.t("errors.image.asyncCreateMissingTaskId"));
+        return { id: data.id, model: requestConfig.model };
     } catch (error) {
         throw new Error(readAxiosError(error, i18n.t("errors.image.asyncCreateFailed")));
     }
@@ -950,13 +950,13 @@ export async function createAsyncImageEditTask(config: AiConfig, prompt: string,
     );
 
     try {
-        const response = await axios.post<{ task_id?: string; status?: string; error?: { message?: string } }>(aiApiUrl(requestConfig, "/async/images/edits"), request.body, {
+        const response = await axios.post<{ id?: string; status?: string; error?: { message?: string } }>(aiApiUrl(requestConfig, "/async/images/edits"), request.body, {
             headers: { ...aiHeaders(requestConfig, request.contentType), "X-Source": "canvas" },
         });
         const data = response.data;
         if (data.error?.message) throw new Error(data.error.message);
-        if (!data.task_id) throw new Error(i18n.t("errors.image.asyncEditMissingTaskId"));
-        return { id: data.task_id, model: requestConfig.model };
+        if (!data.id) throw new Error(i18n.t("errors.image.asyncEditMissingTaskId"));
+        return { id: data.id, model: requestConfig.model };
     } catch (error) {
         throw new Error(readAxiosError(error, i18n.t("errors.image.asyncEditFailed")));
     }
@@ -969,7 +969,7 @@ export async function pollAsyncImageTask(config: AiConfig, task: AsyncImageTask,
             code?: number;
             msg?: string;
             status?: string;
-            data?: { images?: Array<{ url?: string; b64_json?: string; dataUrl?: string }> };
+            result?: { data?: Array<Record<string, unknown>> };
             error?: { code?: string; message?: string };
         }>(aiApiUrl(requestConfig, `/tasks/${encodeURIComponent(task.id)}`), {
             headers: aiHeaders(requestConfig),
@@ -980,8 +980,11 @@ export async function pollAsyncImageTask(config: AiConfig, task: AsyncImageTask,
         // ponytail: backend wraps errors; unwrap before inspecting task fields
         if (typeof body.code === "number" && body.code !== 0) return { status: "failed", error: body.msg || i18n.t("errors.image.taskQueryFailed") };
         if (body.error?.message) return { status: "failed", error: body.error.message };
-        if (body.status === "succeeded") {
-            const images = (body.data?.images || []).map((img) => ({ dataUrl: img.dataUrl || img.url || `data:image/png;base64,${img.b64_json || ""}` }));
+        if (body.status === "completed") {
+            const images = (body.result?.data || [])
+                .map(resolveImageDataUrl)
+                .filter((dataUrl): dataUrl is string => Boolean(dataUrl))
+                .map((dataUrl) => ({ dataUrl }));
             if (!images.length) return { status: "failed", error: i18n.t("errors.image.taskSucceededWithoutImage") };
             return { status: "succeeded", images };
         }

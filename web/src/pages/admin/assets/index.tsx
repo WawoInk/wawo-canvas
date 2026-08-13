@@ -8,7 +8,9 @@ import { useTranslation } from "react-i18next";
 
 import { useCopyText } from "@/hooks/use-copy-text";
 import { formatNumber } from "@/i18n/formatters";
+import { isCurrentSession } from "@/lib/account-storage";
 import type { AdminAsset } from "@/services/api/admin";
+import { useUserStore } from "@/stores/use-user-store";
 import { useAdminAssets } from "./use-admin-assets";
 
 type AssetFormValues = Partial<AdminAsset> & { tagText?: string };
@@ -341,16 +343,18 @@ export default function AdminAssetsPage() {
 async function uploadAssetImage(file: UploadFile, fallback: { unreadable: string; uploadFailed: string }) {
     const origin = file.originFileObj || (file as unknown as File);
     if (!origin) throw new Error(fallback.unreadable);
-    const token = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
-    const parsed = JSON.parse(token);
-    const tokenValue = parsed?.state?.token || "";
+    const { token, user } = useUserStore.getState();
+    if (!token || !user?.id) throw new Error(fallback.uploadFailed);
+    const session = { token, userId: user.id };
 
     if (file.status === "done" && file.response) return file.response as string;
 
     const formData = new FormData();
     formData.append("file", origin);
-    const response = await fetch("/api/admin/assets/upload-image", { method: "POST", body: formData, headers: { Authorization: `Bearer ${tokenValue}` } });
+    const response = await fetch("/api/admin/assets/upload-image", { method: "POST", body: formData, headers: { Authorization: `Bearer ${token}` } });
     const json = await response.json();
+    const current = useUserStore.getState();
+    if (!isCurrentSession(session, { token: current.token, userId: current.user?.id })) throw new Error(fallback.uploadFailed);
     if (json.code !== 0) throw new Error(json.msg || fallback.uploadFailed);
     return json.data.url as string;
 }

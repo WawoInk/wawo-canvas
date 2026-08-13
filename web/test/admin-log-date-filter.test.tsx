@@ -49,17 +49,7 @@ test("使用日志选择和清空日期范围会更新管理员查询参数", as
 
     try {
         await act(async () => {
-            root.render(
-                createElement(
-                    ConfigProvider,
-                    null,
-                    createElement(
-                        App,
-                        null,
-                        createElement(QueryClientProvider, { client: queryClient }, createElement(AdminGenerationTasksPage)),
-                    ),
-                ),
-            );
+            root.render(createElement(ConfigProvider, null, createElement(App, null, createElement(QueryClientProvider, { client: queryClient }, createElement(AdminGenerationTasksPage)))));
         });
         await waitFor(() => generationCalls.length > 0);
         generationCalls.length = 0;
@@ -120,17 +110,7 @@ test("算力点日志选择和清空日期范围会更新管理员查询参数",
 
     try {
         await act(async () => {
-            root.render(
-                createElement(
-                    ConfigProvider,
-                    null,
-                    createElement(
-                        App,
-                        null,
-                        createElement(QueryClientProvider, { client: queryClient }, createElement(AdminCreditLogsPage)),
-                    ),
-                ),
-            );
+            root.render(createElement(ConfigProvider, null, createElement(App, null, createElement(QueryClientProvider, { client: queryClient }, createElement(AdminCreditLogsPage)))));
         });
         await waitFor(() => creditCalls.length > 0);
         creditCalls.length = 0;
@@ -204,17 +184,7 @@ test("算力点日志表格展示记录对应的用户名", async () => {
 
     try {
         await act(async () => {
-            root.render(
-                createElement(
-                    ConfigProvider,
-                    null,
-                    createElement(
-                        App,
-                        null,
-                        createElement(QueryClientProvider, { client: queryClient }, createElement(AdminCreditLogsPage)),
-                    ),
-                ),
-            );
+            root.render(createElement(ConfigProvider, null, createElement(App, null, createElement(QueryClientProvider, { client: queryClient }, createElement(AdminCreditLogsPage)))));
         });
         await waitFor(() => creditCalls.length > 0);
         await waitFor(() => container.textContent?.includes("user-with-username") === true);

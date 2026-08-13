@@ -284,6 +284,10 @@ original credits * enterprise.discount_rate
 - `getGenerationByClientRequestId` 在创建响应丢失时找回当前用户的同一 first-party task。
 - `cancelGeneration` 请求取消。
 - `readGenerationError` 读取信封中的稳定错误。
+- 错误展示优先使用结构化 `GenerationError.code`，其次按 HTTP 状态映射认证、权限、任务不存在、超时、限流和服务异常。
+- 查询错误没有稳定或具体原因时显示“暂停自动查询”；创建或恢复请求则使用调用方提供的操作级 fallback。
+
+兼容视频客户端还会从供应商 `error.code/error.message`、Axios 网络错误和 HTTP 状态推导统一用户提示；已识别的供应商私有错误文本只用于本地归类，不成为平台 API 合同。
 
 Canvas metadata 持久化：
 
@@ -323,6 +327,7 @@ Canvas metadata 持久化：
 ```json
 {
   "code": "INVALID_SETTING",
+  "message": "生成参数不合法",
   "retryable": false,
   "fieldPath": "intent.settings.durationSeconds",
   "resourceId": "canvas-node-id"
@@ -336,6 +341,24 @@ Canvas metadata 持久化：
 - `resourceId` 定位 Canvas/文件资源。
 - 异步失败写入 task error；同步创建失败写入响应信封 `data`。
 - 内部错误未显式标记安全时，外部消息为“操作失败”。
+- Adapter 对非成功响应先解析顶层 `{code,message|msg}` 或嵌套 `{error:{code,message}}`；可识别的 body 语义优先于 HTTP status，无法识别时才按 status 回退。
+
+Adapter 上游错误归一化：
+
+| 来源 | 稳定错误码 | `retryable` |
+| --- | --- | --- |
+| transport deadline/timeout，或 HTTP 408/504 | `UPSTREAM_TIMEOUT` | `true` |
+| 上游终态文本包含 timeout/deadline/expired | `UPSTREAM_TIMEOUT` | `false` |
+| 其他 transport/read 错误，或 HTTP 500/502/503 | `UPSTREAM_UNAVAILABLE` | `true` |
+| HTTP/body 表示认证失败 | `UPSTREAM_AUTH_FAILED` | `false` |
+| HTTP/body 表示权限拒绝 | `UPSTREAM_PERMISSION_DENIED` | `false` |
+| HTTP 404 fallback | `UPSTREAM_NOT_FOUND` | `false` |
+| HTTP 400/409/422 或 body 表示参数无效 | `INVALID_REQUEST` | `false` |
+| HTTP/body 表示限流或额度超限 | `UPSTREAM_RATE_LIMITED` | `true` |
+| body 表示安全审核或内容策略拒绝 | `CONTENT_REJECTED` | `false` |
+| 无法进一步识别的上游拒绝 | `UPSTREAM_REJECTED` | `false` |
+
+`UPSTREAM_NOT_FOUND` 专门表示上游任务或生成接口不存在，不再与参数错误共用 `INVALID_REQUEST`。前端应按稳定 code 展示本地化原因，不依赖供应商原始 message。
 
 ## 常见修改地图
 

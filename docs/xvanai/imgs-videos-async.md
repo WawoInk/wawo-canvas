@@ -1,6 +1,6 @@
 ## 异步图片生成
 
-对于处理时间较长的图片生成任务，支持异步模式：提交后立即返回 `task_id`，通过轮询接口查询结果。
+对于处理时间较长的图片生成任务，支持异步模式：提交后立即返回 `id`，通过轮询接口查询结果。
 
 ---
 
@@ -28,14 +28,16 @@ curl https://xvan.ai/v1/async/images/generations \
 
 ```json
 {
-  "task_id": "task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "id": "task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "object": "task",
   "status": "queued"
 }
 ```
 
 | 字段      | 类型   | 说明                  |
 | --------- | ------ | --------------------- |
-| `task_id` | string | 任务 ID，用于后续查询 |
+| `id` | string | 任务 ID，用于后续查询 |
+| `object` | string | 对象类型，固定为 `task` |
 | `status`  | string | 初始状态 `queued`     |
 
 ---
@@ -55,20 +57,21 @@ curl https://xvan.ai/v1/tasks/task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
 
 ```json
 {
-  "task_id": "task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-  "status": "succeeded",
-  "type": "image_generation",
-  "model": "gpt-image-2",
-  "created_at": 1782354218,
-  "completed_at": 1782354300,
-  "data": {
-    "images": [
+  "id": "task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "object": "task",
+  "status": "completed",
+  "result": {
+    "created": 1786343538,
+    "data": [
       {
-        "url": "https://storage.example.com/images/xxx.png",
-        "b64_json": null,
-        "revised_prompt": "优化后的提示词"
+        "b64_json": "<base64>"
       }
-    ]
+    ],
+    "background": "auto",
+    "output_format": "png",
+    "quality": "auto",
+    "size": "1024x1024",
+    "model": "gpt-image-2"
   }
 }
 ```
@@ -77,12 +80,9 @@ curl https://xvan.ai/v1/tasks/task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
 
 ```json
 {
-  "task_id": "task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "id": "task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "object": "task",
   "status": "failed",
-  "type": "image_generation",
-  "model": "gpt-image-2",
-  "created_at": 1782354218,
-  "completed_at": 1782354218,
   "error": {
     "code": "FAILURE",
     "message": "错误描述信息"
@@ -96,7 +96,7 @@ curl https://xvan.ai/v1/tasks/task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
 | ------------ | ----------------------------- |
 | `queued`     | 已提交，等待处理              |
 | `processing` | 正在处理中                    |
-| `succeeded`  | 成功，结果在 `data` 字段      |
+| `completed`  | 成功，结果在 `result.data` 字段 |
 | `failed`     | 失败，错误信息在 `error` 字段 |
 | `cancelled`  | 已取消                        |
 
@@ -133,7 +133,7 @@ curl -X POST https://xvan.ai/v1/tasks/task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/canc
 
 ### 轮询策略建议
 
-1. **提交**：`POST /v1/async/images/generations` → 获取 `task_id`
+1. **提交**：`POST /v1/async/images/generations` → 获取 `id`
 2. **轮询**：前 3 次间隔 1 秒，后续间隔 2-3 秒
-3. **结束**：`status` 为 `succeeded` / `failed` / `cancelled` 时停止
+3. **结束**：`status` 为 `completed` / `failed` / `cancelled` 时停止
 4. **超时**：建议 120 秒超时，超时后调用 `cancel`

@@ -1132,18 +1132,18 @@ func TestSeedanceAdapterCreatesPromptOnlyTask(t *testing.T) {
 }
 
 func TestSoraAdapterCreatesVideoTask(t *testing.T) {
-	var gotMethod, gotPath, gotAuthorization string
-	var gotForm map[string][]string
+	var gotMethod, gotPath, gotAuthorization, gotContentType string
+	var gotBody map[string]any
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
 		gotPath = r.URL.Path
 		gotAuthorization = r.Header.Get("Authorization")
-		if err := r.ParseMultipartForm(1 << 20); err != nil {
-			t.Fatalf("parse upstream request: %v", err)
+		gotContentType = r.Header.Get("Content-Type")
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("decode upstream request: %v", err)
 		}
-		gotForm = r.MultipartForm.Value
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"video_sora_create","status":"queued","model":"sora-2-pro","seconds":"8","size":"1280x720"}`))
+		_, _ = w.Write([]byte(`{"id":"video_sora_create","status":"queued","model":"sora-2-pro","duration":8,"size":"720p"}`))
 	}))
 	defer upstream.Close()
 
@@ -1154,7 +1154,7 @@ func TestSoraAdapterCreatesVideoTask(t *testing.T) {
 		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "人物走进雨夜街道", Settings: model.ScalarSettings{
 			"aspectRatio": "16:9", "resolution": "720p", "durationSeconds": 8,
 		}},
-		Metadata: map[string]string{"action": "videogen"},
+		Metadata: map[string]string{"action": "template_hq_t2v"},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -1165,26 +1165,162 @@ func TestSoraAdapterCreatesVideoTask(t *testing.T) {
 	if gotMethod != http.MethodPost || gotPath != "/v1/videos" || gotAuthorization != "Bearer secret" {
 		t.Fatalf("method=%q path=%q Authorization=%q", gotMethod, gotPath, gotAuthorization)
 	}
-	want := map[string][]string{
-		"model":    {"sora-2-pro"},
-		"prompt":   {"人物走进雨夜街道"},
-		"size":     {"1280x720"},
-		"seconds":  {"8"},
-		"metadata": {`{"action":"videogen"}`},
+	if gotContentType != "application/json" {
+		t.Fatalf("Content-Type = %q", gotContentType)
 	}
-	if !jsonEqual(gotForm, want) {
-		t.Fatalf("form = %#v, want %#v", gotForm, want)
+	want := map[string]any{
+		"model":    "sora-2-pro",
+		"prompt":   "人物走进雨夜街道",
+		"duration": float64(8),
+		"size":     "720p",
+		"metadata": map[string]any{"action": "template_hq_t2v", "aspect_ratio": "16:9"},
+	}
+	if !jsonEqual(gotBody, want) {
+		t.Fatalf("body = %#v, want %#v", gotBody, want)
+	}
+}
+
+func TestSoraAdapterCreatesImageToVideoTask(t *testing.T) {
+	var gotBody map[string]any
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("decode upstream request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"video_sora_i2v","status":"queued"}`))
+	}))
+	defer upstream.Close()
+
+	adapter := NewSoraVideosV1Adapter(upstream.Client())
+	_, err := adapter.Create(context.Background(), AdapterCreateRequest{
+		Profile: model.GenerationProfile{UpstreamModel: "sora-i2v", Capabilities: soraCapabilities()},
+		Channel: model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"},
+		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "让人物缓慢转身并看向镜头", Settings: model.ScalarSettings{
+			"aspectRatio": "9:16", "resolution": "1080p", "durationSeconds": 8,
+		}},
+		References: AdapterMediaReferences{
+			Images: []string{"https://example.com/input.png"},
+			Videos: []string{"https://example.com/reference.mp4"},
+			Audios: []string{"https://example.com/audio.mp3"},
+		},
+		Metadata: map[string]string{"action": "template_hq_i2v"},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	want := map[string]any{
+		"model":    "sora-i2v",
+		"prompt":   "让人物缓慢转身并看向镜头",
+		"images":   []any{"https://example.com/input.png"},
+		"duration": float64(8),
+		"size":     "1080p",
+		"metadata": map[string]any{
+			"action":       "template_hq_i2v",
+			"aspect_ratio": "9:16",
+			"video_urls":   []any{"https://example.com/reference.mp4"},
+			"audio_urls":   []any{"https://example.com/audio.mp3"},
+		},
+	}
+	if !jsonEqual(gotBody, want) {
+		t.Fatalf("body = %#v, want %#v", gotBody, want)
+	}
+}
+
+func TestSoraAdapterCreatesReferenceToVideoTask(t *testing.T) {
+	profile := model.GenerationProfile{UpstreamModel: "sora-r2v", Capabilities: soraCapabilities()}
+	settings, err := normalizeGenerationSettings(profile, model.ScalarSettings{
+		"aspectRatio": "adaptive", "resolution": "720p", "durationSeconds": 6,
+	})
+	if err != nil {
+		t.Fatalf("normalize settings: %v", err)
+	}
+	var gotBody map[string]any
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("decode upstream request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"video_sora_r2v","status":"queued"}`))
+	}))
+	defer upstream.Close()
+
+	adapter := NewSoraVideosV1Adapter(upstream.Client())
+	_, err = adapter.Create(context.Background(), AdapterCreateRequest{
+		Profile: profile,
+		Channel: model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"},
+		Intent:  model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "保持人物身份和服装一致，人物向前走", Settings: settings},
+		References: AdapterMediaReferences{Images: []string{
+			"https://example.com/ref-1.png",
+			"https://example.com/ref-2.png",
+			"https://example.com/ref-3.png",
+		}},
+		Metadata: map[string]string{"action": "template_hq_r2v"},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	want := map[string]any{
+		"model":    "sora-r2v",
+		"prompt":   "保持人物身份和服装一致，人物向前走",
+		"images":   []any{"https://example.com/ref-1.png", "https://example.com/ref-2.png", "https://example.com/ref-3.png"},
+		"duration": float64(6),
+		"size":     "720p",
+		"metadata": map[string]any{"action": "template_hq_r2v", "aspect_ratio": "adaptive"},
+	}
+	if !jsonEqual(gotBody, want) {
+		t.Fatalf("body = %#v, want %#v", gotBody, want)
+	}
+}
+
+func TestSoraAdapterPreservesConfiguredActionWithTwoImages(t *testing.T) {
+	var gotBody map[string]any
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("decode upstream request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"video_sora_htv","status":"queued"}`))
+	}))
+	defer upstream.Close()
+
+	adapter := NewSoraVideosV1Adapter(upstream.Client())
+	_, err := adapter.Create(context.Background(), AdapterCreateRequest{
+		Profile: model.GenerationProfile{UpstreamModel: "sora-htv", Capabilities: soraCapabilities()},
+		Channel: model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"},
+		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "从第一帧自然过渡到最后一帧", Settings: model.ScalarSettings{
+			"aspectRatio": "16:9", "resolution": "720p", "durationSeconds": 6,
+		}},
+		References: AdapterMediaReferences{Images: []string{
+			"https://example.com/start.png",
+			"https://example.com/end.png",
+		}},
+		Metadata: map[string]string{"action": "template_future_video"},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	want := map[string]any{
+		"model":    "sora-htv",
+		"prompt":   "从第一帧自然过渡到最后一帧",
+		"images":   []any{"https://example.com/start.png", "https://example.com/end.png"},
+		"duration": float64(6),
+		"size":     "720p",
+		"metadata": map[string]any{"action": "template_future_video", "aspect_ratio": "16:9"},
+	}
+	if !jsonEqual(gotBody, want) {
+		t.Fatalf("body = %#v, want %#v", gotBody, want)
 	}
 }
 
 func TestSoraAdapterPollsCompletedVideoTask(t *testing.T) {
 	var gotMethod, gotPath, gotAuthorization string
+	const resultURL = "https://video.example/video.mp4?Expires=1786427246&Signature=secret&Key-Pair-Id=test"
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
 		gotPath = r.URL.Path
 		gotAuthorization = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"video_sora_poll","status":"completed","model":"sora-2-pro","output":{"url":"https://cdn.example/video.mp4"}}`))
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"id":"video_sora_poll","object":"video","model":"","status":"completed","progress":100,"created_at":1786340631,"completed_at":1786340846,"metadata":{"url":%q}}`, resultURL)))
 	}))
 	defer upstream.Close()
 
@@ -1196,7 +1332,7 @@ func TestSoraAdapterPollsCompletedVideoTask(t *testing.T) {
 	if gotMethod != http.MethodGet || gotPath != "/v1/videos/video_sora_poll" || gotAuthorization != "Bearer secret" {
 		t.Fatalf("method=%q path=%q Authorization=%q", gotMethod, gotPath, gotAuthorization)
 	}
-	if ref.ID != "video_sora_poll" || ref.Status != model.TaskStatusSucceeded || ref.VideoURL != "https://cdn.example/video.mp4" {
+	if ref.ID != "video_sora_poll" || ref.Status != model.TaskStatusSucceeded || ref.VideoURL != resultURL {
 		t.Fatalf("provider task = %#v", ref)
 	}
 }
@@ -1363,19 +1499,14 @@ func TestRecoveredGenerationPollsExistingProviderTask(t *testing.T) {
 	}
 }
 
-func TestFirstPartyGenerationPersistsProviderVideoBeforeSuccess(t *testing.T) {
+func TestSoraGenerationPersistsMetadataVideoBeforeSuccess(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Path == "/video.mp4" {
-			w.Header().Set("Content-Type", "video/mp4")
-			_, _ = w.Write([]byte("video-bytes"))
-			return
-		}
 		if r.Method == http.MethodPost {
 			_, _ = w.Write([]byte(`{"id":"provider-video","status":"queued"}`))
 			return
 		}
-		_, _ = w.Write([]byte(fmt.Sprintf(`{"id":"provider-video","status":"succeeded","content":{"video_url":%q}}`, upstreamURL(r)+"video.mp4?X-Amz-Signature=secret")))
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"id":"provider-video","status":"completed","metadata":{"url":%q}}`, upstreamURL(r)+"video.mp4?X-Amz-Signature=secret")))
 	}))
 	defer upstream.Close()
 
@@ -1396,7 +1527,10 @@ func TestFirstPartyGenerationPersistsProviderVideoBeforeSuccess(t *testing.T) {
 		generationPersistVideo = previousPersist
 	}()
 	generationProfiles = func() []model.GenerationProfile {
-		return []model.GenerationProfile{{ID: "seedance-result", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "seedance-result", ChannelName: "test", Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}}
+		return []model.GenerationProfile{{
+			ID: "sora-result", Version: 1, AdapterKey: "sora-videos-v1", UpstreamModel: "sora-result", ChannelName: "test",
+			Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: soraCapabilities(), Metadata: map[string]string{"action": "template_hq_t2v"},
+		}}
 	}
 	generationRouteChannel = func(string, string) (model.ModelChannel, error) {
 		return model.ModelChannel{Name: "test", Protocol: "openai", BaseURL: upstream.URL, APIKey: "secret", Enabled: true}, nil
@@ -1418,7 +1552,7 @@ func TestFirstPartyGenerationPersistsProviderVideoBeforeSuccess(t *testing.T) {
 
 	userID := "user-result-" + uuid.NewString()
 	task, err := CreateGeneration(context.Background(), model.AuthUser{ID: userID}, model.GenerationCommand{
-		CommandVersion: 1, ClientRequestID: "request-result-" + uuid.NewString(), ModelProfileID: "seedance-result", Source: string(model.SourceCanvas),
+		CommandVersion: 1, ClientRequestID: "request-result-" + uuid.NewString(), ModelProfileID: "sora-result", Source: string(model.SourceCanvas),
 		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "test"},
 	})
 	if err != nil {
@@ -1543,7 +1677,7 @@ func TestViduShortDramaAdapterNormalizesTerminalResultsAndErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Poll failure result: %v", err)
 	}
-	if failed.Status != model.TaskStatusFailed || failed.Error == nil || failed.Error.Code != "UPSTREAM_REJECTED" || failed.Error.Message != "上游拒绝了生成请求" || failed.Error.Retryable {
+	if failed.Status != model.TaskStatusFailed || failed.Error == nil || failed.Error.Code != "INVALID_REQUEST" || failed.Error.Message != "生成参数或输入不符合上游要求" || failed.Error.Retryable {
 		t.Fatalf("failed = %#v", failed)
 	}
 	if !strings.Contains(failed.Audit.ResponseBody, `"code":"E001"`) {
@@ -1551,15 +1685,96 @@ func TestViduShortDramaAdapterNormalizesTerminalResultsAndErrors(t *testing.T) {
 	}
 }
 
+func TestGenerationAdaptersExposeConcreteTerminalFailureReasons(t *testing.T) {
+	cases := []struct {
+		name     string
+		body     string
+		wantCode string
+		wantMsg  string
+	}{
+		{"expired", `{"id":"expired","status":"expired"}`, "UPSTREAM_TIMEOUT", "上游视频生成超时"},
+		{"timeout", `{"id":"timeout","status":"failed","error":{"code":"TASK_TIMEOUT","message":"upstream rejected"}}`, "UPSTREAM_TIMEOUT", "上游视频生成超时"},
+		{"content", `{"id":"content","status":"failed","error":{"code":"SENSITIVE_CONTENT","message":"content policy violation"}}`, "CONTENT_REJECTED", "生成内容未通过上游安全审核"},
+		{"invalid", `{"id":"invalid","status":"failed","error":{"code":"INVALID_PARAMETER","message":"invalid duration"}}`, "INVALID_REQUEST", "生成参数或输入不符合上游要求"},
+		{"unknown", `{"id":"unknown","status":"failed","error":{"code":"E001","message":"provider detail"}}`, "UPSTREAM_REJECTED", "上游拒绝了生成请求"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(testCase.body))
+			}))
+			defer upstream.Close()
+
+			ref, err := NewSeedanceContentsV1Adapter(upstream.Client()).Poll(context.Background(), model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"}, testCase.name)
+			if err != nil || ref.Status != model.TaskStatusFailed || ref.Error == nil || ref.Error.Code != testCase.wantCode || ref.Error.Message != testCase.wantMsg || ref.Error.Retryable {
+				t.Fatalf("ref=%#v err=%v", ref, err)
+			}
+		})
+	}
+}
+
+func TestGenerationAdapterMapsTransportTimeout(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer upstream.Close()
+
+	client := upstream.Client()
+	client.Timeout = time.Millisecond
+	ref, err := NewSeedanceContentsV1Adapter(client).Poll(context.Background(), model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"}, "timeout")
+	if err == nil || ref.Error == nil || ref.Error.Code != "UPSTREAM_TIMEOUT" || ref.Error.Message != "上游请求超时" || !ref.Error.Retryable {
+		t.Fatalf("ref=%#v err=%v", ref, err)
+	}
+}
+
+func TestGenerationAdapterUsesHTTPBodyFailureReason(t *testing.T) {
+	cases := []struct {
+		name     string
+		body     string
+		wantCode string
+		wantMsg  string
+	}{
+		{"content", `{"error":{"code":"SENSITIVE_CONTENT","message":"content policy violation"}}`, "CONTENT_REJECTED", "生成内容未通过上游安全审核"},
+		{"invalid", `{"error":{"code":"INVALID_PARAMETER","message":"invalid duration"}}`, "INVALID_REQUEST", "生成参数或输入不符合上游要求"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(testCase.body))
+			}))
+			defer upstream.Close()
+
+			ref, err := NewSeedanceContentsV1Adapter(upstream.Client()).Create(context.Background(), AdapterCreateRequest{
+				Profile: model.GenerationProfile{UpstreamModel: "seedance"},
+				Channel: model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"},
+				Intent:  model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "test"},
+			})
+			if err == nil || ref.Error == nil || ref.Error.Code != testCase.wantCode || ref.Error.Message != testCase.wantMsg {
+				t.Fatalf("ref=%#v err=%v", ref, err)
+			}
+		})
+	}
+}
+
 func TestGenerationAdapterMapsHTTPFailuresToStableErrors(t *testing.T) {
 	cases := []struct {
 		status    int
 		code      string
+		message   string
 		retryable bool
 	}{
-		{http.StatusBadRequest, "UPSTREAM_REJECTED", false},
-		{http.StatusTooManyRequests, "UPSTREAM_RATE_LIMITED", true},
-		{http.StatusServiceUnavailable, "UPSTREAM_UNAVAILABLE", true},
+		{http.StatusBadRequest, "INVALID_REQUEST", "生成参数或输入不符合上游要求", false},
+		{http.StatusUnauthorized, "UPSTREAM_AUTH_FAILED", "上游服务认证失败", false},
+		{http.StatusForbidden, "UPSTREAM_PERMISSION_DENIED", "上游服务拒绝访问", false},
+		{http.StatusNotFound, "UPSTREAM_NOT_FOUND", "上游任务或生成接口不存在", false},
+		{http.StatusRequestTimeout, "UPSTREAM_TIMEOUT", "上游请求超时", true},
+		{http.StatusTooManyRequests, "UPSTREAM_RATE_LIMITED", "上游服务限流", true},
+		{http.StatusInternalServerError, "UPSTREAM_UNAVAILABLE", "上游服务暂时不可用", true},
+		{http.StatusBadGateway, "UPSTREAM_UNAVAILABLE", "上游服务暂时不可用", true},
+		{http.StatusServiceUnavailable, "UPSTREAM_UNAVAILABLE", "上游服务暂时不可用", true},
+		{http.StatusGatewayTimeout, "UPSTREAM_TIMEOUT", "上游请求超时", true},
 	}
 	for _, testCase := range cases {
 		t.Run(fmt.Sprint(testCase.status), func(t *testing.T) {
@@ -1574,7 +1789,7 @@ func TestGenerationAdapterMapsHTTPFailuresToStableErrors(t *testing.T) {
 				Channel: model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"},
 				Intent:  model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "test"},
 			})
-			if err == nil || ref.Error == nil || ref.Error.Code != testCase.code || ref.Error.Retryable != testCase.retryable {
+			if err == nil || ref.Error == nil || ref.Error.Code != testCase.code || ref.Error.Message != testCase.message || ref.Error.Retryable != testCase.retryable {
 				t.Fatalf("ref=%#v err=%v", ref, err)
 			}
 			if strings.Contains(ref.Audit.RequestHeaders, "secret") {

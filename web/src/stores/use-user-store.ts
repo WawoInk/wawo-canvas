@@ -24,23 +24,25 @@ export const useUserStore = create<UserStore>()(
             user: null,
             isReady: false,
             isLoading: false,
-            setSession: (token, user) => set({ token, user, isReady: true }),
-            clearSession: () => set({ token: "", user: null, isReady: true }),
+            setSession: (token, user) => set({ token, user, isReady: true, isLoading: false }),
+            clearSession: () => set({ token: "", user: null, isReady: true, isLoading: false }),
             hydrateUser: async () => {
                 const token = get().token;
                 if (!token) {
-                    set({ user: null, isReady: true });
+                    set({ user: null, isReady: true, isLoading: false });
                     return;
                 }
                 set({ isLoading: true });
                 try {
                     const user = await fetchCurrentUser(token);
+                    if (get().token !== token) return;
                     if (user.role === "guest") {
                         set({ token: "", user: null, isReady: true, isLoading: false });
                         return;
                     }
                     set({ user, isReady: true, isLoading: false });
                 } catch {
+                    if (get().token !== token) return;
                     set({ isReady: true, isLoading: false });
                 }
             },

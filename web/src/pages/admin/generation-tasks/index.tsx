@@ -30,8 +30,29 @@ const taskTypeColors: Record<string, string> = {
 
 export default function AdminGenerationTasksPage() {
     const { t } = useTranslation();
-    const { tasks, keyword, taskType, status, dateRange, page, pageSize, total, isLoading, isDeleting, searchLogs, filterByType, filterByStatus, filterByDateRange, changePage, changePageSize, resetFilters, refreshLogs, fetchDetail, deleteTask, batchDeleteTasks } =
-        useAdminGenerationTasks();
+    const {
+        tasks,
+        keyword,
+        taskType,
+        status,
+        dateRange,
+        page,
+        pageSize,
+        total,
+        isLoading,
+        isDeleting,
+        searchLogs,
+        filterByType,
+        filterByStatus,
+        filterByDateRange,
+        changePage,
+        changePageSize,
+        resetFilters,
+        refreshLogs,
+        fetchDetail,
+        deleteTask,
+        batchDeleteTasks,
+    } = useAdminGenerationTasks();
     const [keywordText, setKeywordText] = useState(keyword);
     const [detail, setDetail] = useState<AdminGenerationTaskDetailResponse | null>(null);
     const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);

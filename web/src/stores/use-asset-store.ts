@@ -130,10 +130,8 @@ export const useAssetStore = create<AssetStore>()(
             },
             removeAssetWithFile: async (id, fileId) => {
                 try {
-                    const token = localStorage.getItem("infinite-canvas-auth-token-v1") || "";
-                    const parsed = JSON.parse(token);
-                    const tokenValue = parsed?.state?.token || "";
-                    await fetch(`/api/v1/files/${encodeURIComponent(fileId)}`, { method: "DELETE", headers: { Authorization: `Bearer ${tokenValue}` } });
+                    const token = useUserStore.getState().token;
+                    if (token) await fetch(`/api/v1/files/${encodeURIComponent(fileId)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
                 } catch {
                     /* 文件删除失败不影响素材删除 */
                 }

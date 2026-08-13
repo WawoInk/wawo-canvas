@@ -44,6 +44,21 @@ description: 后端统一响应信封与结构化生成错误
 - `fieldPath`：命令中的错误字段路径；没有具体字段时可省略。
 - `resourceId`：关联的 Canvas 节点或平台资源 ID；不适用时省略。
 
+视频 Generation Run 会把可判断的上游失败归一为稳定错误码，原始供应商错误只保留在脱敏审计中：
+
+| 错误码 | 含义 |
+| --- | --- |
+| `UPSTREAM_TIMEOUT` | 上游请求或视频生成超时 |
+| `UPSTREAM_RATE_LIMITED` | 上游限流或额度繁忙 |
+| `UPSTREAM_UNAVAILABLE` | 上游服务或网络暂时不可用 |
+| `UPSTREAM_AUTH_FAILED` | 上游认证失败 |
+| `UPSTREAM_PERMISSION_DENIED` | 上游拒绝当前凭据访问 |
+| `UPSTREAM_NOT_FOUND` | 上游任务或生成接口不存在 |
+| `CONTENT_REJECTED` | 内容未通过上游安全审核 |
+| `INVALID_REQUEST` | 生成参数、输入或接口要求不匹配 |
+
+Canvas 还会按已有平台错误码区分 `GENERATION_TIMEOUT`、`TASK_SYNC_TIMEOUT`、`MODEL_CONFIGURATION_INVALID`、`RESULT_PERSIST_FAILED` 和 `RESULT_FILE_MISSING`。客户端收到稳定 `code` 时优先按错误码显示具体原因；旧响应缺少 `retryable` 时按 `false` 处理。
+
 取消、回调等操作错误至少返回稳定的 `data.code`。异步失败通过 `GET /api/v1/generations/{id}` 的任务 `error` 字段返回同一套归一化信息。
 
 第一方生成创建响应丢失时，已认证客户端可调用 `GET /api/v1/generations/client-requests/{clientRequestId}`，按当前用户和幂等请求 ID 找回同一任务。不存在或不属于当前用户时成功响应的 `data` 为 `null`；该查询不会创建新任务或改变任务状态。
