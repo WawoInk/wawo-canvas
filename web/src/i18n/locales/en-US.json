@@ -1597,10 +1597,21 @@
                 },
                 "imageRequestFormats": {
                     "title": "Image request formats",
-                    "description": "Only explicitly configured image models use the selected protocol. Unconfigured models keep the existing default request format.",
+                    "description": "Configure the request format per image model and choose whether My Canvas routes reference images to edits or always uses generations. Unconfigured models keep the existing defaults.",
                     "modelRequired": "Select an image model",
                     "formatRequired": "Select a request format",
                     "formatPlaceholder": "Select a request format",
+                    "options": {
+                        "json": "application/json",
+                        "multipart": "multipart/form-data",
+                        "default": "Default"
+                    },
+                    "canvasModeRequired": "Select a Canvas request mode",
+                    "canvasModePlaceholder": "Select a Canvas request mode",
+                    "canvasModes": {
+                        "split": "Split by input (default)",
+                        "generations": "Always use generations"
+                    },
                     "deleteLabel": "Delete image request format for {{model}}"
                 },
                 "systemPrompt": "System prompt",
@@ -1822,6 +1833,7 @@
             "readFailed": "Failed to read the image",
             "geminiRejected": "Gemini rejected the request: {{reason}}",
             "geminiMaskUnsupported": "The Gemini request format does not support mask editing",
+            "tooManyReferences": "Up to {{max}} reference images are supported",
             "generationFailed": "Image generation failed",
             "asyncCreateMissingTaskId": "Failed to create the asynchronous image task because id was not returned",
             "asyncCreateFailed": "Failed to create the asynchronous image task",

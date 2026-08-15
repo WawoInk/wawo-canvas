@@ -68,9 +68,10 @@ const billingModeOptions: Array<{ labelKey: string; value: VideoBillingMode }> =
     { labelKey: "admin.settings.billing.modes.perCall", value: "per_call" },
 ];
 const billingModeLabelKeys = Object.fromEntries(billingModeOptions.map((item) => [item.value, item.labelKey])) as Record<VideoBillingMode, string>;
-const imageRequestFormatOptions: Array<{ label: string; value: AdminImageRequestFormat["format"] }> = [
-    { label: "application/json", value: "application/json" },
-    { label: "multipart/form-data", value: "multipart/form-data" },
+const imageRequestFormatOptions: Array<{ labelKey: string; value: AdminImageRequestFormat["format"] }> = [
+    { labelKey: "admin.settings.public.imageRequestFormats.options.json", value: "application/json" },
+    { labelKey: "admin.settings.public.imageRequestFormats.options.multipart", value: "multipart/form-data" },
+    { labelKey: "admin.settings.public.imageRequestFormats.options.default", value: "default" },
 ];
 
 type SettingsTabKey = "public" | "private";
@@ -140,6 +141,7 @@ export default function AdminSettingsPage() {
     const activeSelectedCount = activeModelSelectModels.filter((model) => modelSelectSelected.includes(model)).length;
     const generationProfileSelectOptions = generationProfileOptions.map((option) => ({ ...option, label: t(option.labelKey) }));
     const billingModeSelectOptions = billingModeOptions.map((option) => ({ label: t(option.labelKey), value: option.value }));
+    const imageRequestFormatSelectOptions = imageRequestFormatOptions.map((option) => ({ label: t(option.labelKey), value: option.value }));
 
     const loadSettings = async () => {
         if (!token) return;
@@ -577,8 +579,8 @@ export default function AdminSettingsPage() {
                                                     {fields.map(({ key, name, ...restField }) => {
                                                         const currentModel = imageRequestFormats[name]?.model;
                                                         return (
-                                                            <Row key={key} gutter={8} align="middle">
-                                                                <Col xs={24} md={11}>
+                                                            <Row key={key} gutter={[8, 8]} align="middle">
+                                                                <Col xs={24} md={8}>
                                                                     <Form.Item {...restField} name={[name, "model"]} rules={[{ required: true, message: t("admin.settings.public.imageRequestFormats.modelRequired") }]} style={{ marginBottom: 0 }}>
                                                                         <Select
                                                                             showSearch
@@ -587,9 +589,25 @@ export default function AdminSettingsPage() {
                                                                         />
                                                                     </Form.Item>
                                                                 </Col>
-                                                                <Col xs={20} md={11}>
+                                                                <Col xs={24} md={6}>
                                                                     <Form.Item {...restField} name={[name, "format"]} rules={[{ required: true, message: t("admin.settings.public.imageRequestFormats.formatRequired") }]} style={{ marginBottom: 0 }}>
-                                                                        <Select placeholder={t("admin.settings.public.imageRequestFormats.formatPlaceholder")} options={imageRequestFormatOptions} />
+                                                                        <Select placeholder={t("admin.settings.public.imageRequestFormats.formatPlaceholder")} options={imageRequestFormatSelectOptions} />
+                                                                    </Form.Item>
+                                                                </Col>
+                                                                <Col xs={20} md={8}>
+                                                                    <Form.Item
+                                                                        {...restField}
+                                                                        name={[name, "canvasRequestMode"]}
+                                                                        rules={[{ required: true, message: t("admin.settings.public.imageRequestFormats.canvasModeRequired") }]}
+                                                                        style={{ marginBottom: 0 }}
+                                                                    >
+                                                                        <Select
+                                                                            placeholder={t("admin.settings.public.imageRequestFormats.canvasModePlaceholder")}
+                                                                            options={[
+                                                                                { label: t("admin.settings.public.imageRequestFormats.canvasModes.split"), value: "split" },
+                                                                                { label: t("admin.settings.public.imageRequestFormats.canvasModes.generations"), value: "generations" },
+                                                                            ]}
+                                                                        />
                                                                     </Form.Item>
                                                                 </Col>
                                                                 <Col xs={4} md={2}>
@@ -604,7 +622,12 @@ export default function AdminSettingsPage() {
                                                             </Row>
                                                         );
                                                     })}
-                                                    <Button type="dashed" icon={<PlusOutlined />} disabled={!nextImageRequestModel} onClick={() => nextImageRequestModel && add({ model: nextImageRequestModel, format: "application/json" })}>
+                                                    <Button
+                                                        type="dashed"
+                                                        icon={<PlusOutlined />}
+                                                        disabled={!nextImageRequestModel}
+                                                        onClick={() => nextImageRequestModel && add({ model: nextImageRequestModel, format: "default", canvasRequestMode: "split" })}
+                                                    >
                                                         {t("admin.settings.actions.addModel")}
                                                     </Button>
                                                 </Flex>
@@ -1290,7 +1313,9 @@ function normalizePublicSetting(setting: Partial<AdminSettings["public"]> = {}):
             ...(setting.modelChannel || {}),
             availableModels: setting.modelChannel?.availableModels || [],
             modelCosts: normalizeModelCosts(setting.modelChannel?.modelCosts || []),
-            imageRequestFormats: (setting.modelChannel?.imageRequestFormats || []).filter((item) => item?.model && imageRequestFormatOptions.some((option) => option.value === item.format)),
+            imageRequestFormats: (setting.modelChannel?.imageRequestFormats || [])
+                .filter((item) => item?.model && imageRequestFormatOptions.some((option) => option.value === item.format))
+                .map((item) => ({ ...item, canvasRequestMode: item.canvasRequestMode === "generations" ? "generations" : "split" })),
         },
         auth: {
             allowRegister: setting.auth?.allowRegister !== false,

@@ -43,7 +43,7 @@ test("video references keep their preview in the mention menu and chip", async (
     }
 });
 
-test("prompt keeps resource-chip caret and content while expanding and shrinking", async () => {
+test("prompt keeps resource-chip caret and submits only with Shift+Enter", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     let submitted = "";
@@ -89,8 +89,15 @@ test("prompt keeps resource-chip caret and content while expanding and shrinking
     assert.equal(currentRange().startContainer.textContent, "清晰 站在这里");
     assert.equal(currentRange().startOffset, "清晰".length);
 
-    await act(async () => editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    await act(async () => editor.dispatchEvent(enter));
+    assert.equal(submitted, "");
+    assert.equal(enter.defaultPrevented, false);
+
+    const shiftEnter = new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true });
+    await act(async () => editor.dispatchEvent(shiftEnter));
     assert.equal(submitted, "让 图片1清晰 站在这里");
+    assert.equal(shiftEnter.defaultPrevented, true);
 
     await act(async () => root.unmount());
     container.remove();

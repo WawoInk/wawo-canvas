@@ -192,10 +192,64 @@ func TestNormalizeSettingsKeepsExplicitImageRequestFormatsOnly(t *testing.T) {
 	})
 
 	want := []model.ImageRequestFormatSetting{
-		{Model: "json-image", Format: "application/json"},
-		{Model: "multipart-image", Format: "multipart/form-data"},
+		{Model: "json-image", Format: "application/json", CanvasRequestMode: "split"},
+		{Model: "multipart-image", Format: "multipart/form-data", CanvasRequestMode: "split"},
 	}
 	if got := settings.Public.ModelChannel.ImageRequestFormats; !reflect.DeepEqual(got, want) {
+		t.Fatalf("image request formats = %#v, want %#v", got, want)
+	}
+}
+
+func TestNormalizeSettingsKeepsDefaultImageRequestFormat(t *testing.T) {
+	settings := normalizeSettings(model.Settings{
+		Public: model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{
+			ImageModels: []string{"default-image"},
+			ImageRequestFormats: []model.ImageRequestFormatSetting{
+				{Model: "default-image", Format: "default"},
+			},
+		}},
+	})
+
+	want := []model.ImageRequestFormatSetting{
+		{Model: "default-image", Format: "default", CanvasRequestMode: "split"},
+	}
+	if got := settings.Public.ModelChannel.ImageRequestFormats; !reflect.DeepEqual(got, want) {
+		t.Fatalf("image request formats = %#v, want %#v", got, want)
+	}
+}
+
+func TestNormalizeSettingsKeepsCanvasImageRequestModes(t *testing.T) {
+	var settings model.Settings
+	if err := json.Unmarshal([]byte(`{
+		"public": {
+			"modelChannel": {
+				"imageModels": ["split-image", "generation-image", "default-image"],
+				"imageRequestFormats": [
+					{"model": "split-image", "format": "application/json", "canvasRequestMode": "split"},
+					{"model": "generation-image", "format": "multipart/form-data", "canvasRequestMode": "generations"},
+					{"model": "default-image", "format": "application/json", "canvasRequestMode": "unknown"}
+				]
+			}
+		}
+	}`), &settings); err != nil {
+		t.Fatal(err)
+	}
+
+	normalized := normalizeSettings(settings)
+	body, err := json.Marshal(normalized.Public.ModelChannel.ImageRequestFormats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := []map[string]any{
+		{"model": "split-image", "format": "application/json", "canvasRequestMode": "split"},
+		{"model": "generation-image", "format": "multipart/form-data", "canvasRequestMode": "generations"},
+		{"model": "default-image", "format": "application/json", "canvasRequestMode": "split"},
+	}
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("image request formats = %#v, want %#v", got, want)
 	}
 }

@@ -36,8 +36,9 @@ type ModelCost struct {
 }
 
 type ImageRequestFormatSetting struct {
-	Model  string `json:"model"`
-	Format string `json:"format"`
+	Model             string `json:"model"`
+	Format            string `json:"format"`
+	CanvasRequestMode string `json:"canvasRequestMode"`
 }
 
 // PublicModelChannelSetting 公开模型渠道配置。

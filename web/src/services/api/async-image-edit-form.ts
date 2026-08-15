@@ -3,7 +3,7 @@ import type { ImageRequestFormat, ImageRequestFormatSetting } from "@/services/a
 export type AsyncImageEditFields = {
     model: string;
     prompt: string;
-    image: File;
+    image: File | File[];
     n: number;
     size?: string;
     background?: string;
@@ -18,7 +18,8 @@ export function buildAsyncImageEditFormData(fields: AsyncImageEditFields) {
     const formData = new FormData();
     formData.set("model", fields.model);
     formData.set("prompt", fields.prompt);
-    formData.set("image", fields.image);
+    const images = Array.isArray(fields.image) ? fields.image : [fields.image];
+    images.forEach((image) => formData.append("image", image));
     formData.set("n", String(fields.n));
     if (fields.size) formData.set("size", fields.size);
     applyImageBackground(formData, fields.background);
@@ -31,10 +32,11 @@ export function resolveImageRequestFormat(settings: ImageRequestFormatSetting[],
     return format === "application/json" || format === "multipart/form-data" ? format : fallback;
 }
 
-export function buildAsyncImageEditRequest(fields: AsyncImageEditFields, format: ImageRequestFormat, image: string) {
+export function buildAsyncImageEditRequest(fields: AsyncImageEditFields, format: ImageRequestFormat, images: string | string[]) {
     if (format === "application/json") {
         const { image: _file, ...body } = fields;
-        return { body: { ...body, image }, contentType: format };
+        const values = Array.isArray(images) ? images : [images];
+        return { body: { ...body, image: values.length === 1 ? values[0] : values }, contentType: format };
     }
     return { body: buildAsyncImageEditFormData(fields), contentType: undefined };
 }

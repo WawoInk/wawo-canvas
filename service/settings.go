@@ -195,8 +195,12 @@ func normalizeImageRequestFormats(items []model.ImageRequestFormatSetting, image
 	for _, item := range items {
 		item.Model = strings.TrimSpace(item.Model)
 		item.Format = strings.TrimSpace(item.Format)
-		if seen[item.Model] || !allowedModels[item.Model] || (item.Format != "application/json" && item.Format != "multipart/form-data") {
+		item.CanvasRequestMode = strings.TrimSpace(item.CanvasRequestMode)
+		if seen[item.Model] || !allowedModels[item.Model] || (item.Format != "application/json" && item.Format != "multipart/form-data" && item.Format != "default") {
 			continue
+		}
+		if item.CanvasRequestMode != "generations" {
+			item.CanvasRequestMode = "split"
 		}
 		seen[item.Model] = true
 		result = append(result, item)

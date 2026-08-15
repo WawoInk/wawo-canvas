@@ -29,7 +29,7 @@ import {
 } from "@/services/api/generations";
 import { DOCS_URL } from "@/constant/env";
 import { defaultConfig, modelOptionName, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
-import { resolveImageUrl, uploadImage, getImageBlob, type UploadedImage, resolveMediaUrl, type UploadedFile } from "@/services/blob-storage";
+import { resolveImageUrl, uploadImage, type UploadedImage, resolveMediaUrl, type UploadedFile } from "@/services/blob-storage";
 import { uploadBlob, uploadUrlToS3, type UploadResult } from "@/services/upload-blob";
 import { nanoid } from "nanoid";
 import { getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
@@ -42,7 +42,6 @@ import { useUserStore } from "@/stores/use-user-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { resolveFileUrls } from "@/services/resolve-file-urls";
 import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "../utils/canvas-image-data";
-import { findImageEditSourceNode } from "../utils/canvas-image-edit-source";
 import { fitNodeSize, nodeSizeFromRatio } from "../utils/canvas-node-size";
 import { App, Button, Dropdown, Modal } from "antd";
 import { NODE_DEFAULT_SIZE, getNodeSpec } from "../constants";
@@ -2227,7 +2226,7 @@ function InfiniteCanvasPage() {
                         isImageNode && sourceNode?.metadata?.content
                             ? [{ id: sourceNode.id, name: `${sourceNode.title || sourceNode.id}.png`, type: sourceNode.metadata.mimeType || "image/png", dataUrl: sourceNode.metadata.content, storageKey: sourceNode.metadata.storageKey }]
                             : [];
-                    const referenceImages = sourceReference.length ? sourceReference : generationContext.referenceImages;
+                    const referenceImages = [...sourceReference, ...generationContext.referenceImages.filter((image) => image.id !== sourceNode?.id)];
                     const generationType = referenceImages.length ? ("edit" as const) : ("generation" as const);
                     const generationMetadata = buildImageGenerationMetadata(generationType, generationConfig, count, referenceImages);
                     const parentConfig = NODE_DEFAULT_SIZE[isConfigNode ? CanvasNodeType.Config : isImageNode ? CanvasNodeType.Image : CanvasNodeType.Text];
@@ -2323,9 +2322,7 @@ function InfiniteCanvasPage() {
                         targetIds.map(async (targetId) => {
                             try {
                                 const isEdit = generationType === "edit";
-                                const editSourceNode = isEdit ? findImageEditSourceNode(sourceNode, referenceImages, nodesRef.current) : null;
-                                const editImage = await resolveSourceImageFile(editSourceNode);
-                                const task = isEdit && editImage ? await createAsyncImageEditTask({ ...generationConfig, count: "1" }, effectivePrompt, editImage) : await createAsyncImageTask({ ...generationConfig, count: "1" }, effectivePrompt);
+                                const task = isEdit ? await createAsyncImageEditTask({ ...generationConfig, count: "1" }, effectivePrompt, referenceImages) : await createAsyncImageTask({ ...generationConfig, count: "1" }, effectivePrompt);
                                 setNodes((prev) => prev.map((n) => (n.id === targetId ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
                                 pollCanvasImageNode(targetId, task, generationConfig, isConfigNode ? nodeId : undefined, rootId);
                             } catch (error) {
@@ -2652,8 +2649,7 @@ function InfiniteCanvasPage() {
 
                 // ponytail: image retry — async, use edit endpoint when we have reference images
                 const isRetryEdit = generationType === "edit" && retryImages.length > 0;
-                const retryEditImage = isRetryEdit ? await resolveSourceImageFile(sourceNode) : null;
-                const task = isRetryEdit && retryEditImage ? await createAsyncImageEditTask(generationConfig, prompt, retryEditImage) : await createAsyncImageTask(generationConfig, prompt);
+                const task = isRetryEdit ? await createAsyncImageEditTask(generationConfig, prompt, retryImages) : await createAsyncImageTask(generationConfig, prompt);
                 setNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, metadata: { ...n.metadata, upstreamTaskId: task.id, taskModel: task.model } } : n)));
                 void pollCanvasImageNode(node.id, task, generationConfig);
                 return;
@@ -3722,24 +3718,6 @@ function sourceNodeReferenceImages(node: CanvasNodeData | null) {
             storageKey: node.metadata.storageKey,
         },
     ];
-}
-
-/** Resolve an image node's content to a file suitable for the async edit API. */
-async function resolveSourceImageFile(node: CanvasNodeData | null): Promise<File | null> {
-    if (!node || node.type !== CanvasNodeType.Image || !node.metadata?.content) return null;
-    const { content, storageKey, fileId, mimeType } = node.metadata;
-    let blob: Blob | null = storageKey ? await getImageBlob(storageKey) : null;
-    if (!blob && fileId) {
-        const { token, user } = useUserStore.getState();
-        if (token && user?.id) {
-            const session = { token, userId: user.id };
-            const response = await fetch(`/api/v1/files/${encodeURIComponent(fileId)}/content`, { headers: { Authorization: `Bearer ${token}` } });
-            const current = useUserStore.getState();
-            if (isCurrentSession(session, { token: current.token, userId: current.user?.id }) && response.ok) blob = await response.blob();
-        }
-    }
-    if (!blob && (content.startsWith("data:") || content.startsWith("blob:") || /^https?:\/\//i.test(content))) blob = await (await fetch(content)).blob();
-    return blob ? new File([blob], `${node.title || node.id}.${imageExtension(content)}`, { type: blob.type || mimeType || "image/png" }) : null;
 }
 
 function isAudioFile(file: File) {

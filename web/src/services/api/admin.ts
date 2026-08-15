@@ -321,7 +321,8 @@ export type AdminPublicModelChannelSettings = {
 
 export type AdminImageRequestFormat = {
     model: string;
-    format: "application/json" | "multipart/form-data";
+    format: "application/json" | "multipart/form-data" | "default";
+    canvasRequestMode: "split" | "generations";
 };
 
 export type AdminModelCost = {

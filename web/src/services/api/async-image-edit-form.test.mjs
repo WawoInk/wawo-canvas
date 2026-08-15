@@ -12,7 +12,7 @@ test("only sends transparent image backgrounds", () => {
     assert.equal(formData.get("background"), "transparent");
 });
 
-test("builds the async image edit request as multipart form data", () => {
+test("builds the async image edit request as multipart form data", async () => {
     const image = new File(["image-bytes"], "source.png", { type: "image/png" });
     const body = buildAsyncImageEditFormData({
         model: "gpt-image-2",
@@ -24,8 +24,11 @@ test("builds the async image edit request as multipart form data", () => {
     });
 
     assert.ok(body instanceof FormData);
-    assert.equal(body.get("image"), image);
-    assert.ok(body.get("image") instanceof File);
+    const uploadedImage = body.get("image");
+    assert.ok(uploadedImage instanceof File);
+    assert.equal(uploadedImage.name, image.name);
+    assert.equal(uploadedImage.type, image.type);
+    assert.equal(await uploadedImage.text(), await image.text());
     assert.deepEqual(Object.fromEntries([...body].filter(([key]) => key !== "image")), {
         model: "gpt-image-2",
         prompt: "replace the background",
@@ -46,6 +49,23 @@ test("adds transparent background to multipart image edits", () => {
     });
 
     assert.equal(body.get("background"), "transparent");
+});
+
+test("builds multiple multipart image references in order", () => {
+    const first = new File(["first"], "first.png", { type: "image/png" });
+    const second = new File(["second"], "second.png", { type: "image/png" });
+    const body = buildAsyncImageEditFormData({
+        model: "Dola-Seedream-5.0-lite",
+        prompt: "combine references",
+        image: [first, second],
+        n: 1,
+        output_format: "png",
+    });
+
+    assert.deepEqual(
+        body.getAll("image").map((image) => image.name),
+        ["first.png", "second.png"],
+    );
 });
 
 test("builds explicitly configured image edits as application/json", () => {
@@ -75,7 +95,10 @@ test("builds explicitly configured image edits as application/json", () => {
 });
 
 test("only overrides the existing request default for explicitly configured models", () => {
-    const settings = [{ model: "json-image", format: "application/json" }];
+    const settings = [
+        { model: "json-image", format: "application/json" },
+        { model: "default-image", format: "default" },
+    ];
 
     assert.equal(resolveImageRequestFormat(settings, "json-image", "multipart/form-data"), "application/json");
     assert.equal(resolveImageRequestFormat(settings, "default-image", "multipart/form-data"), "multipart/form-data");

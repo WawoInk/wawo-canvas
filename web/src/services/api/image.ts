@@ -3,7 +3,7 @@ import axios from "axios";
 import { buildApiUrl, resolveModelRequestConfig, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 import { nanoid } from "nanoid";
-import { dataUrlToFile, readFileAsDataUrl } from "@/lib/image-utils";
+import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { buildAsyncImageEditRequest, resolveImageRequestFormat } from "@/services/api/async-image-edit-form";
 import { imageBackgroundFields } from "@/services/api/image-background";
@@ -270,6 +270,11 @@ function aiHeaders(config: AiConfig, contentType?: string) {
 
 function configuredImageRequestFormat(config: AiConfig, fallback: ImageRequestFormat) {
     return config.channelMode === "remote" ? resolveImageRequestFormat(config.imageRequestFormats, config.model, fallback) : fallback;
+}
+
+function configuredCanvasImageEditPath(config: AiConfig) {
+    const mode = config.channelMode === "remote" ? config.imageRequestFormats.find((item) => item.model.trim() === config.model.trim())?.canvasRequestMode : undefined;
+    return mode === "generations" ? "/async/images/generations" : "/async/images/edits";
 }
 
 function imageRequestFormData(fields: Record<string, string | number | undefined>) {
@@ -900,6 +905,7 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
 
 export type AsyncImageTask = { id: string; model: string };
 export type AsyncImageTaskState = { status: "pending" } | { status: "succeeded"; images: Array<{ dataUrl: string }> } | { status: "failed"; error: string };
+const MAX_ASYNC_IMAGE_REFERENCES = 9;
 
 export async function createAsyncImageTask(config: AiConfig, prompt: string, count = 1): Promise<AsyncImageTask> {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
@@ -930,27 +936,30 @@ export async function createAsyncImageTask(config: AiConfig, prompt: string, cou
     }
 }
 
-export async function createAsyncImageEditTask(config: AiConfig, prompt: string, image: File, count = 1): Promise<AsyncImageTask> {
+export async function createAsyncImageEditTask(config: AiConfig, prompt: string, references: ReferenceImage[], count = 1): Promise<AsyncImageTask> {
+    if (references.length > MAX_ASYNC_IMAGE_REFERENCES) throw new Error(i18n.t("errors.image.tooManyReferences", { max: MAX_ASYNC_IMAGE_REFERENCES }));
     const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
     const requestSize = resolveRequestSize(normalizeQuality(config.quality), config.size);
     const format = configuredImageRequestFormat(requestConfig, "multipart/form-data");
+    const images = await Promise.all(references.map(imageToDataUrl));
+    const files = format === "multipart/form-data" ? images.map((dataUrl, index) => dataUrlToFile({ ...references[index], dataUrl })) : [];
     const request = buildAsyncImageEditRequest(
         {
             model: requestConfig.model,
             prompt: withSystemPrompt(requestConfig, prompt),
-            image,
+            image: files,
             n,
             ...(requestSize ? { size: requestSize } : {}),
             ...imageBackgroundFields(requestConfig.background),
             output_format: IMAGE_OUTPUT_FORMAT,
         },
         format,
-        format === "application/json" ? await readFileAsDataUrl(image) : "",
+        images,
     );
 
     try {
-        const response = await axios.post<{ id?: string; status?: string; error?: { message?: string } }>(aiApiUrl(requestConfig, "/async/images/edits"), request.body, {
+        const response = await axios.post<{ id?: string; status?: string; error?: { message?: string } }>(aiApiUrl(requestConfig, configuredCanvasImageEditPath(requestConfig)), request.body, {
             headers: { ...aiHeaders(requestConfig, request.contentType), "X-Source": "canvas" },
         });
         const data = response.data;

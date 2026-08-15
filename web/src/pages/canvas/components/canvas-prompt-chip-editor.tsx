@@ -200,7 +200,7 @@ export function CanvasPromptChipEditor({ value, references, onChange, onSubmit, 
                         requestAnimationFrame(syncFromEditor);
                         return;
                     }
-                    if (event.key === "Enter" && onSubmit && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+                    if (event.key === "Enter" && onSubmit && event.shiftKey && !event.ctrlKey && !event.metaKey) {
                         event.preventDefault();
                         onSubmit();
                         return;
