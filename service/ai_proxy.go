@@ -80,15 +80,35 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		proxyFailError(w, err)
 		return
 	}
+	refund := func() {
+		if err := RefundUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
+			proxyAILogf("AI proxy refund credits failed: user=%s model=%s credits=%s err=%v", user.ID, modelName, credits.String(), err)
+		}
+	}
 	proxyCopyAIResponse(w, request,
-		func() {
-			if err := RefundUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
-				proxyAILogf("AI proxy refund credits failed: user=%s model=%s credits=%s err=%v", user.ID, modelName, credits.String(), err)
-			}
-		},
+		refund,
 		func(respBody []byte, respHeaders string) {
 			latencyMs := time.Since(startTime).Milliseconds()
 			upstreamTaskID := ExtractUpstreamTaskID(respBody)
+			if strings.HasPrefix(path, "/async/images/") {
+				task, err := repository.GetGenerationTaskByID(genTaskID)
+				if err == nil {
+					if ref, terminal := asyncImageTaskRef(respBody, upstreamTaskID); terminal {
+						finalizeAsyncImageTask(task, ref, "compatibility-submit", respBody, respHeaders)
+						return
+					}
+					if upstreamTaskID == "" {
+						ref := ProviderTaskRef{Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: "UPSTREAM_INVALID_RESPONSE", Message: "上游未返回图片任务 ID", Retryable: false}}
+						finalizeAsyncImageTask(task, ref, "compatibility-submit", respBody, respHeaders)
+						return
+					}
+				}
+				LogTaskCreated(genTaskID, upstreamTaskID, latencyMs, credits)
+				if err := repository.UpdateGenerationPayload(genTaskID, string(respBody), respHeaders); err != nil {
+					proxyAILogf("AI proxy update async image submit payload failed: task=%s err=%v", genTaskID, err)
+				}
+				return
+			}
 			LogTaskSuccess(genTaskID, respBody, respHeaders, latencyMs, credits, upstreamTaskID)
 		},
 		func(errCode string, errMsg string, rawError string) {
@@ -128,13 +148,112 @@ func ProxyAIGetRequest(w http.ResponseWriter, r *http.Request, path string) {
 			request.Header.Add(key, value)
 		}
 	}
-	proxyCopyAIResponse(w, request, nil, nil, nil)
+	var onSuccess func([]byte, string)
+	if task, ok := asyncImageTaskForPoll(r, path, modelName); ok {
+		onSuccess = func(respBody []byte, respHeaders string) {
+			if ref, terminal := asyncImageTaskRef(respBody, task.UpstreamTaskID); terminal {
+				finalizeAsyncImageTask(task, ref, "compatibility-poll", respBody, respHeaders)
+			}
+		}
+	}
+	proxyCopyAIResponse(w, request, nil, onSuccess, nil)
 }
 
 type upstreamRequest struct {
 	URL     string
 	Headers http.Header
 	Body    []byte
+}
+
+func asyncImageTaskForPoll(r *http.Request, path, modelName string) (model.GenerationTask, bool) {
+	if !strings.HasPrefix(path, "/tasks/") {
+		return model.GenerationTask{}, false
+	}
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		return model.GenerationTask{}, false
+	}
+	upstreamTaskID := strings.TrimSpace(strings.TrimPrefix(path, "/tasks/"))
+	task, err := repository.GetGenerationTaskByUpstreamTaskIDAndUser(upstreamTaskID, user.ID)
+	return task, err == nil && task.TaskType == model.TaskTypeImage && task.Model == modelName && !isTerminalGenerationStatus(task.Status)
+}
+
+func asyncImageTaskRef(body []byte, upstreamTaskID string) (ProviderTaskRef, bool) {
+	var payload struct {
+		Code   json.RawMessage  `json:"code"`
+		Msg    string           `json:"msg"`
+		Status string           `json:"status"`
+		Data   []map[string]any `json:"data"`
+		Result struct {
+			Data []map[string]any `json:"data"`
+		} `json:"result"`
+		Error *struct {
+			Code    json.RawMessage `json:"code"`
+			Message string          `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &payload) != nil {
+		return ProviderTaskRef{}, false
+	}
+	if code := strings.Trim(strings.TrimSpace(string(payload.Code)), `"`); code != "" && code != "0" {
+		return ProviderTaskRef{ID: upstreamTaskID, Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: code, Message: payload.Msg, Retryable: false}}, true
+	}
+	if payload.Error != nil && (len(payload.Error.Code) > 0 || strings.TrimSpace(payload.Error.Message) != "") {
+		code := strings.Trim(strings.TrimSpace(string(payload.Error.Code)), `"`)
+		if code == "" {
+			code = "UPSTREAM_REJECTED"
+		}
+		return ProviderTaskRef{ID: upstreamTaskID, Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: code, Message: payload.Error.Message, Retryable: false}}, true
+	}
+	status := strings.ToLower(strings.TrimSpace(payload.Status))
+	if status == "failed" {
+		message := strings.TrimSpace(payload.Msg)
+		if message == "" {
+			message = "图片生成失败"
+		}
+		return ProviderTaskRef{ID: upstreamTaskID, Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: "UPSTREAM_REJECTED", Message: message, Retryable: false}}, true
+	}
+	if status == "cancelled" || status == "canceled" {
+		return ProviderTaskRef{ID: upstreamTaskID, Status: model.TaskStatusCancelled}, true
+	}
+	imageData := payload.Result.Data
+	if imageData == nil {
+		imageData = payload.Data
+	}
+	if imageData != nil {
+		for _, item := range imageData {
+			if value, ok := item["url"].(string); ok && strings.TrimSpace(value) != "" {
+				return ProviderTaskRef{ID: upstreamTaskID, Status: model.TaskStatusSucceeded}, true
+			}
+			if value, ok := item["b64_json"].(string); ok && strings.TrimSpace(value) != "" {
+				return ProviderTaskRef{ID: upstreamTaskID, Status: model.TaskStatusSucceeded}, true
+			}
+		}
+		return ProviderTaskRef{ID: upstreamTaskID, Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: "RESULT_FILE_MISSING", Message: "上游任务成功但未返回图片结果", Retryable: false}}, true
+	}
+	switch status {
+	case "completed", "succeeded", "success":
+		return ProviderTaskRef{ID: upstreamTaskID, Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: "RESULT_FILE_MISSING", Message: "上游任务成功但未返回图片结果", Retryable: false}}, true
+	default:
+		return ProviderTaskRef{}, false
+	}
+}
+
+func finalizeAsyncImageTask(task model.GenerationTask, ref ProviderTaskRef, source string, body []byte, headers string) {
+	if err := repository.UpdateGenerationPayload(task.ID, string(body), headers); err != nil {
+		proxyAILogf("AI proxy update async image payload failed: task=%s err=%v", task.ID, err)
+	}
+	if ref.Status == model.TaskStatusFailed || ref.Status == model.TaskStatusCancelled {
+		if err := repository.UpdateGenerationPayloadRawError(task.ID, string(body)); err != nil {
+			proxyAILogf("AI proxy update async image error failed: task=%s err=%v", task.ID, err)
+		}
+	}
+	if createdAt, err := time.Parse(time.RFC3339Nano, task.CreatedAt); err == nil {
+		_ = repository.UpdateGenerationTask(task.ID, map[string]any{"latency_ms": time.Since(createdAt).Milliseconds()})
+	}
+	if err := arbitrateGenerationTerminalFrom(task, task.Model, ref, source, "", true, []model.TaskStatus{model.TaskStatusQueued, model.TaskStatusPending, model.TaskStatusRunning}); err != nil {
+		proxyAILogf("AI proxy finalize async image task failed: task=%s err=%v", task.ID, err)
+	}
 }
 
 // resolveUpstreamRequest 按渠道协议构造上游请求。

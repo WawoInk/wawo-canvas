@@ -42,6 +42,108 @@ func TestReadAIRequestMultipart(t *testing.T) {
 	}
 }
 
+func TestProxyAsyncImageFailureRefundsAndFinalizesTask(t *testing.T) {
+	const upstreamTaskID = "async-image-failed"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost {
+			_, _ = w.Write([]byte(`{"id":"` + upstreamTaskID + `","status":"queued"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"` + upstreamTaskID + `","status":"failed","error":{"code":"INVALID_IMAGE_SIZE","message":"image size must be at least 2K"}}`))
+	}))
+	defer upstream.Close()
+
+	previousSettings, err := repository.GetSettings()
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	defer func() {
+		_, _ = repository.SaveSettings(previousSettings, time.Now().UTC().Format(time.RFC3339Nano))
+	}()
+
+	key := uuid.NewString()
+	modelName := "Dola-Seedream-5.0-lite-" + key
+	settings := previousSettings
+	settings.Private.Channels = append(settings.Private.Channels, model.ModelChannel{
+		Name: "async-image-" + key, Protocol: "openai", BaseURL: upstream.URL, APIKey: "secret",
+		Enabled: true, Weight: 1, Models: []string{modelName},
+	})
+	settings.Public.ModelChannel.ImageModels = append(settings.Public.ModelChannel.ImageModels, modelName)
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: modelName, Credits: credit(2)})
+	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatalf("save settings: %v", err)
+	}
+
+	userID := "async-image-user-" + key
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := repository.SaveUser(model.User{ID: userID, Username: "async-image-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: credit(10), CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatalf("save user: %v", err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/async/images/generations", strings.NewReader(`{"model":"`+modelName+`","prompt":"test","size":"1024x1024","n":1}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Source", string(model.SourceCanvas))
+	request = request.WithContext(WithUser(request.Context(), model.AuthUser{ID: userID}))
+	response := httptest.NewRecorder()
+	ProxyAIRequest(response, request, "/async/images/generations")
+
+	taskID := response.Header().Get("X-Generation-Task-Id")
+	if response.Code != http.StatusOK || taskID == "" {
+		t.Fatalf("submit response = %d %s, taskID = %q", response.Code, response.Body.String(), taskID)
+	}
+
+	pollRequest := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+upstreamTaskID+"?model="+modelName, nil)
+	pollRequest = pollRequest.WithContext(WithUser(pollRequest.Context(), model.AuthUser{ID: userID}))
+	pollResponse := httptest.NewRecorder()
+	ProxyAIGetRequest(pollResponse, pollRequest, "/tasks/"+upstreamTaskID)
+	if pollResponse.Code != http.StatusOK {
+		t.Fatalf("poll response = %d %s", pollResponse.Code, pollResponse.Body.String())
+	}
+	repeatedPollRequest := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+upstreamTaskID+"?model="+modelName, nil)
+	repeatedPollRequest = repeatedPollRequest.WithContext(WithUser(repeatedPollRequest.Context(), model.AuthUser{ID: userID}))
+	ProxyAIGetRequest(httptest.NewRecorder(), repeatedPollRequest, "/tasks/"+upstreamTaskID)
+
+	task, err := repository.GetGenerationTaskByID(taskID)
+	if err != nil || task.TaskType != model.TaskTypeImage || task.Source != string(model.SourceCanvas) || task.Provider != "openai" ||
+		task.Model != modelName || !task.Credits.Equal(credit(2)) || task.Status != model.TaskStatusFailed || task.UpstreamTaskID != upstreamTaskID ||
+		task.ErrorCode != "INVALID_IMAGE_SIZE" || !strings.Contains(task.ErrorMessage, "at least 2K") {
+		t.Fatalf("task = %#v, err = %v", task, err)
+	}
+	user, ok, err := repository.GetUserByID(userID)
+	if err != nil || !ok || !user.Credits.Equal(credit(10)) {
+		t.Fatalf("user = %#v, ok = %v, err = %v", user, ok, err)
+	}
+	logs, _, err := repository.ListCreditLogsByUserID(userID, model.Query{PageSize: 20})
+	consumeCount, refundCount := 0, 0
+	for _, log := range logs {
+		if log.TaskID != taskID {
+			continue
+		}
+		switch log.Type {
+		case model.CreditLogTypeAIConsume:
+			consumeCount++
+		case model.CreditLogTypeAIRefund:
+			refundCount++
+		}
+	}
+	if err != nil || len(logs) != 2 || consumeCount != 1 || refundCount != 1 {
+		t.Fatalf("credit logs = %#v, err = %v", logs, err)
+	}
+	payload, err := repository.GetGenerationPayloadByTaskID(taskID)
+	if err != nil || !strings.Contains(payload.RequestBody, "1024x1024") || !strings.Contains(payload.ResponseBody, `"status":"failed"`) ||
+		!strings.Contains(payload.ResponseHeaders, "Content-Type") || !strings.Contains(payload.RawError, "at least 2K") {
+		t.Fatalf("payload = %#v, err = %v", payload, err)
+	}
+}
+
+func TestAsyncImageTaskRefAcceptsTopLevelImageData(t *testing.T) {
+	ref, terminal := asyncImageTaskRef([]byte(`{"model":"Images","data":[{"url":"https://example.com/result.png"}]}`), "images-task")
+	if !terminal || ref.ID != "images-task" || ref.Status != model.TaskStatusSucceeded || ref.Error != nil {
+		t.Fatalf("ref = %#v, terminal = %v", ref, terminal)
+	}
+}
+
 func TestProxyVideoTaskCreateChargesBoundViduByUpstreamCredits(t *testing.T) {
 	requestedModels := make(chan string, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
