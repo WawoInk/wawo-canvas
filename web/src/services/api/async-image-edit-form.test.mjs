@@ -94,6 +94,32 @@ test("builds explicitly configured image edits as application/json", () => {
     });
 });
 
+test("builds default Images edits with image_url references", () => {
+    const image = new File(["image-bytes"], "source.png", { type: "image/png" });
+    const request = buildAsyncImageEditRequest(
+        {
+            model: "Images",
+            prompt: "将背景换成蓝色",
+            image,
+            n: 1,
+            size: "1024x1024",
+            output_format: "png",
+        },
+        "application/json",
+        "data:image/png;base64,aW1hZ2UtYnl0ZXM=",
+    );
+
+    assert.equal(request.contentType, "application/json");
+    assert.deepEqual(request.body, {
+        model: "Images",
+        prompt: "将背景换成蓝色",
+        images: [{ image_url: "data:image/png;base64,aW1hZ2UtYnl0ZXM=" }],
+        n: 1,
+        size: "1024x1024",
+        output_format: "png",
+    });
+});
+
 test("only overrides the existing request default for explicitly configured models", () => {
     const settings = [
         { model: "json-image", format: "application/json" },

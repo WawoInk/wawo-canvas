@@ -1773,6 +1773,7 @@ function InfiniteCanvasPage() {
                 data: {
                     dataUrl,
                     storageKey: node.metadata.storageKey,
+                    fileId: node.metadata.fileId,
                     width: node.metadata.naturalWidth || node.width,
                     height: node.metadata.naturalHeight || node.height,
                     bytes: node.metadata.bytes || getDataUrlByteSize(dataUrl),
@@ -1906,7 +1907,7 @@ function InfiniteCanvasPage() {
             const userPrompt = payload.prompt.trim();
             const prompt = t("canvas.editor.prompts.maskEdit", { prompt: userPrompt });
             const childId = nanoid();
-            const source = { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey };
+            const source = { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey, fileId: node.metadata.fileId };
             const generationMetadata = buildImageGenerationMetadata("edit", generationConfig, 1, [source]);
             setMaskEditNodeId(null);
             setRunningNodeId(childId);
@@ -1986,7 +1987,7 @@ function InfiniteCanvasPage() {
             const title = buildAngleLabel(params);
             const prompt = buildAnglePrompt(params);
             const generationMetadata = buildImageGenerationMetadata("edit", generationConfig, 1, [
-                { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey },
+                { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey, fileId: node.metadata.fileId },
             ]);
             setAngleNodeId(null);
             setRunningNodeId(childId);
@@ -2010,7 +2011,7 @@ function InfiniteCanvasPage() {
                 const image = await requestEdit(
                     generationConfig,
                     prompt,
-                    [{ id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey }],
+                    [{ id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey, fileId: node.metadata.fileId }],
                     undefined,
                     { signal: controller.signal },
                 ).then((items) => items[0]);
@@ -2224,7 +2225,16 @@ function InfiniteCanvasPage() {
                     const isEmptyImageNode = isImageNode && !sourceNode?.metadata?.content;
                     const sourceReference =
                         isImageNode && sourceNode?.metadata?.content
-                            ? [{ id: sourceNode.id, name: `${sourceNode.title || sourceNode.id}.png`, type: sourceNode.metadata.mimeType || "image/png", dataUrl: sourceNode.metadata.content, storageKey: sourceNode.metadata.storageKey }]
+                            ? [
+                                  {
+                                      id: sourceNode.id,
+                                      name: `${sourceNode.title || sourceNode.id}.png`,
+                                      type: sourceNode.metadata.mimeType || "image/png",
+                                      dataUrl: sourceNode.metadata.content,
+                                      storageKey: sourceNode.metadata.storageKey,
+                                      fileId: sourceNode.metadata.fileId,
+                                  },
+                              ]
                             : [];
                     const referenceImages = [...sourceReference, ...generationContext.referenceImages.filter((image) => image.id !== sourceNode?.id)];
                     const generationType = referenceImages.length ? ("edit" as const) : ("generation" as const);
@@ -3716,6 +3726,7 @@ function sourceNodeReferenceImages(node: CanvasNodeData | null) {
             type: node.metadata.mimeType || "image/png",
             dataUrl: node.metadata.content,
             storageKey: node.metadata.storageKey,
+            fileId: node.metadata.fileId,
         },
     ];
 }

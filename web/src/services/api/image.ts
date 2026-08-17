@@ -5,7 +5,7 @@ import { useUserStore } from "@/stores/use-user-store";
 import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
-import { buildAsyncImageEditRequest, resolveImageRequestFormat } from "@/services/api/async-image-edit-form";
+import { buildAsyncImageEditRequest, imageEditReferenceFields, resolveImageRequestFormat } from "@/services/api/async-image-edit-form";
 import { imageBackgroundFields } from "@/services/api/image-background";
 import type { ImageRequestFormat } from "@/services/api/settings";
 import { imageToDataUrl } from "@/services/blob-storage";
@@ -66,6 +66,7 @@ type ResponseStreamState = { buffer: string; text: string; payload?: ResponseApi
 
 type ImageApiResponse = {
     data?: Array<Record<string, unknown>>;
+    result?: { data?: Array<Record<string, unknown>> };
     error?: { message?: string };
     code?: number;
     msg?: string;
@@ -213,15 +214,15 @@ function resolveImageDataUrl(item: Record<string, unknown>) {
     return null;
 }
 
+function parseImageDataUrls(items?: Array<Record<string, unknown>>) {
+    return (items || []).map(resolveImageDataUrl).filter((value): value is string => Boolean(value));
+}
+
 function parseImagePayload(payload: ImageApiResponse) {
     if (typeof payload.code === "number" && payload.code !== 0) {
         throw new Error(payload.msg || i18n.t("errors.requestFailed"));
     }
-    const images =
-        payload.data
-            ?.map(resolveImageDataUrl)
-            .filter((value): value is string => Boolean(value))
-            .map((dataUrl) => ({ id: nanoid(), dataUrl })) || [];
+    const images = parseImageDataUrls(payload.data).map((dataUrl) => ({ id: nanoid(), dataUrl }));
 
     if (images.length === 0) {
         throw new Error(i18n.t("errors.image.noImageReturned"));
@@ -291,6 +292,18 @@ function imageRequestBody(fields: Record<string, string | number | undefined>, f
 
 function imageRequestHeaders(config: AiConfig, format: ImageRequestFormat) {
     return aiHeaders(config, format === "application/json" ? format : undefined);
+}
+
+async function referenceImageToFile(image: ReferenceImage) {
+    if (!image.fileId) return dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) });
+    const token = useUserStore.getState().token;
+    const response = await fetch(`/api/v1/files/${encodeURIComponent(image.fileId)}/content`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!response.ok || response.headers.get("content-type")?.includes("application/json")) throw new Error(i18n.t("errors.image.readFailed"));
+    const blob = await response.blob();
+    if (!blob.size) throw new Error(i18n.t("errors.image.readFailed"));
+    return new File([blob], image.name || "reference.png", { type: blob.type || image.type || "image/png" });
 }
 
 function geminiBaseUrl(config: Pick<AiConfig, "baseUrl">) {
@@ -859,12 +872,12 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
         const images = await Promise.all(references.map(imageToDataUrl));
         body = {
             ...fields,
-            image: images.length === 1 ? images[0] : images,
+            ...imageEditReferenceFields(requestConfig.model, images),
             ...(mask ? { mask: await imageToDataUrl(mask) } : {}),
         };
     } else {
         const formData = imageRequestFormData(fields);
-        const files = await Promise.all(references.map(async (image) => dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) })));
+        const files = await Promise.all(references.map(referenceImageToFile));
         files.forEach((file) => formData.append("image", file));
         if (mask) formData.set("mask", dataUrlToFile(mask));
         body = formData;
@@ -903,9 +916,18 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
 
 // ── Async Image Generation ──────────────────────────────────────────
 
-export type AsyncImageTask = { id: string; model: string };
+export type AsyncImageTask = { id: string; model: string; images?: Array<{ dataUrl: string }> };
 export type AsyncImageTaskState = { status: "pending" } | { status: "succeeded"; images: Array<{ dataUrl: string }> } | { status: "failed"; error: string };
 const MAX_ASYNC_IMAGE_REFERENCES = 9;
+
+function readAsyncImageTask(data: ImageApiResponse & { id?: string }, headers: Record<string, unknown>, model: string, missingId: string): AsyncImageTask {
+    if (typeof data.code === "number" && data.code !== 0) throw new Error(data.msg || i18n.t("errors.requestFailed"));
+    if (data.error?.message) throw new Error(data.error.message);
+    const images = parseImageDataUrls(data.result?.data ?? data.data).map((dataUrl) => ({ dataUrl }));
+    if (images.length) return { id: data.id || String(headers["x-generation-task-id"] || ""), model, images };
+    if (!data.id) throw new Error(missingId);
+    return { id: data.id, model };
+}
 
 export async function createAsyncImageTask(config: AiConfig, prompt: string, count = 1): Promise<AsyncImageTask> {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
@@ -924,13 +946,10 @@ export async function createAsyncImageTask(config: AiConfig, prompt: string, cou
     };
 
     try {
-        const response = await axios.post<{ id?: string; status?: string; error?: { message?: string } }>(aiApiUrl(requestConfig, "/async/images/generations"), imageRequestBody(body, format), {
+        const response = await axios.post<ImageApiResponse & { id?: string; status?: string }>(aiApiUrl(requestConfig, "/async/images/generations"), imageRequestBody(body, format), {
             headers: { ...imageRequestHeaders(requestConfig, format), "X-Source": "canvas" },
         });
-        const data = response.data;
-        if (data.error?.message) throw new Error(data.error.message);
-        if (!data.id) throw new Error(i18n.t("errors.image.asyncCreateMissingTaskId"));
-        return { id: data.id, model: requestConfig.model };
+        return readAsyncImageTask(response.data, response.headers, requestConfig.model, i18n.t("errors.image.asyncCreateMissingTaskId"));
     } catch (error) {
         throw new Error(readAxiosError(error, i18n.t("errors.image.asyncCreateFailed")));
     }
@@ -942,8 +961,8 @@ export async function createAsyncImageEditTask(config: AiConfig, prompt: string,
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
     const requestSize = resolveRequestSize(normalizeQuality(config.quality), config.size);
     const format = configuredImageRequestFormat(requestConfig, "multipart/form-data");
-    const images = await Promise.all(references.map(imageToDataUrl));
-    const files = format === "multipart/form-data" ? images.map((dataUrl, index) => dataUrlToFile({ ...references[index], dataUrl })) : [];
+    const images = format === "application/json" ? await Promise.all(references.map(imageToDataUrl)) : [];
+    const files = format === "multipart/form-data" ? await Promise.all(references.map(referenceImageToFile)) : [];
     const request = buildAsyncImageEditRequest(
         {
             model: requestConfig.model,
@@ -959,19 +978,17 @@ export async function createAsyncImageEditTask(config: AiConfig, prompt: string,
     );
 
     try {
-        const response = await axios.post<{ id?: string; status?: string; error?: { message?: string } }>(aiApiUrl(requestConfig, configuredCanvasImageEditPath(requestConfig)), request.body, {
+        const response = await axios.post<ImageApiResponse & { id?: string; status?: string }>(aiApiUrl(requestConfig, configuredCanvasImageEditPath(requestConfig)), request.body, {
             headers: { ...aiHeaders(requestConfig, request.contentType), "X-Source": "canvas" },
         });
-        const data = response.data;
-        if (data.error?.message) throw new Error(data.error.message);
-        if (!data.id) throw new Error(i18n.t("errors.image.asyncEditMissingTaskId"));
-        return { id: data.id, model: requestConfig.model };
+        return readAsyncImageTask(response.data, response.headers, requestConfig.model, i18n.t("errors.image.asyncEditMissingTaskId"));
     } catch (error) {
         throw new Error(readAxiosError(error, i18n.t("errors.image.asyncEditFailed")));
     }
 }
 
 export async function pollAsyncImageTask(config: AiConfig, task: AsyncImageTask, options?: RequestOptions): Promise<AsyncImageTaskState> {
+    if (task.images?.length) return { status: "succeeded", images: task.images };
     const requestConfig = resolveModelRequestConfig(config, task.model);
     try {
         const response = await axios.get<{
@@ -993,10 +1010,7 @@ export async function pollAsyncImageTask(config: AiConfig, task: AsyncImageTask,
         if (body.status === "failed" || body.status === "cancelled") return { status: "failed", error: body.error?.message || i18n.t("errors.image.generationFailed") };
         const imageData = body.result?.data ?? body.data;
         if (body.status === "completed" || imageData) {
-            const images = (imageData || [])
-                .map(resolveImageDataUrl)
-                .filter((dataUrl): dataUrl is string => Boolean(dataUrl))
-                .map((dataUrl) => ({ dataUrl }));
+            const images = parseImageDataUrls(imageData).map((dataUrl) => ({ dataUrl }));
             if (!images.length) return { status: "failed", error: i18n.t("errors.image.taskSucceededWithoutImage") };
             return { status: "succeeded", images };
         }

@@ -4,6 +4,7 @@ import { test } from "node:test";
 import axios from "axios";
 
 import { defaultConfig } from "../../stores/use-config-store.ts";
+import { useUserStore } from "../../stores/use-user-store.ts";
 import { createAsyncImageEditTask, pollAsyncImageTask } from "./image.ts";
 
 test("canvas image edits can use the generations endpoint with the image payload", async () => {
@@ -50,6 +51,141 @@ test("canvas image edits can use the generations endpoint with the image payload
         });
         assert.equal(request.options.headers["X-Source"], "canvas");
     } finally {
+        axios.post = previousPost;
+    }
+});
+
+test("canvas default image edits upload stored image bytes", async () => {
+    const previousPost = axios.post;
+    const previousFetch = globalThis.fetch;
+    const previousToken = useUserStore.getState().token;
+    let request;
+    let downloadRequest;
+    axios.post = async (url, body, options) => {
+        request = { url, body, options };
+        return { data: { id: "task-images" } };
+    };
+    globalThis.fetch = async (input, init) => {
+        downloadRequest = { input: String(input), init };
+        return new Response(new Blob(["image-bytes"], { type: "image/png" }), { status: 200, headers: { "Content-Type": "image/png" } });
+    };
+    useUserStore.setState({ token: "test-token" });
+
+    const model = "Images";
+    try {
+        await createAsyncImageEditTask(
+            {
+                ...defaultConfig,
+                channelMode: "remote",
+                model,
+                imageModel: model,
+                size: "1024x1024",
+                imageRequestFormats: [{ model, format: "default", canvasRequestMode: "split" }],
+            },
+            "替换背景",
+            [{ id: "image-1", name: "reference.png", type: "image/png", dataUrl: "https://example.test/presigned.png", fileId: "file-1" }],
+        );
+
+        assert.equal(request.url, "/api/v1/async/images/edits");
+        assert.ok(request.body instanceof FormData);
+        const uploadedImage = request.body.get("image");
+        assert.ok(uploadedImage instanceof File);
+        assert.equal(await uploadedImage.text(), "image-bytes");
+        assert.equal(downloadRequest.input, "/api/v1/files/file-1/content");
+        assert.equal(new Headers(downloadRequest.init.headers).get("Authorization"), "Bearer test-token");
+    } finally {
+        useUserStore.setState({ token: previousToken });
+        globalThis.fetch = previousFetch;
+        axios.post = previousPost;
+    }
+});
+
+test("canvas accepts completed b64_json responses from async image edits", async () => {
+    const previousPost = axios.post;
+    const previousGet = axios.get;
+    let queried = false;
+    axios.post = async () => ({
+        data: {
+            data: [{ b64_json: "aW1hZ2UtYnl0ZXM=" }],
+            model: "gpt-image-2",
+            output_format: "png",
+        },
+        headers: { "x-generation-task-id": "generation-task-1" },
+    });
+    axios.get = async () => {
+        queried = true;
+        throw new Error("completed responses must not be polled");
+    };
+
+    const model = "Images";
+    try {
+        const task = await createAsyncImageEditTask(
+            {
+                ...defaultConfig,
+                channelMode: "remote",
+                model,
+                imageModel: model,
+                imageRequestFormats: [{ model, format: "default", canvasRequestMode: "split" }],
+            },
+            "替换背景",
+            [{ id: "image-1", name: "reference.png", type: "image/png", dataUrl: "data:image/png;base64,aW1hZ2U=" }],
+        );
+
+        assert.equal(task.id, "generation-task-1");
+        assert.deepEqual(await pollAsyncImageTask(defaultConfig, task), {
+            status: "succeeded",
+            images: [{ dataUrl: "data:image/png;base64,aW1hZ2UtYnl0ZXM=" }],
+        });
+        assert.equal(queried, false);
+    } finally {
+        axios.get = previousGet;
+        axios.post = previousPost;
+    }
+});
+
+test("canvas accepts completed result.data url responses from async image edits", async () => {
+    const previousPost = axios.post;
+    const previousGet = axios.get;
+    let queried = false;
+    const imageUrl = "https://example.test/generated.png";
+    axios.post = async () => ({
+        data: {
+            id: "task-result-url",
+            object: "task",
+            status: "completed",
+            result: {
+                model: "seedream-5-0-260128",
+                data: [{ url: imageUrl, size: "2048x2048" }],
+            },
+        },
+    });
+    axios.get = async () => {
+        queried = true;
+        throw new Error("completed responses must not be polled");
+    };
+
+    const model = "Images";
+    try {
+        const task = await createAsyncImageEditTask(
+            {
+                ...defaultConfig,
+                channelMode: "remote",
+                model,
+                imageModel: model,
+                imageRequestFormats: [{ model, format: "default", canvasRequestMode: "split" }],
+            },
+            "替换背景",
+            [{ id: "image-1", name: "reference.png", type: "image/png", dataUrl: "data:image/png;base64,aW1hZ2U=" }],
+        );
+
+        assert.equal(task.id, "task-result-url");
+        assert.deepEqual(await pollAsyncImageTask(defaultConfig, task), {
+            status: "succeeded",
+            images: [{ dataUrl: imageUrl }],
+        });
+        assert.equal(queried, false);
+    } finally {
+        axios.get = previousGet;
         axios.post = previousPost;
     }
 });

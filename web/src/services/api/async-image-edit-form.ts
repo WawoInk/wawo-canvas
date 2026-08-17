@@ -32,11 +32,15 @@ export function resolveImageRequestFormat(settings: ImageRequestFormatSetting[],
     return format === "application/json" || format === "multipart/form-data" ? format : fallback;
 }
 
+export function imageEditReferenceFields(model: string, images: string[]) {
+    return model.trim() === "Images" ? { images: images.map((image_url) => ({ image_url })) } : { image: images.length === 1 ? images[0] : images };
+}
+
 export function buildAsyncImageEditRequest(fields: AsyncImageEditFields, format: ImageRequestFormat, images: string | string[]) {
     if (format === "application/json") {
         const { image: _file, ...body } = fields;
         const values = Array.isArray(images) ? images : [images];
-        return { body: { ...body, image: values.length === 1 ? values[0] : values }, contentType: format };
+        return { body: { ...body, ...imageEditReferenceFields(fields.model, values) }, contentType: format };
     }
     return { body: buildAsyncImageEditFormData(fields), contentType: undefined };
 }

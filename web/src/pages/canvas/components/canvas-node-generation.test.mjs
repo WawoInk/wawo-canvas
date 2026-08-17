@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import i18n from "@/i18n";
-import { buildShortDramaGenerationIntent, buildVideoGenerationIntent, cleanShortDramaAssetMappings, locateGenerationError, prepareFirstPartyCanvasVideoRun } from "./canvas-node-generation.ts";
+import { buildNodeGenerationContext, buildShortDramaGenerationIntent, buildVideoGenerationIntent, cleanShortDramaAssetMappings, locateGenerationError, prepareFirstPartyCanvasVideoRun } from "./canvas-node-generation.ts";
 
 const image = {
     id: "image-1",
@@ -15,6 +15,13 @@ const image = {
     },
 };
 const videoTarget = { id: "video-1", type: "video", title: "输出视频", metadata: {} };
+
+test("keeps uploaded file IDs in Canvas image references", () => {
+    const target = { id: "image-target", type: "image", title: "输出图片", metadata: {} };
+    const context = buildNodeGenerationContext("image-target", [image, target], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "image-target" }], "替换背景");
+
+    assert.equal(context.referenceImages[0].fileId, "file-image-1");
+});
 
 test("compiles Canvas media and settings as a first-party intent", () => {
     const settings = { aspectRatio: "9:16", resolution: "1080p", durationSeconds: 10, generateAudio: false, watermark: true };
