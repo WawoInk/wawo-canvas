@@ -82,6 +82,8 @@ Canvas 还会按已有平台错误码区分 `GENERATION_TIMEOUT`、`TASK_SYNC_TI
 
 管理后台使用日志 `GET /api/admin/generation-tasks` 同样支持 `start_time/end_time` 日期闭区间筛选。前端日期范围会按本地首日开始时间和末日结束时间转换为 ISO 时间戳。
 
+管理员可对失败或已取消且缺少退款流水的任务调用 `POST /api/admin/generation-tasks/{id}/refund`，请求体为 `{ "reason": "..." }`。服务端从该任务的 `ai_consume` 流水取得实际退款金额并以 `ai_refund` 写回原扣费账号；任务 ID 已退款时重复调用不重复入账，运行中任务、无消费流水任务和空原因请求会被拒绝。详情接口 `GET /api/admin/generation-tasks/{id}` 返回 `canRepairRefund`，用于控制后台操作入口。
+
 `/api/auth/login` 和 `/api/auth/me` 的公开用户信息可包含 `enterpriseId`、`enterpriseName`、`enterpriseRole` 和 `enterpriseStatus`。企业范围由服务端当前用户推导，不接受客户端提交企业 ID 来切换身份。
 
 当前登录用户使用以下接口维护自己的账户，用户名、平台角色、积分和企业身份不能通过这些接口修改：

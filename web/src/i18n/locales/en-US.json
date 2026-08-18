@@ -1372,7 +1372,8 @@
             },
             "actions": {
                 "deleteSelected_one": "Delete selected ({{value}})",
-                "deleteSelected_other": "Delete selected ({{value}})"
+                "deleteSelected_other": "Delete selected ({{value}})",
+                "repairRefund": "Repair refund"
             },
             "delete": {
                 "title": "Confirm deletion",
@@ -1398,7 +1399,10 @@
                 "error": "Error",
                 "requestBody": "Request body",
                 "responseBody": "Response body",
-                "rawError": "Raw error"
+                "rawError": "Raw error",
+                "refundReason": "Repair reason",
+                "refundReasonPlaceholder": "Enter the reason for this refund repair",
+                "refundReasonRequired": "Enter a repair reason"
             },
             "values": {
                 "seconds": "{{value}} sec",
@@ -1410,7 +1414,9 @@
                 "batchDeleted_one": "Deleted {{value}} record",
                 "batchDeleted_other": "Deleted {{value}} records",
                 "batchDeleteFailed": "Bulk delete failed",
-                "loadFailed": "Failed to load logs"
+                "loadFailed": "Failed to load logs",
+                "refundRepaired": "Refund repaired",
+                "refundRepairFailed": "Refund repair failed"
             }
         },
         "assets": {

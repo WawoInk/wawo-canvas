@@ -160,12 +160,30 @@ func UpdateGenerationTaskMetadata(w http.ResponseWriter, r *http.Request, id str
 // AdminGetGenerationTaskDetail GET /api/admin/generation-tasks/:id — 管理员查看任意任务详情（含 Payload）。
 func AdminGetGenerationTaskDetail(w http.ResponseWriter, r *http.Request, id string) {
 	includePayload := r.URL.Query().Get("include_payload") == "true"
-	task, payload, err := service.AdminGetTaskDetail(id, includePayload)
+	task, payload, canRepairRefund, err := service.AdminGetTaskDetail(id, includePayload)
 	if err != nil {
 		FailError(w, err)
 		return
 	}
-	OK(w, map[string]any{"task": task, "payload": payload})
+	OK(w, map[string]any{"task": task, "payload": payload, "canRepairRefund": canRepairRefund})
+}
+
+// AdminRepairGenerationTaskRefund POST /api/admin/generation-tasks/:id/refund — 管理员补发缺失退款。
+func AdminRepairGenerationTaskRefund(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := service.AdminRepairGenerationTaskRefund(id, user.ID, body.Reason); err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, true)
 }
 
 // AdminDeleteGenerationTask DELETE /api/admin/generation-tasks/:id — 管理员删除单条任务。

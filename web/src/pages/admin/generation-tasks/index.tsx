@@ -1,6 +1,6 @@
 "use client";
 
-import { DeleteOutlined, EyeOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EyeOutlined, ReloadOutlined, RollbackOutlined, SearchOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { Button, Card, Col, DatePicker, Form, Input, Modal, Row, Select, Space, Tag, Tooltip, Typography } from "antd";
 import type { Dayjs } from "dayjs";
@@ -41,6 +41,7 @@ export default function AdminGenerationTasksPage() {
         total,
         isLoading,
         isDeleting,
+        isRefunding,
         searchLogs,
         filterByType,
         filterByStatus,
@@ -52,10 +53,12 @@ export default function AdminGenerationTasksPage() {
         fetchDetail,
         deleteTask,
         batchDeleteTasks,
+        refundTask,
     } = useAdminGenerationTasks();
     const [keywordText, setKeywordText] = useState(keyword);
     const [detail, setDetail] = useState<AdminGenerationTaskDetailResponse | null>(null);
     const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+    const [refundForm] = Form.useForm<{ reason: string }>();
 
     const handleDelete = (item: AdminGenerationTask) => {
         Modal.confirm({
@@ -86,8 +89,26 @@ export default function AdminGenerationTasksPage() {
     useEffect(() => setKeywordText(keyword), [keyword]);
 
     const openDetail = async (task: AdminGenerationTask) => {
+        refundForm.resetFields();
         const result = await fetchDetail(task.id);
         setDetail(result);
+    };
+
+    const closeDetail = () => {
+        setDetail(null);
+        refundForm.resetFields();
+    };
+
+    const repairRefund = async () => {
+        if (!detail) return;
+        try {
+            const { reason } = await refundForm.validateFields();
+            await refundTask(detail.task.id, reason);
+            setDetail((current) => (current ? { ...current, canRepairRefund: false } : current));
+            refundForm.resetFields();
+        } catch {
+            return;
+        }
     };
 
     const columns: ProColumns<AdminGenerationTask>[] = [
@@ -316,7 +337,23 @@ export default function AdminGenerationTasksPage() {
                 />
             </Space>
 
-            <Modal title={t("admin.generationTasks.detail.title")} open={Boolean(detail)} width={800} footer={null} onCancel={() => setDetail(null)} destroyOnHidden>
+            <Modal
+                title={t("admin.generationTasks.detail.title")}
+                open={Boolean(detail)}
+                width={800}
+                footer={
+                    detail?.canRepairRefund ? (
+                        <Space style={{ width: "100%", justifyContent: "flex-end" }}>
+                            <Button onClick={closeDetail}>{t("admin.common.actions.close")}</Button>
+                            <Button type="primary" icon={<RollbackOutlined />} loading={isRefunding} onClick={() => void repairRefund()}>
+                                {t("admin.generationTasks.actions.repairRefund")}
+                            </Button>
+                        </Space>
+                    ) : null
+                }
+                onCancel={closeDetail}
+                destroyOnHidden
+            >
                 {detail && (
                     <Space orientation="vertical" size={12} style={{ width: "100%" }}>
                         <Row gutter={24}>
@@ -447,6 +484,13 @@ export default function AdminGenerationTasksPage() {
                                     </>
                                 )}
                             </>
+                        )}
+                        {detail.canRepairRefund && (
+                            <Form form={refundForm} layout="vertical">
+                                <Form.Item name="reason" label={t("admin.generationTasks.detail.refundReason")} rules={[{ required: true, message: t("admin.generationTasks.detail.refundReasonRequired") }]}>
+                                    <Input.TextArea rows={3} maxLength={200} showCount placeholder={t("admin.generationTasks.detail.refundReasonPlaceholder")} />
+                                </Form.Item>
+                            </Form>
                         )}
                     </Space>
                 )}

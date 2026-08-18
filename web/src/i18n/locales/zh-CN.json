@@ -1372,7 +1372,8 @@
             },
             "actions": {
                 "deleteSelected_one": "删除选中（{{value}}）",
-                "deleteSelected_other": "删除选中（{{value}}）"
+                "deleteSelected_other": "删除选中（{{value}}）",
+                "repairRefund": "补发退款"
             },
             "delete": {
                 "title": "确认删除",
@@ -1398,7 +1399,10 @@
                 "error": "错误信息",
                 "requestBody": "请求体",
                 "responseBody": "响应体",
-                "rawError": "原始错误"
+                "rawError": "原始错误",
+                "refundReason": "补发原因",
+                "refundReasonPlaceholder": "请输入本次补发原因",
+                "refundReasonRequired": "请输入补发原因"
             },
             "values": {
                 "seconds": "{{value}} 秒",
@@ -1410,7 +1414,9 @@
                 "batchDeleted_one": "已删除 {{value}} 条记录",
                 "batchDeleted_other": "已删除 {{value}} 条记录",
                 "batchDeleteFailed": "批量删除失败",
-                "loadFailed": "读取日志失败"
+                "loadFailed": "读取日志失败",
+                "refundRepaired": "退款已补发",
+                "refundRepairFailed": "补发退款失败"
             }
         },
         "assets": {

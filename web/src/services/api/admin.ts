@@ -201,6 +201,7 @@ export type AdminGenerationTaskDetailResponse = {
         responseBody: string;
         rawError: string;
     } | null;
+    canRepairRefund: boolean;
 };
 
 export async function fetchAdminGenerationTasks(token: string, query: AdminGenerationTaskQuery = {}) {
@@ -209,6 +210,10 @@ export async function fetchAdminGenerationTasks(token: string, query: AdminGener
 
 export async function fetchAdminGenerationTaskDetail(token: string, id: string) {
     return apiGet<AdminGenerationTaskDetailResponse>(`/api/admin/generation-tasks/${encodeURIComponent(id)}?include_payload=true`, undefined, token);
+}
+
+export async function refundAdminGenerationTask(token: string, id: string, reason: string) {
+    return apiPost<boolean>(`/api/admin/generation-tasks/${encodeURIComponent(id)}/refund`, { reason }, token);
 }
 
 export async function deleteAdminGenerationTask(token: string, id: string): Promise<boolean> {

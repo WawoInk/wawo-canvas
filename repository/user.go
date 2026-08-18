@@ -206,6 +206,17 @@ func ApplyUserCreditLog(userID string, amount model.Decimal, log model.CreditLog
 	return user, applied, err
 }
 
+// HasTaskCreditLog 判断任务是否已有指定类型的积分流水。
+func HasTaskCreditLog(taskID string, logType model.CreditLogType) (bool, error) {
+	db, err := DB()
+	if err != nil {
+		return false, err
+	}
+	var total int64
+	err = db.Model(&model.CreditLog{}).Where("task_id = ? AND type = ?", taskID, logType).Count(&total).Error
+	return total > 0, err
+}
+
 func discountedUserCredits(tx *gorm.DB, user model.User, credits model.Decimal) (model.Decimal, error) {
 	if !credits.IsPositive() || user.EnterpriseID == nil {
 		return credits, nil

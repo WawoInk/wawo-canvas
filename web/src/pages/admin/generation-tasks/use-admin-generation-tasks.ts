@@ -7,7 +7,7 @@ import type { Dayjs } from "dayjs";
 import { useTranslation } from "react-i18next";
 
 import { formatNumber } from "@/i18n/formatters";
-import { fetchAdminGenerationTasks, fetchAdminGenerationTaskDetail, deleteAdminGenerationTask, batchDeleteAdminGenerationTasks, type AdminGenerationTask } from "@/services/api/admin";
+import { batchDeleteAdminGenerationTasks, deleteAdminGenerationTask, fetchAdminGenerationTaskDetail, fetchAdminGenerationTasks, refundAdminGenerationTask, type AdminGenerationTask } from "@/services/api/admin";
 import { useUserStore } from "@/stores/use-user-store";
 
 const defaultPageSize = 10;
@@ -79,6 +79,21 @@ export function useAdminGenerationTasks() {
         },
     });
 
+    const refundMutation = useMutation({
+        mutationFn: ({ id, reason }: { id: string; reason: string }) => refundAdminGenerationTask(token, id, reason),
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ["admin", "generation-tasks"] }),
+                queryClient.invalidateQueries({ queryKey: ["admin", "generation-task-detail"] }),
+                queryClient.invalidateQueries({ queryKey: ["admin", "credit-logs"] }),
+            ]);
+            message.success(t("admin.generationTasks.messages.refundRepaired"));
+        },
+        onError: (error: Error) => {
+            message.error(error.message || t("admin.generationTasks.messages.refundRepairFailed"));
+        },
+    });
+
     return {
         tasks: data?.items || [],
         keyword,
@@ -110,6 +125,8 @@ export function useAdminGenerationTasks() {
         },
         deleteTask: (id: string) => deleteMutation.mutate(id),
         batchDeleteTasks: (ids: string[]) => batchDeleteMutation.mutate(ids),
+        refundTask: (id: string, reason: string) => refundMutation.mutateAsync({ id, reason }),
         isDeleting: deleteMutation.isPending || batchDeleteMutation.isPending,
+        isRefunding: refundMutation.isPending,
     };
 }

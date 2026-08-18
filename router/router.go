@@ -233,6 +233,9 @@ func New() *gin.Engine {
 	admin.GET("/generation-tasks/:id", func(c *gin.Context) {
 		handler.AdminGetGenerationTaskDetail(c.Writer, c.Request, c.Param("id"))
 	})
+	admin.POST("/generation-tasks/:id/refund", func(c *gin.Context) {
+		handler.AdminRepairGenerationTaskRefund(c.Writer, c.Request, c.Param("id"))
+	})
 	admin.DELETE("/generation-tasks/:id", func(c *gin.Context) {
 		handler.AdminDeleteGenerationTask(c.Writer, c.Request, c.Param("id"))
 	})

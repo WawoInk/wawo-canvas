@@ -271,20 +271,76 @@ func GetUserTaskDetail(taskID string, userID string, includePayload bool) (model
 }
 
 // AdminGetTaskDetail 管理员查看任务详情（无用户过滤，可含 Payload）。
-func AdminGetTaskDetail(taskID string, includePayload bool) (model.GenerationTask, *model.GenerationPayload, error) {
+func AdminGetTaskDetail(taskID string, includePayload bool) (model.GenerationTask, *model.GenerationPayload, bool, error) {
 	task, err := repository.GetGenerationTaskByID(taskID)
 	if err != nil {
-		return model.GenerationTask{}, nil, err
+		return model.GenerationTask{}, nil, false, err
 	}
 	setGenerationTaskDisplayName(&task)
+	canRepairRefund, err := canRepairGenerationTaskRefund(task)
+	if err != nil {
+		return model.GenerationTask{}, nil, false, err
+	}
 	if !includePayload {
-		return task, nil, nil
+		return task, nil, canRepairRefund, nil
 	}
 	payload, err := repository.GetGenerationPayloadByTaskID(taskID)
 	if err != nil {
-		return task, nil, nil
+		return task, nil, canRepairRefund, nil
 	}
-	return task, &payload, nil
+	return task, &payload, canRepairRefund, nil
+}
+
+// AdminRepairGenerationTaskRefund 补发失败或取消任务缺失的退款。
+func AdminRepairGenerationTaskRefund(taskID, actorID, reason string) error {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return safeMessageError{message: "补发原因不能为空"}
+	}
+	task, err := repository.GetGenerationTaskByID(taskID)
+	if err != nil {
+		return err
+	}
+	if task.Status != model.TaskStatusFailed && task.Status != model.TaskStatusCancelled {
+		return safeMessageError{message: "仅失败或已取消任务可补发退款"}
+	}
+	refunded, err := repository.HasTaskCreditLog(taskID, model.CreditLogTypeAIRefund)
+	if err != nil || refunded {
+		return err
+	}
+	consumed, err := repository.HasTaskCreditLog(taskID, model.CreditLogTypeAIConsume)
+	if err != nil {
+		return err
+	}
+	if !consumed {
+		return safeMessageError{message: "任务没有可补发的扣费流水"}
+	}
+	_, ok, err := repository.ApplyUserCreditLog(task.UserID, model.DecimalZero, model.CreditLog{
+		ID:        newID("credit"),
+		TaskID:    task.ID,
+		Type:      model.CreditLogTypeAIRefund,
+		RelatedID: actorID,
+		Remark:    "管理员补发退款：" + reason,
+	}, now())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return safeMessageError{message: "用户不存在"}
+	}
+	return nil
+}
+
+func canRepairGenerationTaskRefund(task model.GenerationTask) (bool, error) {
+	if task.Status != model.TaskStatusFailed && task.Status != model.TaskStatusCancelled {
+		return false, nil
+	}
+	consumed, err := repository.HasTaskCreditLog(task.ID, model.CreditLogTypeAIConsume)
+	if err != nil || !consumed {
+		return false, err
+	}
+	refunded, err := repository.HasTaskCreditLog(task.ID, model.CreditLogTypeAIRefund)
+	return !refunded, err
 }
 
 func setGenerationTaskDisplayNames(tasks []model.GenerationTask) {
