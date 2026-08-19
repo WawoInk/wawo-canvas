@@ -137,6 +137,158 @@ func TestProxyAsyncImageFailureRefundsAndFinalizesTask(t *testing.T) {
 	}
 }
 
+func TestAsyncImageSuccessWaitsForMaterializedFileMetadata(t *testing.T) {
+	key := uuid.NewString()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	user, err := SaveUser(model.User{ID: "async-image-pending-user-" + key, Username: "async-image-pending-" + key, AffCode: "async-image-pending-aff-" + key, Credits: credit(5)}, "password")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	task := model.GenerationTask{
+		ID: "async-image-pending-" + key, UserID: user.ID, TaskType: model.TaskTypeImage,
+		Status: model.TaskStatusRunning, Source: string(model.SourceImageWorkbench), Model: "image-model",
+		Credits: credit(2), CreatedAt: now, UpdatedAt: now,
+	}
+	if err := repository.CreateGenerationTask(task, model.GenerationPayload{ID: "async-image-pending-payload-" + key, CreatedAt: now}); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	if err := ConsumeUserCreditsWithTask(user.ID, task.Model, task.Credits, "/api/v1/async/images/generations", task.ID); err != nil {
+		t.Fatalf("consume task credits: %v", err)
+	}
+
+	finalizeAsyncImageTask(task, ProviderTaskRef{ID: "upstream-" + key, Status: model.TaskStatusSucceeded}, "poll", []byte(`{"data":[{"url":"https://example.com/image.png"}]}`), "")
+	pending, err := repository.GetGenerationTaskByID(task.ID)
+	if err != nil || pending.Status != model.TaskStatusPending {
+		t.Fatalf("task after upstream success = %#v, err=%v; want pending", pending, err)
+	}
+	fileID := "file-materialized-" + key
+	if err := repository.CreateUserFile(model.UserFile{
+		ID: fileID, UserID: user.ID, FileType: "results/images",
+		S3Key: "results/images/" + fileID + ".png", MimeType: "image/png", CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("create materialized file: %v", err)
+	}
+	if err := UpdateTaskMetadata(task.ID, user.ID, `{"fileIds":["`+fileID+`"],"width":1024,"height":1024}`); err != nil {
+		t.Fatalf("materialize metadata: %v", err)
+	}
+	stored, err := repository.GetGenerationTaskByID(task.ID)
+	if err != nil || stored.Status != model.TaskStatusSuccess || !strings.Contains(stored.Metadata, fileID) {
+		t.Fatalf("task after materialization = %#v, err=%v", stored, err)
+	}
+}
+
+func TestAsyncImageMetadataRequiresMaterializedUserFile(t *testing.T) {
+	key := uuid.NewString()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	user, err := SaveUser(model.User{ID: "async-image-file-user-" + key, Username: "async-image-file-" + key, AffCode: "async-image-file-aff-" + key, Credits: credit(5)}, "password")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	task := model.GenerationTask{
+		ID: "async-image-file-task-" + key, UserID: user.ID, TaskType: model.TaskTypeImage,
+		Status: model.TaskStatusPending, Model: "image-model", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := repository.CreateGenerationTask(task, model.GenerationPayload{ID: "async-image-file-payload-" + key, CreatedAt: now}); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	if err := UpdateTaskMetadata(task.ID, user.ID, `{"fileIds":["missing-file"],"width":1024,"height":1024}`); err == nil {
+		t.Fatal("metadata update succeeded for a missing materialized file")
+	}
+	stored, err := repository.GetGenerationTaskByID(task.ID)
+	if err != nil || stored.Status != model.TaskStatusPending {
+		t.Fatalf("task after invalid materialization = %#v, err=%v; want pending", stored, err)
+	}
+}
+
+func TestAsyncImageServerTimeoutRefundsRunningTask(t *testing.T) {
+	key := uuid.NewString()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	user, err := SaveUser(model.User{ID: "async-image-timeout-user-" + key, Username: "async-image-timeout-" + key, AffCode: "async-image-timeout-aff-" + key, Credits: credit(5)}, "password")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	task := model.GenerationTask{
+		ID: "async-image-timeout-" + key, UserID: user.ID, TaskType: model.TaskTypeImage,
+		Status: model.TaskStatusRunning, Model: "image-model", UpstreamTaskID: "upstream-" + key,
+		Credits: credit(2), CreatedAt: now, UpdatedAt: now,
+	}
+	if err := repository.CreateGenerationTask(task, model.GenerationPayload{ID: "async-image-timeout-payload-" + key, CreatedAt: now}); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	if err := ConsumeUserCreditsWithTask(user.ID, task.Model, task.Credits, "/api/v1/async/images/generations", task.ID); err != nil {
+		t.Fatalf("consume task credits: %v", err)
+	}
+
+	scheduleAsyncImageTaskTimeout(task.ID, time.Millisecond)
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		stored, getErr := repository.GetGenerationTaskByID(task.ID)
+		if getErr == nil && stored.Status == model.TaskStatusFailed {
+			if stored.ErrorCode != "TASK_SYNC_TIMEOUT" {
+				t.Fatalf("timeout error code = %q", stored.ErrorCode)
+			}
+			refreshed, ok, getErr := repository.GetUserByID(user.ID)
+			if getErr != nil || !ok || !refreshed.Credits.Equal(credit(5)) {
+				t.Fatalf("credits after timeout = %#v, ok=%v, err=%v", refreshed, ok, getErr)
+			}
+			return
+		}
+		time.Sleep(time.Millisecond * 10)
+	}
+	t.Fatalf("task did not settle by server timeout")
+}
+
+func TestAsyncImageServerTimeoutRefundsPendingTaskOnce(t *testing.T) {
+	key := uuid.NewString()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	user, err := SaveUser(model.User{ID: "async-image-pending-timeout-user-" + key, Username: "async-image-pending-timeout-" + key, AffCode: "async-image-pending-timeout-aff-" + key, Credits: credit(5)}, "password")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	task := model.GenerationTask{
+		ID: "async-image-pending-timeout-" + key, UserID: user.ID, TaskType: model.TaskTypeImage,
+		Status: model.TaskStatusPending, Model: "image-model", UpstreamTaskID: "upstream-" + key,
+		Credits: credit(2), CreatedAt: now, UpdatedAt: now,
+	}
+	if err := repository.CreateGenerationTask(task, model.GenerationPayload{ID: "async-image-pending-timeout-payload-" + key, CreatedAt: now}); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	if err := ConsumeUserCreditsWithTask(user.ID, task.Model, task.Credits, "/api/v1/async/images/generations", task.ID); err != nil {
+		t.Fatalf("consume task credits: %v", err)
+	}
+
+	scheduleAsyncImageTaskTimeout(task.ID, time.Millisecond)
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		stored, getErr := repository.GetGenerationTaskByID(task.ID)
+		if getErr == nil && stored.Status == model.TaskStatusFailed {
+			if stored.ErrorCode != "TASK_SYNC_TIMEOUT" {
+				t.Fatalf("timeout error code = %q", stored.ErrorCode)
+			}
+			refreshed, ok, getErr := repository.GetUserByID(user.ID)
+			if getErr != nil || !ok || !refreshed.Credits.Equal(credit(5)) {
+				t.Fatalf("credits after timeout = %#v, ok=%v, err=%v", refreshed, ok, getErr)
+			}
+			scheduleAsyncImageTaskTimeout(task.ID, time.Millisecond)
+			time.Sleep(time.Millisecond * 20)
+			logs, _, logErr := repository.ListCreditLogsByUserID(user.ID, model.Query{PageSize: 20})
+			refunds := 0
+			for _, log := range logs {
+				if log.TaskID == task.ID && log.Type == model.CreditLogTypeAIRefund {
+					refunds++
+				}
+			}
+			if logErr != nil || refunds != 1 {
+				t.Fatalf("refund logs = %d, err=%v; want 1", refunds, logErr)
+			}
+			return
+		}
+		time.Sleep(time.Millisecond * 10)
+	}
+	t.Fatalf("pending task did not settle by server timeout")
+}
+
 func TestAsyncImageTaskRefAcceptsTopLevelImageData(t *testing.T) {
 	ref, terminal := asyncImageTaskRef([]byte(`{"model":"Images","data":[{"url":"https://example.com/result.png"}]}`), "images-task")
 	if !terminal || ref.ID != "images-task" || ref.Status != model.TaskStatusSucceeded || ref.Error != nil {

@@ -21,9 +21,10 @@ import { boolConfig, normalizeSeedanceRatio, seedanceReferenceLabel, SEEDANCE_RE
 import { deleteStoredMedia, getMediaBlob, resolveMediaUrl, uploadMediaFile, resolveImageUrl, uploadImage } from "@/services/blob-storage";
 import { uploadBlob, uploadUrlToS3 } from "@/services/upload-blob";
 import { resolveFileUrls } from "@/services/resolve-file-urls";
-import { patchGenerationTaskMetadata, recordGenerationTask } from "@/services/api/generation-tasks";
+import { recordGenerationTask } from "@/services/api/generation-tasks";
 import { cancelVideoGenerationTask, createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, type VideoGenerationTask } from "@/services/api/video";
 import { fetchVideoHistory, deleteGenerationTask, type VideoHistoryItem } from "@/services/api/generation-tasks";
+import { completeVideoWorkbenchTask, createVideoWorkbenchTask } from "./video-async-task";
 import { syncClient } from "@/services/sync-client";
 import { syncScheduler } from "@/services/sync-scheduler";
 import { useAssetStore } from "@/stores/use-asset-store";
@@ -69,7 +70,7 @@ type GenerationLog = {
     resolution: string;
     seconds: string;
     status: "pending" | "success" | "failed";
-    task?: VideoGenerationTask;
+    task?: VideoGenerationTask & { platformTaskId?: string };
     video?: GeneratedVideo;
     error?: string;
 };
@@ -236,7 +237,11 @@ export default function VideoPage() {
         const batchStartedAt = performance.now();
         setStartedAt(batchStartedAt);
         try {
-            const task = await createVideoGenerationTask(snapshot.config, snapshot.text, snapshot.references, snapshot.videoReferences, snapshot.audioReferences);
+            const created =
+                snapshot.config.channelMode === "remote"
+                    ? await createVideoWorkbenchTask(snapshot.config, snapshot.text, snapshot.references, snapshot.videoReferences, snapshot.audioReferences)
+                    : { platformTaskId: "", upstreamTask: await createVideoGenerationTask(snapshot.config, snapshot.text, snapshot.references, snapshot.videoReferences, snapshot.audioReferences) };
+            const task = { ...created.upstreamTask, ...(created.platformTaskId ? { platformTaskId: created.platformTaskId } : {}) };
             const log = buildLog({ prompt: snapshot.text, model, config: snapshot.config, references: snapshot.references, videoReferences: snapshot.videoReferences, audioReferences: snapshot.audioReferences, durationMs: 0, status: "pending", task });
             await saveLog(log);
             void pollGenerationLog(log, snapshot.config);
@@ -417,12 +422,6 @@ export default function VideoPage() {
                 /* non-blocking */
             }
         }
-        // Sync video task result metadata (fileIds) to backend for presigned URL refresh
-        const videos = [log.video].filter(Boolean);
-        const fileIds = videos.map((v) => v?.fileId).filter((id): id is string => Boolean(id));
-        if (fileIds.length) {
-            await patchGenerationTaskMetadata(log.id, JSON.stringify({ fileIds })).catch(() => {});
-        }
         await refreshLogs();
     };
 
@@ -494,7 +493,7 @@ export default function VideoPage() {
         };
         // Rebuild polling task from upstreamTaskId so pending tasks resume after refresh
         if (isPending && item.upstreamTaskId) {
-            log.task = { id: item.upstreamTaskId, model: item.model };
+            log.task = { id: item.upstreamTaskId, model: item.model, platformTaskId: item.id };
         }
         return log;
     }
@@ -515,6 +514,25 @@ export default function VideoPage() {
         setResults((value) => (value.length ? value : [{ id: log.id, status: "pending" }]));
         const taskConfig = buildVideoConfig({ ...effectiveConfig, ...log.config }, log.task.model || log.model);
         try {
+            if (taskConfig.channelMode === "remote" && log.task.platformTaskId) {
+                const nextVideo = await completeVideoWorkbenchTask(
+                    { platformTaskId: log.task.platformTaskId, upstreamTask: log.task },
+                    {
+                        resolveFile: async (fileId) => {
+                            const url = (await resolveFileUrls([fileId])).get(fileId);
+                            if (!url) throw new Error(t("errors.video.emptyResult"));
+                            return { id: fileId, url, fileId, storageKey: "", durationMs: Date.now() - log.createdAt, width: 1280, height: 720, bytes: 0, mimeType: "video/mp4" };
+                        },
+                        sleep: () => delay(5000, abortController.signal),
+                    },
+                );
+                setResults([{ id: nextVideo.id, status: "success", video: nextVideo }]);
+                const completedLog = { ...log, status: "success" as const, durationMs: nextVideo.durationMs, video: nextVideo, error: undefined };
+                await saveLog(completedLog);
+                setLogs((prev) => prev.map((item) => (item.id === log.id ? completedLog : item)));
+                message.success(t("videoWorkbench.results.generated"));
+                return;
+            }
             for (let attempt = 0; attempt < 120; attempt += 1) {
                 const state = await pollVideoGenerationTask(configOverride || taskConfig, log.task, { signal: abortController.signal });
                 if (state.status === "completed") {
