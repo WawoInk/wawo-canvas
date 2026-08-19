@@ -116,6 +116,12 @@ type ChatCompletionPayload = {
 type ChatStreamState = { buffer: string; text: string; toolCalls: Map<number, { id: string; name: string; args: string }>; error?: string };
 type RequestOptions = { signal?: AbortSignal };
 
+function responseHeader(headers: unknown, name: string) {
+    if (!headers || typeof headers !== "object") return "";
+    const value = "get" in headers && typeof headers.get === "function" ? headers.get(name) : (headers as Record<string, unknown>)[name];
+    return typeof value === "string" ? value : "";
+}
+
 const QUALITY_BASE: Record<string, number> = {
     low: 1024,
     medium: 2048,
@@ -916,20 +922,20 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
 
 // ── Async Image Generation ──────────────────────────────────────────
 
-export type AsyncImageTask = { id: string; model: string; images?: Array<{ dataUrl: string }> };
+export type AsyncImageTask = { id: string; model: string; images?: Array<{ dataUrl: string }>; platformTaskId?: string };
 export type AsyncImageTaskState = { status: "pending" } | { status: "succeeded"; images: Array<{ dataUrl: string }> } | { status: "failed"; error: string };
 const MAX_ASYNC_IMAGE_REFERENCES = 9;
 
-function readAsyncImageTask(data: ImageApiResponse & { id?: string }, headers: Record<string, unknown>, model: string, missingId: string): AsyncImageTask {
+function readAsyncImageTask(data: ImageApiResponse & { id?: string }, headers: unknown, model: string, missingId: string): AsyncImageTask {
     if (typeof data.code === "number" && data.code !== 0) throw new Error(data.msg || i18n.t("errors.requestFailed"));
     if (data.error?.message) throw new Error(data.error.message);
     const images = parseImageDataUrls(data.result?.data ?? data.data).map((dataUrl) => ({ dataUrl }));
-    if (images.length) return { id: data.id || String(headers["x-generation-task-id"] || ""), model, images };
+    if (images.length) return { id: data.id || responseHeader(headers, "x-generation-task-id"), model, images };
     if (!data.id) throw new Error(missingId);
     return { id: data.id, model };
 }
 
-export async function createAsyncImageTask(config: AiConfig, prompt: string, count = 1): Promise<AsyncImageTask> {
+export async function createAsyncImageTask(config: AiConfig, prompt: string, count = 1, source = "canvas"): Promise<AsyncImageTask> {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
     const quality = normalizeQuality(config.quality);
@@ -947,15 +953,17 @@ export async function createAsyncImageTask(config: AiConfig, prompt: string, cou
 
     try {
         const response = await axios.post<ImageApiResponse & { id?: string; status?: string }>(aiApiUrl(requestConfig, "/async/images/generations"), imageRequestBody(body, format), {
-            headers: { ...imageRequestHeaders(requestConfig, format), "X-Source": "canvas" },
+            headers: { ...imageRequestHeaders(requestConfig, format), "X-Source": source },
         });
-        return readAsyncImageTask(response.data, response.headers, requestConfig.model, i18n.t("errors.image.asyncCreateMissingTaskId"));
+        const task = readAsyncImageTask(response.data, response.headers, requestConfig.model, i18n.t("errors.image.asyncCreateMissingTaskId"));
+        const platformTaskId = responseHeader(response.headers, "x-generation-task-id");
+        return platformTaskId ? { ...task, platformTaskId } : task;
     } catch (error) {
         throw new Error(readAxiosError(error, i18n.t("errors.image.asyncCreateFailed")));
     }
 }
 
-export async function createAsyncImageEditTask(config: AiConfig, prompt: string, references: ReferenceImage[], count = 1): Promise<AsyncImageTask> {
+export async function createAsyncImageEditTask(config: AiConfig, prompt: string, references: ReferenceImage[], count = 1, source = "canvas"): Promise<AsyncImageTask> {
     if (references.length > MAX_ASYNC_IMAGE_REFERENCES) throw new Error(i18n.t("errors.image.tooManyReferences", { max: MAX_ASYNC_IMAGE_REFERENCES }));
     const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
@@ -979,9 +987,11 @@ export async function createAsyncImageEditTask(config: AiConfig, prompt: string,
 
     try {
         const response = await axios.post<ImageApiResponse & { id?: string; status?: string }>(aiApiUrl(requestConfig, configuredCanvasImageEditPath(requestConfig)), request.body, {
-            headers: { ...aiHeaders(requestConfig, request.contentType), "X-Source": "canvas" },
+            headers: { ...aiHeaders(requestConfig, request.contentType), "X-Source": source },
         });
-        return readAsyncImageTask(response.data, response.headers, requestConfig.model, i18n.t("errors.image.asyncEditMissingTaskId"));
+        const task = readAsyncImageTask(response.data, response.headers, requestConfig.model, i18n.t("errors.image.asyncEditMissingTaskId"));
+        const platformTaskId = responseHeader(response.headers, "x-generation-task-id");
+        return platformTaskId ? { ...task, platformTaskId } : task;
     } catch (error) {
         throw new Error(readAxiosError(error, i18n.t("errors.image.asyncEditFailed")));
     }
@@ -1005,9 +1015,9 @@ export async function pollAsyncImageTask(config: AiConfig, task: AsyncImageTask,
         });
         const body = response.data;
         // ponytail: backend wraps errors; unwrap before inspecting task fields
-        if (typeof body.code === "number" && body.code !== 0) return { status: "failed", error: body.msg || i18n.t("errors.image.taskQueryFailed") };
-        if (body.error?.message) return { status: "failed", error: body.error.message };
         if (body.status === "failed" || body.status === "cancelled") return { status: "failed", error: body.error?.message || i18n.t("errors.image.generationFailed") };
+        if (typeof body.code === "number" && body.code !== 0) throw new Error(body.msg || i18n.t("errors.image.taskQueryFailed"));
+        if (body.error?.message) throw new Error(body.error.message);
         const imageData = body.result?.data ?? body.data;
         if (body.status === "completed" || imageData) {
             const images = parseImageDataUrls(imageData).map((dataUrl) => ({ dataUrl }));

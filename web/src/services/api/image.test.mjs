@@ -5,7 +5,135 @@ import axios from "axios";
 
 import { defaultConfig } from "../../stores/use-config-store.ts";
 import { useUserStore } from "../../stores/use-user-store.ts";
-import { createAsyncImageEditTask, pollAsyncImageTask } from "./image.ts";
+import { createAsyncImageEditTask, createAsyncImageTask, pollAsyncImageTask } from "./image.ts";
+
+test("workbench image generations preserve source and platform task identity", async () => {
+    const previousPost = axios.post;
+    let request;
+    axios.post = async (url, body, options) => {
+        request = { url, body, options };
+        return {
+            data: { id: "upstream-task-7" },
+            headers: new axios.AxiosHeaders({ "x-generation-task-id": "platform-task-42" }),
+        };
+    };
+
+    const model = "Images";
+    try {
+        const task = await createAsyncImageTask(
+            {
+                ...defaultConfig,
+                channelMode: "remote",
+                model,
+                imageModel: model,
+            },
+            "画一座灯塔",
+            1,
+            "image_workbench",
+        );
+
+        assert.equal(request.options.headers["X-Source"], "image_workbench");
+        assert.deepEqual(task, {
+            id: "upstream-task-7",
+            model,
+            platformTaskId: "platform-task-42",
+        });
+    } finally {
+        axios.post = previousPost;
+    }
+});
+
+test("workbench image edits preserve source and platform task identity", async () => {
+    const previousPost = axios.post;
+    let request;
+    axios.post = async (url, body, options) => {
+        request = { url, body, options };
+        return {
+            data: { id: "upstream-edit-8" },
+            headers: { "x-generation-task-id": "platform-edit-43" },
+        };
+    };
+
+    const model = "Images";
+    try {
+        const task = await createAsyncImageEditTask(
+            {
+                ...defaultConfig,
+                channelMode: "remote",
+                model,
+                imageModel: model,
+            },
+            "把天空改成晚霞",
+            [{ id: "reference-1", name: "reference.png", type: "image/png", dataUrl: "data:image/png;base64,aW1hZ2U=" }],
+            1,
+            "image_workbench",
+        );
+
+        assert.equal(request.options.headers["X-Source"], "image_workbench");
+        assert.deepEqual(task, {
+            id: "upstream-edit-8",
+            model,
+            platformTaskId: "platform-edit-43",
+        });
+    } finally {
+        axios.post = previousPost;
+    }
+});
+
+test("workbench immediate results keep upstream and platform ids separate with AxiosHeaders", async () => {
+    const previousPost = axios.post;
+    axios.post = async () => ({
+        data: { data: [{ url: "https://provider.test/immediate.png" }] },
+        headers: new axios.AxiosHeaders({ "x-generation-task-id": "platform-immediate-44" }),
+    });
+
+    const model = "Images";
+    try {
+        const task = await createAsyncImageTask(
+            {
+                ...defaultConfig,
+                channelMode: "remote",
+                model,
+                imageModel: model,
+            },
+            "立即返回一张图",
+            1,
+            "image_workbench",
+        );
+
+        assert.deepEqual(task, {
+            id: "platform-immediate-44",
+            model,
+            platformTaskId: "platform-immediate-44",
+            images: [{ dataUrl: "https://provider.test/immediate.png" }],
+        });
+    } finally {
+        axios.post = previousPost;
+    }
+});
+
+test("async image task query envelope errors remain retryable", async () => {
+    const previousGet = axios.get;
+    axios.get = async () => ({ data: { code: 1, msg: "temporary upstream query failure" } });
+
+    const model = "Images";
+    try {
+        await assert.rejects(
+            pollAsyncImageTask(
+                {
+                    ...defaultConfig,
+                    channelMode: "remote",
+                    model,
+                    imageModel: model,
+                },
+                { id: "upstream-query-retry", model },
+            ),
+            /temporary upstream query failure/,
+        );
+    } finally {
+        axios.get = previousGet;
+    }
+});
 
 test("canvas image edits can use the generations endpoint with the image payload", async () => {
     const previousPost = axios.post;

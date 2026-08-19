@@ -4,7 +4,13 @@ import type { DecimalValue } from "@/lib/decimal";
 export type ImageRequestFormat = "application/json" | "multipart/form-data";
 export type ImageRequestFormatOption = ImageRequestFormat | "default";
 export type CanvasImageRequestMode = "split" | "generations";
-export type ImageRequestFormatSetting = { model: string; format: ImageRequestFormatOption; canvasRequestMode: CanvasImageRequestMode };
+export type ImageResolutionOption = "default" | "1k" | "2k" | "4k";
+export type ImageRequestFormatSetting = {
+    model: string;
+    format: ImageRequestFormatOption;
+    canvasRequestMode: CanvasImageRequestMode;
+    resolution: ImageResolutionOption;
+};
 
 export type PublicModelChannelSettings = {
     availableModels: string[];

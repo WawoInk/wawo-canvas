@@ -17,10 +17,10 @@ import { accountStoreName } from "@/lib/account-storage";
 import { modelOptionLabel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { nanoid } from "nanoid";
-import { formatBytes, formatDuration, getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
-import { requestEdit, requestGeneration } from "@/services/api/image";
+import { formatBytes, formatDuration } from "@/lib/image-utils";
+import { pollAsyncImageTask } from "@/services/api/image";
 import { deleteStoredImages, resolveImageUrl, uploadImage } from "@/services/blob-storage";
-import { uploadBlob } from "@/services/upload-blob";
+import { uploadBlob, uploadUrlToS3 } from "@/services/upload-blob";
 import { resolveFileUrls } from "@/services/resolve-file-urls";
 import { patchGenerationTaskMetadata } from "@/services/api/generation-tasks";
 import { useAssetStore } from "@/stores/use-asset-store";
@@ -30,6 +30,20 @@ import { fetchImageHistory, deleteGenerationTask, recordGenerationTask, type Ima
 import { syncClient } from "@/services/sync-client";
 import { syncScheduler } from "@/services/sync-scheduler";
 import { formatDateTime, formatDimensions, formatNumber } from "@/i18n/formatters";
+import {
+    completeImageWorkbenchTask,
+    cancelImageWorkbenchTask,
+    createImageWorkbenchTask,
+    imageWorkbenchReference,
+    imageWorkbenchDeletionIds,
+    imageWorkbenchTaskStatusForError,
+    imageWorkbenchTaskRecord,
+    resumableImageWorkbenchTasks,
+    restoreImageWorkbenchSlots,
+    upsertImageWorkbenchTaskRecord,
+    type ImageWorkbenchTask,
+    type ImageWorkbenchTaskRecord,
+} from "./image-async-task";
 
 type GeneratedImage = {
     id: string;
@@ -41,6 +55,7 @@ type GeneratedImage = {
     height: number;
     bytes: number;
     mimeType?: string;
+    slotIndex?: number;
 };
 
 type GenerationResult = {
@@ -68,6 +83,7 @@ type GenerationLog = {
     error?: string;
     images: GeneratedImage[];
     thumbnails: string[];
+    tasks?: ImageWorkbenchTaskRecord[];
 };
 
 type GenerationLogConfig = Pick<AiConfig, "model" | "imageModel" | "quality" | "size" | "count">;
@@ -83,13 +99,16 @@ function logStoreForUser() {
     return localforage.createInstance({ name: "infinite-canvas", storeName: accountStoreName("image_generation_logs", userId) });
 }
 
-// ponytail: module-level bridge between syncClient (singleton) and component (closure-scoped refreshLogs)
-let refreshLogsHandler: (() => void) | null = null;
-
 export default function ImagePage() {
     const { t } = useTranslation();
     const { message } = App.useApp();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const imageTasksRef = useRef<Map<string, { controller: AbortController; task?: ImageWorkbenchTask }>>(new Map());
+    const cancellationRef = useRef(new Set<string>());
+    const unmountingRef = useRef(false);
+    const workbenchLogsRef = useRef(new Map<string, GenerationLog>());
+    const refreshLogsRef = useRef<() => void>(() => {});
+    const activeLogIdRef = useRef<string | null>(null);
     const config = useConfigStore((state) => state.config);
     const effectiveConfig = useEffectiveConfig();
     const updateConfig = useConfigStore((state) => state.updateConfig);
@@ -115,24 +134,72 @@ export default function ImagePage() {
     const canGenerate = Boolean(prompt.trim());
     const generationCount = Math.max(1, Math.min(10, Number(config.count) || 1));
 
+    const rememberLog = (log: GenerationLog) => {
+        workbenchLogsRef.current.set(log.id, log);
+        setLogs((value) => (value.some((item) => item.id === log.id) ? value.map((item) => (item.id === log.id ? log : item)) : [log, ...value]));
+    };
+
+    const replaceLogs = (nextLogs: GenerationLog[]) => {
+        workbenchLogsRef.current.clear();
+        nextLogs.forEach((log) => workbenchLogsRef.current.set(log.id, log));
+        setLogs(nextLogs);
+    };
+
+    const patchLog = (id: string, update: (log: GenerationLog) => GenerationLog) => {
+        const current = workbenchLogsRef.current.get(id);
+        if (!current) return null;
+        const next = update(current);
+        rememberLog(next);
+        return next;
+    };
+
+    const updateSlot = (logId: string, index: number, recordPatch: Partial<ImageWorkbenchTaskRecord>, image?: GeneratedImage) =>
+        patchLog(logId, (current) => {
+            const currentTask = current.tasks?.find((task) => task.index === index);
+            const nextTask = {
+                ...(currentTask || { index, source: "image_workbench" as const, status: "pending" as const }),
+                ...recordPatch,
+            } as ImageWorkbenchTaskRecord;
+            const tasks = upsertImageWorkbenchTaskRecord(current.tasks || [], nextTask);
+            const images = image
+                ? [...current.images.filter((item) => item.slotIndex !== index), { ...image, slotIndex: index }].sort((a, b) => (a.slotIndex ?? 0) - (b.slotIndex ?? 0))
+                : current.images;
+            const successCount = tasks.filter((task) => task.status === "succeeded").length;
+            const failCount = tasks.filter((task) => task.status === "failed" || task.status === "cancelled").length;
+            const hasPending = tasks.some((task) => task.status === "pending");
+            const hasErrorPatch = Object.prototype.hasOwnProperty.call(recordPatch, "error");
+            return {
+                ...current,
+                tasks,
+                images,
+                thumbnails: images.map((item) => item.dataUrl).filter(Boolean),
+                successCount,
+                failCount,
+                status: hasPending ? "pending" : successCount ? "success" : "failed",
+                error: hasErrorPatch ? recordPatch.error : hasPending ? current.error : undefined,
+            };
+        });
+
     useEffect(() => {
         if (!running || !startedAt) return;
         const timer = window.setInterval(() => setElapsedMs(performance.now() - startedAt), 1000);
         return () => window.clearInterval(timer);
     }, [running, startedAt]);
 
+    useEffect(() => {
+        unmountingRef.current = false;
+        return () => {
+            unmountingRef.current = true;
+            for (const { controller } of imageTasksRef.current.values()) controller.abort();
+        };
+    }, []);
+
     const configHydrated = useConfigStore((state) => state.configHydrated);
 
     useEffect(() => {
-        // ponytail: re-register onDelta on mount so whichever page loaded last wins
-        syncClient.onDelta("tasks", () => {
-            if (refreshLogsHandler) refreshLogsHandler();
-        });
-        refreshLogsHandler = () => {
-            void refreshLogs();
-        };
+        syncClient.onDelta("tasks", () => refreshLogsRef.current());
         return () => {
-            refreshLogsHandler = null;
+            refreshLogsRef.current = () => {};
         };
     }, []);
 
@@ -161,7 +228,7 @@ export default function ImagePage() {
             imageFiles.map(async (file) => {
                 const dataUrl = URL.createObjectURL(file);
                 const image = await uploadBlob(file, "images");
-                return { id: nanoid(), name: file.name, type: image.mimeType, dataUrl, url: image.url, storageKey: image.fileId };
+                return imageWorkbenchReference({ id: nanoid(), name: file.name, type: image.mimeType, dataUrl, fileId: image.fileId });
             }),
         );
         setReferences((value) => [...value, ...nextReferences]);
@@ -179,7 +246,13 @@ export default function ImagePage() {
                 blobs.map(async (blob, index) => {
                     const dataUrl = URL.createObjectURL(blob);
                     const image = await uploadBlob(blob, "images");
-                    return { id: nanoid(), name: t("imageWorkbench.references.clipboardFileName", { index: formatNumber(index + 1, { useGrouping: false }) }), type: image.mimeType, dataUrl, url: image.url, storageKey: image.fileId };
+                    return imageWorkbenchReference({
+                        id: nanoid(),
+                        name: t("imageWorkbench.references.clipboardFileName", { index: formatNumber(index + 1, { useGrouping: false }) }),
+                        type: image.mimeType,
+                        dataUrl,
+                        fileId: image.fileId,
+                    });
                 }),
             );
             setReferences((value) => [...value, ...nextReferences]);
@@ -212,12 +285,7 @@ export default function ImagePage() {
         const batchStartedAt = performance.now();
         setStartedAt(batchStartedAt);
 
-        // Stable dedupe key shared by the pending and final saveLog so the backend
-        // upserts one row (RecordUserTask matches by upstreamTaskId) instead of
-        // leaving a stuck pending row next to the final-status row.
-        const dedupeKey = nanoid();
-
-        // Create a pending log immediately so the sidebar shows "generating" state
+        // Keep one durable batch record while each output owns its async task.
         const pendingLog = buildLog({
             prompt: text,
             model,
@@ -228,51 +296,45 @@ export default function ImagePage() {
             failCount: 0,
             status: "pending",
             images: [],
+            tasks: Array.from({ length: generationCount }, (_, index) => ({
+                index,
+                source: "image_workbench",
+                taskModel: model,
+                status: "pending" as const,
+            })),
         });
-        await saveLog(pendingLog, dedupeKey);
+        activeLogIdRef.current = pendingLog.id;
+        await saveLog(pendingLog, false).catch(() => {});
 
-        const tasks = Array.from({ length: generationCount }, (_, index) => runGenerationSlot(index, snapshot));
+        const tasks = Array.from({ length: generationCount }, (_, index) => runGenerationSlot(index, snapshot, { logId: pendingLog.id }));
 
         const result = await Promise.allSettled(tasks);
         const successImages = result.filter((item): item is PromiseFulfilledResult<GeneratedImage> => item.status === "fulfilled").map((item) => item.value);
-        const successCount = successImages.length;
-        const failCount = generationCount - successCount;
         const failed = result.find((item): item is PromiseRejectedResult => item.status === "rejected");
         const errorMessage = failed?.reason instanceof Error ? failed.reason.message : t("errors.image.generationFailed");
 
         try {
-            const logImages = await Promise.all(
-                successImages.map(async (image) => {
-                    const blob = await (await fetch(image.dataUrl)).blob();
-                    const stored = await uploadBlob(blob, "results/images");
-                    return { ...image, dataUrl: stored.url, fileId: stored.fileId, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType };
-                }),
-            );
-            // Sync results state so "add to assets" gets fileId
-            setResults((prev) =>
-                prev.map((r) => {
-                    const stored = logImages.find((img) => img.id === r.image?.id);
-                    return stored ? { ...r, image: { ...r.image!, dataUrl: stored.dataUrl, fileId: stored.fileId, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType } } : r;
-                }),
-            );
-            const finalLog = buildLog({
-                prompt: text,
-                model,
-                config: { ...snapshot.config, count: String(generationCount) },
-                references: snapshot.references,
+            const currentLog = workbenchLogsRef.current.get(pendingLog.id) || pendingLog;
+            const successCount = currentLog.tasks?.filter((task) => task.status === "succeeded").length ?? successImages.length;
+            const failCount = currentLog.tasks?.filter((task) => task.status === "failed" || task.status === "cancelled").length ?? generationCount - successCount;
+            const hasPending = currentLog.tasks?.some((task) => task.status === "pending") ?? false;
+            const finalLog: GenerationLog = {
+                ...currentLog,
                 durationMs: performance.now() - batchStartedAt,
                 successCount,
                 failCount,
-                status: successCount ? "success" : "failed",
-                images: logImages,
-            });
-            finalLog.error = successCount ? undefined : errorMessage;
+                status: hasPending ? "pending" : successCount ? "success" : "failed",
+                images: currentLog.images.length ? currentLog.images : successImages,
+                thumbnails: (currentLog.images.length ? currentLog.images : successImages).map((image) => image.dataUrl).filter(Boolean),
+            };
+            finalLog.error = hasPending ? currentLog.error || errorMessage : successCount ? undefined : errorMessage;
             try {
-                await saveLog(finalLog, dedupeKey);
+                await saveLog(finalLog, finalLog.status !== "pending");
             } catch {
                 // ponytail: saveLog failure shouldn't block the generation result
             }
-            successCount ? message.success(t("imageWorkbench.results.generated")) : message.error(errorMessage);
+            if (finalLog.status === "success") message.success(t("imageWorkbench.results.generated"));
+            if (finalLog.status === "failed") message.error(errorMessage);
         } finally {
             setRunning(false);
             syncScheduler.onRunningTaskCountChange(0);
@@ -289,8 +351,35 @@ export default function ImagePage() {
     };
 
     const addResultToReferences = async (image: GeneratedImage, index: number) => {
-        const stored = await uploadImage(image.dataUrl);
-        setReferences((value) => [...value, { id: nanoid(), name: t("imageWorkbench.references.resultFileName", { index: formatNumber(index + 1, { useGrouping: false }) }), type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }]);
+        let dataUrl = image.dataUrl;
+        if (image.fileId) {
+            const urlMap = await resolveFileUrls([image.fileId]);
+            dataUrl = urlMap.get(image.fileId) || dataUrl;
+        }
+        if (image.fileId) {
+            setReferences((value) => [
+                ...value,
+                imageWorkbenchReference({
+                    id: nanoid(),
+                    name: t("imageWorkbench.references.resultFileName", { index: formatNumber(index + 1, { useGrouping: false }) }),
+                    type: image.mimeType || "image/png",
+                    dataUrl,
+                    fileId: image.fileId,
+                }),
+            ]);
+        } else {
+            const stored = await uploadImage(dataUrl);
+            setReferences((value) => [
+                ...value,
+                imageWorkbenchReference({
+                    id: nanoid(),
+                    name: t("imageWorkbench.references.resultFileName", { index: formatNumber(index + 1, { useGrouping: false }) }),
+                    type: stored.mimeType,
+                    dataUrl: stored.url,
+                    storageKey: stored.storageKey,
+                }),
+            ]);
+        }
         message.success(t("imageWorkbench.references.added"));
     };
 
@@ -340,8 +429,17 @@ export default function ImagePage() {
         if (payload.kind === "text") {
             setPrompt(payload.content);
         } else if (payload.kind === "image") {
-            const stored = await uploadImage(payload.dataUrl);
-            setReferences((value) => [...value, { id: nanoid(), name: payload.title, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }]);
+            setReferences((value) => [
+                ...value,
+                imageWorkbenchReference({
+                    id: nanoid(),
+                    name: payload.title,
+                    type: "image/png",
+                    dataUrl: payload.dataUrl,
+                    fileId: payload.fileId,
+                    storageKey: payload.storageKey,
+                }),
+            ]);
         } else {
             message.warning(t("imageWorkbench.assets.unsupportedType"));
         }
@@ -349,6 +447,7 @@ export default function ImagePage() {
     };
 
     const createSession = () => {
+        activeLogIdRef.current = null;
         setPrompt("");
         setReferences([]);
         setResults([]);
@@ -360,8 +459,10 @@ export default function ImagePage() {
 
     const deleteSelectedLogs = async () => {
         const ids = [...selectedLogIds];
-        const imageKeys = logs.filter((log) => selectedLogIds.includes(log.id)).flatMap((log) => log.images.map((image) => image.storageKey).filter((key): key is string => Boolean(key)));
-        await Promise.all([deleteStoredImages(imageKeys), ...ids.map((id) => logStoreForUser().removeItem(id)), ...ids.map((id) => deleteGenerationTask(id).catch(() => {}))]);
+        const selectedLogs = logs.filter((log) => selectedLogIds.includes(log.id));
+        const imageKeys = selectedLogs.flatMap((log) => log.images.map((image) => image.storageKey).filter((key): key is string => Boolean(key)));
+        const generationTaskIds = [...new Set(selectedLogs.flatMap(imageWorkbenchDeletionIds))];
+        await Promise.all([deleteStoredImages(imageKeys), ...ids.map((id) => logStoreForUser().removeItem(id)), ...generationTaskIds.map((id) => deleteGenerationTask(id).catch(() => {}))]);
         if (previewLog && selectedLogIds.includes(previewLog.id)) {
             setPreviewLog(null);
             setResults([]);
@@ -371,91 +472,68 @@ export default function ImagePage() {
         await refreshLogs();
     };
 
-    const saveLog = async (log: GenerationLog, dedupeId = ""): Promise<void> => {
+    const saveLog = async (log: GenerationLog, refresh = true): Promise<void> => {
         // Save to local cache first
+        rememberLog(log);
         await logStoreForUser().setItem(log.id, serializeLog(log));
-        // Sync to backend so refreshLogs can find it
-        const user = useUserStore.getState().user;
-        const channelMode = useConfigStore.getState().config.channelMode;
-        const fileIds = log.images.map((img) => img.fileId).filter(Boolean);
+        if (refresh) await refreshLogs();
+    };
 
-        if (user?.id) {
-            if (channelMode !== "remote") {
-                try {
-                    const result = await recordGenerationTask({
-                        taskType: "image",
-                        provider: "openai",
-                        model: log.model || "unknown",
-                        status: log.status,
-                        credits: "0",
-                        latencyMs: log.durationMs,
-                        upstreamTaskId: dedupeId,
-                        source: "image_workbench",
-                        requestBody: JSON.stringify({
-                            prompt: log.prompt,
-                            model: log.model,
-                            size: log.config.size,
-                            quality: log.config.quality,
-                            count: log.config.count,
-                        }),
-                        responseBody: JSON.stringify({
-                            data: log.images.map((img) => ({ url: img.dataUrl })),
-                        }),
-                        metadata: fileIds.length ? JSON.stringify({ fileIds }) : "",
-                        errorMessage: log.status === "failed" ? log.error || "" : "",
-                    });
-                    if (result?.id && fileIds.length) {
-                        await patchGenerationTaskMetadata(result.id, JSON.stringify({ fileIds })).catch(() => {});
-                    }
-                } catch {
-                    /* non-blocking */
-                }
-            } else if (fileIds.length) {
-                // Remote mode: proxy already created the task, but we need to
-                // backfill S3 fileIds into its metadata so the backend DTO
-                // returns them on next refreshLogs (cross-browser/device).
-                // Fetch the latest tasks, find the proxy's record, and patch it.
-                try {
-                    const result = await fetchImageHistory(1, 5, "image_workbench");
-                    const match = result.items.find((item) => item.model === log.model && item.createdAt <= new Date(log.createdAt).toISOString() && !item.fileIds?.length);
-                    if (match?.id) {
-                        await patchGenerationTaskMetadata(match.id, JSON.stringify({ fileIds })).catch(() => {});
-                    }
-                } catch {
-                    /* non-blocking */
-                }
+    const resumePendingLogs = (items: GenerationLog[]) => {
+        for (const log of items) {
+            for (const { record, task } of resumableImageWorkbenchTasks(log.tasks || [])) {
+                const key = `${log.id}:${record.index}`;
+                if (imageTasksRef.current.has(key)) continue;
+                const taskConfig = {
+                    ...effectiveConfig,
+                    ...log.config,
+                    model: task.upstreamTask.model,
+                    imageModel: task.upstreamTask.model,
+                    count: "1",
+                };
+                void runGenerationSlot(
+                    record.index,
+                    { text: log.prompt, config: taskConfig, references: log.references || [] },
+                    { logId: log.id, task, key },
+                ).catch(() => {});
             }
         }
-        await refreshLogs();
     };
 
     const refreshLogs = async () => {
-        // Load from backend (source of truth) for online users
+        const localLogs = await readStoredLogs();
         const user = useUserStore.getState().user;
         if (user?.id) {
             try {
                 const result = await fetchImageHistory(1, 50, "image_workbench");
                 const backendLogs = result.items.map(toGenerationLog);
-                // Resolve presigned URLs for S3-backed images
                 const allFileIds = backendLogs.flatMap((log) => log.images.map((img) => img.fileId).filter((id): id is string => Boolean(id)));
                 const urlMap = allFileIds.length ? await resolveFileUrls([...new Set(allFileIds)]) : new Map<string, string>();
                 for (const log of backendLogs) {
                     for (const img of log.images) {
-                        if (img.fileId && urlMap.has(img.fileId)) {
-                            img.dataUrl = urlMap.get(img.fileId)!;
-                        }
+                        if (img.fileId && urlMap.has(img.fileId)) img.dataUrl = urlMap.get(img.fileId)!;
                     }
                 }
-                setLogs(backendLogs);
+
+                const durableLogs = localLogs.filter((log) => log.tasks?.length);
+                const platformTaskIds = new Set(durableLogs.flatMap((log) => (log.tasks || []).map((task) => task.platformTaskId).filter((id): id is string => Boolean(id))));
+                const mergedLogs = [...durableLogs, ...backendLogs.filter((log) => !platformTaskIds.has(log.id))].sort((a, b) => b.createdAt - a.createdAt);
+                replaceLogs(mergedLogs);
                 for (const log of backendLogs) {
                     await logStoreForUser().setItem(log.id, serializeLog(log));
                 }
+                resumePendingLogs(mergedLogs);
                 return;
             } catch {
                 // Fallback to local cache
             }
         }
-        setLogs(await readStoredLogs());
+        replaceLogs(localLogs);
+        resumePendingLogs(localLogs);
+    };
+
+    refreshLogsRef.current = () => {
+        void refreshLogs();
     };
 
     function toGenerationLog(item: ImageHistoryItem): GenerationLog {
@@ -502,10 +580,12 @@ export default function ImagePage() {
             size: item.size || "",
             quality: item.quality || "",
             status: item.status === "success" ? "success" : item.status === "failed" ? "failed" : "pending",
+            error: item.error,
         };
     }
 
     const previewGenerationLog = async (log: GenerationLog) => {
+        activeLogIdRef.current = log.id;
         setPreviewLog(log);
         setLogsOpen(false);
         setPrompt(log.prompt);
@@ -514,7 +594,17 @@ export default function ImagePage() {
         if (log.config.quality) updateConfig("quality", log.config.quality);
         if (log.config.size) updateConfig("size", log.config.size);
         if (log.config.count) updateConfig("count", log.config.count);
-        setResults(log.images.map((image) => ({ id: image.id, status: "success", image })));
+        const restoredSlots = restoreImageWorkbenchSlots(log.tasks || [], log.images);
+        setResults(
+            restoredSlots.length
+                ? restoredSlots.map((slot) => ({
+                      id: slot.image?.id || `${log.id}:${slot.index}`,
+                      status: slot.status,
+                      ...(slot.image ? { image: slot.image } : {}),
+                      ...(slot.error ? { error: slot.error } : {}),
+                  }))
+                : log.images.map((image) => ({ id: image.id, status: "success", image })),
+        );
     };
 
     const buildRequestSnapshot = () => {
@@ -531,28 +621,147 @@ export default function ImagePage() {
         return { text, config: { ...effectiveConfig, model, count: "1" }, references: [...references] };
     };
 
-    const runGenerationSlot = async (index: number, snapshot: { text: string; config: AiConfig; references: ReferenceImage[] }) => {
-        const itemStartedAt = performance.now();
+    const syncLocalWorkbenchTask = async (
+        task: ImageWorkbenchTask,
+        snapshot: { text: string; config: AiConfig },
+        status: "pending" | "success" | "failed" | "cancelled",
+        result?: { url: string; fileId?: string },
+        errorMessage = "",
+    ) => {
+        if (snapshot.config.channelMode === "remote" || !useUserStore.getState().user?.id) return task;
         try {
-            const result = snapshot.references.length ? await requestEdit(snapshot.config, snapshot.text, snapshot.references) : await requestGeneration(snapshot.config, snapshot.text);
-            const image = result[0];
-            if (!image) throw new Error(t("errors.image.noImageReturned"));
-            const meta = await readImageMeta(image.dataUrl);
-            const nextImage = { id: image.id, dataUrl: image.dataUrl, durationMs: performance.now() - itemStartedAt, width: meta.width, height: meta.height, bytes: getDataUrlByteSize(image.dataUrl) };
-            setResults((value) => updateResultAt(value, index, { status: "success", image: nextImage }));
-            return nextImage;
-        } catch (error) {
-            setResults((value) => updateResultAt(value, index, { status: "failed", error: error instanceof Error ? error.message : t("errors.image.generationFailed") }));
-            throw error;
+            const recorded = await recordGenerationTask({
+                taskType: "image",
+                provider: "openai",
+                model: task.upstreamTask.model,
+                status,
+                credits: "0",
+                latencyMs: 0,
+                upstreamTaskId: task.upstreamTask.id,
+                source: "image_workbench",
+                requestBody: JSON.stringify({
+                    prompt: snapshot.text,
+                    model: task.upstreamTask.model,
+                    size: snapshot.config.size,
+                    quality: snapshot.config.quality,
+                    count: "1",
+                }),
+                responseBody: result ? JSON.stringify({ data: [{ url: result.url }] }) : "",
+                metadata: result?.fileId ? JSON.stringify({ fileIds: [result.fileId] }) : "",
+                errorMessage,
+            });
+            return recorded?.id && !task.platformTaskId ? { ...task, platformTaskId: recorded.id } : task;
+        } catch {
+            return task;
         }
     };
 
-    const retryResult = (index: number) => {
+    const runGenerationSlot = async (
+        index: number,
+        snapshot: { text: string; config: AiConfig; references: ReferenceImage[] },
+        context: { logId?: string; task?: ImageWorkbenchTask; key?: string } = {},
+    ) => {
+        const itemStartedAt = performance.now();
+        const key = context.key || `${context.logId || "session"}:${index}:${nanoid()}`;
+        const controller = new AbortController();
+        let task = context.task;
+        imageTasksRef.current.set(key, { controller, task });
+        try {
+            task ||= await createImageWorkbenchTask(snapshot.config, snapshot.text, snapshot.references);
+            task = await syncLocalWorkbenchTask(task, snapshot, "pending");
+            imageTasksRef.current.set(key, { controller, task });
+            if (context.logId) {
+                const taskRecord = imageWorkbenchTaskRecord(index, task);
+                const updated = updateSlot(context.logId, index, { ...taskRecord, status: "pending", error: undefined });
+                if (updated) await saveLog(updated, false).catch(() => {});
+            }
+
+            const activeTask = task;
+            const stored = await completeImageWorkbenchTask(activeTask, {
+                poll: () => pollAsyncImageTask(snapshot.config, activeTask.upstreamTask, { signal: controller.signal }),
+                materialize: (dataUrl) =>
+                    dataUrl.startsWith("data:")
+                        ? fetch(dataUrl)
+                              .then((response) => response.blob())
+                              .then((blob) => uploadBlob(blob, "results/images"))
+                        : uploadUrlToS3(dataUrl, "results/images"),
+                patchMetadata: patchGenerationTaskMetadata,
+                cancel: (taskToCancel) => (unmountingRef.current ? Promise.resolve() : cancelImageWorkbenchTask(snapshot.config, taskToCancel)),
+                signal: controller.signal,
+            });
+            await syncLocalWorkbenchTask(activeTask, snapshot, "success", stored);
+            const nextImage: GeneratedImage = {
+                id: stored.fileId,
+                dataUrl: stored.url,
+                fileId: stored.fileId,
+                durationMs: performance.now() - itemStartedAt,
+                width: stored.width,
+                height: stored.height,
+                bytes: stored.bytes,
+                mimeType: stored.mimeType,
+                slotIndex: index,
+            };
+            setResults((value) => updateResultAt(value, index, { status: "success", image: nextImage }));
+            const updated = context.logId ? updateSlot(context.logId, index, { status: "succeeded", fileId: stored.fileId, error: undefined }, nextImage) : null;
+            if (updated) await saveLog(updated, false).catch(() => {});
+            return nextImage;
+        } catch (error) {
+            const explicitCancellation = cancellationRef.current.has(key);
+            const aborted = controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError");
+            const taskStatus = imageWorkbenchTaskStatusForError(error, explicitCancellation);
+            const errorMessage = aborted ? t("errors.requestCancelled") : error instanceof Error ? error.message : t("errors.image.generationFailed");
+            if (task && (!controller.signal.aborted || explicitCancellation) && taskStatus !== "pending") {
+                await syncLocalWorkbenchTask(task, snapshot, taskStatus, undefined, errorMessage);
+            }
+            if (context.logId && (!controller.signal.aborted || explicitCancellation)) {
+                const updated = updateSlot(context.logId, index, { status: taskStatus, error: errorMessage });
+                if (updated) await saveLog(updated, false).catch(() => {});
+            }
+            if (!unmountingRef.current || explicitCancellation) {
+                setResults((value) => updateResultAt(value, index, { status: taskStatus === "pending" ? "pending" : "failed", error: errorMessage }));
+            }
+            throw error;
+        } finally {
+            imageTasksRef.current.delete(key);
+            cancellationRef.current.delete(key);
+        }
+    };
+
+    const cancelGeneration = () => {
+        for (const [key, { controller }] of imageTasksRef.current) {
+            cancellationRef.current.add(key);
+            controller.abort();
+        }
+    };
+
+    const retryResult = async (index: number) => {
         const snapshot = buildRequestSnapshot();
         if (!snapshot) return;
+        const logId = activeLogIdRef.current || previewLog?.id;
+        setRunning(true);
+        syncScheduler.onRunningTaskCountChange(1);
+        setStartedAt(performance.now());
+        setElapsedMs(0);
         setPreviewLog(null);
         setResults((value) => updateResultAt(value, index, { status: "pending", error: undefined, image: undefined }));
-        void runGenerationSlot(index, snapshot).catch(() => {});
+        if (logId) {
+            const updated = updateSlot(logId, index, {
+                status: "pending",
+                upstreamTaskId: undefined,
+                taskModel: undefined,
+                platformTaskId: undefined,
+                images: undefined,
+                fileId: undefined,
+                error: undefined,
+            });
+            if (updated) await saveLog(updated, false).catch(() => {});
+        }
+        void runGenerationSlot(index, snapshot, logId ? { logId } : {})
+            .catch(() => {})
+            .finally(() => {
+                setRunning(false);
+                syncScheduler.onRunningTaskCountChange(0);
+            });
     };
 
     return (
@@ -658,8 +867,15 @@ export default function ImagePage() {
                         </div>
 
                         <div className="mt-auto pt-6">
-                            <Button type="primary" size="large" block icon={<Sparkles className="size-4" />} loading={running} disabled={!canGenerate || running} onClick={() => void generate()}>
-                                {t("imageWorkbench.actions.generate")}
+                            <Button
+                                type="primary"
+                                size="large"
+                                block
+                                icon={running ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                                disabled={!canGenerate && !running}
+                                onClick={() => (running ? cancelGeneration() : void generate())}
+                            >
+                                {running ? t("common.actions.cancel") : t("imageWorkbench.actions.generate")}
                             </Button>
                         </div>
                     </div>
@@ -969,14 +1185,13 @@ async function readStoredLogs() {
 }
 
 async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog> {
-    // Collect fileIds for URL refresh
-    const fileIds = (log.images || []).map((img) => img.fileId).filter((id): id is string => Boolean(id));
+    const fileIds = [...(log.images || []), ...(log.references || [])].map((item) => item.fileId).filter((id): id is string => Boolean(id));
     const urlMap = fileIds.length ? await resolveFileUrls([...new Set(fileIds)]) : new Map<string, string>();
 
     const references = await Promise.all(
         (log.references || []).map(async (item) => ({
             ...item,
-            dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl),
+            dataUrl: item.fileId && urlMap.has(item.fileId) ? urlMap.get(item.fileId)! : await resolveImageUrl(item.storageKey, item.dataUrl),
         })),
     );
     const images = await Promise.all(
@@ -986,6 +1201,7 @@ async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog>
         })),
     );
     const config = normalizeLogConfig(log);
+    const tasks = log.tasks?.map((task) => ({ ...task }));
     return {
         id: log.id || nanoid(),
         createdAt: log.createdAt || Date.now(),
@@ -995,22 +1211,24 @@ async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog>
         config,
         references,
         durationMs: log.durationMs || 0,
-        successCount: log.successCount ?? log.imageCount ?? 0,
-        failCount: log.failCount || 0,
-        imageCount: log.imageCount || log.successCount || 0,
+        successCount: log.successCount ?? tasks?.filter((task) => task.status === "succeeded").length ?? log.imageCount ?? 0,
+        failCount: log.failCount ?? tasks?.filter((task) => task.status === "failed").length ?? 0,
+        imageCount: log.imageCount || Number(config.count) || log.successCount || 0,
         size: log.size || config.size || "",
         quality: log.quality || config.quality || "",
         status: log.status || "success",
+        error: log.error,
         images,
         thumbnails: images.map((image) => image.dataUrl).filter(Boolean),
+        tasks,
     };
 }
 
 function serializeLog(log: GenerationLog): GenerationLog {
     return {
         ...log,
-        references: log.references.map((item) => ({ ...item, dataUrl: item.storageKey ? "" : item.dataUrl })),
-        images: log.images.map((image) => ({ ...image, dataUrl: image.storageKey ? "" : image.dataUrl })),
+        references: log.references.map((item) => ({ ...item, dataUrl: item.fileId || item.storageKey ? "" : item.dataUrl })),
+        images: log.images.map((image) => ({ ...image, dataUrl: image.fileId || image.storageKey ? "" : image.dataUrl })),
         thumbnails: [],
     };
 }
@@ -1061,6 +1279,7 @@ function buildLog({
     failCount,
     status,
     images,
+    tasks,
 }: {
     prompt: string;
     model: string;
@@ -1071,6 +1290,7 @@ function buildLog({
     failCount: number;
     status: GenerationLog["status"];
     images: GeneratedImage[];
+    tasks?: ImageWorkbenchTaskRecord[];
 }): GenerationLog {
     const logConfig = {
         model: config.model,
@@ -1096,5 +1316,6 @@ function buildLog({
         status,
         images,
         thumbnails: images.map((image) => image.dataUrl).filter(Boolean),
+        tasks,
     };
 }

@@ -1,11 +1,11 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { ConfigProvider, Switch } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { type CanvasTheme } from "@/lib/canvas-theme";
-import type { AiConfig } from "@/stores/use-config-store";
+import { modelOptionName, type AiConfig } from "@/stores/use-config-store";
 import i18n from "@/i18n";
 import { formatNumber } from "@/i18n/formatters";
 
@@ -43,6 +43,33 @@ const aspectOptions: AspectOption[] = [
     { value: "auto", label: "auto", labelKey: "imageSettings.size.auto", width: 0, height: 0, icon: "auto" },
 ];
 
+export function visibleImageAspectOptions(resolution?: unknown) {
+    if (resolution === "1k") return aspectOptions.slice(0, 7);
+    if (resolution === "2k") return aspectOptions.slice(7, 10);
+    if (resolution === "4k") return aspectOptions.slice(10, 12);
+    return aspectOptions;
+}
+
+export function normalizeImageSizeForResolution(resolution: unknown, currentSize: string) {
+    if (resolution !== "1k" && resolution !== "2k" && resolution !== "4k") return currentSize;
+    const options = visibleImageAspectOptions(resolution);
+    if (options.some((option) => (option.size || option.value) === currentSize)) return currentSize;
+    const selected = aspectOptions.find((option) => (option.size || option.value) === currentSize || option.value === currentSize);
+    if (!selected && /^\d+x\d+$/.test(currentSize)) return currentSize;
+    const dimensions = readSizeDimensions(currentSize, selected || aspectOptions[0]);
+    const orientation = Math.sign(dimensions.width - dimensions.height);
+    const option = options.find((item) => Math.sign(item.width - item.height) === orientation) || options[0];
+    return option.size || option.value;
+}
+
+export function imageResolutionForConfig(config: AiConfig) {
+    if (config.channelMode !== "remote") return "default";
+    const models = [config.model, config.imageModel].map((value) => modelOptionName(value || "").trim()).filter(Boolean);
+    const setting = models.map((model) => config.imageRequestFormats.find((item) => modelOptionName(item.model).trim() === model)).find(Boolean);
+    const resolution = (setting as typeof setting & { resolution?: unknown } | undefined)?.resolution;
+    return resolution === "1k" || resolution === "2k" || resolution === "4k" ? resolution : "default";
+}
+
 type ImageSettingsPanelProps = {
     config: AiConfig;
     onConfigChange: (key: "quality" | "size" | "background" | "count", value: string) => void;
@@ -58,11 +85,18 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
     const [snapDimensionToStep, setSnapDimensionToStep] = useState(true);
     const quality = config.quality || "auto";
     const count = Math.max(1, Math.min(maxCount, Math.floor(Math.abs(Number(config.count)) || 1)));
-    const activeSize = config.size || "auto";
-    const selectedAspect = aspectOptions.find((item) => (item.size || item.value) === activeSize || item.value === activeSize);
+    const resolution = imageResolutionForConfig(config);
+    const visibleOptions = visibleImageAspectOptions(resolution);
+    const configuredSize = config.size || "auto";
+    const activeSize = normalizeImageSizeForResolution(resolution, configuredSize);
+    const selectedAspect = visibleOptions.find((item) => (item.size || item.value) === activeSize || item.value === activeSize);
     const dimensions = readSizeDimensions(activeSize, selectedAspect || aspectOptions[0]);
+    useEffect(() => {
+        if (configuredSize !== activeSize) onConfigChange("size", activeSize);
+    }, [activeSize, configuredSize, onConfigChange]);
+
     const selectAspect = (value: string) => {
-        const option = aspectOptions.find((item) => item.value === value);
+        const option = visibleOptions.find((item) => item.value === value);
         onConfigChange("size", option?.size || option?.value || "auto");
     };
     const updateDimension = (key: "width" | "height", value: number | null) => {
@@ -115,7 +149,7 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>{t("imageSettings.aspectRatio")}</SettingTitle>
                     <div className="grid grid-cols-4 gap-2.5">
-                        {aspectOptions.map((item) => (
+                        {visibleOptions.map((item) => (
                             <button
                                 key={item.value}
                                 type="button"

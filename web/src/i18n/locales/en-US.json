@@ -1618,6 +1618,15 @@
                         "split": "Split by input (default)",
                         "generations": "Always use generations"
                     },
+                    "resolutionLabel": "Resolution",
+                    "resolutionRequired": "Select a resolution",
+                    "resolutionPlaceholder": "Select a resolution",
+                    "resolutionOptions": {
+                        "default": "Default",
+                        "1k": "1k",
+                        "2k": "2k",
+                        "4k": "4k"
+                    },
                     "deleteLabel": "Delete image request format for {{model}}"
                 },
                 "systemPrompt": "System prompt",

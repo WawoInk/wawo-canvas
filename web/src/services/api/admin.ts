@@ -1,6 +1,7 @@
 import { apiDelete, apiGet, apiPost, compactApiParams } from "@/services/api/request";
 import type { DecimalValue } from "@/lib/decimal";
 import type { Prompt, PromptListResponse } from "@/services/api/prompts";
+import type { ImageResolutionOption } from "@/services/api/settings";
 
 export type AdminPromptCategory = {
     category: string;
@@ -328,6 +329,7 @@ export type AdminImageRequestFormat = {
     model: string;
     format: "application/json" | "multipart/form-data" | "default";
     canvasRequestMode: "split" | "generations";
+    resolution: ImageResolutionOption;
 };
 
 export type AdminModelCost = {

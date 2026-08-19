@@ -1618,6 +1618,15 @@
                         "split": "按场景分端点（默认）",
                         "generations": "统一使用 generations"
                     },
+                    "resolutionLabel": "分辨率",
+                    "resolutionRequired": "请选择分辨率",
+                    "resolutionPlaceholder": "选择分辨率",
+                    "resolutionOptions": {
+                        "default": "默认（default）",
+                        "1k": "1k",
+                        "2k": "2k",
+                        "4k": "4k"
+                    },
                     "deleteLabel": "删除图片请求格式 {{model}}"
                 },
                 "systemPrompt": "系统提示词",
