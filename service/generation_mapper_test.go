@@ -47,3 +47,42 @@ func TestHistoryMapsFirstPartySucceededStatusToSuccess(t *testing.T) {
 		t.Fatalf("image history status = %q, want success", got)
 	}
 }
+
+func TestVideoHistoryMapsFirstPartyWorkbenchResult(t *testing.T) {
+	dto := ToVideoHistoryDTO(model.GenerationTask{
+		ID:             "first-party-video-1",
+		TaskType:       model.TaskTypeVideo,
+		Source:         string(model.SourceVideoWorkbench),
+		Model:          "seedance-1-5-pro",
+		ModelProfileID: "seedance-profile",
+		IntentKind:     string(model.IntentVideoGenerate),
+		Status:         model.TaskStatusSucceeded,
+		ResultJSON:     `{"kind":"video","file":{"fileId":"file-video-1","mimeType":"video/mp4","bytes":123}}`,
+		CreatedAt:      "2026-08-20T00:00:00Z",
+	}, &model.GenerationPayload{
+		CommandBody: `{"commandVersion":1,"modelProfileId":"seedance-profile","source":"video_workbench","intent":{"kind":"video.generate","prompt":"雨夜街道","settings":{"aspectRatio":"9:16","resolution":"1080p","durationSeconds":10,"generateAudio":false,"watermark":true}}}`,
+	})
+
+	if dto.ModelProfileID != "seedance-profile" || dto.Prompt != "雨夜街道" || dto.Size != "9:16" || dto.Vquality != "1080p" || dto.VideoSeconds != "10" {
+		t.Fatalf("first-party history fields = %#v", dto)
+	}
+	if len(dto.FileIDs) != 1 || dto.FileIDs[0] != "file-video-1" {
+		t.Fatalf("first-party result file IDs = %#v", dto.FileIDs)
+	}
+}
+
+func TestVideoHistoryDoesNotTreatFirstPartyInputFilesAsResults(t *testing.T) {
+	dto := ToVideoHistoryDTO(model.GenerationTask{
+		ID:             "first-party-video-failed",
+		TaskType:       model.TaskTypeVideo,
+		ModelProfileID: "seedance-profile",
+		CommandVersion: 1,
+		Status:         model.TaskStatusFailed,
+		Metadata:       `{"fileIds":["file-reference-1"]}`,
+		CreatedAt:      "2026-08-20T00:00:00Z",
+	}, nil)
+
+	if len(dto.FileIDs) != 0 {
+		t.Fatalf("first-party input files leaked into result file IDs: %#v", dto.FileIDs)
+	}
+}

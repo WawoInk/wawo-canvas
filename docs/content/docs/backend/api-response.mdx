@@ -63,6 +63,8 @@ Canvas 还会按已有平台错误码区分 `GENERATION_TIMEOUT`、`TASK_SYNC_TI
 
 第一方生成创建响应丢失时，已认证客户端可调用 `GET /api/v1/generations/client-requests/{clientRequestId}`，按当前用户和幂等请求 ID 找回同一任务。不存在或不属于当前用户时成功响应的 `data` 为 `null`；该查询不会创建新任务或改变任务状态。
 
+Canvas 与远程视频创作台都使用第一方视频 Generation Run：客户端提交 `source: "canvas"` 或 `source: "video_workbench"`，服务端统一负责路由、计费、审计、轮询、结果物化和终态仲裁。远程图片仍使用异步 compatibility 路由；任务在平台文件 `fileId` 写入 metadata 后才进入成功状态。
+
 积分、价格、折扣倍率和上游 credits 等十进制字段在 JSON 中统一使用字符串，避免 JavaScript `number` 丢失精度；客户端提交这类字段时也应发送十进制字符串，例如 `"2.5"`。
 
 ## 企业基础接口

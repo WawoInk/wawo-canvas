@@ -12,6 +12,8 @@ export interface VideoHistoryItem {
     prompt: string;
     status: GenerationTaskStatus;
     model: string;
+    modelProfileId?: string;
+    intentKind?: string;
     upstreamTaskId: string;
     credits: DecimalValue;
     upstreamCredits: DecimalValue | null;

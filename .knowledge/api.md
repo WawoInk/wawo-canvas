@@ -98,6 +98,8 @@ source=canvas|image_workbench|video_workbench
 intent.kind=video.generate|video.short-drama
 ```
 
+Canvas 与远程视频工作台提交同一份 first-party command；视频工作台短剧请求使用 title、script 和图片资产角色。local video workbench 仍使用 compatibility 视频任务路由。
+
 结构化创建错误放在响应 `data`：
 
 ```json

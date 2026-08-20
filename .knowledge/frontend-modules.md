@@ -146,14 +146,15 @@
 
 ## 视频工作台
 
-- **职责**：视频 prompt、参考媒体、兼容任务创建/轮询/取消、结果上传和历史。
+- **职责**：视频 prompt、参考媒体、远程第一方 Generation Run 或本地兼容任务、结果展示和历史。
 - **输入**：`AiConfig`、文本、图片/视频/音频引用、视频 settings。
-- **输出**：兼容 task、视频 Blob/URL、平台文件和历史。
+- **输出**：远程平台 Materialized Result 或本地兼容结果、平台文件和历史。
 - **核心文件**：`web/src/pages/video/index.tsx`、`web/src/services/api/video.ts`、`web/src/lib/seedance-video.ts`。
-- **数据流**：build Seedance-shaped payload -> local upstream 或 `/api/v1/contents/generations/tasks` -> poll -> upload result。
+- **数据流**：remote mode 读取后台 Model Profile，提交 `GenerationCommand` 到 `/api/v1/generations`，由服务端完成队列、轮询、计费、审计和物化；local mode 保留 Seedance-shaped payload -> direct upstream -> poll -> upload result。短剧 Profile 额外要求标题和每张参考图角色。
 - **依赖关系**：config、files、generation history、prompts。
 - **常见修改位置**：
-  - 兼容 payload/status：`services/api/video.ts`。
+  - 本地兼容 payload/status：`services/api/video.ts`。
+  - 远程 first-party command/观察：`pages/video/video-async-task.ts`。
   - UI/历史：video page。
   - 第一方视频不在此文件主导，见 [generation.md](generation.md)。
 

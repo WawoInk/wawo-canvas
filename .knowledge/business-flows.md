@@ -324,10 +324,10 @@ Canvas compiler
 - **依赖**：user files/S3、settings, credits, Canvas metadata。
 - **常见修改位置**：详见 [generation.md](generation.md)。
 
-## Compatibility 视频任务
+## 视频工作台与兼容视频任务
 
 ```text
-Video workbench or local-compatible Canvas
+Local video workbench or local-compatible Canvas
 -> Seedance-shaped payload
 -> /contents/generations/tasks or direct upstream
 -> upstream task ID
@@ -336,10 +336,12 @@ Video workbench or local-compatible Canvas
 -> upload result
 ```
 
+- 远程视频工作台使用第一方 Generation Run，与 Canvas 视频节点相同：Profile -> `POST /api/v1/generations` -> worker/Adapter -> 服务端结果物化 -> 平台 `fileId`。
+- 短剧 Profile 在视频工作台提交标题、脚本和每张参考图的资产角色。
 - **输入**：prompt content、reference URLs、ratio/resolution/duration/audio/watermark。
 - **输出**：upstream task 和结果视频。
 - **失败**：任务所有权失败、上游终态、缺失 URL、超时。
-- **核心文件**：`web/src/services/api/video.ts`、video task handler/service、compatibility lifecycle。
+- **核心文件**：本地兼容路径使用 `web/src/services/api/video.ts`、video task handler/service、compatibility lifecycle；远程工作台使用 `web/src/pages/video/video-async-task.ts` 和 first-party generation API。
 - **依赖**：channel config、`video_tasks`、generation tasks。
 - **常见修改位置**：不要把 compatibility task ID 和 first-party task ID 混为同一合同。
 

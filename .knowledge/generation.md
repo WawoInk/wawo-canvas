@@ -27,7 +27,7 @@
 | --- | --- | --- | --- | --- |
 | local channel | 浏览器直接请求用户 Base URL | 无平台渠道扣费；结果可后续上传 | 取决于上游和前端本地历史 | 用户自带 API Key |
 | remote compatibility | 浏览器请求 `/api/v1/images/*`、`chat/completions`、`audio/speech`、`contents/generations/tasks` 等 | Go 代理选渠道、扣费、记录任务/payload | 使用统一 `generation_tasks`，异步视频另有兼容生命周期 | 图片、文本、音频、旧视频协议 |
-| remote first-party | `POST /api/v1/generations` | 完整平台校验、幂等、计费、事件和结果物化 | PostgreSQL 队列 + worker lease | 当前 Canvas 视频和短剧 |
+| remote first-party | `POST /api/v1/generations` | 完整平台校验、幂等、计费、事件和结果物化 | PostgreSQL 队列 + worker lease | Canvas 与视频工作台的视频/短剧 |
 
 第一方和兼容入口共享任务、积分和审计基础设施，但不能把未知供应商扩展字段强制转换为第一方意图。
 
@@ -61,7 +61,7 @@ type GenerationCommand = {
 };
 ```
 
-当前只实现两个 first-party intent。架构文档中提到的 text/image/image-edit/audio intent 是长期方向，不是当前 API 能力。
+当前只实现两个 first-party intent，Canvas 与远程视频工作台共用它们。图片、音频和文本主要仍走 compatibility path。
 
 关键输入约束：
 
@@ -297,6 +297,8 @@ Canvas metadata 持久化：
 - `generationProfileId`
 - `taskModel`
 - 当前 status/error
+
+远程视频工作台本地日志保存 first-party task ID、Profile ID 和短剧标题/资产角色，用于刷新后继续观察同一任务；服务端视频历史从 command/result 投影 Profile settings、短剧标题/脚本和 Materialized Result `fileId`。远程图片工作台与 Canvas 图片节点共用异步 task 完成器：上传结果后将同一平台 task 的 metadata 写为 `fileIds`，由服务端把图片任务从内部 `pending` 结算为成功。
 
 视频 Materialized Result 通过 `commitCanvasVideoResult` 写回节点；页面只有在账号隔离 Canvas Replica durable commit 完成后才发布成功状态。等待期间若有更晚的节点编辑，结果会重新应用到最新 accepted nodes；服务端 Canvas PUT 也只消费已本地持久化的项目快照。
 
