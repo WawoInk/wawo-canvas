@@ -63,6 +63,7 @@ export type CanvasNodeMetadata = {
     bytes?: number;
     durationMs?: number;
     upstreamTaskId?: string;
+    platformTaskId?: string;
     generationTaskId?: string;
     generationClientRequestId?: string;
     generationTaskStatus?: CanvasGenerationTaskStatus;

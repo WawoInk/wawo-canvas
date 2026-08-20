@@ -16,6 +16,8 @@ type VideoHistoryDTO struct {
 	Prompt          string         `json:"prompt"`
 	Status          string         `json:"status"`
 	Model           string         `json:"model"`
+	ModelProfileID  string         `json:"modelProfileId,omitempty"`
+	IntentKind      string         `json:"intentKind,omitempty"`
 	UpstreamTaskID  string         `json:"upstreamTaskId"`
 	Credits         model.Decimal  `json:"credits"`
 	UpstreamCredits *model.Decimal `json:"upstreamCredits"`
@@ -34,23 +36,53 @@ type VideoHistoryDTO struct {
 
 // ToVideoHistoryDTO 将 Task + Payload 转为视频历史 DTO。
 func ToVideoHistoryDTO(task model.GenerationTask, payload *model.GenerationPayload) VideoHistoryDTO {
+	fileIDs := extractGeneratedFileIDs(task.ResultJSON)
+	if len(fileIDs) == 0 && task.CommandVersion == 0 {
+		fileIDs = extractFileIDsFromMetadata(task.Metadata)
+	}
 	dto := VideoHistoryDTO{
 		ID:              task.ID,
 		Title:           "视频生成",
 		Prompt:          extractPromptFromPayload(payload),
 		Status:          mapTaskStatus(task.Status),
 		Model:           task.Model,
+		ModelProfileID:  task.ModelProfileID,
+		IntentKind:      task.IntentKind,
 		UpstreamTaskID:  task.UpstreamTaskID,
 		Credits:         task.Credits,
 		UpstreamCredits: task.UpstreamCredits,
 		DurationMs:      task.LatencyMs,
 		CreatedAt:       task.CreatedAt,
-		FileIDs:         extractFileIDsFromMetadata(task.Metadata),
+		FileIDs:         fileIDs,
 	}
-	// Extract video config from request payload
-	if payload != nil && payload.RequestBody != "" {
-		var body map[string]any
-		if err := json.Unmarshal([]byte(payload.RequestBody), &body); err == nil {
+	if body := generationPayloadBody(payload); body != nil {
+		if intent, ok := body["intent"].(map[string]any); ok {
+			if title, ok := intent["title"].(string); ok && title != "" {
+				dto.Title = title
+			}
+			if prompt, ok := intent["script"].(string); ok && prompt != "" {
+				dto.Prompt = prompt
+			} else if prompt, ok := intent["prompt"].(string); ok && prompt != "" {
+				dto.Prompt = prompt
+			}
+			if settings, ok := intent["settings"].(map[string]any); ok {
+				if v, ok := settings["aspectRatio"].(string); ok && v != "" {
+					dto.Size = v
+				}
+				if v, ok := settings["resolution"].(string); ok && v != "" {
+					dto.Vquality = v
+				}
+				if v, ok := settings["durationSeconds"]; ok {
+					dto.VideoSeconds = fmtValue(v)
+				}
+				if v, ok := settings["generateAudio"].(bool); ok {
+					dto.GenAudio = fmt.Sprintf("%v", v)
+				}
+				if v, ok := settings["watermark"].(bool); ok {
+					dto.Watermark = fmt.Sprintf("%v", v)
+				}
+			}
+		} else {
 			if v, ok := body["ratio"].(string); ok && v != "" {
 				dto.Size = v
 			}
@@ -84,6 +116,17 @@ func fmtDuration(v float64) string {
 		return ""
 	}
 	return fmt.Sprintf("%.0f", v)
+}
+
+func fmtValue(value any) string {
+	switch value := value.(type) {
+	case float64:
+		return fmtDuration(value)
+	case string:
+		return value
+	default:
+		return ""
+	}
 }
 
 // ─── Image History DTO ────────────────────────────────────────────────
@@ -163,12 +206,17 @@ func mapTaskStatus(status model.TaskStatus) string {
 }
 
 func extractPromptFromPayload(payload *model.GenerationPayload) string {
-	if payload == nil || payload.RequestBody == "" {
+	body := generationPayloadBody(payload)
+	if body == nil {
 		return ""
 	}
-	var body map[string]any
-	if err := json.Unmarshal([]byte(payload.RequestBody), &body); err != nil {
-		return ""
+	if intent, ok := body["intent"].(map[string]any); ok {
+		if script, ok := intent["script"].(string); ok && script != "" {
+			return script
+		}
+		if prompt, ok := intent["prompt"].(string); ok && prompt != "" {
+			return prompt
+		}
 	}
 	// 优先顶层 prompt
 	if prompt, ok := body["prompt"].(string); ok && prompt != "" {
@@ -195,6 +243,22 @@ func extractPromptFromPayload(payload *model.GenerationPayload) string {
 		}
 	}
 	return ""
+}
+
+func generationPayloadBody(payload *model.GenerationPayload) map[string]any {
+	if payload == nil {
+		return nil
+	}
+	for _, raw := range []string{payload.CommandBody, payload.RequestBody} {
+		if raw == "" {
+			continue
+		}
+		var body map[string]any
+		if json.Unmarshal([]byte(raw), &body) == nil {
+			return body
+		}
+	}
+	return nil
 }
 
 func extractVideoURLFromPayload(payload *model.GenerationPayload) string {
@@ -252,4 +316,19 @@ func extractFileIDsFromMetadata(metadata string) []string {
 		return nil
 	}
 	return parsed.FileIDs
+}
+
+func extractGeneratedFileIDs(resultJSON string) []string {
+	if resultJSON == "" {
+		return nil
+	}
+	var result struct {
+		File struct {
+			FileID string `json:"fileId"`
+		} `json:"file"`
+	}
+	if json.Unmarshal([]byte(resultJSON), &result) != nil || result.File.FileID == "" {
+		return nil
+	}
+	return []string{result.File.FileID}
 }

@@ -813,6 +813,23 @@
             "placeholder": "Describe camera movement, subject action, atmosphere, and visual style",
             "required": "Enter a video prompt"
         },
+        "shortDrama": {
+            "title": {
+                "label": "Short Drama Title",
+                "placeholder": "Enter a short drama title"
+            },
+            "script": {
+                "label": "Short Drama Script",
+                "placeholder": "Enter the script, character setup, and shot details"
+            },
+            "roleAria": "Choose a short-drama asset role for {{name}}",
+            "rolePlaceholder": "Select role",
+            "roles": {
+                "character": "Character",
+                "scene": "Scene",
+                "tool": "Prop"
+            }
+        },
         "references": {
             "unsupported": "Unsupported references were ignored. Use images, mp4/mov video, or mp3/wav audio.",
             "imageTooLarge": "Reference images larger than 30MB were ignored",
@@ -1904,6 +1921,7 @@
             "remixFailed": "Failed to remix the video",
             "emptyResult": "The video result is empty",
             "firstPartyProfileRequired": "The current model does not support first-party Canvas video generation. Select a configured Model Profile.",
+            "firstPartyReferenceNotUploaded": "Reference media \"{{name}}\" has not been uploaded to the platform file library.",
             "posterLoadFailed": "Unable to load the first video frame",
             "referenceTooLarge": "{{label}} exceeds 50MB. Compress it and upload again.",
             "referenceDuration": "{{label}} must be between 2 and 15 seconds",

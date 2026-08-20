@@ -1,4 +1,4 @@
-type ResumableNode = { type: string; metadata?: { upstreamTaskId?: string; generationTaskId?: string; generationClientRequestId?: string; generationProfileId?: string; taskModel?: string; status?: string; fileId?: string } };
+type ResumableNode = { type: string; metadata?: { upstreamTaskId?: string; platformTaskId?: string; generationTaskId?: string; generationClientRequestId?: string; generationProfileId?: string; taskModel?: string; status?: string; fileId?: string } };
 
 export function canvasGenerationResume(node?: ResumableNode) {
     if (node?.type === "video" && node.metadata?.status === "success" && node.metadata.fileId) return null;
@@ -9,5 +9,5 @@ export function canvasGenerationResume(node?: ResumableNode) {
     }
     if (!node || !taskId) return null;
     const kind = node.type === "image" ? "image" : node.type === "video" ? "video" : null;
-    return kind ? ({ kind, taskId, model: node.metadata?.taskModel || "" } as const) : null;
+    return kind ? ({ kind, taskId, model: node.metadata?.taskModel || "", ...(node.metadata?.platformTaskId ? { platformTaskId: node.metadata.platformTaskId } : {}) } as const) : null;
 }

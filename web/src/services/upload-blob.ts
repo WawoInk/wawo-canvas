@@ -94,7 +94,7 @@ export async function uploadBlob(blob: Blob, fileType: FileType): Promise<Upload
 export async function uploadUrlToS3(url: string, fileType: FileType): Promise<UploadResult> {
     const session = currentSession();
     assertCurrentSession(session);
-    const ext = fileType.endsWith("videos") ? "mp4" : "png";
+    const ext = fileType.endsWith("videos") ? "mp4" : fileType.endsWith("audios") ? "mp3" : "png";
     const fileName = `generated-${Date.now()}.${ext}`;
     const resp = await fetch("/api/v1/files/proxy-upload", {
         method: "POST",
