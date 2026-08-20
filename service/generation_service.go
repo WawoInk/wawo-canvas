@@ -72,17 +72,43 @@ func DetermineSourceFromPath(path string) string {
 
 // UpdateTaskMetadata 业务层补充任务元数据（所有权校验，仅允许更新 metadata 字段）。
 func UpdateTaskMetadata(taskID string, userID string, metadata string) error {
-	_, err := repository.GetGenerationTaskByIDAndUser(taskID, userID)
+	task, err := repository.GetGenerationTaskByIDAndUser(taskID, userID)
 	if err != nil {
 		return err
 	}
 	if len(metadata) > 4096 {
 		return fmt.Errorf("metadata too large: %d bytes (max 4096)", len(metadata))
 	}
-	return repository.UpdateGenerationTask(taskID, map[string]any{
+	updates := map[string]any{
 		"metadata":   metadata,
 		"updated_at": time.Now().Format(time.RFC3339),
-	})
+	}
+	if task.Status == model.TaskStatusPending {
+		if task.TaskType != model.TaskTypeImage {
+			return fmt.Errorf("materialized result requires an image task")
+		}
+		var result struct {
+			FileIDs []string `json:"fileIds"`
+		}
+		if err := json.Unmarshal([]byte(metadata), &result); err != nil || len(result.FileIDs) == 0 {
+			return fmt.Errorf("materialized result requires fileIds")
+		}
+		for _, fileID := range result.FileIDs {
+			fileID = strings.TrimSpace(fileID)
+			if fileID == "" {
+				return fmt.Errorf("materialized result requires fileIds")
+			}
+			file, ok, err := repository.GetUserFileByID(fileID, userID)
+			if err != nil {
+				return err
+			}
+			if !ok || (file.FileType != "images" && file.FileType != "results/images") {
+				return fmt.Errorf("materialized result requires valid image fileIds")
+			}
+		}
+		updates["status"] = string(model.TaskStatusSuccess)
+	}
+	return repository.UpdateGenerationTask(taskID, updates)
 }
 
 // ListUserTasks 获取用户的任务列表。

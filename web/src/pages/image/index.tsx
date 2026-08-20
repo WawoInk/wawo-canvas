@@ -17,10 +17,10 @@ import { accountStoreName } from "@/lib/account-storage";
 import { modelOptionLabel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { nanoid } from "nanoid";
-import { formatBytes, formatDuration, getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
-import { requestEdit, requestGeneration } from "@/services/api/image";
+import { formatBytes, formatDuration } from "@/lib/image-utils";
+import { cancelAsyncImageTask, pollAsyncImageTask } from "@/services/api/image";
 import { deleteStoredImages, resolveImageUrl, uploadImage } from "@/services/blob-storage";
-import { uploadBlob } from "@/services/upload-blob";
+import { uploadBlob, uploadUrlToS3 } from "@/services/upload-blob";
 import { resolveFileUrls } from "@/services/resolve-file-urls";
 import { patchGenerationTaskMetadata } from "@/services/api/generation-tasks";
 import { useAssetStore } from "@/stores/use-asset-store";
@@ -30,6 +30,7 @@ import { fetchImageHistory, deleteGenerationTask, recordGenerationTask, type Ima
 import { syncClient } from "@/services/sync-client";
 import { syncScheduler } from "@/services/sync-scheduler";
 import { formatDateTime, formatDimensions, formatNumber } from "@/i18n/formatters";
+import { completeImageWorkbenchTask, createImageWorkbenchTask } from "./image-async-task";
 
 type GeneratedImage = {
     id: string;
@@ -90,6 +91,7 @@ export default function ImagePage() {
     const { t } = useTranslation();
     const { message } = App.useApp();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const imageTasksRef = useRef<Map<number, { controller: AbortController; task: Awaited<ReturnType<typeof createImageWorkbenchTask>> }>>(new Map());
     const config = useConfigStore((state) => state.config);
     const effectiveConfig = useEffectiveConfig();
     const updateConfig = useConfigStore((state) => state.updateConfig);
@@ -234,20 +236,14 @@ export default function ImagePage() {
         const tasks = Array.from({ length: generationCount }, (_, index) => runGenerationSlot(index, snapshot));
 
         const result = await Promise.allSettled(tasks);
-        const successImages = result.filter((item): item is PromiseFulfilledResult<GeneratedImage> => item.status === "fulfilled").map((item) => item.value);
+        const successImages = result.filter((item) => item.status === "fulfilled").map((item) => item.value);
         const successCount = successImages.length;
         const failCount = generationCount - successCount;
         const failed = result.find((item): item is PromiseRejectedResult => item.status === "rejected");
         const errorMessage = failed?.reason instanceof Error ? failed.reason.message : t("errors.image.generationFailed");
 
         try {
-            const logImages = await Promise.all(
-                successImages.map(async (image) => {
-                    const blob = await (await fetch(image.dataUrl)).blob();
-                    const stored = await uploadBlob(blob, "results/images");
-                    return { ...image, dataUrl: stored.url, fileId: stored.fileId, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType };
-                }),
-            );
+            const logImages = successImages;
             // Sync results state so "add to assets" gets fileId
             setResults((prev) =>
                 prev.map((r) => {
@@ -410,20 +406,6 @@ export default function ImagePage() {
                 } catch {
                     /* non-blocking */
                 }
-            } else if (fileIds.length) {
-                // Remote mode: proxy already created the task, but we need to
-                // backfill S3 fileIds into its metadata so the backend DTO
-                // returns them on next refreshLogs (cross-browser/device).
-                // Fetch the latest tasks, find the proxy's record, and patch it.
-                try {
-                    const result = await fetchImageHistory(1, 5, "image_workbench");
-                    const match = result.items.find((item) => item.model === log.model && item.createdAt <= new Date(log.createdAt).toISOString() && !item.fileIds?.length);
-                    if (match?.id) {
-                        await patchGenerationTaskMetadata(match.id, JSON.stringify({ fileIds })).catch(() => {});
-                    }
-                } catch {
-                    /* non-blocking */
-                }
             }
         }
         await refreshLogs();
@@ -533,17 +515,32 @@ export default function ImagePage() {
 
     const runGenerationSlot = async (index: number, snapshot: { text: string; config: AiConfig; references: ReferenceImage[] }) => {
         const itemStartedAt = performance.now();
+        const controller = new AbortController();
         try {
-            const result = snapshot.references.length ? await requestEdit(snapshot.config, snapshot.text, snapshot.references) : await requestGeneration(snapshot.config, snapshot.text);
-            const image = result[0];
-            if (!image) throw new Error(t("errors.image.noImageReturned"));
-            const meta = await readImageMeta(image.dataUrl);
-            const nextImage = { id: image.id, dataUrl: image.dataUrl, durationMs: performance.now() - itemStartedAt, width: meta.width, height: meta.height, bytes: getDataUrlByteSize(image.dataUrl) };
+            const task = await createImageWorkbenchTask(snapshot.config, snapshot.text, snapshot.references);
+            imageTasksRef.current.set(index, { controller, task });
+            const stored = await completeImageWorkbenchTask(task, {
+                poll: () => pollAsyncImageTask(snapshot.config, task.upstreamTask, { signal: controller.signal }),
+                materialize: (dataUrl) => (dataUrl.startsWith("data:") ? fetch(dataUrl).then((response) => response.blob()).then((blob) => uploadBlob(blob, "results/images")) : uploadUrlToS3(dataUrl, "results/images")),
+                patchMetadata: patchGenerationTaskMetadata,
+                cancel: () => cancelAsyncImageTask(snapshot.config, task.upstreamTask),
+                signal: controller.signal,
+            });
+            const nextImage = { id: stored.fileId, dataUrl: stored.url, fileId: stored.fileId, durationMs: performance.now() - itemStartedAt, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType };
             setResults((value) => updateResultAt(value, index, { status: "success", image: nextImage }));
             return nextImage;
         } catch (error) {
             setResults((value) => updateResultAt(value, index, { status: "failed", error: error instanceof Error ? error.message : t("errors.image.generationFailed") }));
             throw error;
+        } finally {
+            imageTasksRef.current.delete(index);
+        }
+    };
+
+    const cancelGeneration = () => {
+        for (const { controller, task } of imageTasksRef.current.values()) {
+            controller.abort();
+            void cancelAsyncImageTask(effectiveConfig, task.upstreamTask);
         }
     };
 
@@ -658,8 +655,8 @@ export default function ImagePage() {
                         </div>
 
                         <div className="mt-auto pt-6">
-                            <Button type="primary" size="large" block icon={<Sparkles className="size-4" />} loading={running} disabled={!canGenerate || running} onClick={() => void generate()}>
-                                {t("imageWorkbench.actions.generate")}
+                            <Button type="primary" size="large" block icon={running ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />} disabled={!canGenerate && !running} onClick={() => (running ? cancelGeneration() : void generate())}>
+                                {running ? t("common.actions.cancel") : t("imageWorkbench.actions.generate")}
                             </Button>
                         </div>
                     </div>

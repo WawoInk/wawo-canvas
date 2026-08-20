@@ -40,6 +40,54 @@ func TestLegacyCompatibilityTerminalNotificationsArbitrateOnce(t *testing.T) {
 	}
 }
 
+func TestLegacyCompatibilityFailureUsesSharedRefundSettlement(t *testing.T) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	user, err := SaveUser(model.User{ID: "compat-refund-user-" + uuid.NewString(), Username: "compat-refund-" + uuid.NewString(), AffCode: "compat-refund-aff-" + uuid.NewString(), Credits: credit(3)}, "password")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	task := model.GenerationTask{
+		ID: "compat-refund-" + uuid.NewString(), UserID: user.ID, TaskType: model.TaskTypeVideo,
+		Model: "compat-model", Status: model.TaskStatusRunning, UpstreamTaskID: "compat-upstream",
+		Credits: credit(3), CreatedAt: now, UpdatedAt: now,
+	}
+	if err := repository.CreateGenerationTask(task, model.GenerationPayload{ID: "payload-" + uuid.NewString(), CreatedAt: now}); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	if err := ConsumeUserCreditsWithTask(user.ID, task.Model, task.Credits, "/api/v1/contents/generations/tasks", task.ID); err != nil {
+		t.Fatalf("consume task credits: %v", err)
+	}
+
+	ref := ProviderTaskRef{
+		ID: task.UpstreamTaskID, Status: model.TaskStatusFailed,
+		Error: &model.GenerationError{Code: "PROVIDER_FAILED", Message: "provider failed", Retryable: false},
+	}
+	if err := arbitrateGenerationTerminalFrom(task, task.Model, ref, "compatibility", "", true, []model.TaskStatus{model.TaskStatusRunning}); err != nil {
+		t.Fatalf("settle failed task: %v", err)
+	}
+	if err := arbitrateGenerationTerminalFrom(task, task.Model, ref, "compatibility", "", true, []model.TaskStatus{model.TaskStatusRunning}); err != nil {
+		t.Fatalf("repeat settle failed task: %v", err)
+	}
+
+	stored, ok, err := repository.GetUserByID(user.ID)
+	if err != nil || !ok || !stored.Credits.Equal(credit(3)) {
+		t.Fatalf("refunded credits = %s err=%v", stored.Credits.String(), err)
+	}
+	events, err := repository.ListGenerationTaskEvents(task.ID)
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	terminal := 0
+	for _, event := range events {
+		if event.Type == "terminal" {
+			terminal++
+		}
+	}
+	if terminal != 1 {
+		t.Fatalf("terminal events = %d, want 1", terminal)
+	}
+}
+
 func TestLegacyViduPollingRecordsUpstreamCreditsIncludingNull(t *testing.T) {
 	for _, testCase := range []struct {
 		name            string

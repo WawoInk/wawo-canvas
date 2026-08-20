@@ -17,6 +17,8 @@ import (
 	"github.com/basketikun/infinite-canvas/repository"
 )
 
+var asyncImageTaskTimeout = generationTaskTimeout
+
 // ProxyAIRequest 处理 POST 类 AI 代理请求：选渠道、扣算力点、转发上游、失败返还。
 func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 	body, contentType, modelName, err := readAIRequest(r)
@@ -70,7 +72,12 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 	// ── 生成任务日志：开始 ──
 	provider := DetermineProvider(channel)
 	source := DetermineSource(r)
-	genTaskID, _ := LogTaskStart(user, taskType, provider, modelName, requestAuditBody(body, contentType), SerializeHeaders(resolved.Headers), source, "")
+	genTaskID, err := LogTaskStart(user, taskType, provider, modelName, requestAuditBody(body, contentType), SerializeHeaders(resolved.Headers), source, "")
+	if err != nil {
+		proxyAILogf("AI proxy task log creation failed: user=%s model=%s err=%v", user.ID, modelName, err)
+		proxyFail(w, "AI 接口请求失败")
+		return
+	}
 	// Expose generation task ID to frontend for metadata enrichment
 	w.Header().Set("X-Generation-Task-Id", genTaskID)
 	startTime := time.Now()
@@ -107,6 +114,7 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 				if err := repository.UpdateGenerationPayload(genTaskID, string(respBody), respHeaders); err != nil {
 					proxyAILogf("AI proxy update async image submit payload failed: task=%s err=%v", genTaskID, err)
 				}
+				scheduleAsyncImageTaskTimeout(genTaskID, asyncImageTaskTimeout)
 				return
 			}
 			LogTaskSuccess(genTaskID, respBody, respHeaders, latencyMs, credits, upstreamTaskID)
@@ -251,9 +259,33 @@ func finalizeAsyncImageTask(task model.GenerationTask, ref ProviderTaskRef, sour
 	if createdAt, err := time.Parse(time.RFC3339Nano, task.CreatedAt); err == nil {
 		_ = repository.UpdateGenerationTask(task.ID, map[string]any{"latency_ms": time.Since(createdAt).Milliseconds()})
 	}
+	if ref.Status == model.TaskStatusSucceeded {
+		if _, err := repository.TransitionGenerationTask(task.ID, []model.TaskStatus{model.TaskStatusQueued, model.TaskStatusPending, model.TaskStatusRunning}, map[string]any{
+			"status": string(model.TaskStatusPending), "updated_at": time.Now().UTC().Format(time.RFC3339Nano),
+		}); err != nil {
+			proxyAILogf("AI proxy mark async image task pending failed: task=%s err=%v", task.ID, err)
+		}
+		return
+	}
 	if err := arbitrateGenerationTerminalFrom(task, task.Model, ref, source, "", true, []model.TaskStatus{model.TaskStatusQueued, model.TaskStatusPending, model.TaskStatusRunning}); err != nil {
 		proxyAILogf("AI proxy finalize async image task failed: task=%s err=%v", task.ID, err)
 	}
+}
+
+func scheduleAsyncImageTaskTimeout(taskID string, timeout time.Duration) {
+	go func() {
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		<-timer.C
+		task, err := repository.GetGenerationTaskByID(taskID)
+		if err != nil || (task.Status != model.TaskStatusRunning && task.Status != model.TaskStatusPending) {
+			return
+		}
+		finalizeAsyncImageTask(task, ProviderTaskRef{
+			ID: task.UpstreamTaskID, Status: model.TaskStatusFailed,
+			Error: &model.GenerationError{Code: "TASK_SYNC_TIMEOUT", Message: "图片任务状态同步超时", Retryable: false},
+		}, "timeout", nil, "")
+	}()
 }
 
 // resolveUpstreamRequest 按渠道协议构造上游请求。
@@ -849,7 +881,7 @@ func ProxyVideoTaskDelete(w http.ResponseWriter, r *http.Request, path string) {
 		func(_ []byte, _ string) {
 			if task, err := repository.GetGenerationTaskByUpstreamTaskIDAndUser(upstreamTaskID, user.ID); err == nil {
 				ref := ProviderTaskRef{ID: upstreamTaskID, Status: model.TaskStatusCancelled}
-				if err := arbitrateGenerationTerminalFrom(task, task.Model, ref, "compatibility-cancel", "", false, []model.TaskStatus{model.TaskStatusQueued, model.TaskStatusRunning}); err != nil {
+				if err := arbitrateGenerationTerminalFrom(task, task.Model, ref, "compatibility-cancel", "", true, []model.TaskStatus{model.TaskStatusQueued, model.TaskStatusRunning}); err != nil {
 					proxyAILogf("video task cancel arbitration failed: upstreamTask=%s err=%v", upstreamTaskID, err)
 				}
 				CancelTaskSync(task.ID)

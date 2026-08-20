@@ -17,8 +17,14 @@ type SeedanceTask = {
 type ApiEnvelope<T> = T | { code?: number; data?: T | null; msg?: string };
 type RequestOptions = { signal?: AbortSignal };
 
+function responseHeader(headers: unknown, name: string) {
+    if (!headers || typeof headers !== "object") return "";
+    const value = "get" in headers && typeof headers.get === "function" ? headers.get(name) : (headers as Record<string, unknown>)[name];
+    return typeof value === "string" ? value : "";
+}
+
 export type VideoGenerationResult = { blob?: Blob; url?: string; mimeType?: string };
-export type VideoGenerationTask = { id: string; model: string };
+export type VideoGenerationTask = { id: string; model: string; platformTaskId?: string };
 export type VideoGenerationTaskState = { status: "pending" } | { status: "completed"; result: VideoGenerationResult } | { status: "failed"; error: string };
 
 function aiHeaders(config: AiConfig, contentType?: string) {
@@ -64,9 +70,11 @@ export async function createVideoGenerationTask(
     try {
         const headers: Record<string, string> = { ...aiHeaders(requestConfig, "application/json") };
         if (source) headers["X-Source"] = source;
-        const created = unwrapSeedanceTask((await axios.post<ApiEnvelope<SeedanceTask>>(videoTaskApiUrl(requestConfig), payload, { headers, signal: options?.signal })).data);
+        const response = await axios.post<ApiEnvelope<SeedanceTask>>(videoTaskApiUrl(requestConfig), payload, { headers, signal: options?.signal });
+        const created = unwrapSeedanceTask(response.data);
         if (!created.id) throw new Error(i18n.t("errors.video.missingTaskId"));
-        return { id: created.id, model: selectedModel };
+        const platformTaskId = responseHeader(response.headers, "x-generation-task-id");
+        return platformTaskId ? { id: created.id, model: selectedModel, platformTaskId } : { id: created.id, model: selectedModel };
     } catch (error) {
         throw new Error(readAxiosError(error, i18n.t("errors.video.createTaskFailed")));
     }

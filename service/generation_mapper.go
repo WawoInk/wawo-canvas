@@ -71,7 +71,7 @@ func ToVideoHistoryDTO(task model.GenerationTask, payload *model.GenerationPaylo
 	if task.Status == model.TaskStatusFailed {
 		dto.ErrorMessage = task.ErrorMessage
 	}
-	if payload != nil && task.Status == model.TaskStatusSuccess {
+	if payload != nil && (task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusSucceeded) {
 		if url := extractVideoURLFromPayload(payload); url != "" {
 			dto.VideoURL = url
 		}
@@ -139,7 +139,7 @@ func ToImageHistoryDTO(task model.GenerationTask, payload *model.GenerationPaylo
 	if task.Status == model.TaskStatusFailed {
 		dto.ErrorMessage = task.ErrorMessage
 	}
-	if payload != nil && task.Status == model.TaskStatusSuccess {
+	if payload != nil && (task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusSucceeded) {
 		if urls := extractImageURLsFromPayload(payload); len(urls) > 0 {
 			dto.ImageURLs = urls
 		}
@@ -151,7 +151,7 @@ func ToImageHistoryDTO(task model.GenerationTask, payload *model.GenerationPaylo
 
 func mapTaskStatus(status model.TaskStatus) string {
 	switch status {
-	case model.TaskStatusSuccess:
+	case model.TaskStatusSuccess, model.TaskStatusSucceeded:
 		return "success"
 	case model.TaskStatusFailed, model.TaskStatusCancelled:
 		return "failed"

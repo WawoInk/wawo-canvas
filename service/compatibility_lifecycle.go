@@ -32,7 +32,7 @@ func isAcceptedCompatibilityTask(task model.GenerationTask) bool {
 func observeCompatibilityTask(ctx context.Context, task model.GenerationTask, profile model.GenerationProfile, channel model.ModelChannel) {
 	adapter, ok := generationAdapterFor(task.AdapterKey)
 	if !ok {
-		_ = arbitrateGenerationTerminalFrom(task, profile.UpstreamModel, ProviderTaskRef{ID: task.UpstreamTaskID, Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: "MODEL_CONFIGURATION_INVALID", Message: "generation adapter is unavailable", Retryable: false}}, "worker", "", false, []model.TaskStatus{model.TaskStatusRunning})
+		_ = arbitrateGenerationTerminalFrom(task, profile.UpstreamModel, ProviderTaskRef{ID: task.UpstreamTaskID, Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: "MODEL_CONFIGURATION_INVALID", Message: "generation adapter is unavailable", Retryable: false}}, "worker", "", true, []model.TaskStatus{model.TaskStatusRunning})
 		return
 	}
 	deadline := time.Now().Add(generationTaskTimeout)
@@ -48,7 +48,7 @@ func observeCompatibilityTask(ctx context.Context, task model.GenerationTask, pr
 			return
 		}
 		if !time.Now().Before(deadline) {
-			_ = arbitrateGenerationTerminalFrom(task, profile.UpstreamModel, ProviderTaskRef{ID: task.UpstreamTaskID, Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: "TASK_SYNC_TIMEOUT", Message: "任务状态同步超时", Retryable: false}}, "timeout", "", false, []model.TaskStatus{model.TaskStatusRunning})
+			_ = arbitrateGenerationTerminalFrom(task, profile.UpstreamModel, ProviderTaskRef{ID: task.UpstreamTaskID, Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: "TASK_SYNC_TIMEOUT", Message: "任务状态同步超时", Retryable: false}}, "timeout", "", true, []model.TaskStatus{model.TaskStatusRunning})
 			return
 		}
 		ref, err := adapter.Poll(ctx, channel, task.UpstreamTaskID)

@@ -227,7 +227,7 @@ func OnTaskCompleted(genTaskID string, status model.TaskStatus, result TaskResul
 	if result.ErrorCode != "" {
 		ref.Error = &model.GenerationError{Code: result.ErrorCode, Message: result.ErrorMessage, Retryable: false}
 	}
-	if err := arbitrateGenerationTerminalFrom(task, task.Model, ref, "legacy", "", false, []model.TaskStatus{model.TaskStatusRunning}); err != nil {
+	if err := arbitrateGenerationTerminalFrom(task, task.Model, ref, "legacy", "", true, []model.TaskStatus{model.TaskStatusRunning}); err != nil {
 		log.Printf("task_sync: terminal arbitration failed: genTask=%s err=%v", genTaskID, err)
 	}
 }

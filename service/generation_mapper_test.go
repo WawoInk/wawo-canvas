@@ -24,3 +24,26 @@ func TestVideoHistoryAcceptsLegacyTaskWithoutFirstPartyFieldsOrPayload(t *testin
 		t.Fatalf("legacy optional fields should remain empty: %#v", dto)
 	}
 }
+
+func TestHistoryMapsFirstPartySucceededStatusToSuccess(t *testing.T) {
+	task := model.GenerationTask{
+		ID:        "succeeded-history-1",
+		TaskType:  model.TaskTypeVideo,
+		Model:     "video-model",
+		Status:    model.TaskStatusSucceeded,
+		CreatedAt: "2026-01-01T00:00:00Z",
+	}
+
+	if got := ToVideoHistoryDTO(task, nil).Status; got != "success" {
+		t.Fatalf("video history status = %q, want success", got)
+	}
+	if got := ToImageHistoryDTO(model.GenerationTask{
+		ID:        "succeeded-history-2",
+		TaskType:  model.TaskTypeImage,
+		Model:     "image-model",
+		Status:    model.TaskStatusSucceeded,
+		CreatedAt: "2026-01-01T00:00:00Z",
+	}, nil).Status; got != "success" {
+		t.Fatalf("image history status = %q, want success", got)
+	}
+}
