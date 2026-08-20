@@ -117,6 +117,126 @@ test("普通视频（Sora）支持选择 480p、720p 和 1080p", async () => {
     }
 });
 
+test("保存图片请求格式时过滤非法分辨率并去重", async () => {
+    const previousRequest = axios.request;
+    const previousUserState = useUserStore.getState();
+    let settingsLoaded = false;
+    let postedSettings: any;
+    axios.request = (async (config: { url?: string; method?: string; data?: any }) => {
+        if (config.url !== "/api/admin/settings") throw new Error(`unexpected admin request: ${config.url}`);
+        if (config.method === "POST") {
+            postedSettings = config.data;
+            return {
+                status: 200,
+                statusText: "OK",
+                headers: {},
+                config: {},
+                data: { code: 0, msg: "", data: config.data },
+            };
+        }
+        settingsLoaded = true;
+        return {
+            status: 200,
+            statusText: "OK",
+            headers: {},
+            config: {},
+            data: {
+                code: 0,
+                msg: "",
+                data: {
+                    public: {
+                        modelChannel: {
+                            availableModels: ["image-model"],
+                            imageModels: ["image-model"],
+                            imageRequestFormats: [{ model: "image-model", format: "default", canvasRequestMode: "split", resolutions: ["2k", "8k", "1k", "2k"] }],
+                        },
+                    },
+                    private: { channels: [] },
+                },
+            },
+        };
+    }) as typeof axios.request;
+    useUserStore.setState({ ...previousUserState, token: "admin-settings-token", isReady: true, isLoading: false });
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    try {
+        await act(async () => {
+            root.render(createElement(ConfigProvider, null, createElement(App, null, createElement(AdminSettingsPage))));
+        });
+        await waitFor(() => settingsLoaded);
+
+        const saveButton = required(Array.from(container.querySelectorAll("button")).find((item) => item.textContent?.includes(i18n.t("admin.settings.actions.saveSettings"))) || null);
+        await act(async () => click(saveButton));
+        await waitFor(() => Boolean(postedSettings));
+
+        assert.deepEqual(postedSettings.public.modelChannel.imageRequestFormats[0].resolutions, ["1k", "2k"]);
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        axios.request = previousRequest;
+        useUserStore.setState(previousUserState);
+    }
+});
+
+test("图片请求格式显示对齐的列标题并保留分辨率值", async () => {
+    const previousRequest = axios.request;
+    const previousUserState = useUserStore.getState();
+    let settingsLoaded = false;
+    axios.request = (async (config: { url?: string }) => {
+        if (config.url !== "/api/admin/settings") throw new Error(`unexpected admin request: ${config.url}`);
+        settingsLoaded = true;
+        return {
+            status: 200,
+            statusText: "OK",
+            headers: {},
+            config: {},
+            data: {
+                code: 0,
+                msg: "",
+                data: {
+                    public: {
+                        modelChannel: {
+                            availableModels: ["image-model"],
+                            imageModels: ["image-model"],
+                            imageRequestFormats: [{ model: "image-model", format: "default", canvasRequestMode: "split", resolutions: ["1k", "2k"] }],
+                        },
+                    },
+                    private: { channels: [] },
+                },
+            },
+        };
+    }) as typeof axios.request;
+    useUserStore.setState({ ...previousUserState, token: "admin-settings-token", isReady: true, isLoading: false });
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    try {
+        await act(async () => {
+            root.render(createElement(ConfigProvider, null, createElement(App, null, createElement(AdminSettingsPage))));
+        });
+        await waitFor(() => settingsLoaded);
+
+        const resolutionLabel = i18n.t("admin.settings.public.imageRequestFormats.resolutionLabel");
+        const resolutionField = required(Array.from(container.querySelectorAll<HTMLElement>(".ant-form-item")).find((item) => item.textContent?.includes(resolutionLabel)) || null);
+        const formatRow = required(resolutionField.closest<HTMLElement>(".ant-row"));
+        assert.deepEqual(
+            Array.from(formatRow.querySelectorAll<HTMLElement>(".ant-form-item-label")).map((item) => item.textContent?.trim()),
+            [i18n.t("admin.settings.public.imageRequestFormats.modelLabel"), i18n.t("admin.settings.public.imageRequestFormats.formatLabel"), i18n.t("admin.settings.public.imageRequestFormats.canvasModeLabel"), resolutionLabel],
+        );
+        assert.ok(resolutionField.querySelector(".ant-select-multiple"));
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        axios.request = previousRequest;
+        useUserStore.setState(previousUserState);
+    }
+});
+
 async function waitFor(check: () => boolean, timeoutMs = 2000) {
     const deadline = Date.now() + timeoutMs;
     while (!check()) {

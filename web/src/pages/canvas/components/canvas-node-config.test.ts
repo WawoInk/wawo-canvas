@@ -57,6 +57,24 @@ test("buildNodeConfig preserves node overrides and image canvas count", () => {
     assert.equal(config.background, "");
 });
 
+test("buildNodeConfig normalizes hidden image sizes without opening settings", () => {
+    const config = buildNodeConfig(
+        {
+            ...defaults,
+            channelMode: "remote",
+            imageModel: "image-4k",
+            imageRequestFormats: [
+                { model: "image-4k", format: "default", canvasRequestMode: "split", resolutions: ["4k"] },
+                { model: "image-2k", format: "default", canvasRequestMode: "split", resolutions: ["1k", "2k"] },
+            ],
+        },
+        defaults,
+        node({ model: "image-2k", size: "3840x2160" }),
+        "image",
+    );
+    assert.equal(config.size, "3:2");
+});
+
 test("buildNodeConfig maps media metadata to effective config", () => {
     const config = buildNodeConfig(defaults, defaults, node({ seconds: "12", generateAudio: "false", watermark: "true", negativePrompt: "低质量，模糊", audioVoice: "nova", audioFormat: "wav", audioSpeed: "1.25", audioInstructions: "calm" }), "video");
     assert.equal(config.videoSeconds, "12");

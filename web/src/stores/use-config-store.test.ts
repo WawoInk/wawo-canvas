@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import type { ImageRequestFormatSetting, PublicSettings } from "@/services/api/settings";
+
 // @ts-expect-error Bun provides module mocking at test runtime.
 import { mock } from "bun:test";
 
-let publicSettings = {
+let publicSettings: PublicSettings = {
     modelChannel: {
         availableModels: ["video-allowed", "video-hidden"],
         modelCosts: [],
@@ -17,6 +19,7 @@ let publicSettings = {
         videoModels: ["video-allowed"],
         textModels: [],
         audioModels: [],
+        imageRequestFormats: [],
         systemPrompt: "",
         allowCustomChannel: false,
     },
@@ -65,4 +68,24 @@ test("forced remote mode exposes no local models when the admin lists are empty"
     assert.deepEqual(useConfigStore.getState().config.models, []);
     assert.deepEqual(useConfigStore.getState().config.videoModels, []);
     assert.equal(useConfigStore.getState().config.videoModel, "");
+});
+
+test("public image request resolutions propagate to forced remote config", async () => {
+    const imageRequestFormats: ImageRequestFormatSetting[] = [{ model: "image-model", format: "default", canvasRequestMode: "split", resolutions: ["1k", "2k"] }];
+    publicSettings = {
+        ...publicSettings,
+        modelChannel: {
+            ...publicSettings.modelChannel,
+            availableModels: ["image-model"],
+            imageModels: ["image-model"],
+            imageRequestFormats,
+            allowCustomChannel: false,
+        },
+    };
+    useConfigStore.setState({ config: { ...defaultConfig, channelMode: "local", imageRequestFormats: [] } });
+
+    await useConfigStore.getState().loadPublicSettings();
+
+    assert.deepEqual(useConfigStore.getState().publicSettings?.modelChannel.imageRequestFormats, imageRequestFormats);
+    assert.deepEqual(useConfigStore.getState().config.imageRequestFormats, imageRequestFormats);
 });

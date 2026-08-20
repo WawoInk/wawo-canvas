@@ -1604,7 +1604,9 @@
                 "imageRequestFormats": {
                     "title": "图片请求格式",
                     "description": "按图片模型配置请求格式，并控制“我的画布”有参考图片时按场景调用 edits，或统一调用 generations。未配置模型保持现有默认。",
+                    "modelLabel": "图片模型",
                     "modelRequired": "请选择图片模型",
+                    "formatLabel": "请求格式",
                     "formatRequired": "请选择请求格式",
                     "formatPlaceholder": "选择请求格式",
                     "options": {
@@ -1612,11 +1614,21 @@
                         "multipart": "multipart/form-data",
                         "default": "默认"
                     },
+                    "canvasModeLabel": "画布调用方式",
                     "canvasModeRequired": "请选择画布调用方式",
                     "canvasModePlaceholder": "选择画布调用方式",
                     "canvasModes": {
                         "split": "按场景分端点（默认）",
                         "generations": "统一使用 generations"
+                    },
+                    "resolutionLabel": "分辨率",
+                    "resolutionRequired": "请至少选择一个分辨率",
+                    "resolutionPlaceholder": "选择一个或多个分辨率",
+                    "resolutionOptions": {
+                        "default": "默认（default）",
+                        "1k": "1k",
+                        "2k": "2k",
+                        "4k": "4k"
                     },
                     "deleteLabel": "删除图片请求格式 {{model}}"
                 },

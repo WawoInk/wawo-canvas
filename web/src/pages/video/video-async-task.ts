@@ -33,13 +33,7 @@ function responseHeader(headers: unknown, name: string) {
     return typeof value === "string" ? value : "";
 }
 
-export async function createVideoWorkbenchTask(
-    config: AiConfig,
-    prompt: string,
-    references: ReferenceImage[],
-    videoReferences: ReferenceVideo[],
-    audioReferences: ReferenceAudio[],
-): Promise<VideoWorkbenchTask> {
+export async function createVideoWorkbenchTask(config: AiConfig, prompt: string, references: ReferenceImage[], videoReferences: ReferenceVideo[], audioReferences: ReferenceAudio[]): Promise<VideoWorkbenchTask> {
     const upstreamTask = await createVideoGenerationTask(config, prompt, references, videoReferences, audioReferences, undefined, "video_workbench");
     return { platformTaskId: upstreamTask.platformTaskId || "", upstreamTask };
 }

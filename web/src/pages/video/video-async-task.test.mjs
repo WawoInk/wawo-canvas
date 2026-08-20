@@ -25,10 +25,7 @@ test("remote video completion uses the compatibility task file id without pollin
 
     try {
         const task = await createVideoWorkbenchTask({ ...defaultConfig, channelMode: "remote", model: "Videos", videoModel: "Videos" }, "make a launch film", [], [], []);
-        const states = [
-            { task: { id: "remote-generation-42", status: "running", metadata: "" } },
-            { task: { id: "remote-generation-42", status: "succeeded", metadata: JSON.stringify({ fileIds: ["file-video-9"] }) } },
-        ];
+        const states = [{ task: { id: "remote-generation-42", status: "running", metadata: "" } }, { task: { id: "remote-generation-42", status: "succeeded", metadata: JSON.stringify({ fileIds: ["file-video-9"] }) } }];
         const video = await completeVideoWorkbenchTask(task, {
             pollTask: async () => states.shift(),
             resolveFile: async (fileId) => ({
@@ -79,10 +76,7 @@ test("remote video cancellation addresses the compatibility task by upstream id"
         return { data: {}, status: 200, statusText: "OK", headers: {}, config };
     };
     try {
-        await cancelVideoGenerationTask(
-            { ...defaultConfig, channelMode: "remote", model: "Videos", videoModel: "Videos" },
-            { id: "upstream-video-cancel", model: "Videos", platformTaskId: "remote-generation-cancel" },
-        );
+        await cancelVideoGenerationTask({ ...defaultConfig, channelMode: "remote", model: "Videos", videoModel: "Videos" }, { id: "upstream-video-cancel", model: "Videos", platformTaskId: "remote-generation-cancel" });
         assert.deepEqual(requests, ["delete /api/v1/contents/generations/tasks/upstream-video-cancel"]);
     } finally {
         axios.defaults.adapter = previousAdapter;

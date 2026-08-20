@@ -202,8 +202,32 @@ func normalizeImageRequestFormats(items []model.ImageRequestFormatSetting, image
 		if item.CanvasRequestMode != "generations" {
 			item.CanvasRequestMode = "split"
 		}
+		item.Resolutions = normalizeImageResolutions(item.Resolutions)
 		seen[item.Model] = true
 		result = append(result, item)
+	}
+	return result
+}
+
+func normalizeImageResolutions(values []string) []string {
+	selected := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "default" {
+			return []string{"default"}
+		}
+		if value == "1k" || value == "2k" || value == "4k" {
+			selected[value] = true
+		}
+	}
+	result := []string{}
+	for _, value := range []string{"1k", "2k", "4k"} {
+		if selected[value] {
+			result = append(result, value)
+		}
+	}
+	if len(result) == 0 {
+		return []string{"default"}
 	}
 	return result
 }

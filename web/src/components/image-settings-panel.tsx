@@ -1,11 +1,12 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { ConfigProvider, Switch } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { type CanvasTheme } from "@/lib/canvas-theme";
-import type { AiConfig } from "@/stores/use-config-store";
+import type { ImageResolutionOption } from "@/services/api/settings";
+import { modelOptionName, type AiConfig } from "@/stores/use-config-store";
 import i18n from "@/i18n";
 import { formatNumber } from "@/i18n/formatters";
 
@@ -36,12 +37,43 @@ const aspectOptions: AspectOption[] = [
     { value: "16:9", label: "16:9", width: 1824, height: 1024, icon: "landscape" },
     { value: "9:16", label: "9:16", width: 1024, height: 1824, icon: "portrait" },
     { value: "1:1-2k", label: "1:1(2k)", size: "2048x2048", width: 2048, height: 2048, icon: "square" },
-    { value: "16:9-2k", label: "16:9(2k)", size: "2048x1152", width: 2048, height: 1152, icon: "landscape" },
-    { value: "9:16-2k", label: "9:16(2k)", size: "1152x2048", width: 1152, height: 2048, icon: "portrait" },
+    { value: "16:9-2k", label: "16:9(2k)", size: "2560x1440", width: 2560, height: 1440, icon: "landscape" },
+    { value: "9:16-2k", label: "9:16(2k)", size: "1440x2560", width: 1440, height: 2560, icon: "portrait" },
     { value: "16:9-4k", label: "16:9(4k)", size: "3840x2160", width: 3840, height: 2160, icon: "landscape" },
     { value: "9:16-4k", label: "9:16(4k)", size: "2160x3840", width: 2160, height: 3840, icon: "portrait" },
     { value: "auto", label: "auto", labelKey: "imageSettings.size.auto", width: 0, height: 0, icon: "auto" },
 ];
+
+function normalizeImageResolutions(resolutions?: unknown): ImageResolutionOption[] {
+    if (!Array.isArray(resolutions)) return ["default"];
+    const selected = new Set(resolutions.filter((value): value is ImageResolutionOption => value === "default" || value === "1k" || value === "2k" || value === "4k"));
+    if (!selected.size || selected.has("default")) return ["default"];
+    return (["1k", "2k", "4k"] as ImageResolutionOption[]).filter((value) => selected.has(value));
+}
+
+export function visibleImageAspectOptions(resolutions?: unknown) {
+    const selected = normalizeImageResolutions(resolutions);
+    if (selected.includes("default")) return aspectOptions;
+    return [...(selected.includes("1k") ? aspectOptions.slice(0, 7) : []), ...(selected.includes("2k") ? aspectOptions.slice(7, 10) : []), ...(selected.includes("4k") ? aspectOptions.slice(10, 12) : [])];
+}
+
+export function normalizeImageSizeForResolutions(resolutions: unknown, currentSize: string) {
+    const options = visibleImageAspectOptions(resolutions);
+    if (options.some((option) => (option.size || option.value) === currentSize)) return currentSize;
+    const selected = aspectOptions.find((option) => (option.size || option.value) === currentSize || option.value === currentSize);
+    if (!selected && /^\d+x\d+$/.test(currentSize)) return currentSize;
+    const dimensions = readSizeDimensions(currentSize, selected || aspectOptions[0]);
+    const orientation = Math.sign(dimensions.width - dimensions.height);
+    const option = options.find((item) => Math.sign(item.width - item.height) === orientation) || options[0];
+    return option.size || option.value;
+}
+
+export function imageResolutionsForConfig(config: AiConfig) {
+    if (config.channelMode !== "remote") return ["default"] as ImageResolutionOption[];
+    const models = [config.model, config.imageModel].map((value) => modelOptionName(value || "").trim()).filter(Boolean);
+    const setting = models.map((model) => config.imageRequestFormats.find((item) => modelOptionName(item.model).trim() === model)).find(Boolean);
+    return normalizeImageResolutions(setting?.resolutions);
+}
 
 type ImageSettingsPanelProps = {
     config: AiConfig;
@@ -58,11 +90,18 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
     const [snapDimensionToStep, setSnapDimensionToStep] = useState(true);
     const quality = config.quality || "auto";
     const count = Math.max(1, Math.min(maxCount, Math.floor(Math.abs(Number(config.count)) || 1)));
-    const activeSize = config.size || "auto";
-    const selectedAspect = aspectOptions.find((item) => (item.size || item.value) === activeSize || item.value === activeSize);
+    const resolutions = imageResolutionsForConfig(config);
+    const visibleOptions = visibleImageAspectOptions(resolutions);
+    const configuredSize = config.size || "auto";
+    const activeSize = normalizeImageSizeForResolutions(resolutions, configuredSize);
+    const selectedAspect = visibleOptions.find((item) => (item.size || item.value) === activeSize || item.value === activeSize);
     const dimensions = readSizeDimensions(activeSize, selectedAspect || aspectOptions[0]);
+    useEffect(() => {
+        if (configuredSize !== activeSize) onConfigChange("size", activeSize);
+    }, [activeSize, configuredSize, onConfigChange]);
+
     const selectAspect = (value: string) => {
-        const option = aspectOptions.find((item) => item.value === value);
+        const option = visibleOptions.find((item) => item.value === value);
         onConfigChange("size", option?.size || option?.value || "auto");
     };
     const updateDimension = (key: "width" | "height", value: number | null) => {
@@ -115,7 +154,7 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>{t("imageSettings.aspectRatio")}</SettingTitle>
                     <div className="grid grid-cols-4 gap-2.5">
-                        {aspectOptions.map((item) => (
+                        {visibleOptions.map((item) => (
                             <button
                                 key={item.value}
                                 type="button"

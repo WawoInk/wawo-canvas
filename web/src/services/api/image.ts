@@ -926,11 +926,11 @@ export type AsyncImageTask = { id: string; model: string; images?: Array<{ dataU
 export type AsyncImageTaskState = { status: "pending" } | { status: "succeeded"; images: Array<{ dataUrl: string }> } | { status: "failed"; error: string };
 const MAX_ASYNC_IMAGE_REFERENCES = 9;
 
-function readAsyncImageTask(data: ImageApiResponse & { id?: string }, headers: Record<string, unknown>, model: string, missingId: string): AsyncImageTask {
+function readAsyncImageTask(data: ImageApiResponse & { id?: string }, headers: unknown, model: string, missingId: string): AsyncImageTask {
     if (typeof data.code === "number" && data.code !== 0) throw new Error(data.msg || i18n.t("errors.requestFailed"));
     if (data.error?.message) throw new Error(data.error.message);
     const images = parseImageDataUrls(data.result?.data ?? data.data).map((dataUrl) => ({ dataUrl }));
-    if (images.length) return { id: data.id || String(headers["x-generation-task-id"] || ""), model, images };
+    if (images.length) return { id: data.id || responseHeader(headers, "x-generation-task-id"), model, images };
     if (!data.id) throw new Error(missingId);
     return { id: data.id, model };
 }
@@ -1015,9 +1015,9 @@ export async function pollAsyncImageTask(config: AiConfig, task: AsyncImageTask,
         });
         const body = response.data;
         // ponytail: backend wraps errors; unwrap before inspecting task fields
-        if (typeof body.code === "number" && body.code !== 0) return { status: "failed", error: body.msg || i18n.t("errors.image.taskQueryFailed") };
-        if (body.error?.message) return { status: "failed", error: body.error.message };
         if (body.status === "failed" || body.status === "cancelled") return { status: "failed", error: body.error?.message || i18n.t("errors.image.generationFailed") };
+        if (typeof body.code === "number" && body.code !== 0) throw new Error(body.msg || i18n.t("errors.image.taskQueryFailed"));
+        if (body.error?.message) throw new Error(body.error.message);
         const imageData = body.result?.data ?? body.data;
         if (body.status === "completed" || imageData) {
             const images = parseImageDataUrls(imageData).map((dataUrl) => ({ dataUrl }));
