@@ -64,15 +64,15 @@ test("buildNodeConfig normalizes hidden image sizes without opening settings", (
             channelMode: "remote",
             imageModel: "image-4k",
             imageRequestFormats: [
-                { model: "image-4k", format: "default", canvasRequestMode: "split", resolution: "4k" },
-                { model: "image-2k", format: "default", canvasRequestMode: "split", resolution: "2k" },
+                { model: "image-4k", format: "default", canvasRequestMode: "split", resolutions: ["4k"] },
+                { model: "image-2k", format: "default", canvasRequestMode: "split", resolutions: ["1k", "2k"] },
             ],
         },
         defaults,
         node({ model: "image-2k", size: "3840x2160" }),
         "image",
     );
-    assert.equal(config.size, "2048x1152");
+    assert.equal(config.size, "3:2");
 });
 
 test("buildNodeConfig maps media metadata to effective config", () => {

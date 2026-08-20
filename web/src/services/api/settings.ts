@@ -9,7 +9,7 @@ export type ImageRequestFormatSetting = {
     model: string;
     format: ImageRequestFormatOption;
     canvasRequestMode: CanvasImageRequestMode;
-    resolution: ImageResolutionOption;
+    resolutions: ImageResolutionOption[];
 };
 
 export type PublicModelChannelSettings = {

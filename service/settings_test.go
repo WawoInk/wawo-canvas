@@ -192,8 +192,8 @@ func TestNormalizeSettingsKeepsExplicitImageRequestFormatsOnly(t *testing.T) {
 	})
 
 	want := []model.ImageRequestFormatSetting{
-		{Model: "json-image", Format: "application/json", CanvasRequestMode: "split", Resolution: "default"},
-		{Model: "multipart-image", Format: "multipart/form-data", CanvasRequestMode: "split", Resolution: "default"},
+		{Model: "json-image", Format: "application/json", CanvasRequestMode: "split", Resolutions: []string{"default"}},
+		{Model: "multipart-image", Format: "multipart/form-data", CanvasRequestMode: "split", Resolutions: []string{"default"}},
 	}
 	if got := settings.Public.ModelChannel.ImageRequestFormats; !reflect.DeepEqual(got, want) {
 		t.Fatalf("image request formats = %#v, want %#v", got, want)
@@ -211,7 +211,7 @@ func TestNormalizeSettingsKeepsDefaultImageRequestFormat(t *testing.T) {
 	})
 
 	want := []model.ImageRequestFormatSetting{
-		{Model: "default-image", Format: "default", CanvasRequestMode: "split", Resolution: "default"},
+		{Model: "default-image", Format: "default", CanvasRequestMode: "split", Resolutions: []string{"default"}},
 	}
 	if got := settings.Public.ModelChannel.ImageRequestFormats; !reflect.DeepEqual(got, want) {
 		t.Fatalf("image request formats = %#v, want %#v", got, want)
@@ -245,9 +245,9 @@ func TestNormalizeSettingsKeepsCanvasImageRequestModes(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []map[string]any{
-		{"model": "split-image", "format": "application/json", "canvasRequestMode": "split", "resolution": "default"},
-		{"model": "generation-image", "format": "multipart/form-data", "canvasRequestMode": "generations", "resolution": "default"},
-		{"model": "default-image", "format": "application/json", "canvasRequestMode": "split", "resolution": "default"},
+		{"model": "split-image", "format": "application/json", "canvasRequestMode": "split", "resolutions": []any{"default"}},
+		{"model": "generation-image", "format": "multipart/form-data", "canvasRequestMode": "generations", "resolutions": []any{"default"}},
+		{"model": "default-image", "format": "application/json", "canvasRequestMode": "split", "resolutions": []any{"default"}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("image request formats = %#v, want %#v", got, want)
@@ -259,13 +259,12 @@ func TestNormalizeSettingsNormalizesImageRequestResolutions(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{
 		"public": {
 			"modelChannel": {
-				"imageModels": ["default-image", "one-k-image", "two-k-image", "four-k-image", "invalid-image"],
+				"imageModels": ["default-image", "mixed-image", "empty-image", "invalid-image"],
 				"imageRequestFormats": [
-					{"model": "default-image", "format": "default", "resolution": "default"},
-					{"model": "one-k-image", "format": "default", "resolution": " 1k "},
-					{"model": "two-k-image", "format": "default", "resolution": "2k"},
-					{"model": "four-k-image", "format": "default", "resolution": "4k"},
-					{"model": "invalid-image", "format": "default", "resolution": "8k"}
+					{"model": "default-image", "format": "default", "resolutions": ["default", "2k"]},
+					{"model": "mixed-image", "format": "default", "resolutions": [" 4k ", "1k", "2k", "1k"]},
+					{"model": "empty-image", "format": "default", "resolutions": []},
+					{"model": "invalid-image", "format": "default", "resolutions": ["8k"]}
 				]
 			}
 		}
@@ -282,11 +281,10 @@ func TestNormalizeSettingsNormalizesImageRequestResolutions(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []map[string]any{
-		{"model": "default-image", "format": "default", "canvasRequestMode": "split", "resolution": "default"},
-		{"model": "one-k-image", "format": "default", "canvasRequestMode": "split", "resolution": "1k"},
-		{"model": "two-k-image", "format": "default", "canvasRequestMode": "split", "resolution": "2k"},
-		{"model": "four-k-image", "format": "default", "canvasRequestMode": "split", "resolution": "4k"},
-		{"model": "invalid-image", "format": "default", "canvasRequestMode": "split", "resolution": "default"},
+		{"model": "default-image", "format": "default", "canvasRequestMode": "split", "resolutions": []any{"default"}},
+		{"model": "mixed-image", "format": "default", "canvasRequestMode": "split", "resolutions": []any{"1k", "2k", "4k"}},
+		{"model": "empty-image", "format": "default", "canvasRequestMode": "split", "resolutions": []any{"default"}},
+		{"model": "invalid-image", "format": "default", "canvasRequestMode": "split", "resolutions": []any{"default"}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("image request formats = %#v, want %#v", got, want)

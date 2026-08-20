@@ -1604,7 +1604,9 @@
                 "imageRequestFormats": {
                     "title": "Image request formats",
                     "description": "Configure the request format per image model and choose whether My Canvas routes reference images to edits or always uses generations. Unconfigured models keep the existing defaults.",
+                    "modelLabel": "Image model",
                     "modelRequired": "Select an image model",
+                    "formatLabel": "Request format",
                     "formatRequired": "Select a request format",
                     "formatPlaceholder": "Select a request format",
                     "options": {
@@ -1612,6 +1614,7 @@
                         "multipart": "multipart/form-data",
                         "default": "Default"
                     },
+                    "canvasModeLabel": "Canvas request mode",
                     "canvasModeRequired": "Select a Canvas request mode",
                     "canvasModePlaceholder": "Select a Canvas request mode",
                     "canvasModes": {
@@ -1619,8 +1622,8 @@
                         "generations": "Always use generations"
                     },
                     "resolutionLabel": "Resolution",
-                    "resolutionRequired": "Select a resolution",
-                    "resolutionPlaceholder": "Select a resolution",
+                    "resolutionRequired": "Select at least one resolution",
+                    "resolutionPlaceholder": "Select one or more resolutions",
                     "resolutionOptions": {
                         "default": "Default",
                         "1k": "1k",

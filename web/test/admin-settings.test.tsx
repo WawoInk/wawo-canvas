@@ -117,7 +117,7 @@ test("普通视频（Sora）支持选择 480p、720p 和 1080p", async () => {
     }
 });
 
-test("保存图片请求格式时将非法分辨率归一化为默认值", async () => {
+test("保存图片请求格式时过滤非法分辨率并去重", async () => {
     const previousRequest = axios.request;
     const previousUserState = useUserStore.getState();
     let settingsLoaded = false;
@@ -148,7 +148,7 @@ test("保存图片请求格式时将非法分辨率归一化为默认值", async
                         modelChannel: {
                             availableModels: ["image-model"],
                             imageModels: ["image-model"],
-                            imageRequestFormats: [{ model: "image-model", format: "default", canvasRequestMode: "split", resolution: "8k" }],
+                            imageRequestFormats: [{ model: "image-model", format: "default", canvasRequestMode: "split", resolutions: ["2k", "8k", "1k", "2k"] }],
                         },
                     },
                     private: { channels: [] },
@@ -172,7 +172,7 @@ test("保存图片请求格式时将非法分辨率归一化为默认值", async
         await act(async () => click(saveButton));
         await waitFor(() => Boolean(postedSettings));
 
-        assert.equal(postedSettings.public.modelChannel.imageRequestFormats[0].resolution, "default");
+        assert.deepEqual(postedSettings.public.modelChannel.imageRequestFormats[0].resolutions, ["1k", "2k"]);
     } finally {
         await act(async () => root.unmount());
         container.remove();
@@ -181,7 +181,7 @@ test("保存图片请求格式时将非法分辨率归一化为默认值", async
     }
 });
 
-test("图片请求格式显示分辨率配置并保留服务端值", async () => {
+test("图片请求格式显示对齐的列标题并保留分辨率值", async () => {
     const previousRequest = axios.request;
     const previousUserState = useUserStore.getState();
     let settingsLoaded = false;
@@ -201,7 +201,7 @@ test("图片请求格式显示分辨率配置并保留服务端值", async () =>
                         modelChannel: {
                             availableModels: ["image-model"],
                             imageModels: ["image-model"],
-                            imageRequestFormats: [{ model: "image-model", format: "default", canvasRequestMode: "split", resolution: "2k" }],
+                            imageRequestFormats: [{ model: "image-model", format: "default", canvasRequestMode: "split", resolutions: ["1k", "2k"] }],
                         },
                     },
                     private: { channels: [] },
@@ -223,7 +223,12 @@ test("图片请求格式显示分辨率配置并保留服务端值", async () =>
 
         const resolutionLabel = i18n.t("admin.settings.public.imageRequestFormats.resolutionLabel");
         const resolutionField = required(Array.from(container.querySelectorAll<HTMLElement>(".ant-form-item")).find((item) => item.textContent?.includes(resolutionLabel)) || null);
-        assert.equal(resolutionField.textContent?.includes("2k"), true);
+        const formatRow = required(resolutionField.closest<HTMLElement>(".ant-row"));
+        assert.deepEqual(
+            Array.from(formatRow.querySelectorAll<HTMLElement>(".ant-form-item-label")).map((item) => item.textContent?.trim()),
+            [i18n.t("admin.settings.public.imageRequestFormats.modelLabel"), i18n.t("admin.settings.public.imageRequestFormats.formatLabel"), i18n.t("admin.settings.public.imageRequestFormats.canvasModeLabel"), resolutionLabel],
+        );
+        assert.ok(resolutionField.querySelector(".ant-select-multiple"));
     } finally {
         await act(async () => root.unmount());
         container.remove();

@@ -143,10 +143,7 @@ test("image workbench does not materialize an immediate result after cancellatio
 });
 
 test("image workbench completes pending tasks and patches the exact platform task", async () => {
-    const states = [
-        { status: "pending" },
-        { status: "succeeded", images: [{ dataUrl: "https://provider.test/result.png" }] },
-    ];
+    const states = [{ status: "pending" }, { status: "succeeded", images: [{ dataUrl: "https://provider.test/result.png" }] }];
     /** @type {{ taskId: string; metadata: string }[]} */
     const patched = [];
     let polls = 0;
@@ -384,10 +381,7 @@ test("image workbench retry replaces a failed slot with durable task identities"
         ),
         [{ ...retriedTask, status: "pending" }],
     );
-    assert.deepEqual(
-        upsertImageWorkbenchTaskRecord([], { ...retriedTask, status: "succeeded", fileId: "file-retry-2" }),
-        [{ ...retriedTask, status: "succeeded", fileId: "file-retry-2" }],
-    );
+    assert.deepEqual(upsertImageWorkbenchTaskRecord([], { ...retriedTask, status: "succeeded", fileId: "file-retry-2" }), [{ ...retriedTask, status: "succeeded", fileId: "file-retry-2" }]);
 });
 
 test("image workbench restores successful and failed batch slots", async () => {

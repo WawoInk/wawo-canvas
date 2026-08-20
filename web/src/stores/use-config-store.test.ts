@@ -70,8 +70,8 @@ test("forced remote mode exposes no local models when the admin lists are empty"
     assert.equal(useConfigStore.getState().config.videoModel, "");
 });
 
-test("public image request resolution propagates to forced remote config", async () => {
-    const imageRequestFormats: ImageRequestFormatSetting[] = [{ model: "image-model", format: "default", canvasRequestMode: "split", resolution: "2k" }];
+test("public image request resolutions propagate to forced remote config", async () => {
+    const imageRequestFormats: ImageRequestFormatSetting[] = [{ model: "image-model", format: "default", canvasRequestMode: "split", resolutions: ["1k", "2k"] }];
     publicSettings = {
         ...publicSettings,
         modelChannel: {

@@ -329,7 +329,7 @@ export type AdminImageRequestFormat = {
     model: string;
     format: "application/json" | "multipart/form-data" | "default";
     canvasRequestMode: "split" | "generations";
-    resolution: ImageResolutionOption;
+    resolutions: ImageResolutionOption[];
 };
 
 export type AdminModelCost = {

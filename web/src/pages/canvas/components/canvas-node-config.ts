@@ -1,4 +1,4 @@
-import { imageResolutionForConfig, normalizeImageSizeForResolution } from "@/components/image-settings-panel";
+import { imageResolutionsForConfig, normalizeImageSizeForResolutions } from "@/components/image-settings-panel";
 import type { AiConfig } from "@/stores/use-config-store";
 import type { CanvasAudioSettingKey } from "./canvas-audio-settings-popover";
 import type { CanvasGenerationMode, CanvasNodeData, CanvasNodeMetadata } from "../types";
@@ -24,7 +24,7 @@ export function buildNodeConfig(globalConfig: AiConfig, defaults: AiConfig, node
         audioInstructions: metadata?.audioInstructions || globalConfig.audioInstructions || defaults.audioInstructions,
         count: String(metadata?.count || (mode === "image" ? globalConfig.canvasImageCount || globalConfig.count : globalConfig.count) || defaults.count),
     };
-    if (mode === "image") config.size = normalizeImageSizeForResolution(imageResolutionForConfig(config), config.size);
+    if (mode === "image") config.size = normalizeImageSizeForResolutions(imageResolutionsForConfig(config), config.size);
     return config;
 }
 

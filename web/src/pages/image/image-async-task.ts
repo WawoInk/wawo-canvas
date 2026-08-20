@@ -102,9 +102,7 @@ function delay(ms: number, signal?: AbortSignal) {
 }
 
 export async function createImageWorkbenchTask(config: AiConfig, prompt: string, references: ReferenceImage[]): Promise<ImageWorkbenchTask> {
-    const upstreamTask = references.length
-        ? await createAsyncImageEditTask(config, prompt, references, 1, IMAGE_WORKBENCH_SOURCE)
-        : await createAsyncImageTask(config, prompt, 1, IMAGE_WORKBENCH_SOURCE);
+    const upstreamTask = references.length ? await createAsyncImageEditTask(config, prompt, references, 1, IMAGE_WORKBENCH_SOURCE) : await createAsyncImageTask(config, prompt, 1, IMAGE_WORKBENCH_SOURCE);
     return {
         source: IMAGE_WORKBENCH_SOURCE,
         platformTaskId: upstreamTask.platformTaskId,
@@ -119,12 +117,16 @@ export async function cancelImageWorkbenchTask(config: AiConfig, task: ImageWork
         return cancelAsyncImageTask(config, task.upstreamTask);
     }
 
-    const response = await axios.post(`/api/v1${taskPath}`, { model: requestConfig.model }, {
-        headers: {
-            "Content-Type": "application/json",
-            ...(useUserStore.getState().token ? { Authorization: `Bearer ${useUserStore.getState().token}` } : {}),
+    const response = await axios.post(
+        `/api/v1${taskPath}`,
+        { model: requestConfig.model },
+        {
+            headers: {
+                "Content-Type": "application/json",
+                ...(useUserStore.getState().token ? { Authorization: `Bearer ${useUserStore.getState().token}` } : {}),
+            },
         },
-    });
+    );
     const body = response.data as { status?: string; data?: { status?: string } };
     const status = body.data?.status || body.status;
     if (status !== "cancelled") throw new Error(i18n.t("errors.image.generationFailed"));

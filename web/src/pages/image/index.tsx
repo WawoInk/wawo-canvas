@@ -161,9 +161,7 @@ export default function ImagePage() {
                 ...recordPatch,
             } as ImageWorkbenchTaskRecord;
             const tasks = upsertImageWorkbenchTaskRecord(current.tasks || [], nextTask);
-            const images = image
-                ? [...current.images.filter((item) => item.slotIndex !== index), { ...image, slotIndex: index }].sort((a, b) => (a.slotIndex ?? 0) - (b.slotIndex ?? 0))
-                : current.images;
+            const images = image ? [...current.images.filter((item) => item.slotIndex !== index), { ...image, slotIndex: index }].sort((a, b) => (a.slotIndex ?? 0) - (b.slotIndex ?? 0)) : current.images;
             const successCount = tasks.filter((task) => task.status === "succeeded").length;
             const failCount = tasks.filter((task) => task.status === "failed" || task.status === "cancelled").length;
             const hasPending = tasks.some((task) => task.status === "pending");
@@ -491,11 +489,7 @@ export default function ImagePage() {
                     imageModel: task.upstreamTask.model,
                     count: "1",
                 };
-                void runGenerationSlot(
-                    record.index,
-                    { text: log.prompt, config: taskConfig, references: log.references || [] },
-                    { logId: log.id, task, key },
-                ).catch(() => {});
+                void runGenerationSlot(record.index, { text: log.prompt, config: taskConfig, references: log.references || [] }, { logId: log.id, task, key }).catch(() => {});
             }
         }
     };
@@ -621,13 +615,7 @@ export default function ImagePage() {
         return { text, config: { ...effectiveConfig, model, count: "1" }, references: [...references] };
     };
 
-    const syncLocalWorkbenchTask = async (
-        task: ImageWorkbenchTask,
-        snapshot: { text: string; config: AiConfig },
-        status: "pending" | "success" | "failed" | "cancelled",
-        result?: { url: string; fileId?: string },
-        errorMessage = "",
-    ) => {
+    const syncLocalWorkbenchTask = async (task: ImageWorkbenchTask, snapshot: { text: string; config: AiConfig }, status: "pending" | "success" | "failed" | "cancelled", result?: { url: string; fileId?: string }, errorMessage = "") => {
         if (snapshot.config.channelMode === "remote" || !useUserStore.getState().user?.id) return task;
         try {
             const recorded = await recordGenerationTask({
@@ -656,11 +644,7 @@ export default function ImagePage() {
         }
     };
 
-    const runGenerationSlot = async (
-        index: number,
-        snapshot: { text: string; config: AiConfig; references: ReferenceImage[] },
-        context: { logId?: string; task?: ImageWorkbenchTask; key?: string } = {},
-    ) => {
+    const runGenerationSlot = async (index: number, snapshot: { text: string; config: AiConfig; references: ReferenceImage[] }, context: { logId?: string; task?: ImageWorkbenchTask; key?: string } = {}) => {
         const itemStartedAt = performance.now();
         const key = context.key || `${context.logId || "session"}:${index}:${nanoid()}`;
         const controller = new AbortController();
