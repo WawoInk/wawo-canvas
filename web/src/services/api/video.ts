@@ -101,6 +101,7 @@ export async function pollVideoGenerationTask(config: AiConfig, task: VideoGener
         if (state.status === "failed" || state.status === "cancelled" || state.status === "expired") return { status: "failed", error: videoTaskFailureMessage(state) };
         return { status: "pending" };
     } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 409) return { status: "pending" };
         throw new Error(readAxiosError(error, i18n.t("errors.video.queryTaskFailed")));
     }
 }

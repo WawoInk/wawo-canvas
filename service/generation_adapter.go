@@ -147,7 +147,7 @@ func (a SoraVideosV1Adapter) Create(ctx context.Context, req AdapterCreateReques
 	}
 	request.Header.Set("Authorization", modelChannelAuthorization(req.Channel.APIKey))
 	request.Header.Set("Content-Type", "application/json")
-	return requestSoraVideoTask(a.client, request, audit)
+	return requestSoraVideoTask(a.client, request, audit, false)
 }
 
 type ViduShortDramaV1Adapter struct {
@@ -277,7 +277,7 @@ func (a SoraVideosV1Adapter) Poll(ctx context.Context, channel model.ModelChanne
 		return ProviderTaskRef{Audit: audit}, err
 	}
 	request.Header.Set("Authorization", modelChannelAuthorization(channel.APIKey))
-	return requestSoraVideoTask(a.client, request, audit)
+	return requestSoraVideoTask(a.client, request, audit, true)
 }
 
 func (a SeedanceContentsV1Adapter) ParseCallback(_ context.Context, body []byte) (ProviderTaskRef, error) {
@@ -304,7 +304,7 @@ func (a SoraVideosV1Adapter) Cancel(context.Context, model.ModelChannel, string)
 	return ProviderTaskRef{}, GenerationOperationError{Code: "CANCEL_UNSUPPORTED", Message: "该模型不支持取消生成任务"}
 }
 
-func requestSoraVideoTask(client *http.Client, request *http.Request, audit GenerationAudit) (ProviderTaskRef, error) {
+func requestSoraVideoTask(client *http.Client, request *http.Request, audit GenerationAudit, polling bool) (ProviderTaskRef, error) {
 	response, err := client.Do(request)
 	if err != nil {
 		audit.RawError = err.Error()
@@ -319,7 +319,11 @@ func requestSoraVideoTask(client *http.Client, request *http.Request, audit Gene
 	audit.ResponseHeaders = sanitizeGenerationAuditHeaders(response.Header)
 	audit.ResponseBody = sanitizeGenerationAuditJSON(string(body))
 	if response.StatusCode >= http.StatusBadRequest {
-		return ProviderTaskRef{Error: mapGenerationHTTPResponseError(response.StatusCode, body), Audit: audit}, fmt.Errorf("upstream returned %d", response.StatusCode)
+		errorMapper := mapGenerationHTTPResponseError
+		if polling {
+			errorMapper = mapGenerationPollHTTPResponseError
+		}
+		return ProviderTaskRef{Error: errorMapper(response.StatusCode, body), Audit: audit}, fmt.Errorf("upstream returned %d", response.StatusCode)
 	}
 	ref, err := parseSoraVideoTask(body)
 	if err != nil {
@@ -392,7 +396,7 @@ func pollContentsGenerationTask(ctx context.Context, client *http.Client, channe
 	audit.ResponseHeaders = sanitizeGenerationAuditHeaders(response.Header)
 	audit.ResponseBody = sanitizeGenerationAuditJSON(string(body))
 	if response.StatusCode >= http.StatusBadRequest {
-		ref := ProviderTaskRef{Error: mapGenerationHTTPResponseError(response.StatusCode, body), Audit: audit}
+		ref := ProviderTaskRef{Error: mapGenerationPollHTTPResponseError(response.StatusCode, body), Audit: audit}
 		return ref, fmt.Errorf("upstream returned %d", response.StatusCode)
 	}
 	ref, err := parseContentsGenerationTask(body)
@@ -580,6 +584,13 @@ func mapGenerationHTTPResponseError(status int, body []byte) *model.GenerationEr
 		}
 	}
 	return mapGenerationHTTPError(status)
+}
+
+func mapGenerationPollHTTPResponseError(status int, body []byte) *model.GenerationError {
+	if status == http.StatusConflict {
+		return generationTransportError()
+	}
+	return mapGenerationHTTPResponseError(status, body)
 }
 
 func sanitizeGenerationAuditHeaders(headers http.Header) string {

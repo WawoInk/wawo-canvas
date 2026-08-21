@@ -132,6 +132,38 @@ test("reports the HTTP failure reason instead of the coarse response message", a
     }
 });
 
+test("keeps polling when the upstream task status temporarily returns conflict", async (t) => {
+    const responses = [
+        { status: 409, body: { msg: "Conflict" } },
+        { status: 200, body: { id: "recovered-task", status: "succeeded", content: { video_url: "https://example.com/recovered.mp4" } } },
+    ];
+    const server = createServer((_request, response) => {
+        const current = responses.shift();
+        response.statusCode = current.status;
+        response.setHeader("Content-Type", "application/json");
+        response.end(JSON.stringify(current.body));
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    t.after(() => server.close());
+
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const localConfig = {
+        ...config("seedance-local"),
+        channelMode: "local",
+        baseUrl,
+        apiKey: "test-key",
+        channels: [{ id: "test-channel", name: "Test", baseUrl, apiKey: "test-key", apiFormat: "openai", models: ["seedance-local"] }],
+    };
+
+    assert.deepEqual(await pollVideoGenerationTask(localConfig, { id: "recovered-task", model: "seedance-local" }), { status: "pending" });
+    assert.deepEqual(await pollVideoGenerationTask(localConfig, { id: "recovered-task", model: "seedance-local" }), {
+        status: "completed",
+        result: { url: "https://example.com/recovered.mp4", mimeType: "video/mp4" },
+    });
+});
+
 test("reports an unavailable upstream when the local video service cannot be reached", async () => {
     const server = createServer();
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));

@@ -69,7 +69,7 @@ export async function cancelGeneration(taskId: string) {
 export function retryableGenerationQueryError(error: unknown) {
     if (error instanceof Error && error.name === "AbortError") return false;
     if (!(error instanceof ApiError)) return true;
-    return error.status === 200 || error.status === 408 || error.status === 425 || error.status === 429 || error.status >= 500;
+    return error.status === 200 || error.status === 408 || error.status === 409 || error.status === 425 || error.status === 429 || error.status >= 500;
 }
 
 export function readGenerationError(error: unknown): GenerationError | null {

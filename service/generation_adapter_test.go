@@ -303,10 +303,16 @@ func TestCreateGenerationChargesVideoBindingByResolutionAndSeconds(t *testing.T)
 }
 
 func TestCreateGenerationChargesViduByUpstreamCreditsAtSuccess(t *testing.T) {
+	var polls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodPost {
 			_, _ = w.Write([]byte(`{"id":"vidu-billed","model":"vidu_hq_t2v-oversea","status":"queued"}`))
+			return
+		}
+		if polls.Add(1) == 1 {
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"msg":"Conflict"}`))
 			return
 		}
 		_, _ = w.Write([]byte(`{"id":"vidu-billed","model":"vidu_hq_t2v-oversea","status":"succeeded","content":{"video_url":"https://example.com/video.mp4"},"credits":18}`))
@@ -697,8 +703,14 @@ func TestCreateGenerationRunsMediaSeedanceTask(t *testing.T) {
 }
 
 func TestCreateGenerationRefundsFailedTaskOnce(t *testing.T) {
+	var polls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if polls.Add(1) == 1 {
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"msg":"Conflict"}`))
+			return
+		}
 		_, _ = w.Write([]byte(`{"id":"upstream-failed","status":"failed"}`))
 	}))
 	defer upstream.Close()
@@ -1711,6 +1723,20 @@ func TestGenerationAdaptersExposeConcreteTerminalFailureReasons(t *testing.T) {
 				t.Fatalf("ref=%#v err=%v", ref, err)
 			}
 		})
+	}
+}
+
+func TestGenerationAdapterTreatsConflictWhilePollingAsRetryable(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"msg":"Conflict"}`))
+	}))
+	defer upstream.Close()
+
+	ref, err := NewSeedanceContentsV1Adapter(upstream.Client()).Poll(context.Background(), model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"}, "restarting-task")
+	if err == nil || ref.Error == nil || ref.Error.Code != "UPSTREAM_UNAVAILABLE" || !ref.Error.Retryable {
+		t.Fatalf("ref=%#v err=%v", ref, err)
 	}
 }
 

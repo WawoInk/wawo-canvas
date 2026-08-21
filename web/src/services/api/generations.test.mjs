@@ -225,12 +225,29 @@ test("pauses local observation after twenty consecutive retryable query errors",
 test("retries only temporary generation query errors", () => {
     assert.equal(retryableGenerationQueryError(new Error("network")), true);
     assert.equal(retryableGenerationQueryError(new DOMException("Aborted", "AbortError")), false);
-    for (const status of [200, 408, 425, 429, 500, 503]) {
+    for (const status of [200, 408, 409, 425, 429, 500, 503]) {
         assert.equal(retryableGenerationQueryError(new ApiError("temporary", status, null)), true);
     }
     for (const status of [401, 403, 404]) {
         assert.equal(retryableGenerationQueryError(new ApiError("permanent", status, null)), false);
     }
+});
+
+test("recovers first-party polling after a temporary 409 query response", async () => {
+    const responses = [new ApiError("Conflict", 409, null), { status: "succeeded" }];
+    const terminal = await pollGenerationTask(
+        async () => {
+            const next = responses.shift();
+            if (next instanceof Error) throw next;
+            return next;
+        },
+        async () => {},
+        undefined,
+        1,
+        retryableGenerationQueryError,
+    );
+
+    assert.equal(terminal.status, "succeeded");
 });
 
 test("shows the stable video failure reason instead of a coarse backend message", async () => {
