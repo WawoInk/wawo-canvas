@@ -45,6 +45,12 @@ export default function AdminVolcengineAssets() {
     });
 
     useEffect(() => {
+        setServerConfig("");
+        setConfigText("");
+        setHasLoadedConfig(false);
+    }, [token]);
+
+    useEffect(() => {
         if (!configQuery.data) return;
         const nextConfig = getJsonState(configQuery.data.config).formatted;
         setServerConfig(nextConfig);
