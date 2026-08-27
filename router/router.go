@@ -32,14 +32,29 @@ func New() *gin.Engine {
 	// Callback webhook: no UserAuth — external providers have no session.
 	api.POST("/v1/generation-tasks/callback", gin.WrapF(handler.HandleTaskCallback))
 	api.POST("/v1/generations/callback", gin.WrapF(handler.GenerationCallback))
-	for _, action := range []string{"CreateAssetGroup", "ListAssetGroups", "GetAssetGroup", "UpdateAssetGroup", "DeleteAssetGroup"} {
-		groupAction := action
-		api.POST("/v1/doubao/open/"+groupAction, middleware.AdminAuth, func(c *gin.Context) {
-			handler.VolcengineAssetAdminGroupAction(c.Writer, c.Request, groupAction)
-		})
+	registerVolcengineAdminGroupRoutes := func(group *gin.RouterGroup) {
+		for _, action := range []string{"CreateAssetGroup", "ListAssetGroups", "GetAssetGroup", "UpdateAssetGroup", "DeleteAssetGroup"} {
+			groupAction := action
+			group.POST("/doubao/open/"+groupAction, func(c *gin.Context) {
+				handler.VolcengineAssetAdminGroupAction(c.Writer, c.Request, groupAction)
+			})
+		}
 	}
+	registerVolcengineUserRoutes := func(group *gin.RouterGroup) {
+		group.GET("/volcengine-assets/outbounds", gin.WrapF(handler.VolcengineAssetOutbounds))
+		for _, action := range []string{"ListAssets", "GetAsset", "CreateAsset", "UpdateAsset", "DeleteAsset"} {
+			assetAction := action
+			group.POST("/doubao/open/"+assetAction, func(c *gin.Context) {
+				handler.VolcengineAssetUserAction(c.Writer, c.Request, assetAction)
+			})
+		}
+	}
+	registerVolcengineAdminGroupRoutes(api.Group("/v1", middleware.AdminAuth))
+	registerVolcengineAdminGroupRoutes(router.Group("/v1", middleware.AdminAuth))
 
 	v1 := api.Group("/v1", middleware.UserAuth)
+	registerVolcengineUserRoutes(v1)
+	registerVolcengineUserRoutes(router.Group("/v1", middleware.UserAuth))
 
 	v1.GET("/model-profiles", gin.WrapF(handler.ModelProfiles))
 	v1.POST("/generations", gin.WrapF(handler.CreateGeneration))
@@ -186,15 +201,8 @@ func New() *gin.Engine {
 	api.GET("/assets", middleware.OptionalAuth, gin.WrapF(handler.Assets))
 	api.POST("/admin/login", gin.WrapF(handler.AdminLogin))
 
-	// Volcengine asset gateway: normal users get scoped asset actions, while
-	// configuration and group-management actions are admin-only.
-	v1.GET("/volcengine-assets/outbounds", gin.WrapF(handler.VolcengineAssetOutbounds))
-	for _, action := range []string{"ListAssets", "GetAsset", "CreateAsset", "UpdateAsset", "DeleteAsset"} {
-		assetAction := action
-		v1.POST("/doubao/open/"+assetAction, func(c *gin.Context) {
-			handler.VolcengineAssetUserAction(c.Writer, c.Request, assetAction)
-		})
-	}
+	// Reference-compatible alias for xvanai-new's safe outbound metadata path.
+	api.GET("/user/assets/outbounds", middleware.UserAuth, gin.WrapF(handler.VolcengineAssetOutbounds))
 
 	admin := api.Group("/admin", middleware.AdminAuth)
 	admin.GET("/enterprises", gin.WrapF(handler.AdminEnterprises))

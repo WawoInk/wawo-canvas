@@ -31,6 +31,62 @@ const (
 	volcengineAssetMaxBody    = 10 << 20
 )
 
+type volcengineAssetUpstreamError struct {
+	code    string
+	message string
+	status  int
+}
+
+func (err volcengineAssetUpstreamError) Error() string {
+	if err.code != "" {
+		return "volcengine asset upstream error: " + err.code
+	}
+	return "volcengine asset upstream request failed"
+}
+
+func (err volcengineAssetUpstreamError) SafeMessage() string {
+	return "上游素材库请求失败"
+}
+
+func (err volcengineAssetUpstreamError) FailureData() any {
+	message := strings.TrimSpace(err.message)
+	if len(message) > 512 {
+		message = message[:512]
+	}
+	errorData := map[string]string{}
+	if err.code != "" {
+		errorData["code"] = err.code
+	}
+	if message != "" {
+		errorData["message"] = message
+	}
+	if len(errorData) == 0 {
+		return nil
+	}
+	return map[string]any{"error": errorData}
+}
+
+func volcengineAssetErrorFromResponse(body []byte, status int) error {
+	code := strings.TrimSpace(gjson.GetBytes(body, "error.code").String())
+	message := strings.TrimSpace(gjson.GetBytes(body, "error.message").String())
+	if code == "" {
+		code = strings.TrimSpace(gjson.GetBytes(body, "ResponseMetadata.Error.Code").String())
+	}
+	if message == "" {
+		message = strings.TrimSpace(gjson.GetBytes(body, "ResponseMetadata.Error.Message").String())
+	}
+	if code == "" {
+		code = strings.TrimSpace(gjson.GetBytes(body, "Code").String())
+	}
+	if message == "" {
+		message = strings.TrimSpace(gjson.GetBytes(body, "Message").String())
+	}
+	if code == "" && message == "" {
+		message = "上游素材库请求失败"
+	}
+	return volcengineAssetUpstreamError{code: code, message: message, status: status}
+}
+
 type volcengineAssetListFilter struct {
 	GroupIDs  []string `json:"GroupIds,omitempty"`
 	GroupType string   `json:"GroupType,omitempty"`
@@ -281,86 +337,96 @@ func VolcengineAssetUserAction(ctx context.Context, user model.AuthUser, headers
 	if err != nil {
 		return nil, err
 	}
-	return withVolcengineAssetActionCharge(user, config, action, func() (json.RawMessage, error) {
-		var body []byte
-		switch action {
-		case "ListAssets":
-			var request volcengineAssetListRequest
-			if err := decodeVolcengineAssetRequest(raw, &request); err != nil {
-				return nil, err
-			}
-			if request.Filter == nil {
-				request.Filter = &volcengineAssetListFilter{}
-			}
-			request.Filter.GroupIDs = []string{scope.groupID}
-			request.Filter.GroupType = scope.groupType
-			request.Filter.Statuses = nonEmptyStrings(request.Filter.Statuses)
-			request.ProjectName = scope.projectName
-			body, _ = json.Marshal(request)
-		case "GetAsset":
-			var request volcengineAssetIDRequest
-			if err := decodeVolcengineAssetRequest(raw, &request); err != nil || strings.TrimSpace(request.ID) == "" {
-				if err != nil {
-					return nil, err
-				}
-				return nil, safeMessageError{message: "素材 ID 不能为空"}
-			}
-			request.ProjectName = scope.projectName
-			body, _ = json.Marshal(request)
-			result, err := callVolcengineAssetAPI(ctx, config, scope.outbound, action, body)
+
+	var body []byte
+	var verifyResult func(json.RawMessage) error
+	switch action {
+	case "ListAssets":
+		var request volcengineAssetListRequest
+		if err := decodeVolcengineAssetRequest(raw, &request); err != nil {
+			return nil, err
+		}
+		if request.Filter == nil {
+			request.Filter = &volcengineAssetListFilter{}
+		}
+		request.Filter.GroupIDs = []string{scope.groupID}
+		request.Filter.GroupType = scope.groupType
+		request.Filter.Statuses = nonEmptyStrings(request.Filter.Statuses)
+		request.ProjectName = scope.projectName
+		body, _ = json.Marshal(request)
+	case "GetAsset":
+		var request volcengineAssetIDRequest
+		if err := decodeVolcengineAssetRequest(raw, &request); err != nil || strings.TrimSpace(request.ID) == "" {
 			if err != nil {
 				return nil, err
 			}
-			if !volcengineAssetBelongsToScope(result, scope) {
-				return nil, safeMessageError{message: "素材不存在或无权访问"}
-			}
-			return result, nil
-		case "CreateAsset":
-			var request volcengineAssetCreateRequest
-			if err := decodeVolcengineAssetRequest(raw, &request); err != nil {
-				return nil, err
-			}
-			request.GroupID = scope.groupID
-			request.ProjectName = scope.projectName
-			request.URL = strings.TrimSpace(request.URL)
-			request.AssetType = strings.TrimSpace(request.AssetType)
-			if !validVolcengineAssetURL(request.URL) {
-				return nil, safeMessageError{message: "URL 必须是有效的 http 或 https 地址"}
-			}
-			if request.AssetType != "Image" && request.AssetType != "Video" && request.AssetType != "Audio" {
-				return nil, safeMessageError{message: "素材类型必须是 Image、Video 或 Audio"}
-			}
-			body, _ = json.Marshal(request)
-		case "UpdateAsset":
-			var request volcengineAssetUpdateRequest
-			if err := decodeVolcengineAssetRequest(raw, &request); err != nil || strings.TrimSpace(request.ID) == "" {
-				if err != nil {
-					return nil, err
-				}
-				return nil, safeMessageError{message: "素材 ID 不能为空"}
-			}
-			if err := verifyVolcengineAssetOwnership(ctx, config, scope, request.ID); err != nil {
-				return nil, err
-			}
-			request.ProjectName = scope.projectName
-			body, _ = json.Marshal(request)
-		case "DeleteAsset":
-			var request volcengineAssetIDRequest
-			if err := decodeVolcengineAssetRequest(raw, &request); err != nil || strings.TrimSpace(request.ID) == "" {
-				if err != nil {
-					return nil, err
-				}
-				return nil, safeMessageError{message: "素材 ID 不能为空"}
-			}
-			if err := verifyVolcengineAssetOwnership(ctx, config, scope, request.ID); err != nil {
-				return nil, err
-			}
-			request.ProjectName = scope.projectName
-			body, _ = json.Marshal(request)
-		default:
-			return nil, safeMessageError{message: "不支持的素材操作"}
+			return nil, safeMessageError{message: "素材 ID 不能为空"}
 		}
-		return callVolcengineAssetAPI(ctx, config, scope.outbound, action, body)
+		request.ProjectName = scope.projectName
+		body, _ = json.Marshal(request)
+		verifyResult = func(result json.RawMessage) error {
+			if !volcengineAssetBelongsToScope(result, scope) {
+				return safeMessageError{message: "素材不存在或无权访问"}
+			}
+			return nil
+		}
+	case "CreateAsset":
+		var request volcengineAssetCreateRequest
+		if err := decodeVolcengineAssetRequest(raw, &request); err != nil {
+			return nil, err
+		}
+		request.GroupID = scope.groupID
+		request.ProjectName = scope.projectName
+		request.URL = strings.TrimSpace(request.URL)
+		request.AssetType = strings.TrimSpace(request.AssetType)
+		if !validVolcengineAssetURL(request.URL) {
+			return nil, safeMessageError{message: "URL 必须是有效的 http 或 https 地址"}
+		}
+		if request.AssetType != "Image" && request.AssetType != "Video" && request.AssetType != "Audio" {
+			return nil, safeMessageError{message: "素材类型必须是 Image、Video 或 Audio"}
+		}
+		body, _ = json.Marshal(request)
+	case "UpdateAsset":
+		var request volcengineAssetUpdateRequest
+		if err := decodeVolcengineAssetRequest(raw, &request); err != nil || strings.TrimSpace(request.ID) == "" {
+			if err != nil {
+				return nil, err
+			}
+			return nil, safeMessageError{message: "素材 ID 不能为空"}
+		}
+		if err := verifyVolcengineAssetOwnership(ctx, config, scope, request.ID); err != nil {
+			return nil, err
+		}
+		request.ProjectName = scope.projectName
+		body, _ = json.Marshal(request)
+	case "DeleteAsset":
+		var request volcengineAssetIDRequest
+		if err := decodeVolcengineAssetRequest(raw, &request); err != nil || strings.TrimSpace(request.ID) == "" {
+			if err != nil {
+				return nil, err
+			}
+			return nil, safeMessageError{message: "素材 ID 不能为空"}
+		}
+		if err := verifyVolcengineAssetOwnership(ctx, config, scope, request.ID); err != nil {
+			return nil, err
+		}
+		request.ProjectName = scope.projectName
+		body, _ = json.Marshal(request)
+	default:
+		return nil, safeMessageError{message: "不支持的素材操作"}
+	}
+
+	return withVolcengineAssetActionCharge(user, config, action, func() (json.RawMessage, error) {
+		result, err := callVolcengineAssetAPI(ctx, config, scope.outbound, action, body)
+		if err != nil {
+			return nil, err
+		}
+		if verifyResult != nil {
+			if err := verifyResult(result); err != nil {
+				return nil, err
+			}
+		}
+		return result, nil
 	})
 }
 
@@ -462,7 +528,9 @@ func VolcengineAssetAdminGroupAction(ctx context.Context, user model.AuthUser, h
 	default:
 		return nil, safeMessageError{message: "不支持的分组操作"}
 	}
-	return callVolcengineAssetAPI(ctx, config, outbound, action, body)
+	return withVolcengineAssetActionCharge(user, config, action, func() (json.RawMessage, error) {
+		return callVolcengineAssetAPI(ctx, config, outbound, action, body)
+	})
 }
 
 func decodeVolcengineAssetRequest(raw []byte, target any) error {
@@ -663,11 +731,14 @@ func callVolcengineFormat(ctx context.Context, outbound model.VolcengineAssetOut
 	response, status, err := sendVolcengineAssetHTTP(ctx, http.MethodPost, endpoint.String(), nil, body, func(request *http.Request) {
 		signVolcengineAssetRequest(request, body, outbound.AccessKey, outbound.SecretKey, outbound.RegionOrDefault(), signHost)
 	})
-	if err != nil || status < http.StatusOK || status >= http.StatusMultipleChoices {
-		return nil, safeMessageError{message: "上游素材库请求失败"}
+	if err != nil {
+		return nil, err
 	}
-	if code := gjson.GetBytes(response, "ResponseMetadata.Error.Code").String(); code != "" {
-		return nil, safeMessageError{message: "上游素材库请求失败"}
+	if status < http.StatusOK || status >= http.StatusMultipleChoices {
+		return nil, volcengineAssetErrorFromResponse(response, status)
+	}
+	if code := strings.TrimSpace(gjson.GetBytes(response, "ResponseMetadata.Error.Code").String()); code != "" && code != "0" {
+		return nil, volcengineAssetUpstreamError{code: code, message: gjson.GetBytes(response, "ResponseMetadata.Error.Message").String(), status: status}
 	}
 	if result := gjson.GetBytes(response, "Result"); result.Exists() {
 		return json.RawMessage(result.Raw), nil
@@ -680,8 +751,14 @@ func callNewAPIAssetFormat(ctx context.Context, outbound model.VolcengineAssetOu
 		return nil, safeMessageError{message: "素材库配置无效"}
 	}
 	response, status, err := sendVolcengineAssetHTTP(ctx, http.MethodPost, strings.TrimRight(outbound.BaseURL, "/")+"/"+action, map[string]string{"Authorization": "Bearer " + outbound.AccessToken, "X-Track-Id": uuid.NewString()}, body, nil)
-	if err != nil || status < http.StatusOK || status >= http.StatusMultipleChoices {
-		return nil, safeMessageError{message: "上游素材库请求失败"}
+	if err != nil {
+		return nil, err
+	}
+	if status < http.StatusOK || status >= http.StatusMultipleChoices {
+		return nil, volcengineAssetErrorFromResponse(response, status)
+	}
+	if code := strings.TrimSpace(gjson.GetBytes(response, "code").String()); code != "" && code != "0" && gjson.GetBytes(response, "data").Exists() {
+		return nil, volcengineAssetUpstreamError{code: code, message: gjson.GetBytes(response, "msg").String(), status: status}
 	}
 	return json.RawMessage(response), nil
 }
@@ -693,8 +770,11 @@ func callCustomAssetFormat(ctx context.Context, outbound model.VolcengineAssetOu
 		return nil, safeMessageError{message: "素材库配置无效"}
 	}
 	response, status, err := sendVolcengineAssetHTTP(ctx, method, requestURL, headers, body, nil)
-	if err != nil || status < http.StatusOK || status >= http.StatusMultipleChoices {
-		return nil, safeMessageError{message: "上游素材库请求失败"}
+	if err != nil {
+		return nil, err
+	}
+	if status < http.StatusOK || status >= http.StatusMultipleChoices {
+		return nil, volcengineAssetErrorFromResponse(response, status)
 	}
 	return parseCustomVolcengineAssetResponse(template, response)
 }
@@ -906,7 +986,11 @@ func parseCustomVolcengineAssetResponse(template model.VolcengineAssetActionTemp
 	if template.ErrorCodePath != "" {
 		code := gjson.GetBytes(body, template.ErrorCodePath)
 		if code.Exists() && code.String() != "" && code.String() != "0" {
-			return nil, safeMessageError{message: "上游素材库请求失败"}
+			message := ""
+			if template.ErrorMessagePath != "" {
+				message = gjson.GetBytes(body, template.ErrorMessagePath).String()
+			}
+			return nil, volcengineAssetUpstreamError{code: code.String(), message: message, status: http.StatusOK}
 		}
 	}
 	result := gjson.Result{Raw: string(body)}

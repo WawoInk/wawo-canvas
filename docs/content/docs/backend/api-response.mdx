@@ -113,6 +113,28 @@ Canvas 与远程视频创作台都使用第一方视频 Generation Run：客户�
 
 `start_time/end_time` 按闭区间筛选 `createdAt`。企业积分流水只接受当前企业主账号查询，企业 ID 始终从认证账号推导；客户端提交 `enterpriseId`、其他企业的 `memberId` 或无关流水 ID 不会扩大范围。列表包含 `admin_adjust`、`enterprise_allocate`、`enterprise_reclaim`、`ai_consume` 和 `ai_refund`，每条记录附带所属账号的 `username/displayName`；子账号继续使用 `/api/v1/credit-logs` 查看自己的个人流水。
 
+## 火山引擎资产接口
+
+管理员通过独立的 `VolcAssetConfig` 设置项配置一个或多个上游素材库。配置 JSON 对齐 xvanai-new，支持 `volcengine`、`volcengine-custom`、`newapi` 和 `custom_formats`；管理端读取时仅清空 `secret_key` 与 `access_token`，提交空值会保留服务端已保存的秘密。上游地址、Access Key、签名密钥和访问令牌不会进入普通用户响应。
+
+用户侧资产 Action 使用当前登录账号和企业身份服务端推导作用域，不接受客户端提交的 `enterpriseId`、`userId`、`GroupId` 或 `ProjectName` 作为授权依据。每个个人或企业用户与 outbound 组合自动绑定独立上游素材分组；分组管理 Action 仅平台管理员可调用。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/v1/volcengine-assets/outbounds` | 返回当前可用 outbound 的安全元数据 |
+| `GET` | `/api/user/assets/outbounds` | 与 xvanai-new 兼容的安全 outbound 元数据别名 |
+| `POST` | `/api/v1/doubao/open/ListAssets` | 列出当前账号作用域内的远端素材 |
+| `POST` | `/api/v1/doubao/open/GetAsset` | 查询并校验当前账号可访问的远端素材 |
+| `POST` | `/api/v1/doubao/open/CreateAsset` | 登记 `http/https` 远端媒体 URL |
+| `POST` | `/api/v1/doubao/open/UpdateAsset` | 重命名当前账号的远端素材 |
+| `POST` | `/api/v1/doubao/open/DeleteAsset` | 删除当前账号的远端素材引用 |
+| `POST` | `/api/v1/doubao/open/{CreateAssetGroup...DeleteAssetGroup}` | 管理员素材分组操作；同样支持 `/v1/...` 兼容路径 |
+| `GET/POST` | `/api/admin/volcengine-assets/config` | 管理员读取脱敏配置或保存 `{ "config": "..." }` |
+
+请求可通过 `X-Asset-Outbound`（或配置的选择请求头）或 `?outbound=<id>` 选择 outbound；未指定时依次使用默认 outbound 和首个可用 outbound。配置 `failover` 时会保留候选顺序，当前版本的 Action 仍以首个已解析 outbound 为主。
+
+火山引擎资产上游请求由后端发起，非回环地址经本机 `127.0.0.1:7897` 代理；用户浏览器只调用平台 API，远端图片、视频和音频 URL 仅用于页面预览。素材库引用删除不会删除 URL 指向的原始媒体。
+
 ## 企业素材接口
 
 有效企业的 `owner/member` 使用独立接口读取本企业素材，企业范围只从当前认证账号推导。`owner` 可管理素材和企业媒体文件，`member` 只读、预览和下载。

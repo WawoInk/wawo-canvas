@@ -51,6 +51,14 @@ description: 核心数据表和第一方生成任务事务约束
 
 企业素材复制不复用源 `assets.id` 或 `user_files.id`。文本复制直接创建 `enterprise_id IS NULL` 的个人素材；媒体复制先由对象存储服务端生成个人对象，再在一个 PostgreSQL 事务中写入个人 `user_files` 和 `assets`，两条记录的 `user_id` 都是当前认证账号。事务失败时回滚数据库记录并删除新对象；源企业素材或企业文件删除后，个人副本仍按个人文件和个人素材权限读取。
 
+## volcengine_asset_group_bindings
+
+`volcengine_asset_group_bindings` 保存平台账号作用域与火山引擎 outbound 的上游素材分组绑定。`scope_type` 为 `personal` 或 `enterprise`；企业作用域额外记录 `enterprise_id`，所有记录都记录 `user_id` 与 `outbound_id`。四列联合唯一索引保证同一作用域、账号和 outbound 只有一条绑定。
+
+`format`、`project_name`、`group_id` 和 `group_type` 是首次建组时的配置快照。服务端仅使用当前认证账号推导这些作用域字段，客户端提交的企业、用户、分组和项目字段不会改变数据库查询范围。配置项目或格式变化后会重新建立绑定；首次使用时由服务端查询或创建上游分组，再写入本地绑定。
+
+`settings` 表中的 `key = VolcAssetConfig` 保存完整的管理员资产网关 JSON。该行只允许管理员 API 读写；返回前清除 `secret_key` 与 `access_token`，数据库中仍保留真实凭据。火山远端素材本体只保存在上游，平台不把 Action 列表写入个人 `assets`、Canvas 同步或 WebDAV。
+
 ## generation_tasks
 
 `generation_tasks` 是第一方生成、兼容生成历史和后台恢复共用的任务事实表。第一方任务使用以下生命周期：

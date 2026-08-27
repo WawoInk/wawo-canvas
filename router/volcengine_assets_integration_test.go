@@ -310,6 +310,12 @@ func TestVolcengineAssetsGatewayEnforcesScopesThroughHTTP(t *testing.T) {
 	if response := list(personalA.Token); response.Code != 0 {
 		t.Fatalf("personal A list = %#v", response)
 	}
+	if response := doJSON[map[string]any](t, http.MethodPost, server.URL+"/v1/doubao/open/ListAssets?outbound=nested", personalA.Token, map[string]any{"PageNumber": 1, "PageSize": 20}); response.Code != 0 {
+		t.Fatalf("bare /v1 personal A list = %#v", response)
+	}
+	if response := doJSON[[]volcAssetOutboundHTTP](t, http.MethodGet, server.URL+"/api/user/assets/outbounds", personalA.Token, nil); response.Code != 0 || len(response.Data) != 1 {
+		t.Fatalf("reference outbound alias = %#v", response)
+	}
 	callA := upstream.latest(t, "ListAssets")
 	groupA := volcAssetFirstString(volcAssetObject(callA.Body, "Filter"), "GroupIds")
 	if groupA == "" || groupA == "forged-group" || volcAssetString(callA.Body, "ProjectName") != "canvas-assets" || volcAssetString(volcAssetObject(callA.Body, "Filter"), "GroupType") != "AIGC" || callA.Authorization != "Bearer nested-token" {

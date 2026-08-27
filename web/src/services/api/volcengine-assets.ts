@@ -50,11 +50,15 @@ export function fetchVolcengineAssetOutbounds(token: string) {
 }
 
 export function listVolcengineAssets(token: string, outboundID: string, page: number, pageSize: number, name = "") {
-    return apiPost<VolcengineAssetList>(actionURL("ListAssets", outboundID), {
-        PageNumber: page,
-        PageSize: pageSize,
-        Filter: name.trim() ? { Name: name.trim() } : undefined,
-    }, token);
+    return apiPost<VolcengineAssetList>(
+        actionURL("ListAssets", outboundID),
+        {
+            PageNumber: page,
+            PageSize: pageSize,
+            Filter: name.trim() ? { Name: name.trim() } : undefined,
+        },
+        token,
+    );
 }
 
 export function getVolcengineAsset(token: string, outboundID: string, id: string) {
@@ -62,11 +66,15 @@ export function getVolcengineAsset(token: string, outboundID: string, id: string
 }
 
 export function createVolcengineAsset(token: string, outboundID: string, input: VolcengineAssetInput) {
-    return apiPost<VolcengineAsset>(actionURL("CreateAsset", outboundID), {
-        URL: input.url.trim(),
-        Name: input.name.trim(),
-        AssetType: input.assetType,
-    }, token);
+    return apiPost<VolcengineAsset>(
+        actionURL("CreateAsset", outboundID),
+        {
+            URL: input.url.trim(),
+            Name: input.name.trim(),
+            AssetType: input.assetType,
+        },
+        token,
+    );
 }
 
 export function updateVolcengineAsset(token: string, outboundID: string, id: string, name: string) {
