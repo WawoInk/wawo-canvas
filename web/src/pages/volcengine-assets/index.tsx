@@ -2,6 +2,8 @@
 
 import { CircleAlert, ExternalLink, FileAudio, FileImage, FileVideo, PencilLine, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, App, Button, Card, Drawer, Empty, Form, Input, Modal, Pagination, Popconfirm, Result, Select, Skeleton, Spin, Tabs, Tag, Typography } from "antd";
 
@@ -51,6 +53,7 @@ function assetDetailQueryKey(scope: AssetScope, outboundID: string, assetID: str
 
 export default function VolcengineAssetsPage() {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const queryClient = useQueryClient();
     const token = useUserStore((state) => state.token);
     const user = useUserStore((state) => state.user);
@@ -90,20 +93,17 @@ export default function VolcengineAssetsPage() {
     });
 
     const invalidateAssets = (targetScope: AssetScope, outboundID: string) =>
-        Promise.all([
-            queryClient.invalidateQueries({ queryKey: assetListQueryPrefix(targetScope, outboundID) }),
-            queryClient.invalidateQueries({ queryKey: assetDetailQueryPrefix(targetScope, outboundID) }),
-        ]);
+        Promise.all([queryClient.invalidateQueries({ queryKey: assetListQueryPrefix(targetScope, outboundID) }), queryClient.invalidateQueries({ queryKey: assetDetailQueryPrefix(targetScope, outboundID) })]);
 
     const createMutation = useMutation({
         mutationFn: ({ targetScope, outboundID, input }: { targetScope: AssetScope; outboundID: string; input: AssetFormValues }) => createVolcengineAsset(token, outboundID, input),
         onSuccess: async (_, variables) => {
             setFormOpen(false);
             setPage(1);
-            message.success("素材已登记");
+            message.success(t("volcengineAssets.messages.created"));
             await invalidateAssets(variables.targetScope, variables.outboundID);
         },
-        onError: (error) => message.error(errorMessage(error, "登记素材失败")),
+        onError: (error) => message.error(errorMessage(error, t("volcengineAssets.messages.createFailed"))),
     });
 
     const renameMutation = useMutation({
@@ -111,10 +111,10 @@ export default function VolcengineAssetsPage() {
         onSuccess: async (_, variables) => {
             setFormOpen(false);
             setEditing(null);
-            message.success("素材名称已更新");
+            message.success(t("volcengineAssets.messages.renamed"));
             await invalidateAssets(variables.targetScope, variables.outboundID);
         },
-        onError: (error) => message.error(errorMessage(error, "重命名失败")),
+        onError: (error) => message.error(errorMessage(error, t("volcengineAssets.messages.renameFailed"))),
     });
 
     const deleteMutation = useMutation({
@@ -122,10 +122,10 @@ export default function VolcengineAssetsPage() {
         onSuccess: async (_, variables) => {
             if (preview?.Id === variables.id) setPreview(null);
             if ((assetsQuery.data?.Items?.length || 0) === 1) setPage((current) => Math.max(1, current - 1));
-            message.success("素材已删除");
+            message.success(t("volcengineAssets.messages.deleted"));
             await invalidateAssets(variables.targetScope, variables.outboundID);
         },
-        onError: (error) => message.error(errorMessage(error, "删除素材失败")),
+        onError: (error) => message.error(errorMessage(error, t("volcengineAssets.messages.deleteFailed"))),
     });
 
     const isMutating = createMutation.isPending || renameMutation.isPending || deleteMutation.isPending;
@@ -162,7 +162,7 @@ export default function VolcengineAssetsPage() {
     if (!token || !scope.userID) {
         return (
             <div className="flex h-full items-center justify-center p-6">
-                <Result status="403" title="请先登录后使用火山素材库" />
+                <Result status="403" title={t("volcengineAssets.states.loginRequired")} />
             </div>
         );
     }
@@ -176,9 +176,11 @@ export default function VolcengineAssetsPage() {
     if (outboundsQuery.isLoading) {
         content = <AssetSkeleton />;
     } else if (outboundsQuery.isError) {
-        content = <Result status="error" title="无法加载素材库" subTitle={errorMessage(outboundsQuery.error, "请检查登录状态后重试。")} extra={<Button onClick={refresh}>重试</Button>} />;
+        content = (
+            <Result status="error" title={t("volcengineAssets.states.loadFailed")} subTitle={errorMessage(outboundsQuery.error, t("volcengineAssets.states.checkLogin"))} extra={<Button onClick={refresh}>{t("volcengineAssets.actions.retry")}</Button>} />
+        );
     } else if (!outbounds.length) {
-        content = <Result status="info" title="暂无可用的火山素材库" subTitle="请联系管理员配置可用的火山引擎资产出站。" />;
+        content = <Result status="info" title={t("volcengineAssets.states.noOutbound")} subTitle={t("volcengineAssets.states.noOutboundDescription")} />;
     } else if (!selectedOutboundID) {
         content = <AssetSkeleton />;
     } else {
@@ -201,13 +203,13 @@ export default function VolcengineAssetsPage() {
                     <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                             <Typography.Title level={5} className="!mb-0 truncate">
-                                {currentOutbound?.name || "素材库"}
+                                {currentOutbound?.name || t("volcengineAssets.fallbacks.library")}
                             </Typography.Title>
                             {currentOutbound?.format ? <Tag className="m-0">{currentOutbound.format}</Tag> : null}
                             {currentOutbound?.group_type ? <Tag className="m-0">{currentOutbound.group_type}</Tag> : null}
                         </div>
                         <Typography.Text type="secondary" className="mt-1 block text-xs">
-                            每页展示 {PAGE_SIZE} 项素材
+                            {t("volcengineAssets.pagination.pageSize", { count: PAGE_SIZE })}
                         </Typography.Text>
                     </div>
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
@@ -215,7 +217,7 @@ export default function VolcengineAssetsPage() {
                             value={searchInput}
                             allowClear
                             enterButton={<Search className="size-4" />}
-                            placeholder="按素材名称搜索"
+                            placeholder={t("volcengineAssets.search.placeholder")}
                             className="sm:w-72"
                             onChange={(event) => setSearchInput(event.target.value)}
                             onSearch={(value) => {
@@ -223,23 +225,43 @@ export default function VolcengineAssetsPage() {
                                 setKeyword(value.trim());
                             }}
                         />
-                        <Button type="primary" icon={<Plus className="size-4" />} disabled={isMutating} onClick={() => {
-                            setEditing(null);
-                            setFormOpen(true);
-                        }}>
-                            登记素材
+                        <Button
+                            type="primary"
+                            icon={<Plus className="size-4" />}
+                            disabled={isMutating}
+                            onClick={() => {
+                                setEditing(null);
+                                setFormOpen(true);
+                            }}
+                        >
+                            {t("volcengineAssets.actions.create")}
                         </Button>
                     </div>
                 </div>
 
                 {assetsQuery.isLoading ? <AssetSkeleton /> : null}
-                {assetsQuery.isError ? <Result status="error" title="无法加载素材" subTitle={errorMessage(assetsQuery.error, "请稍后重试。")} extra={<Button onClick={refresh}>重试</Button>} /> : null}
+                {assetsQuery.isError ? (
+                    <Result
+                        status="error"
+                        title={t("volcengineAssets.states.assetLoadFailed")}
+                        subTitle={errorMessage(assetsQuery.error, t("volcengineAssets.states.retry"))}
+                        extra={<Button onClick={refresh}>{t("volcengineAssets.actions.retry")}</Button>}
+                    />
+                ) : null}
                 {!assetsQuery.isLoading && !assetsQuery.isError && !assets.length ? (
-                    <Empty description={keyword ? "没有匹配的素材" : "当前素材库还没有素材"}>
-                        {!keyword ? <Button type="primary" icon={<Plus className="size-4" />} onClick={() => {
-                            setEditing(null);
-                            setFormOpen(true);
-                        }}>登记第一个素材</Button> : null}
+                    <Empty description={keyword ? t("volcengineAssets.states.noMatch") : t("volcengineAssets.states.empty")}>
+                        {!keyword ? (
+                            <Button
+                                type="primary"
+                                icon={<Plus className="size-4" />}
+                                onClick={() => {
+                                    setEditing(null);
+                                    setFormOpen(true);
+                                }}
+                            >
+                                {t("volcengineAssets.actions.createFirst")}
+                            </Button>
+                        ) : null}
                     </Empty>
                 ) : null}
                 {!assetsQuery.isLoading && !assetsQuery.isError && assets.length ? (
@@ -256,13 +278,14 @@ export default function VolcengineAssetsPage() {
                                         setEditing(nextAsset);
                                         setFormOpen(true);
                                     }}
+                                    t={t}
                                     onDelete={(nextAsset) => deleteMutation.mutateAsync({ targetScope: scope, outboundID: selectedOutboundID, id: nextAsset.Id })}
                                 />
                             ))}
                         </div>
                         <div className="mt-6 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
                             <Typography.Text type="secondary" className="text-xs">
-                                共 {total} 项素材
+                                {t("volcengineAssets.pagination.total", { count: total })}
                             </Typography.Text>
                             <Pagination current={page} pageSize={PAGE_SIZE} total={total} showSizeChanger={false} showQuickJumper={false} disabled={assetsQuery.isFetching || isMutating} onChange={setPage} />
                         </div>
@@ -280,11 +303,11 @@ export default function VolcengineAssetsPage() {
                 <div className="mx-auto w-full max-w-6xl">
                     <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div className="max-w-2xl">
-                            <h1 className="text-4xl font-semibold tracking-tight text-foreground">火山素材库</h1>
-                            <p className="mt-3 text-sm leading-6 text-muted-foreground">浏览和管理已配置素材库中的远端图片、视频与音频。素材保持在对应的远端素材库中。</p>
+                            <h1 className="text-4xl font-semibold tracking-tight text-foreground">{t("volcengineAssets.title")}</h1>
+                            <p className="mt-3 text-sm leading-6 text-muted-foreground">{t("volcengineAssets.description")}</p>
                         </div>
                         <Button icon={<RefreshCw className={outboundsQuery.isFetching || assetsQuery.isFetching ? "size-4 animate-spin" : "size-4"} />} onClick={refresh}>
-                            刷新
+                            {t("volcengineAssets.actions.refresh")}
                         </Button>
                     </div>
                     <Card className="overflow-hidden border-border/70 bg-card/95" styles={{ body: { padding: 0 } }}>
@@ -295,9 +318,9 @@ export default function VolcengineAssetsPage() {
 
             <Modal
                 open={formOpen}
-                title={editing ? "重命名素材" : "登记 URL 素材"}
-                okText={editing ? "保存名称" : "登记素材"}
-                cancelText="取消"
+                title={editing ? t("volcengineAssets.actions.rename") : t("volcengineAssets.actions.registerURL")}
+                okText={editing ? t("volcengineAssets.actions.saveName") : t("volcengineAssets.actions.create")}
+                cancelText={t("volcengineAssets.actions.cancel")}
                 onCancel={() => {
                     if (isFormSubmitting) return;
                     setFormOpen(false);
@@ -312,15 +335,15 @@ export default function VolcengineAssetsPage() {
                                 setEditing(null);
                             }}
                         >
-                            取消
+                            {t("volcengineAssets.actions.cancel")}
                         </Button>
                         <Button type="primary" htmlType="submit" form={FORM_ID} loading={isFormSubmitting}>
-                            {editing ? "保存名称" : "登记素材"}
+                            {editing ? t("volcengineAssets.actions.saveName") : t("volcengineAssets.actions.create")}
                         </Button>
                     </div>
                 }
             >
-                <p className="mb-5 text-sm leading-6 text-muted-foreground">{editing ? "编辑仅会更新素材名称，不会修改 URL 或素材类型。" : "通过公开的 http 或 https 媒体 URL 将图片、视频或音频登记到当前素材库。"}</p>
+                <p className="mb-5 text-sm leading-6 text-muted-foreground">{editing ? t("volcengineAssets.form.editDescription") : t("volcengineAssets.form.createDescription")}</p>
                 <Form
                     id={FORM_ID}
                     form={form}
@@ -336,60 +359,60 @@ export default function VolcengineAssetsPage() {
                 >
                     {!editing ? (
                         <>
-                            <Form.Item name="url" label="媒体 URL" rules={[{ required: true, message: "请输入媒体 URL" }, { validator: validateMediaURL }]}>
+                            <Form.Item name="url" label={t("volcengineAssets.form.url")} rules={[{ required: true, message: t("volcengineAssets.form.urlRequired") }, { validator: (_, value) => validateMediaURL(_, value, t) }]}>
                                 <Input placeholder="https://example.com/media.jpg" autoComplete="url" />
                             </Form.Item>
-                            <Form.Item name="assetType" label="素材类型" rules={[{ required: true, message: "请选择素材类型" }]}>
-                                <Select options={volcengineAssetTypes.map((value) => ({ value, label: assetTypeLabel(value) }))} />
+                            <Form.Item name="assetType" label={t("volcengineAssets.form.type")} rules={[{ required: true, message: t("volcengineAssets.form.typeRequired") }]}>
+                                <Select options={volcengineAssetTypes.map((value) => ({ value, label: assetTypeLabel(value, t) }))} />
                             </Form.Item>
                         </>
                     ) : null}
-                    <Form.Item name="name" label="素材名称" rules={[{ required: true, whitespace: true, message: "请输入素材名称" }]}>
-                        <Input maxLength={200} placeholder="例如：品牌主视觉" autoComplete="off" />
+                    <Form.Item name="name" label={t("volcengineAssets.form.name")} rules={[{ required: true, whitespace: true, message: t("volcengineAssets.form.nameRequired") }]}>
+                        <Input maxLength={200} placeholder={t("volcengineAssets.form.namePlaceholder")} autoComplete="off" />
                     </Form.Item>
                 </Form>
             </Modal>
 
-            <Drawer open={Boolean(previewAsset)} width={480} title="素材详情" onClose={() => setPreview(null)}>
+            <Drawer open={Boolean(previewAsset)} width={480} title={t("volcengineAssets.detail.title")} onClose={() => setPreview(null)}>
                 {previewAsset ? (
                     <div className="space-y-5">
                         <div className="overflow-hidden rounded-xl border bg-muted/35">
-                            <AssetPreview asset={previewAsset} className="aspect-[4/3]" />
+                            <AssetPreview asset={previewAsset} className="aspect-[4/3]" t={t} />
                         </div>
                         <div className="space-y-3">
                             <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div className="min-w-0">
                                     <Typography.Title level={4} className="!mb-1 break-words">
-                                        {previewAsset.Name || "未命名素材"}
+                                        {previewAsset.Name || t("volcengineAssets.fallbacks.unnamed")}
                                     </Typography.Title>
-                                    <Typography.Text type="secondary">{assetTypeLabel(previewAsset.AssetType)}</Typography.Text>
+                                    <Typography.Text type="secondary">{assetTypeLabel(previewAsset.AssetType, t)}</Typography.Text>
                                 </div>
                                 <Tag color={statusColor(previewAsset.Status)} className="m-0">
-                                    {previewAsset.Status || "未知状态"}
+                                    {previewAsset.Status || t("volcengineAssets.fallbacks.unknownStatus")}
                                 </Tag>
                             </div>
                             {assetError(previewAsset) ? <Alert type="error" showIcon message={assetError(previewAsset)} /> : null}
-                            {detailQuery.isError ? <Alert type="warning" showIcon message={errorMessage(detailQuery.error, "读取素材详情失败，正在显示列表中的信息。")} /> : null}
+                            {detailQuery.isError ? <Alert type="warning" showIcon message={errorMessage(detailQuery.error, t("volcengineAssets.detail.loadFailed"))} /> : null}
                         </div>
                         <div className="rounded-xl border p-4">
                             <Typography.Text type="secondary" className="block text-xs">
-                                远端媒体 URL
+                                {t("volcengineAssets.detail.mediaURL")}
                             </Typography.Text>
                             <div className="mt-2 flex items-start justify-between gap-3">
                                 <Typography.Text className="min-w-0 break-all text-sm">{previewAsset.URL}</Typography.Text>
                                 {isSafeMediaURL(previewAsset.URL) ? (
                                     <Button type="link" size="small" icon={<ExternalLink className="size-3.5" />} href={previewAsset.URL} target="_blank" rel="noreferrer">
-                                        打开
+                                        {t("volcengineAssets.actions.open")}
                                     </Button>
                                 ) : null}
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3 text-sm">
-                            <InfoItem label="素材 ID" value={previewAsset.Id} />
-                            <InfoItem label="分组 ID" value={previewAsset.GroupId} />
-                            <InfoItem label="项目" value={previewAsset.ProjectName} />
-                            <InfoItem label="创建时间" value={previewAsset.CreateTime} />
-                            <InfoItem label="更新时间" value={previewAsset.UpdateTime} />
+                            <InfoItem label={t("volcengineAssets.detail.assetID")} value={previewAsset.Id} t={t} />
+                            <InfoItem label={t("volcengineAssets.detail.groupID")} value={previewAsset.GroupId} t={t} />
+                            <InfoItem label={t("volcengineAssets.detail.project")} value={previewAsset.ProjectName} t={t} />
+                            <InfoItem label={t("volcengineAssets.detail.createdAt")} value={previewAsset.CreateTime} t={t} />
+                            <InfoItem label={t("volcengineAssets.detail.updatedAt")} value={previewAsset.UpdateTime} t={t} />
                         </div>
                     </div>
                 ) : null}
@@ -398,34 +421,62 @@ export default function VolcengineAssetsPage() {
     );
 }
 
-function VolcengineAssetCard({ asset, disabled, deleting, onPreview, onEdit, onDelete }: { asset: VolcengineAsset; disabled: boolean; deleting: boolean; onPreview: (asset: VolcengineAsset) => void; onEdit: (asset: VolcengineAsset) => void; onDelete: (asset: VolcengineAsset) => Promise<unknown> }) {
+function VolcengineAssetCard({
+    asset,
+    disabled,
+    deleting,
+    onPreview,
+    onEdit,
+    onDelete,
+    t,
+}: {
+    asset: VolcengineAsset;
+    disabled: boolean;
+    deleting: boolean;
+    onPreview: (asset: VolcengineAsset) => void;
+    onEdit: (asset: VolcengineAsset) => void;
+    onDelete: (asset: VolcengineAsset) => Promise<unknown>;
+    t: (key: string, options?: Record<string, unknown>) => string;
+}) {
     const error = assetError(asset);
     return (
         <Card hoverable className="h-full overflow-hidden" styles={{ body: { padding: 0 } }}>
             <div className="border-b bg-muted/30">
-                <AssetPreview asset={asset} className="aspect-[4/3]" />
+                <AssetPreview asset={asset} className="aspect-[4/3]" t={t} />
             </div>
             <div className="p-4">
                 <div className="flex items-start justify-between gap-3">
                     <button type="button" className="min-w-0 text-left" onClick={() => onPreview(asset)}>
-                        <h2 className="line-clamp-1 text-sm font-semibold text-foreground">{asset.Name || "未命名素材"}</h2>
-                        <span className="mt-1 block text-xs text-muted-foreground">{assetTypeLabel(asset.AssetType)}</span>
+                        <h2 className="line-clamp-1 text-sm font-semibold text-foreground">{asset.Name || t("volcengineAssets.fallbacks.unnamed")}</h2>
+                        <span className="mt-1 block text-xs text-muted-foreground">{assetTypeLabel(asset.AssetType, t)}</span>
                     </button>
                     <Tag color={statusColor(asset.Status)} className="m-0 shrink-0 text-[11px]">
-                        {asset.Status || "未知"}
+                        {asset.Status || t("volcengineAssets.fallbacks.unknownStatus")}
                     </Tag>
                 </div>
-                {error ? <div className="mt-3 flex gap-1.5 rounded-lg bg-destructive/10 px-2.5 py-2 text-xs leading-5 text-destructive"><CircleAlert className="mt-0.5 size-3.5 shrink-0" />{error}</div> : null}
+                {error ? (
+                    <div className="mt-3 flex gap-1.5 rounded-lg bg-destructive/10 px-2.5 py-2 text-xs leading-5 text-destructive">
+                        <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+                        {error}
+                    </div>
+                ) : null}
                 <div className="mt-4 flex items-center gap-2">
                     <Button size="small" onClick={() => onPreview(asset)}>
-                        查看
+                        {t("volcengineAssets.actions.view")}
                     </Button>
                     <Button size="small" icon={<PencilLine className="size-3.5" />} disabled={disabled} onClick={() => onEdit(asset)}>
-                        重命名
+                        {t("volcengineAssets.actions.rename")}
                     </Button>
-                    <Popconfirm title="删除此素材？" description="仅删除当前远端素材库中的引用，不会删除原始 URL 指向的媒体。" okText="删除" cancelText="取消" okButtonProps={{ danger: true, loading: deleting }} onConfirm={() => onDelete(asset)}>
+                    <Popconfirm
+                        title={t("volcengineAssets.delete.title")}
+                        description={t("volcengineAssets.delete.description")}
+                        okText={t("volcengineAssets.actions.delete")}
+                        cancelText={t("volcengineAssets.actions.cancel")}
+                        okButtonProps={{ danger: true, loading: deleting }}
+                        onConfirm={() => onDelete(asset)}
+                    >
                         <Button size="small" danger icon={<Trash2 className="size-3.5" />} disabled={disabled && !deleting} loading={deleting}>
-                            删除
+                            {t("volcengineAssets.actions.delete")}
                         </Button>
                     </Popconfirm>
                 </div>
@@ -434,12 +485,12 @@ function VolcengineAssetCard({ asset, disabled, deleting, onPreview, onEdit, onD
     );
 }
 
-function AssetPreview({ asset, className }: { asset: VolcengineAsset; className: string }) {
+function AssetPreview({ asset, className, t }: { asset: VolcengineAsset; className: string; t: (key: string) => string }) {
     const [failed, setFailed] = useState(false);
     const mediaURL = isSafeMediaURL(asset.URL) ? asset.URL : "";
 
     if (mediaURL && asset.AssetType === "Image" && !failed) {
-        return <img src={mediaURL} alt={asset.Name || "素材预览"} className={`${className} w-full object-contain`} loading="lazy" onError={() => setFailed(true)} />;
+        return <img src={mediaURL} alt={asset.Name || t("volcengineAssets.preview.alt")} className={`${className} w-full object-contain`} loading="lazy" onError={() => setFailed(true)} />;
     }
 
     if (mediaURL && asset.AssetType === "Video" && !failed) {
@@ -459,7 +510,7 @@ function AssetPreview({ asset, className }: { asset: VolcengineAsset; className:
     return (
         <div className={`${className} flex flex-col items-center justify-center gap-3 px-5 text-center text-sm text-muted-foreground`}>
             <Icon className="size-10" />
-            <span>{failed ? "预览加载失败" : "暂无可预览的媒体"}</span>
+            <span>{failed ? t("volcengineAssets.preview.failed") : t("volcengineAssets.preview.unavailable")}</span>
         </div>
     );
 }
@@ -474,19 +525,19 @@ function AssetSkeleton() {
     );
 }
 
-function InfoItem({ label, value }: { label: string; value: string }) {
+function InfoItem({ label, value, t }: { label: string; value: string; t: (key: string) => string }) {
     return (
         <div className="min-w-0 rounded-lg border p-3">
             <Typography.Text type="secondary" className="block text-xs">
                 {label}
             </Typography.Text>
-            <Typography.Text className="mt-1 block break-all text-xs">{value || "—"}</Typography.Text>
+            <Typography.Text className="mt-1 block break-all text-xs">{value || t("volcengineAssets.fallbacks.emptyValue")}</Typography.Text>
         </div>
     );
 }
 
-function assetTypeLabel(type: VolcengineAssetType) {
-    return type === "Image" ? "图片" : type === "Video" ? "视频" : "音频";
+function assetTypeLabel(type: VolcengineAssetType, t: (key: string) => string) {
+    return t(`volcengineAssets.types.${type.toLowerCase()}`);
 }
 
 function assetError(asset: VolcengineAsset) {
@@ -510,8 +561,8 @@ function isSafeMediaURL(value: string) {
     }
 }
 
-function validateMediaURL(_: unknown, value: string) {
-    return !value || isSafeMediaURL(value) ? Promise.resolve() : Promise.reject(new Error("仅支持 http 或 https URL"));
+function validateMediaURL(_: unknown, value: string, t: (key: string) => string) {
+    return !value || isSafeMediaURL(value) ? Promise.resolve() : Promise.reject(new Error(t("volcengineAssets.form.urlInvalid")));
 }
 
 function errorMessage(error: unknown, fallback: string) {

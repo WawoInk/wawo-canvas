@@ -4,20 +4,22 @@ import { CheckCircleOutlined, FormatPainterOutlined, ReloadOutlined, SaveOutline
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, App, Button, Card, Flex, Input, Space, Spin, Tag, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { fetchAdminVolcengineAssetsConfig, saveAdminVolcengineAssetsConfig } from "@/services/api/admin";
 import { useUserStore } from "@/stores/use-user-store";
 
-function getJsonState(value: string) {
+function getJsonState(value: string, invalidMessage: string) {
     try {
         return { error: "", formatted: JSON.stringify(JSON.parse(value), null, 2) ?? value };
     } catch (error) {
-        return { error: error instanceof Error ? error.message : "JSON 格式无效", formatted: value };
+        return { error: error instanceof Error ? error.message : invalidMessage, formatted: value };
     }
 }
 
 export default function AdminVolcengineAssets() {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const queryClient = useQueryClient();
     const token = useUserStore((state) => state.token);
     const queryKey = ["admin", "volcengine-assets", "config", token] as const;
@@ -31,16 +33,16 @@ export default function AdminVolcengineAssets() {
         retry: false,
         refetchOnWindowFocus: false,
     });
-    const jsonState = useMemo(() => getJsonState(configText), [configText]);
+    const jsonState = useMemo(() => getJsonState(configText, t("admin.volcengineAssets.jsonInvalid")), [configText]);
     const isDirty = configText !== serverConfig;
     const saveMutation = useMutation({
         mutationFn: () => saveAdminVolcengineAssetsConfig(token, configText),
         onSuccess: async () => {
-            message.success("配置已保存，已重新读取脱敏内容");
+            message.success(t("admin.volcengineAssets.messages.saved"));
             await queryClient.invalidateQueries({ queryKey });
         },
         onError: (error) => {
-            message.error(error instanceof Error ? error.message : "保存配置失败，请稍后重试");
+            message.error(error instanceof Error ? error.message : t("admin.volcengineAssets.messages.saveFailed"));
         },
     });
 
@@ -52,15 +54,15 @@ export default function AdminVolcengineAssets() {
 
     useEffect(() => {
         if (!configQuery.data) return;
-        const nextConfig = getJsonState(configQuery.data.config).formatted;
+        const nextConfig = getJsonState(configQuery.data.config, t("admin.volcengineAssets.jsonInvalid")).formatted;
         setServerConfig(nextConfig);
         setConfigText(nextConfig);
         setHasLoadedConfig(true);
-    }, [configQuery.data]);
+    }, [configQuery.data, t]);
 
     const formatConfig = () => {
         if (jsonState.error) {
-            message.error("JSON 格式无效，无法格式化");
+            message.error(t("admin.volcengineAssets.messages.formatFailed"));
             return;
         }
         setConfigText(jsonState.formatted);
@@ -68,10 +70,10 @@ export default function AdminVolcengineAssets() {
 
     const resetConfig = () => {
         setConfigText(serverConfig);
-        message.info("已恢复为服务器返回的脱敏配置");
+        message.info(t("admin.volcengineAssets.messages.reset"));
     };
 
-    const errorMessage = configQuery.error instanceof Error ? configQuery.error.message : "读取配置失败，请稍后重试";
+    const errorMessage = configQuery.error instanceof Error ? configQuery.error.message : t("admin.volcengineAssets.messages.loadFailed");
 
     return (
         <main style={{ padding: 24 }}>
@@ -81,21 +83,21 @@ export default function AdminVolcengineAssets() {
                         <Flex vertical gap={4}>
                             <Space size={8} wrap>
                                 <Typography.Title level={4} style={{ margin: 0 }}>
-                                    火山引擎资产
+                                    {t("admin.volcengineAssets.title")}
                                 </Typography.Title>
-                                <Tag color="processing">服务端已脱敏</Tag>
+                                <Tag color="processing">{t("admin.volcengineAssets.redacted")}</Tag>
                             </Space>
-                            <Typography.Text type="secondary">通过 JSON 管理上游素材库配置，不会在此页面回显凭据。</Typography.Text>
+                            <Typography.Text type="secondary">{t("admin.volcengineAssets.description")}</Typography.Text>
                         </Flex>
                         <Space wrap>
                             <Button icon={<FormatPainterOutlined />} disabled={!hasLoadedConfig || Boolean(jsonState.error)} onClick={formatConfig}>
-                                格式化
+                                {t("admin.volcengineAssets.actions.format")}
                             </Button>
                             <Button icon={<ReloadOutlined />} disabled={!hasLoadedConfig || !isDirty} onClick={resetConfig}>
-                                重置
+                                {t("admin.volcengineAssets.actions.reset")}
                             </Button>
                             <Button type="primary" icon={<SaveOutlined />} disabled={!hasLoadedConfig || Boolean(jsonState.error)} loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
-                                保存配置
+                                {t("admin.volcengineAssets.actions.save")}
                             </Button>
                         </Space>
                     </Flex>
@@ -103,55 +105,50 @@ export default function AdminVolcengineAssets() {
 
                 <Card variant="borderless">
                     <Flex vertical gap={16}>
-                        <Alert
-                            showIcon
-                            type="info"
-                            message="凭据保护"
-                            description="服务端返回的配置已脱敏。secret_key、access_token 等敏感字段不会回显；如未更换凭据，保存时保持其为空，服务端会保留已有值。"
-                        />
+                        <Alert showIcon type="info" message={t("admin.volcengineAssets.security.title")} description={t("admin.volcengineAssets.security.description")} />
 
                         {configQuery.isLoading ? (
                             <Flex vertical align="center" justify="center" gap={12} style={{ minHeight: 420 }}>
                                 <Spin size="large" />
-                                <Typography.Text type="secondary">正在读取脱敏配置…</Typography.Text>
+                                <Typography.Text type="secondary">{t("admin.volcengineAssets.states.loading")}</Typography.Text>
                             </Flex>
                         ) : configQuery.isError ? (
                             <Alert
                                 showIcon
                                 type="error"
-                                message="读取配置失败"
+                                message={t("admin.volcengineAssets.states.loadFailed")}
                                 description={errorMessage}
                                 action={
                                     <Button size="small" onClick={() => void configQuery.refetch()}>
-                                        重试
+                                        {t("admin.volcengineAssets.actions.retry")}
                                     </Button>
                                 }
                             />
                         ) : !token ? (
-                            <Alert showIcon type="warning" message="请先登录管理员账号后再管理配置。" />
+                            <Alert showIcon type="warning" message={t("admin.volcengineAssets.states.loginRequired")} />
                         ) : (
                             <>
                                 <Flex align="center" justify="space-between" gap={12} wrap>
-                                    <Typography.Text strong>配置 JSON</Typography.Text>
+                                    <Typography.Text strong>{t("admin.volcengineAssets.jsonLabel")}</Typography.Text>
                                     {jsonState.error ? (
-                                        <Tag color="error">JSON 无效，无法保存</Tag>
+                                        <Tag color="error">{t("admin.volcengineAssets.jsonInvalid")}</Tag>
                                     ) : (
                                         <Tag color="success" icon={<CheckCircleOutlined />}>
-                                            JSON 有效
+                                            {t("admin.volcengineAssets.jsonValid")}
                                         </Tag>
                                     )}
                                 </Flex>
                                 <Input.TextArea
                                     value={configText}
                                     autoSize={{ minRows: 20, maxRows: 32 }}
-                                    placeholder="加载后可在此编辑 JSON 配置"
+                                    placeholder={t("admin.volcengineAssets.placeholder")}
                                     spellCheck={false}
                                     status={jsonState.error ? "error" : undefined}
                                     style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", lineHeight: 1.6 }}
                                     onChange={(event) => setConfigText(event.target.value)}
                                 />
-                                {jsonState.error ? <Alert showIcon type="error" message="JSON 格式无效" description={jsonState.error} /> : null}
-                                <Typography.Text type="secondary">{isDirty ? "当前内容尚未保存" : "当前内容与服务器返回的脱敏配置一致"}</Typography.Text>
+                                {jsonState.error ? <Alert showIcon type="error" message={t("admin.volcengineAssets.jsonInvalid")} description={jsonState.error} /> : null}
+                                <Typography.Text type="secondary">{t(isDirty ? "admin.volcengineAssets.states.dirty" : "admin.volcengineAssets.states.clean")}</Typography.Text>
                             </>
                         )}
                     </Flex>
