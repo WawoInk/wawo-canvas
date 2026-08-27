@@ -106,6 +106,12 @@ export type AdminCanvasNodeListResponse = {
 };
 
 export type AdminCanvasNodeQuery = {
+    user_id?: string;
+    username?: string;
+    node_id?: string;
+    upstream_task_id?: string;
+    start_time?: string;
+    end_time?: string;
     page?: number;
     pageSize?: number;
 };

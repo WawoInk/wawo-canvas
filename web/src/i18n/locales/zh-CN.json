@@ -1439,6 +1439,17 @@
         },
         "canvasNodes": {
             "title": "画布节点信息",
+            "filters": {
+                "userId": "用户 ID",
+                "userIdPlaceholder": "输入用户 ID",
+                "username": "用户名",
+                "usernamePlaceholder": "输入用户名",
+                "nodeId": "节点 ID",
+                "nodeIdPlaceholder": "输入节点 ID",
+                "upstreamTaskId": "上游任务 ID",
+                "upstreamTaskIdPlaceholder": "输入上游任务 ID",
+                "createdAt": "创建时间"
+            },
             "table": {
                 "userId": "用户 ID",
                 "username": "用户名",

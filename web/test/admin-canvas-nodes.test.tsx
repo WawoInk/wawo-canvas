@@ -10,7 +10,7 @@ import AdminCanvasNodesPage from "../src/pages/admin/canvas-nodes/index.tsx";
 test("画布节点结果 URL 仅以文本展示", () => {
     const resultUrl = "https://cdn.example.com/results/canvas-node.png";
     const queryClient = new QueryClient();
-    queryClient.setQueryData(["admin", "canvas-nodes", "", 1, 10], {
+    queryClient.setQueryData(["admin", "canvas-nodes", "", "", "", "", "", undefined, undefined, 1, 10], {
         items: [
             {
                 userId: "user-id-123",
@@ -28,4 +28,9 @@ test("画布节点结果 URL 仅以文本展示", () => {
 
     assert.match(html, new RegExp(resultUrl));
     assert.doesNotMatch(html, /<a\b[^>]*\bhref=/);
+    assert.match(html, /ant-typography-copy/);
+    assert.match(html, /Enter user ID/);
+    assert.match(html, /Enter username/);
+    assert.match(html, /Enter node ID/);
+    assert.match(html, /Enter upstream task ID/);
 });

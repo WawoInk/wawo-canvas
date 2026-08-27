@@ -1439,6 +1439,17 @@
         },
         "canvasNodes": {
             "title": "Canvas node information",
+            "filters": {
+                "userId": "User ID",
+                "userIdPlaceholder": "Enter user ID",
+                "username": "Username",
+                "usernamePlaceholder": "Enter username",
+                "nodeId": "Node ID",
+                "nodeIdPlaceholder": "Enter node ID",
+                "upstreamTaskId": "Upstream task ID",
+                "upstreamTaskIdPlaceholder": "Enter upstream task ID",
+                "createdAt": "Created at"
+            },
             "table": {
                 "userId": "User ID",
                 "username": "Username",
