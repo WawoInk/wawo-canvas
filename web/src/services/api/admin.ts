@@ -91,6 +91,25 @@ export type AdminCreditLogQuery = {
     pageSize?: number;
 };
 
+export type AdminCanvasNode = {
+    userId: string;
+    username: string;
+    nodeId: string;
+    upstreamTaskId: string;
+    createdAt: string;
+    resultUrl: string;
+};
+
+export type AdminCanvasNodeListResponse = {
+    items: AdminCanvasNode[];
+    total: number;
+};
+
+export type AdminCanvasNodeQuery = {
+    page?: number;
+    pageSize?: number;
+};
+
 export type AdminUserQuery = {
     keyword?: string;
     page?: number;
@@ -144,6 +163,10 @@ export async function deleteAdminUser(token: string, id: string) {
 
 export async function fetchAdminCreditLogs(token: string, query: AdminCreditLogQuery = {}) {
     return apiGet<AdminCreditLogListResponse>("/api/admin/credit-logs", compactApiParams(query), token);
+}
+
+export async function fetchAdminCanvasNodes(token: string, query: AdminCanvasNodeQuery = {}) {
+    return apiGet<AdminCanvasNodeListResponse>("/api/admin/canvas-nodes", compactApiParams(query), token);
 }
 
 export async function saveAdminCreditLog(token: string, log: Partial<AdminCreditLog>) {
