@@ -1104,6 +1104,38 @@
             "volcengineAssets": "Volcengine assets",
             "settings": "System settings"
         },
+        "volcengineAssets": {
+            "title": "Volcengine assets",
+            "redacted": "Redacted by server",
+            "description": "Manage upstream asset library configuration with JSON. Credentials are never echoed on this page.",
+            "jsonLabel": "Configuration JSON",
+            "jsonValid": "Valid JSON",
+            "jsonInvalid": "Invalid JSON",
+            "placeholder": "Edit the JSON configuration after it loads",
+            "actions": {
+                "format": "Format",
+                "reset": "Reset",
+                "save": "Save configuration",
+                "retry": "Retry"
+            },
+            "security": {
+                "title": "Credential protection",
+                "description": "The configuration returned by the server is redacted. Sensitive fields such as secret_key and access_token are never echoed; leaving credentials blank preserves the existing values on save."
+            },
+            "states": {
+                "loading": "Loading redacted configuration…",
+                "loadFailed": "Failed to load configuration",
+                "loginRequired": "Log in with an administrator account to manage this configuration.",
+                "dirty": "Current content has unsaved changes",
+                "clean": "Current content matches the redacted configuration returned by the server"
+            },
+            "messages": {
+                "saved": "Configuration saved. Redacted content was reloaded.",
+                "saveFailed": "Failed to save configuration. Try again later.",
+                "formatFailed": "Invalid JSON cannot be formatted",
+                "reset": "Restored the redacted configuration returned by the server"
+            }
+        },
         "common": {
             "actions": {
                 "add": "Add",
@@ -1984,6 +2016,91 @@
         "upload": {
             "failed": "Upload failed",
             "proxyFailed": "Proxy upload failed"
+        }
+    },
+    "volcengineAssets": {
+        "title": "Volcengine assets",
+        "description": "Browse and manage remote images, videos, and audio in configured asset libraries. Assets remain in their respective remote libraries.",
+        "actions": {
+            "retry": "Retry",
+            "create": "Register asset",
+            "createFirst": "Register the first asset",
+            "refresh": "Refresh",
+            "rename": "Rename",
+            "registerURL": "Register URL asset",
+            "saveName": "Save name",
+            "cancel": "Cancel",
+            "view": "View",
+            "delete": "Delete",
+            "open": "Open"
+        },
+        "messages": {
+            "created": "Asset registered",
+            "createFailed": "Failed to register asset",
+            "renamed": "Asset name updated",
+            "renameFailed": "Rename failed",
+            "deleted": "Asset deleted",
+            "deleteFailed": "Failed to delete asset"
+        },
+        "states": {
+            "loginRequired": "Log in to use Volcengine assets",
+            "loadFailed": "Failed to load asset library",
+            "checkLogin": "Check your login status and try again.",
+            "noOutbound": "No Volcengine asset library is available",
+            "noOutboundDescription": "Ask an administrator to configure an available Volcengine asset outbound.",
+            "assetLoadFailed": "Failed to load assets",
+            "retry": "Try again later.",
+            "noMatch": "No matching assets",
+            "empty": "This asset library has no assets yet"
+        },
+        "fallbacks": {
+            "library": "Asset library",
+            "unnamed": "Unnamed asset",
+            "unknownStatus": "Unknown status",
+            "emptyValue": "—"
+        },
+        "search": {
+            "placeholder": "Search by asset name"
+        },
+        "pagination": {
+            "pageSize": "{{count}} assets per page",
+            "total": "{{count}} assets total"
+        },
+        "form": {
+            "editDescription": "Editing only updates the asset name; the URL and asset type cannot be changed.",
+            "createDescription": "Register an image, video, or audio asset in the current library using a public http or https media URL.",
+            "url": "Media URL",
+            "urlRequired": "Enter a media URL",
+            "urlInvalid": "Only http or https URLs are supported",
+            "type": "Asset type",
+            "typeRequired": "Select an asset type",
+            "name": "Asset name",
+            "nameRequired": "Enter an asset name",
+            "namePlaceholder": "Example: Brand hero"
+        },
+        "detail": {
+            "title": "Asset details",
+            "loadFailed": "Failed to load asset details; showing the information from the list.",
+            "mediaURL": "Remote media URL",
+            "assetID": "Asset ID",
+            "groupID": "Group ID",
+            "project": "Project",
+            "createdAt": "Created at",
+            "updatedAt": "Updated at"
+        },
+        "delete": {
+            "title": "Delete this asset?",
+            "description": "Only the reference in the remote asset library will be deleted; the media at the original URL will not be deleted."
+        },
+        "preview": {
+            "alt": "Asset preview",
+            "failed": "Preview failed to load",
+            "unavailable": "No previewable media"
+        },
+        "types": {
+            "image": "Image",
+            "video": "Video",
+            "audio": "Audio"
         }
     },
     "seo": {
