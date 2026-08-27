@@ -541,7 +541,11 @@ func ensureVolcengineAssetScope(ctx context.Context, config model.VolcengineAsse
 	if binding.ProjectName != outbound.ProjectName || binding.GroupID == "" {
 		return nil, safeMessageError{message: "素材库分组配置无效"}
 	}
-	return &volcengineAssetScope{user: user, scopeType: scopeType, enterpriseID: enterpriseID, outbound: outbound, projectName: outbound.ProjectName, groupID: binding.GroupID, groupType: binding.GroupType}, nil
+	groupType := binding.GroupType
+	if groupType == "" {
+		groupType = outbound.GroupTypeOrDefault()
+	}
+	return &volcengineAssetScope{user: user, scopeType: scopeType, enterpriseID: enterpriseID, outbound: outbound, projectName: outbound.ProjectName, groupID: binding.GroupID, groupType: groupType}, nil
 }
 
 func provisionVolcengineAssetGroup(ctx context.Context, config model.VolcengineAssetConfig, outbound model.VolcengineAssetOutbound, user model.AuthUser, scopeType, enterpriseID string) (model.VolcengineAssetGroupBinding, error) {
