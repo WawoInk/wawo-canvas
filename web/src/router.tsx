@@ -22,6 +22,7 @@ import AdminUsers from "@/pages/admin/users";
 import AdminEnterprises from "@/pages/admin/enterprises";
 import AdminCreditLogs from "@/pages/admin/credit-logs";
 import AdminGenerationTasks from "@/pages/admin/generation-tasks";
+import AdminCanvasNodes from "@/pages/admin/canvas-nodes";
 import AdminPrompts from "@/pages/admin/prompts";
 import AdminAssets from "@/pages/admin/assets";
 import AdminSettings from "@/pages/admin/settings";
@@ -85,6 +86,7 @@ export const router = createBrowserRouter([
                     { path: "admin/enterprises", element: <AdminEnterprises /> },
                     { path: "admin/credit-logs", element: <AdminCreditLogs /> },
                     { path: "admin/generation-tasks", element: <AdminGenerationTasks /> },
+                    { path: "admin/canvas-nodes", element: <AdminCanvasNodes /> },
                     { path: "admin/prompts", element: <AdminPrompts /> },
                     { path: "admin/assets", element: <AdminAssets /> },
                     { path: "admin/settings", element: <AdminSettings /> },

@@ -1096,6 +1096,7 @@
             "users": "用户管理",
             "creditLogs": "算力点日志",
             "generationTasks": "使用日志",
+            "canvasNodes": "画布节点信息",
             "prompts": "提示词管理",
             "assets": "素材库",
             "assetsManagement": "素材库管理",
@@ -1434,6 +1435,20 @@
                 "loadFailed": "读取日志失败",
                 "refundRepaired": "退款已补发",
                 "refundRepairFailed": "补发退款失败"
+            }
+        },
+        "canvasNodes": {
+            "title": "画布节点信息",
+            "table": {
+                "userId": "用户 ID",
+                "username": "用户名",
+                "nodeId": "节点 ID",
+                "upstreamTaskId": "上游任务 ID",
+                "createdAt": "创建时间",
+                "resultUrl": "生成结果 URL"
+            },
+            "messages": {
+                "loadFailed": "读取画布节点信息失败"
             }
         },
         "assets": {

@@ -1,4 +1,4 @@
-import { ExperimentOutlined, FileTextOutlined, HomeOutlined, LogoutOutlined, PictureOutlined, SettingOutlined, TeamOutlined, TransactionOutlined, UserOutlined } from "@ant-design/icons";
+import { ExperimentOutlined, FileTextOutlined, HomeOutlined, LogoutOutlined, NodeIndexOutlined, PictureOutlined, SettingOutlined, TeamOutlined, TransactionOutlined, UserOutlined } from "@ant-design/icons";
 import { Button, Flex, Layout, Menu, Typography, theme } from "antd";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
@@ -26,6 +26,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         { key: "/admin/users", icon: <UserOutlined />, label: t("admin.menus.users") },
         { key: "/admin/credit-logs", icon: <TransactionOutlined />, label: t("admin.menus.creditLogs") },
         { key: "/admin/generation-tasks", icon: <ExperimentOutlined />, label: t("admin.menus.generationTasks") },
+        { key: "/admin/canvas-nodes", icon: <NodeIndexOutlined />, label: t("admin.menus.canvasNodes") },
         { key: "/admin/prompts", icon: <FileTextOutlined />, label: t("admin.menus.prompts") },
         { key: "/admin/assets", icon: <PictureOutlined />, label: t("admin.menus.assets") },
         { key: "/admin/settings", icon: <SettingOutlined />, label: t("admin.menus.settings") },
@@ -38,13 +39,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             ? "/admin/assets"
             : appPath.startsWith("/admin/generation-tasks")
               ? "/admin/generation-tasks"
-              : appPath.startsWith("/admin/prompts")
-                ? "/admin/prompts"
-                : appPath.startsWith("/admin/credit-logs")
-                  ? "/admin/credit-logs"
-                  : appPath.startsWith("/admin/users")
-                    ? "/admin/users"
-                    : "";
+              : appPath.startsWith("/admin/canvas-nodes")
+                ? "/admin/canvas-nodes"
+                : appPath.startsWith("/admin/prompts")
+                  ? "/admin/prompts"
+                  : appPath.startsWith("/admin/credit-logs")
+                    ? "/admin/credit-logs"
+                    : appPath.startsWith("/admin/users")
+                      ? "/admin/users"
+                      : "";
     const pageTitle = appPath.startsWith("/admin/enterprises")
         ? t("admin.menus.enterprises")
         : appPath.startsWith("/admin/settings")
@@ -53,11 +56,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             ? t("admin.menus.assetsManagement")
             : appPath.startsWith("/admin/generation-tasks")
               ? t("admin.menus.generationTasks")
-              : appPath.startsWith("/admin/prompts")
-                ? t("admin.menus.prompts")
-                : appPath.startsWith("/admin/credit-logs")
-                  ? t("admin.menus.creditLogs")
-                  : t("admin.menus.users");
+              : appPath.startsWith("/admin/canvas-nodes")
+                ? t("admin.menus.canvasNodes")
+                : appPath.startsWith("/admin/prompts")
+                  ? t("admin.menus.prompts")
+                  : appPath.startsWith("/admin/credit-logs")
+                    ? t("admin.menus.creditLogs")
+                    : t("admin.menus.users");
 
     useEffect(() => {
         if (!isReady) return;

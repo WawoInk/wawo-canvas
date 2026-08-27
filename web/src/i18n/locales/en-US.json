@@ -1096,6 +1096,7 @@
             "users": "Users",
             "creditLogs": "Credit logs",
             "generationTasks": "Usage logs",
+            "canvasNodes": "Canvas node information",
             "prompts": "Prompts",
             "assets": "Asset library",
             "assetsManagement": "Asset management",
@@ -1434,6 +1435,20 @@
                 "loadFailed": "Failed to load logs",
                 "refundRepaired": "Refund repaired",
                 "refundRepairFailed": "Refund repair failed"
+            }
+        },
+        "canvasNodes": {
+            "title": "Canvas node information",
+            "table": {
+                "userId": "User ID",
+                "username": "Username",
+                "nodeId": "Node ID",
+                "upstreamTaskId": "Upstream task ID",
+                "createdAt": "Created at",
+                "resultUrl": "Result URL"
+            },
+            "messages": {
+                "loadFailed": "Failed to load Canvas node information"
             }
         },
         "assets": {
