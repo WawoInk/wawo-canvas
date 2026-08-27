@@ -2,8 +2,10 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/basketikun/infinite-canvas/model"
@@ -30,7 +32,11 @@ type adminCanvasNodeItem struct {
 }
 
 // ListAdminCanvasNodes 从当前画布项目快照解析并分页返回节点信息。
-func ListAdminCanvasNodes(q model.Query) (model.CanvasNodeInfoList, error) {
+func ListAdminCanvasNodes(q model.CanvasNodeInfoQuery) (model.CanvasNodeInfoList, error) {
+	startAt, endAt, err := canvasNodeCreatedAtRange(q)
+	if err != nil {
+		return model.CanvasNodeInfoList{}, err
+	}
 	projects, err := repository.ListCanvasNodeProjectSnapshots()
 	if err != nil {
 		return model.CanvasNodeInfoList{}, err
@@ -52,7 +58,7 @@ func ListAdminCanvasNodes(q model.Query) (model.CanvasNodeInfoList, error) {
 			if err != nil {
 				node.CreatedAt = ""
 			}
-			items = append(items, adminCanvasNodeItem{
+			item := adminCanvasNodeItem{
 				CanvasNodeInfo: model.CanvasNodeInfo{
 					UserID:         project.UserID,
 					Username:       project.Username,
@@ -63,7 +69,10 @@ func ListAdminCanvasNodes(q model.Query) (model.CanvasNodeInfoList, error) {
 				},
 				createdAt:    createdAt,
 				hasCreatedAt: err == nil,
-			})
+			}
+			if canvasNodeMatches(item, q, startAt, endAt) {
+				items = append(items, item)
+			}
 		}
 	}
 
@@ -103,6 +112,33 @@ func ListAdminCanvasNodes(q model.Query) (model.CanvasNodeInfoList, error) {
 		result.Items = append(result.Items, item.CanvasNodeInfo)
 	}
 	return result, nil
+}
+
+func canvasNodeCreatedAtRange(q model.CanvasNodeInfoQuery) (time.Time, time.Time, error) {
+	var startAt, endAt time.Time
+	var err error
+	if q.StartTime != "" {
+		if startAt, err = time.Parse(time.RFC3339, q.StartTime); err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("start_time must be RFC3339: %w", err)
+		}
+	}
+	if q.EndTime != "" {
+		if endAt, err = time.Parse(time.RFC3339, q.EndTime); err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("end_time must be RFC3339: %w", err)
+		}
+	}
+	return startAt, endAt, nil
+}
+
+func canvasNodeMatches(item adminCanvasNodeItem, q model.CanvasNodeInfoQuery, startAt, endAt time.Time) bool {
+	if !canvasNodeContains(item.UserID, q.UserID) || !canvasNodeContains(item.Username, q.Username) || !canvasNodeContains(item.NodeID, q.NodeID) || !canvasNodeContains(item.UpstreamTaskID, q.UpstreamTaskID) {
+		return false
+	}
+	return startAt.IsZero() && endAt.IsZero() || item.hasCreatedAt && (startAt.IsZero() || !item.createdAt.Before(startAt)) && (endAt.IsZero() || !item.createdAt.After(endAt))
+}
+
+func canvasNodeContains(value, filter string) bool {
+	return strings.Contains(strings.ToLower(value), strings.ToLower(filter))
 }
 
 func canvasNodeResultURL(value string) string {

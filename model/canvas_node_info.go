@@ -16,6 +16,15 @@ type CanvasNodeInfoList struct {
 	Total int              `json:"total"`
 }
 
+// CanvasNodeInfoQuery 管理端画布节点筛选和分页参数。
+type CanvasNodeInfoQuery struct {
+	Query
+	UserID         string
+	Username       string
+	NodeID         string
+	UpstreamTaskID string
+}
+
 // CanvasNodeProjectSnapshot 是读取画布项目 JSON 所需的关联数据。
 type CanvasNodeProjectSnapshot struct {
 	UserID      string `json:"-"`

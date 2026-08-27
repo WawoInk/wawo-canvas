@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -53,15 +55,19 @@ func TestAdminCanvasNodesReflectCurrentProjectSnapshotThroughHTTP(t *testing.T) 
 
 	createdAt := time.Now().UTC().Format(time.RFC3339Nano)
 	earlierAt := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano)
+	currentNodeID := "node-current-" + uuid.NewString()
+	removedNodeID := "node-removed-" + uuid.NewString()
+	invalidNodeID := "node-invalid-time-" + uuid.NewString()
+	currentUpstreamTaskID := "upstream-current-" + uuid.NewString()
 	firstURL := "https://cdn.example.test/result.png?signature=a%2Bb#fragment"
 	project := model.CanvasProject{
 		ID:     "canvas-" + uuid.NewString(),
 		UserID: user.ID,
 		Name:   "画布节点测试",
 		ProjectJSON: canvasNodeProjectJSON(t, []any{
-			map[string]any{"id": "node-removed", "createdAt": earlierAt, "metadata": map[string]any{"upstreamTaskId": "upstream-removed", "content": "https://cdn.example.test/removed.png"}},
-			map[string]any{"id": "node-current", "createdAt": createdAt, "metadata": map[string]any{"upstreamTaskId": "upstream-current", "content": firstURL}},
-			map[string]any{"id": "node-invalid-time", "createdAt": "not-rfc3339", "metadata": map[string]any{"upstreamTaskId": "upstream-invalid", "content": "不是生成结果 URL"}},
+			map[string]any{"id": removedNodeID, "createdAt": earlierAt, "metadata": map[string]any{"upstreamTaskId": "upstream-removed", "content": "https://cdn.example.test/removed.png"}},
+			map[string]any{"id": currentNodeID, "createdAt": createdAt, "metadata": map[string]any{"upstreamTaskId": currentUpstreamTaskID, "content": firstURL}},
+			map[string]any{"id": invalidNodeID, "createdAt": "not-rfc3339", "metadata": map[string]any{"upstreamTaskId": "upstream-invalid", "content": "不是生成结果 URL"}},
 			map[string]any{"id": 1},
 		}),
 		Version:   1,
@@ -87,13 +93,13 @@ func TestAdminCanvasNodesReflectCurrentProjectSnapshotThroughHTTP(t *testing.T) 
 	if initial.Code != 0 || initial.Data.Total != baseline.Data.Total+3 {
 		t.Fatalf("initial canvas nodes = %#v", initial)
 	}
-	current, currentIndex := findAdminCanvasNode(initial.Data.Items, "node-current")
-	_, removedIndex := findAdminCanvasNode(initial.Data.Items, "node-removed")
-	invalid, invalidIndex := findAdminCanvasNode(initial.Data.Items, "node-invalid-time")
+	current, currentIndex := findAdminCanvasNode(initial.Data.Items, currentNodeID)
+	_, removedIndex := findAdminCanvasNode(initial.Data.Items, removedNodeID)
+	invalid, invalidIndex := findAdminCanvasNode(initial.Data.Items, invalidNodeID)
 	if currentIndex >= removedIndex {
 		t.Fatalf("node order = current:%d removed:%d, want createdAt descending", currentIndex, removedIndex)
 	}
-	if current.UserID != user.ID || current.Username != user.Username || current.UpstreamTaskID != "upstream-current" || current.CreatedAt != createdAt || current.ResultURL != firstURL {
+	if current.UserID != user.ID || current.Username != user.Username || current.UpstreamTaskID != currentUpstreamTaskID || current.CreatedAt != createdAt || current.ResultURL != firstURL {
 		t.Fatalf("current canvas node = %#v", current)
 	}
 	if _, err := time.Parse(time.RFC3339, current.CreatedAt); err != nil {
@@ -103,19 +109,48 @@ func TestAdminCanvasNodesReflectCurrentProjectSnapshotThroughHTTP(t *testing.T) 
 		t.Fatalf("invalid canvas node = %#v", invalid)
 	}
 
+	for name, want := range map[string]struct {
+		query url.Values
+		total int
+	}{
+		"user ID":          {url.Values{"user_id": {user.ID}}, 3},
+		"username":         {url.Values{"username": {strings.ToUpper(user.Username)}}, 3},
+		"node ID":          {url.Values{"node_id": {strings.ToUpper(currentNodeID)}}, 1},
+		"upstream task ID": {url.Values{"upstream_task_id": {strings.ToUpper(currentUpstreamTaskID)}}, 1},
+	} {
+		filtered := doJSON[adminCanvasNodeInfoList](t, http.MethodGet, server.URL+"/api/admin/canvas-nodes?"+want.query.Encode(), session.Data.Token, nil)
+		if filtered.Code != 0 || filtered.Data.Total != want.total {
+			t.Fatalf("%s filter = %#v", name, filtered)
+		}
+	}
+	combinedQuery := url.Values{
+		"user_id":          {user.ID},
+		"username":         {strings.ToUpper(user.Username)},
+		"node_id":          {strings.ToUpper(currentNodeID)},
+		"upstream_task_id": {strings.ToUpper(currentUpstreamTaskID)},
+		"start_time":       {createdAt},
+		"end_time":         {createdAt},
+		"page":             {"1"},
+		"pageSize":         {"1"},
+	}
+	filtered := doJSON[adminCanvasNodeInfoList](t, http.MethodGet, server.URL+"/api/admin/canvas-nodes?"+combinedQuery.Encode(), session.Data.Token, nil)
+	if filtered.Code != 0 || filtered.Data.Total != 1 || len(filtered.Data.Items) != 1 || filtered.Data.Items[0].NodeID != currentNodeID {
+		t.Fatalf("combined canvas node filters = %#v", filtered)
+	}
+
 	stored, err := repository.GetCanvasProjectByID(project.ID)
 	if err != nil {
 		t.Fatalf("get canvas project: %v", err)
 	}
 	updatedURL := "https://cdn.example.test/result-v2.png?signature=c%2Bd#fresh"
 	if err := repository.UpdateCanvasProjectWithLock(stored.ID, stored.UserID, canvasNodeProjectJSON(t, []any{
-		map[string]any{"id": "node-current", "createdAt": createdAt, "metadata": map[string]any{"upstreamTaskId": "upstream-current", "content": updatedURL}},
+		map[string]any{"id": currentNodeID, "createdAt": createdAt, "metadata": map[string]any{"upstreamTaskId": currentUpstreamTaskID, "content": updatedURL}},
 	}), stored.Revision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		t.Fatalf("update canvas project: %v", err)
 	}
 
 	updated := doJSON[adminCanvasNodeInfoList](t, http.MethodGet, server.URL+"/api/admin/canvas-nodes?page=1&pageSize=500", session.Data.Token, nil)
-	updatedCurrent, _ := findAdminCanvasNode(updated.Data.Items, "node-current")
+	updatedCurrent, _ := findAdminCanvasNode(updated.Data.Items, currentNodeID)
 	if updated.Code != 0 || updated.Data.Total != baseline.Data.Total+1 || updatedCurrent.ResultURL != updatedURL {
 		t.Fatalf("updated canvas nodes = %#v", updated)
 	}
