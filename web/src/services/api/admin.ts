@@ -426,6 +426,18 @@ export async function saveAdminSettings(token: string, settings: AdminSettings) 
     return apiPost<AdminSettings>("/api/admin/settings", settings, token);
 }
 
+export type AdminVolcengineAssetsConfig = {
+    config: string;
+};
+
+export async function fetchAdminVolcengineAssetsConfig(token: string) {
+    return apiGet<AdminVolcengineAssetsConfig>("/api/admin/volcengine-assets/config", undefined, token);
+}
+
+export async function saveAdminVolcengineAssetsConfig(token: string, config: string) {
+    return apiPost<AdminVolcengineAssetsConfig>("/api/admin/volcengine-assets/config", { config }, token);
+}
+
 export type AdminChannelActionRequest = {
     index?: number;
     channel: AdminModelChannel;
