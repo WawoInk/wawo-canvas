@@ -2,8 +2,10 @@ package repository
 
 import (
 	"encoding/json"
+	"errors"
 
 	"github.com/basketikun/infinite-canvas/model"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -45,4 +47,45 @@ func SaveSettings(settings model.Settings, now string) (model.Settings, error) {
 		DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}),
 	}).Create(&items).Error
 	return settings, err
+}
+
+// GetVolcengineAssetConfig returns the independent Volcengine asset gateway config.
+func GetVolcengineAssetConfig() (model.VolcengineAssetConfig, error) {
+	db, err := DB()
+	if err != nil {
+		return model.VolcengineAssetConfig{}, err
+	}
+	var item model.Setting
+	if err := db.First(&item, "key = ?", model.SettingKeyVolcAssetConfig).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return model.VolcengineAssetConfig{}, nil
+		}
+		return model.VolcengineAssetConfig{}, err
+	}
+	if len(item.Value) == 0 {
+		return model.VolcengineAssetConfig{}, nil
+	}
+	var config model.VolcengineAssetConfig
+	if err := json.Unmarshal(item.Value, &config); err != nil {
+		return model.VolcengineAssetConfig{}, err
+	}
+	return config, nil
+}
+
+// SaveVolcengineAssetConfig saves the independent Volcengine asset gateway config.
+func SaveVolcengineAssetConfig(config model.VolcengineAssetConfig, now string) (model.VolcengineAssetConfig, error) {
+	db, err := DB()
+	if err != nil {
+		return config, err
+	}
+	value, err := json.Marshal(config)
+	if err != nil {
+		return config, err
+	}
+	item := model.Setting{Key: model.SettingKeyVolcAssetConfig, Value: value, CreatedAt: now, UpdatedAt: now}
+	err = db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "key"}},
+		DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}),
+	}).Create(&item).Error
+	return config, err
 }
