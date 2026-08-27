@@ -131,7 +131,7 @@ Canvas 与远程视频创作台都使用第一方视频 Generation Run：客户�
 | `POST` | `/api/v1/doubao/open/{CreateAssetGroup...DeleteAssetGroup}` | 管理员素材分组操作；同样支持 `/v1/...` 兼容路径 |
 | `GET/POST` | `/api/admin/volcengine-assets/config` | 管理员读取脱敏配置或保存 `{ "config": "..." }` |
 
-请求可通过 `X-Asset-Outbound`（或配置的选择请求头）或 `?outbound=<id>` 选择 outbound；未指定时依次使用默认 outbound 和首个可用 outbound。配置 `failover` 时会保留候选顺序，当前版本的 Action 仍以首个已解析 outbound 为主。
+请求可通过 `X-Asset-Outbound`（或配置的选择请求头）或 `?outbound=<id>` 选择 outbound；未指定时依次使用默认 outbound 和首个可用 outbound。配置 `failover` 时，连接失败、超时、429 或 5xx 会按候选顺序改用下一个已配置 outbound；参数、鉴权、越权和素材不存在等业务错误不会切换。
 
 火山引擎资产上游请求由后端发起，非回环地址经本机 `127.0.0.1:7897` 代理；用户浏览器只调用平台 API，远端图片、视频和音频 URL 仅用于页面预览。素材库引用删除不会删除 URL 指向的原始媒体。
 

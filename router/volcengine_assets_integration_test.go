@@ -415,3 +415,43 @@ func TestVolcengineAssetActionPricesChargeSuccessfulRequests(t *testing.T) {
 		t.Fatalf("unfunded list reached upstream: before=%d after=%d", before, after)
 	}
 }
+
+func TestVolcengineAssetFailoverUsesNextConfiguredOutbound(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "volc-asset-failover-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	upstream := newVolcAssetTestUpstream()
+	workingServer := httptest.NewServer(upstream)
+	defer workingServer.Close()
+	failedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":{"code":"UNAVAILABLE","message":"temporary outage"}}`, http.StatusBadGateway)
+	}))
+	defer failedServer.Close()
+
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	admin := volcAssetTestSession(t, server.URL, "volc-failover-admin", model.UserRoleAdmin)
+	user := volcAssetTestSession(t, server.URL, "volc-failover-user", model.UserRoleUser)
+
+	configured := map[string]any{
+		"outbounds": []map[string]any{
+			{"id": "primary", "format": "newapi", "base_url": failedServer.URL, "access_token": "primary-token", "project_name": "canvas-assets"},
+			{"id": "backup", "format": "newapi", "base_url": workingServer.URL, "access_token": "backup-token", "project_name": "canvas-assets"},
+		},
+		"default_outbound": "primary",
+		"failover":         true,
+	}
+	if saved := doJSON[volcAssetConfigHTTP](t, http.MethodPost, server.URL+"/api/admin/volcengine-assets/config", admin.Token, map[string]string{"config": volcAssetConfigJSON(t, configured)}); saved.Code != 0 {
+		t.Fatalf("save config = %#v", saved)
+	}
+
+	list := doJSON[map[string]any](t, http.MethodPost, server.URL+"/api/v1/doubao/open/ListAssets", user.Token, map[string]any{"PageNumber": 1, "PageSize": 20})
+	if list.Code != 0 {
+		t.Fatalf("failover list = %#v", list)
+	}
+	call := upstream.latest(t, "ListAssets")
+	if got := call.Authorization; got != "Bearer backup-token" {
+		t.Fatalf("failover authorization = %q", got)
+	}
+}

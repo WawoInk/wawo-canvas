@@ -326,18 +326,37 @@ func VolcengineAssetUserAction(ctx context.Context, user model.AuthUser, headers
 	if err != nil {
 		return nil, err
 	}
-	outbound, ok := resolveVolcengineAssetOutbound(config, strings.TrimSpace(headers.Get(config.SelectorHeader())), strings.TrimSpace(query.Get("outbound")))
-	if !ok {
+	candidates := resolveVolcengineAssetOutbounds(config, strings.TrimSpace(headers.Get(config.SelectorHeader())), strings.TrimSpace(query.Get("outbound")))
+	if len(candidates) == 0 {
 		return nil, safeMessageError{message: "没有可用的素材库配置"}
 	}
 	if err := checkVolcengineAssetRateLimit(config, user.ID); err != nil {
 		return nil, err
 	}
-	scope, err := ensureVolcengineAssetScope(ctx, config, outbound, user)
-	if err != nil {
+	var lastErr error
+	for _, outbound := range candidates {
+		scope, err := ensureVolcengineAssetScope(ctx, config, outbound, user)
+		if err != nil {
+			lastErr = err
+			if config.Failover && isRetryableVolcengineAssetError(err) {
+				continue
+			}
+			return nil, err
+		}
+		result, err := executeVolcengineAssetUserAction(ctx, user, config, scope, action, raw)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+		if config.Failover && isRetryableVolcengineAssetError(err) {
+			continue
+		}
 		return nil, err
 	}
+	return nil, lastErr
+}
 
+func executeVolcengineAssetUserAction(ctx context.Context, user model.AuthUser, config model.VolcengineAssetConfig, scope *volcengineAssetScope, action string, raw []byte) (json.RawMessage, error) {
 	var body []byte
 	var verifyResult func(json.RawMessage) error
 	switch action {
@@ -415,7 +434,6 @@ func VolcengineAssetUserAction(ctx context.Context, user model.AuthUser, headers
 	default:
 		return nil, safeMessageError{message: "不支持的素材操作"}
 	}
-
 	return withVolcengineAssetActionCharge(user, config, action, func() (json.RawMessage, error) {
 		result, err := callVolcengineAssetAPI(ctx, config, scope.outbound, action, body)
 		if err != nil {
@@ -429,7 +447,6 @@ func VolcengineAssetUserAction(ctx context.Context, user model.AuthUser, headers
 		return result, nil
 	})
 }
-
 func withVolcengineAssetActionCharge(user model.AuthUser, config model.VolcengineAssetConfig, action string, call func() (json.RawMessage, error)) (json.RawMessage, error) {
 	cost := config.ActionPrice(action)
 	if cost <= 0 {
@@ -464,10 +481,32 @@ func VolcengineAssetAdminGroupAction(ctx context.Context, user model.AuthUser, h
 	if err := checkVolcengineAssetRateLimit(config, user.ID); err != nil {
 		return nil, err
 	}
-	outbound, ok := resolveVolcengineAssetOutbound(config, strings.TrimSpace(headers.Get(config.SelectorHeader())), strings.TrimSpace(query.Get("outbound")))
-	if !ok {
+	candidates := resolveVolcengineAssetOutbounds(config, strings.TrimSpace(headers.Get(config.SelectorHeader())), strings.TrimSpace(query.Get("outbound")))
+	if len(candidates) == 0 {
 		return nil, safeMessageError{message: "没有可用的素材库配置"}
 	}
+	var lastErr error
+	for _, outbound := range candidates {
+		body, err := buildVolcengineAssetAdminGroupRequest(outbound, action, raw)
+		if err != nil {
+			return nil, err
+		}
+		result, err := withVolcengineAssetActionCharge(user, config, action, func() (json.RawMessage, error) {
+			return callVolcengineAssetAPI(ctx, config, outbound, action, body)
+		})
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+		if config.Failover && isRetryableVolcengineAssetError(err) {
+			continue
+		}
+		return nil, err
+	}
+	return nil, lastErr
+}
+
+func buildVolcengineAssetAdminGroupRequest(outbound model.VolcengineAssetOutbound, action string, raw []byte) ([]byte, error) {
 	var body []byte
 	switch action {
 	case "CreateAssetGroup":
@@ -528,11 +567,8 @@ func VolcengineAssetAdminGroupAction(ctx context.Context, user model.AuthUser, h
 	default:
 		return nil, safeMessageError{message: "不支持的分组操作"}
 	}
-	return withVolcengineAssetActionCharge(user, config, action, func() (json.RawMessage, error) {
-		return callVolcengineAssetAPI(ctx, config, outbound, action, body)
-	})
+	return body, nil
 }
-
 func decodeVolcengineAssetRequest(raw []byte, target any) error {
 	if len(bytes.TrimSpace(raw)) == 0 || !json.Valid(raw) || json.Unmarshal(raw, target) != nil {
 		return safeMessageError{message: "请求 JSON 无效"}
@@ -540,17 +576,29 @@ func decodeVolcengineAssetRequest(raw []byte, target any) error {
 	return nil
 }
 
-func resolveVolcengineAssetOutbound(config model.VolcengineAssetConfig, headerSelector, querySelector string) (model.VolcengineAssetOutbound, bool) {
-	selector := headerSelector
+func resolveVolcengineAssetOutbounds(config model.VolcengineAssetConfig, headerSelector, querySelector string) []model.VolcengineAssetOutbound {
+	selector := strings.TrimSpace(headerSelector)
 	if selector == "" {
-		selector = querySelector
+		selector = strings.TrimSpace(querySelector)
 	}
-	for _, outbound := range config.ResolveOutboundCandidates(selector) {
-		return outbound, true
-	}
-	return model.VolcengineAssetOutbound{}, false
+	return config.ResolveOutboundCandidates(selector)
 }
 
+func resolveVolcengineAssetOutbound(config model.VolcengineAssetConfig, headerSelector, querySelector string) (model.VolcengineAssetOutbound, bool) {
+	candidates := resolveVolcengineAssetOutbounds(config, headerSelector, querySelector)
+	if len(candidates) == 0 {
+		return model.VolcengineAssetOutbound{}, false
+	}
+	return candidates[0], true
+}
+
+func isRetryableVolcengineAssetError(err error) bool {
+	var upstreamErr volcengineAssetUpstreamError
+	if !errors.As(err, &upstreamErr) {
+		return false
+	}
+	return upstreamErr.status == 0 || upstreamErr.status == http.StatusRequestTimeout || upstreamErr.status == http.StatusTooManyRequests || upstreamErr.status >= http.StatusInternalServerError
+}
 func checkVolcengineAssetRateLimit(config model.VolcengineAssetConfig, userID string) error {
 	if config.RateLimitCount <= 0 || config.RateLimitDurationSeconds <= 0 || userID == "" {
 		return nil
@@ -732,7 +780,7 @@ func callVolcengineFormat(ctx context.Context, outbound model.VolcengineAssetOut
 		signVolcengineAssetRequest(request, body, outbound.AccessKey, outbound.SecretKey, outbound.RegionOrDefault(), signHost)
 	})
 	if err != nil {
-		return nil, err
+		return nil, volcengineAssetUpstreamError{message: err.Error()}
 	}
 	if status < http.StatusOK || status >= http.StatusMultipleChoices {
 		return nil, volcengineAssetErrorFromResponse(response, status)
@@ -752,13 +800,18 @@ func callNewAPIAssetFormat(ctx context.Context, outbound model.VolcengineAssetOu
 	}
 	response, status, err := sendVolcengineAssetHTTP(ctx, http.MethodPost, strings.TrimRight(outbound.BaseURL, "/")+"/"+action, map[string]string{"Authorization": "Bearer " + outbound.AccessToken, "X-Track-Id": uuid.NewString()}, body, nil)
 	if err != nil {
-		return nil, err
+		return nil, volcengineAssetUpstreamError{message: err.Error()}
 	}
 	if status < http.StatusOK || status >= http.StatusMultipleChoices {
 		return nil, volcengineAssetErrorFromResponse(response, status)
 	}
-	if code := strings.TrimSpace(gjson.GetBytes(response, "code").String()); code != "" && code != "0" && gjson.GetBytes(response, "data").Exists() {
-		return nil, volcengineAssetUpstreamError{code: code, message: gjson.GetBytes(response, "msg").String(), status: status}
+	if code := strings.TrimSpace(gjson.GetBytes(response, "code").String()); code != "" {
+		if code != "0" {
+			return nil, volcengineAssetUpstreamError{code: code, message: gjson.GetBytes(response, "msg").String(), status: status}
+		}
+		if data := gjson.GetBytes(response, "data"); data.Exists() && data.Raw != "null" {
+			return json.RawMessage(data.Raw), nil
+		}
 	}
 	return json.RawMessage(response), nil
 }
@@ -771,7 +824,7 @@ func callCustomAssetFormat(ctx context.Context, outbound model.VolcengineAssetOu
 	}
 	response, status, err := sendVolcengineAssetHTTP(ctx, method, requestURL, headers, body, nil)
 	if err != nil {
-		return nil, err
+		return nil, volcengineAssetUpstreamError{message: err.Error()}
 	}
 	if status < http.StatusOK || status >= http.StatusMultipleChoices {
 		return nil, volcengineAssetErrorFromResponse(response, status)
