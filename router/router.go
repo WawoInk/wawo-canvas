@@ -32,6 +32,13 @@ func New() *gin.Engine {
 	// Callback webhook: no UserAuth — external providers have no session.
 	api.POST("/v1/generation-tasks/callback", gin.WrapF(handler.HandleTaskCallback))
 	api.POST("/v1/generations/callback", gin.WrapF(handler.GenerationCallback))
+	for _, action := range []string{"CreateAssetGroup", "ListAssetGroups", "GetAssetGroup", "UpdateAssetGroup", "DeleteAssetGroup"} {
+		groupAction := action
+		api.POST("/v1/doubao/open/"+groupAction, middleware.AdminAuth, func(c *gin.Context) {
+			handler.VolcengineAssetAdminGroupAction(c.Writer, c.Request, groupAction)
+		})
+	}
+
 	v1 := api.Group("/v1", middleware.UserAuth)
 
 	v1.GET("/model-profiles", gin.WrapF(handler.ModelProfiles))
@@ -179,6 +186,16 @@ func New() *gin.Engine {
 	api.GET("/assets", middleware.OptionalAuth, gin.WrapF(handler.Assets))
 	api.POST("/admin/login", gin.WrapF(handler.AdminLogin))
 
+	// Volcengine asset gateway: normal users get scoped asset actions, while
+	// configuration and group-management actions are admin-only.
+	v1.GET("/volcengine-assets/outbounds", gin.WrapF(handler.VolcengineAssetOutbounds))
+	for _, action := range []string{"ListAssets", "GetAsset", "CreateAsset", "UpdateAsset", "DeleteAsset"} {
+		assetAction := action
+		v1.POST("/doubao/open/"+assetAction, func(c *gin.Context) {
+			handler.VolcengineAssetUserAction(c.Writer, c.Request, assetAction)
+		})
+	}
+
 	admin := api.Group("/admin", middleware.AdminAuth)
 	admin.GET("/enterprises", gin.WrapF(handler.AdminEnterprises))
 	admin.POST("/enterprises", gin.WrapF(handler.AdminCreateEnterprise))
@@ -215,6 +232,8 @@ func New() *gin.Engine {
 	admin.POST("/settings", gin.WrapF(handler.AdminSaveSettings))
 	admin.POST("/settings/channel-models", gin.WrapF(handler.AdminChannelModels))
 	admin.POST("/settings/channel-test", gin.WrapF(handler.AdminTestChannelModel))
+	admin.GET("/volcengine-assets/config", gin.WrapF(handler.AdminVolcengineAssetConfig))
+	admin.POST("/volcengine-assets/config", gin.WrapF(handler.AdminSaveVolcengineAssetConfig))
 	admin.GET("/prompt-categories", gin.WrapF(handler.AdminPromptCategories))
 	admin.POST("/prompt-categories/sync", gin.WrapF(handler.AdminSyncPromptCategories))
 	admin.GET("/prompts", gin.WrapF(handler.AdminPrompts))

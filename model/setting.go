@@ -5,8 +5,9 @@ import "encoding/json"
 type SettingKey string
 
 const (
-	SettingKeyPublic  SettingKey = "public"
-	SettingKeyPrivate SettingKey = "private"
+	SettingKeyPublic          SettingKey = "public"
+	SettingKeyPrivate         SettingKey = "private"
+	SettingKeyVolcAssetConfig SettingKey = "volc_asset_config"
 )
 
 // ModelChannel 模型渠道配置。
