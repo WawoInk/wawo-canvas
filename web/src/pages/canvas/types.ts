@@ -77,6 +77,7 @@ export type CanvasNodeMetadata = {
 
 export type CanvasNodeData = {
     id: string;
+    createdAt?: string;
     type: CanvasNodeType;
     title: string;
     position: Position;
