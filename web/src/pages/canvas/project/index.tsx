@@ -146,6 +146,7 @@ function createCanvasNode(type: CanvasNodeType, position: Position, metadata?: C
 
     return {
         id,
+        createdAt: new Date().toISOString(),
         type,
         title: i18n.t(`canvas.nodeTypes.${type}`),
         position: {
@@ -902,6 +903,14 @@ function InfiniteCanvasPage() {
                 before,
                 safeOps.filter((op) => op.type !== "run_generation"),
             );
+            const existingNodes = new Map(before.nodes.map((node) => [node.id, node]));
+            const createdAt = new Date().toISOString();
+            const stampedNodes = next.nodes.map((node) => {
+                const existing = existingNodes.get(node.id);
+                if (existing) return node.createdAt === existing.createdAt ? node : { ...node, createdAt: existing.createdAt };
+                return node.createdAt ? node : { ...node, createdAt };
+            });
+            if (stampedNodes.some((node, index) => node !== next.nodes[index])) next.nodes = stampedNodes;
             nodesRef.current = next.nodes;
             connectionsRef.current = next.connections;
             selectedNodeIdsRef.current = new Set(next.selectedNodeIds);
@@ -1049,6 +1058,7 @@ function InfiniteCanvasPage() {
             const next: CanvasNodeData = {
                 ...source,
                 id,
+                createdAt: new Date().toISOString(),
                 title: t("canvas.editor.nodes.copyTitle", { title: source.title }),
                 position: { x: source.position.x + 36, y: source.position.y + 36 },
             };
@@ -1105,6 +1115,7 @@ function InfiniteCanvasPage() {
             return {
                 ...node,
                 id,
+                createdAt: new Date().toISOString(),
                 title: node.title.endsWith(copySuffix) ? node.title : t("canvas.editor.nodes.copyTitle", { title: node.title }),
                 position: {
                     x: node.position.x + dx,
@@ -1437,6 +1448,7 @@ function InfiniteCanvasPage() {
         const id = `image-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         const newNode: CanvasNodeData = {
             id,
+            createdAt: new Date().toISOString(),
             type: CanvasNodeType.Image,
             title: file.name,
             position: { x: position.x - size.width / 2, y: position.y - size.height / 2 },
@@ -1459,6 +1471,7 @@ function InfiniteCanvasPage() {
             ...prev,
             {
                 id,
+                createdAt: new Date().toISOString(),
                 type: CanvasNodeType.Video,
                 title: file.name,
                 position: { x: position.x - size.width / 2, y: position.y - size.height / 2 },
@@ -1480,6 +1493,7 @@ function InfiniteCanvasPage() {
             ...prev,
             {
                 id,
+                createdAt: new Date().toISOString(),
                 type: CanvasNodeType.Audio,
                 title: file.name,
                 position: { x: position.x - spec.width / 2, y: position.y - spec.height / 2 },
@@ -1837,6 +1851,7 @@ function InfiniteCanvasPage() {
             const childId = nanoid();
             const child: CanvasNodeData = {
                 id: childId,
+                createdAt: new Date().toISOString(),
                 type: CanvasNodeType.Image,
                 title: t("canvas.editor.nodes.croppedImage"),
                 position: { x: node.position.x + node.width + 96, y: node.position.y },
@@ -1872,6 +1887,7 @@ function InfiniteCanvasPage() {
                     const id = nanoid();
                     return {
                         id,
+                        createdAt: new Date().toISOString(),
                         type: CanvasNodeType.Image,
                         title: t("canvas.editor.nodes.splitImageTitle", {
                             title: node.title || t("canvas.nodeTypes.image"),
@@ -1917,6 +1933,7 @@ function InfiniteCanvasPage() {
                 ...prev,
                 {
                     id: childId,
+                    createdAt: new Date().toISOString(),
                     type: CanvasNodeType.Image,
                     title: userPrompt.slice(0, 32) || t("canvas.editor.nodes.maskEditResult"),
                     position: { x: node.position.x + node.width + 96, y: node.position.y },
@@ -1958,6 +1975,7 @@ function InfiniteCanvasPage() {
             const childId = nanoid();
             const child: CanvasNodeData = {
                 id: childId,
+                createdAt: new Date().toISOString(),
                 type: CanvasNodeType.Image,
                 title: t("canvas.editor.nodes.upscaledImage"),
                 position: { x: node.position.x + node.width + 96, y: node.position.y },
@@ -1997,6 +2015,7 @@ function InfiniteCanvasPage() {
                 ...prev,
                 {
                     id: childId,
+                    createdAt: new Date().toISOString(),
                     type: CanvasNodeType.Image,
                     title,
                     position: { x: node.position.x + node.width + 96, y: node.position.y },
@@ -2252,6 +2271,7 @@ function InfiniteCanvasPage() {
                     pendingChildIds = isEmptyImageNode ? childIds : [rootId, ...childIds];
                     const rootNode: CanvasNodeData = {
                         id: rootId,
+                        ...(isEmptyImageNode ? {} : { createdAt: new Date().toISOString() }),
                         type: CanvasNodeType.Image,
                         title: effectivePrompt.slice(0, 32) || t("canvas.editor.nodes.generatedImage"),
                         position: {
@@ -2272,6 +2292,7 @@ function InfiniteCanvasPage() {
                     };
                     const childNodes: CanvasNodeData[] = childIds.map((id, index) => ({
                         id,
+                        createdAt: new Date().toISOString(),
                         type: CanvasNodeType.Image,
                         title: effectivePrompt.slice(0, 32) || t("canvas.editor.nodes.generatedImage"),
                         position: {
@@ -2362,6 +2383,7 @@ function InfiniteCanvasPage() {
                     const parent = sourceNode?.position || { x: 0, y: 0 };
                     const videoNode: CanvasNodeData = {
                         id: videoId,
+                        ...(isEmptyVideoNode ? {} : { createdAt: new Date().toISOString() }),
                         type: CanvasNodeType.Video,
                         title: isEmptyVideoNode ? sourceNode.title : effectivePrompt.slice(0, 32) || t("canvas.editor.nodes.generatedVideo"),
                         position: isEmptyVideoNode ? sourceNode.position : { x: parent.x + (sourceNode?.width || spec.width) + 96, y: parent.y },
@@ -2464,6 +2486,7 @@ function InfiniteCanvasPage() {
                     const parent = sourceNode?.position || { x: 0, y: 0 };
                     const audioNode: CanvasNodeData = {
                         id: audioId,
+                        ...(isEmptyAudioNode ? {} : { createdAt: new Date().toISOString() }),
                         type: CanvasNodeType.Audio,
                         title: effectivePrompt.slice(0, 32) || t("canvas.editor.nodes.generatedAudio"),
                         position: isEmptyAudioNode ? sourceNode.position : { x: parent.x + (sourceNode?.width || spec.width) + 96, y: parent.y + ((sourceNode?.height || spec.height) - spec.height) / 2 },
@@ -2500,6 +2523,7 @@ function InfiniteCanvasPage() {
                 if (isConfigNode || editingTextNode) {
                     const childNodes: CanvasNodeData[] = childIds.map((id, index) => ({
                         id,
+                        createdAt: new Date().toISOString(),
                         type: CanvasNodeType.Text,
                         title: effectivePrompt.slice(0, 32) || t("canvas.editor.nodes.generatedText"),
                         position: {
@@ -2910,6 +2934,7 @@ function InfiniteCanvasPage() {
             const id = `image-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
             const node: CanvasNodeData = {
                 id,
+                createdAt: new Date().toISOString(),
                 type: CanvasNodeType.Image,
                 title: image.prompt.slice(0, 32) || t("canvas.editor.nodes.generatedImage"),
                 position: { x: center.x - config.width / 2, y: center.y - config.height / 2 },
@@ -2954,6 +2979,7 @@ function InfiniteCanvasPage() {
                     ...prev,
                     {
                         id,
+                        createdAt: new Date().toISOString(),
                         type: CanvasNodeType.Video,
                         title: payload.title,
                         position: { x: center.x - nextSize.width / 2, y: center.y - nextSize.height / 2 },
