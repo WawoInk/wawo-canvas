@@ -10,7 +10,7 @@ import { useUserStore } from "@/stores/use-user-store";
 
 function getJsonState(value: string) {
     try {
-        return { error: "", formatted: JSON.stringify(JSON.parse(value), null, 2) };
+        return { error: "", formatted: JSON.stringify(JSON.parse(value), null, 2) ?? value };
     } catch (error) {
         return { error: error instanceof Error ? error.message : "JSON 格式无效", formatted: value };
     }
