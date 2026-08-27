@@ -24,7 +24,7 @@ export default function AdminCanvasNodesPage() {
         <main style={{ padding: 24 }}>
             <Card variant="borderless" styles={{ body: { padding: 0 } }}>
                 <Table<AdminCanvasNode>
-                    rowKey="nodeId"
+                    rowKey={(node) => `${node.userId}:${node.nodeId}`}
                     columns={columns}
                     dataSource={nodes}
                     loading={isLoading}
