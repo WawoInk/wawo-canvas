@@ -221,7 +221,7 @@ func TestVolcengineAssetsAdminConfigRedactsAndRetainsSecretsThroughHTTP(t *testi
 	}
 
 	redacted := doJSON[volcAssetConfigHTTP](t, http.MethodGet, server.URL+"/api/admin/volcengine-assets/config", admin.Token, nil)
-	if redacted.Code != 0 || strings.Contains(redacted.Data.Config, "nested-secret-token") || strings.Contains(redacted.Data.Config, "signing-secret-key") || strings.Contains(redacted.Data.Config, "access-key") || strings.Contains(redacted.Data.Config, "127.0.0.1:9999") {
+	if redacted.Code != 0 || strings.Contains(redacted.Data.Config, "nested-secret-token") || strings.Contains(redacted.Data.Config, "signing-secret-key") {
 		t.Fatalf("redacted config = %#v", redacted)
 	}
 	var redactedValue map[string]any
@@ -247,7 +247,7 @@ func TestVolcengineAssetsAdminConfigRedactsAndRetainsSecretsThroughHTTP(t *testi
 		t.Fatalf("database: %v", err)
 	}
 	var stored model.Setting
-	if err := db.First(&stored, "key = ?", "volc_asset_config").Error; err != nil {
+	if err := db.First(&stored, "key = ?", model.SettingKeyVolcAssetConfig).Error; err != nil {
 		t.Fatalf("load stored config: %v", err)
 	}
 	if !strings.Contains(string(stored.Value), "nested-secret-token") || !strings.Contains(string(stored.Value), "signing-secret-key") {
@@ -366,5 +366,46 @@ func TestVolcengineAssetsGatewayEnforcesScopesThroughHTTP(t *testing.T) {
 	adminCall := upstream.latest(t, "ListAssetGroups")
 	if volcAssetString(adminCall.Body, "ProjectName") != "canvas-assets" {
 		t.Fatalf("admin default project was not applied: %#v", adminCall)
+	}
+}
+
+func TestVolcengineAssetActionPricesChargeSuccessfulRequests(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "volc-asset-price-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	upstream := newVolcAssetTestUpstream()
+	upstreamServer := httptest.NewServer(upstream)
+	defer upstreamServer.Close()
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+
+	admin := volcAssetTestSession(t, server.URL, "volc-price-admin", model.UserRoleAdmin)
+	user := volcAssetTestSession(t, server.URL, "volc-price-user", model.UserRoleUser)
+	if _, err := service.AdjustUserCredits(user.User.ID, model.NewDecimal(2)); err != nil {
+		t.Fatalf("fund user: %v", err)
+	}
+	configured := map[string]any{
+		"outbounds":     []map[string]any{{"id": "nested", "format": "newapi", "base_url": upstreamServer.URL, "access_token": "nested-token", "project_name": "canvas-assets"}},
+		"action_prices": map[string]int{"ListAssets": 2},
+	}
+	if saved := doJSON[volcAssetConfigHTTP](t, http.MethodPost, server.URL+"/api/admin/volcengine-assets/config", admin.Token, map[string]string{"config": volcAssetConfigJSON(t, configured)}); saved.Code != 0 {
+		t.Fatalf("save config = %#v", saved)
+	}
+
+	listURL := server.URL + "/api/v1/doubao/open/ListAssets?outbound=nested"
+	if response := doJSON[map[string]any](t, http.MethodPost, listURL, user.Token, map[string]any{"PageNumber": 1, "PageSize": 20}); response.Code != 0 {
+		t.Fatalf("paid list = %#v", response)
+	}
+	stored, ok, err := repository.GetUserByID(user.User.ID)
+	if err != nil || !ok || !stored.Credits.IsZero() {
+		t.Fatalf("credits after paid list = %#v, %v, %v", stored, ok, err)
+	}
+	before := upstream.count("ListAssets")
+	if response := doJSON[map[string]any](t, http.MethodPost, listURL, user.Token, map[string]any{"PageNumber": 1, "PageSize": 20}); response.Code != 1 || response.Msg != "算力点不足" {
+		t.Fatalf("unfunded list = %#v", response)
+	}
+	if after := upstream.count("ListAssets"); after != before {
+		t.Fatalf("unfunded list reached upstream: before=%d after=%d", before, after)
 	}
 }

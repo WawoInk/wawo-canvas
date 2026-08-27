@@ -112,6 +112,9 @@ type volcengineAssetRateWindow struct {
 
 var assetRateWindow = volcengineAssetRateWindow{hits: map[string][]time.Time{}}
 
+// ponytail: serialize rare first-use provisioning; shard per scope only if this becomes a measured bottleneck.
+var volcengineAssetProvisionMu sync.Mutex
+
 // AdminVolcengineAssetConfig returns the redacted independent config as JSON for the admin editor.
 func AdminVolcengineAssetConfig() (string, error) {
 	config, err := repository.GetVolcengineAssetConfig()
@@ -155,57 +158,11 @@ func SaveVolcengineAssetConfig(raw string) (string, error) {
 }
 
 func redactVolcengineAssetConfig(config model.VolcengineAssetConfig) model.VolcengineAssetConfig {
-	result := config
-	result.Outbounds = append([]model.VolcengineAssetOutbound(nil), config.Outbounds...)
-	for i := range result.Outbounds {
-		result.Outbounds[i].BaseURL = ""
-		result.Outbounds[i].SignHost = ""
-		result.Outbounds[i].AccessKey = ""
-		result.Outbounds[i].SecretKey = ""
-		result.Outbounds[i].AccessToken = ""
-	}
-	result.CustomFormats = make([]model.VolcengineAssetCustomFormat, 0, len(config.CustomFormats))
-	for _, format := range config.CustomFormats {
-		result.CustomFormats = append(result.CustomFormats, model.VolcengineAssetCustomFormat{ID: format.ID, Name: format.Name})
-	}
-	return result
+	return config.Redacted()
 }
 
 func mergeVolcengineAssetClientConfig(next, previous model.VolcengineAssetConfig) model.VolcengineAssetConfig {
-	next = next.MergeSecretsFrom(previous)
-	previousOutbounds := make(map[string]model.VolcengineAssetOutbound, len(previous.Outbounds))
-	for _, outbound := range previous.Outbounds {
-		previousOutbounds[outbound.EffectiveID()] = outbound
-	}
-	for i := range next.Outbounds {
-		old, ok := previousOutbounds[next.Outbounds[i].EffectiveID()]
-		if !ok {
-			continue
-		}
-		if next.Outbounds[i].BaseURL == "" {
-			next.Outbounds[i].BaseURL = old.BaseURL
-		}
-		if next.Outbounds[i].SignHost == "" {
-			next.Outbounds[i].SignHost = old.SignHost
-		}
-		if next.Outbounds[i].AccessKey == "" {
-			next.Outbounds[i].AccessKey = old.AccessKey
-		}
-	}
-	previousFormats := make(map[string]model.VolcengineAssetCustomFormat, len(previous.CustomFormats))
-	for _, format := range previous.CustomFormats {
-		previousFormats[format.ID] = format
-	}
-	for i := range next.CustomFormats {
-		old, ok := previousFormats[next.CustomFormats[i].ID]
-		if !ok {
-			continue
-		}
-		if next.CustomFormats[i].URLTemplate == "" && len(next.CustomFormats[i].Actions) == 0 && len(next.CustomFormats[i].Headers) == 0 && len(next.CustomFormats[i].RequestStatic) == 0 && len(next.CustomFormats[i].RequestMapping) == 0 && len(next.CustomFormats[i].ResponseMapping) == 0 && len(next.CustomFormats[i].ItemMapping) == 0 && next.CustomFormats[i].Auth.Value == "" {
-			next.CustomFormats[i] = old
-		}
-	}
-	return next
+	return next.MergeSecretsFrom(previous)
 }
 
 func normalizeVolcengineAssetConfig(config model.VolcengineAssetConfig) model.VolcengineAssetConfig {
@@ -324,89 +281,111 @@ func VolcengineAssetUserAction(ctx context.Context, user model.AuthUser, headers
 	if err != nil {
 		return nil, err
 	}
-	var body []byte
-	switch action {
-	case "ListAssets":
-		var request volcengineAssetListRequest
-		if err := decodeVolcengineAssetRequest(raw, &request); err != nil {
-			return nil, err
-		}
-		if request.Filter == nil {
-			request.Filter = &volcengineAssetListFilter{}
-		}
-		request.Filter.GroupIDs = []string{scope.groupID}
-		request.Filter.GroupType = scope.groupType
-		request.Filter.Statuses = nonEmptyStrings(request.Filter.Statuses)
-		request.ProjectName = scope.projectName
-		body, _ = json.Marshal(request)
-	case "GetAsset":
-		var request volcengineAssetIDRequest
-		if err := decodeVolcengineAssetRequest(raw, &request); err != nil || strings.TrimSpace(request.ID) == "" {
+	return withVolcengineAssetActionCharge(user, config, action, func() (json.RawMessage, error) {
+		var body []byte
+		switch action {
+		case "ListAssets":
+			var request volcengineAssetListRequest
+			if err := decodeVolcengineAssetRequest(raw, &request); err != nil {
+				return nil, err
+			}
+			if request.Filter == nil {
+				request.Filter = &volcengineAssetListFilter{}
+			}
+			request.Filter.GroupIDs = []string{scope.groupID}
+			request.Filter.GroupType = scope.groupType
+			request.Filter.Statuses = nonEmptyStrings(request.Filter.Statuses)
+			request.ProjectName = scope.projectName
+			body, _ = json.Marshal(request)
+		case "GetAsset":
+			var request volcengineAssetIDRequest
+			if err := decodeVolcengineAssetRequest(raw, &request); err != nil || strings.TrimSpace(request.ID) == "" {
+				if err != nil {
+					return nil, err
+				}
+				return nil, safeMessageError{message: "素材 ID 不能为空"}
+			}
+			request.ProjectName = scope.projectName
+			body, _ = json.Marshal(request)
+			result, err := callVolcengineAssetAPI(ctx, config, scope.outbound, action, body)
 			if err != nil {
 				return nil, err
 			}
-			return nil, safeMessageError{message: "素材 ID 不能为空"}
-		}
-		request.ProjectName = scope.projectName
-		body, _ = json.Marshal(request)
-		result, err := callVolcengineAssetAPI(ctx, config, scope.outbound, action, body)
-		if err != nil {
-			return nil, err
-		}
-		if !volcengineAssetBelongsToScope(result, scope) {
-			return nil, safeMessageError{message: "素材不存在或无权访问"}
-		}
-		return result, nil
-	case "CreateAsset":
-		var request volcengineAssetCreateRequest
-		if err := decodeVolcengineAssetRequest(raw, &request); err != nil {
-			return nil, err
-		}
-		request.GroupID = scope.groupID
-		request.ProjectName = scope.projectName
-		request.URL = strings.TrimSpace(request.URL)
-		request.AssetType = strings.TrimSpace(request.AssetType)
-		if !validVolcengineAssetURL(request.URL) {
-			return nil, safeMessageError{message: "URL 必须是有效的 http 或 https 地址"}
-		}
-		if request.AssetType != "Image" && request.AssetType != "Video" && request.AssetType != "Audio" {
-			return nil, safeMessageError{message: "素材类型必须是 Image、Video 或 Audio"}
-		}
-		body, _ = json.Marshal(request)
-	case "UpdateAsset":
-		var request volcengineAssetUpdateRequest
-		if err := decodeVolcengineAssetRequest(raw, &request); err != nil || strings.TrimSpace(request.ID) == "" {
-			if err != nil {
+			if !volcengineAssetBelongsToScope(result, scope) {
+				return nil, safeMessageError{message: "素材不存在或无权访问"}
+			}
+			return result, nil
+		case "CreateAsset":
+			var request volcengineAssetCreateRequest
+			if err := decodeVolcengineAssetRequest(raw, &request); err != nil {
 				return nil, err
 			}
-			return nil, safeMessageError{message: "素材 ID 不能为空"}
-		}
-		if err := verifyVolcengineAssetOwnership(ctx, config, scope, request.ID); err != nil {
-			return nil, err
-		}
-		request.ProjectName = scope.projectName
-		body, _ = json.Marshal(request)
-	case "DeleteAsset":
-		var request volcengineAssetIDRequest
-		if err := decodeVolcengineAssetRequest(raw, &request); err != nil || strings.TrimSpace(request.ID) == "" {
-			if err != nil {
+			request.GroupID = scope.groupID
+			request.ProjectName = scope.projectName
+			request.URL = strings.TrimSpace(request.URL)
+			request.AssetType = strings.TrimSpace(request.AssetType)
+			if !validVolcengineAssetURL(request.URL) {
+				return nil, safeMessageError{message: "URL 必须是有效的 http 或 https 地址"}
+			}
+			if request.AssetType != "Image" && request.AssetType != "Video" && request.AssetType != "Audio" {
+				return nil, safeMessageError{message: "素材类型必须是 Image、Video 或 Audio"}
+			}
+			body, _ = json.Marshal(request)
+		case "UpdateAsset":
+			var request volcengineAssetUpdateRequest
+			if err := decodeVolcengineAssetRequest(raw, &request); err != nil || strings.TrimSpace(request.ID) == "" {
+				if err != nil {
+					return nil, err
+				}
+				return nil, safeMessageError{message: "素材 ID 不能为空"}
+			}
+			if err := verifyVolcengineAssetOwnership(ctx, config, scope, request.ID); err != nil {
 				return nil, err
 			}
-			return nil, safeMessageError{message: "素材 ID 不能为空"}
+			request.ProjectName = scope.projectName
+			body, _ = json.Marshal(request)
+		case "DeleteAsset":
+			var request volcengineAssetIDRequest
+			if err := decodeVolcengineAssetRequest(raw, &request); err != nil || strings.TrimSpace(request.ID) == "" {
+				if err != nil {
+					return nil, err
+				}
+				return nil, safeMessageError{message: "素材 ID 不能为空"}
+			}
+			if err := verifyVolcengineAssetOwnership(ctx, config, scope, request.ID); err != nil {
+				return nil, err
+			}
+			request.ProjectName = scope.projectName
+			body, _ = json.Marshal(request)
+		default:
+			return nil, safeMessageError{message: "不支持的素材操作"}
 		}
-		if err := verifyVolcengineAssetOwnership(ctx, config, scope, request.ID); err != nil {
-			return nil, err
-		}
-		request.ProjectName = scope.projectName
-		body, _ = json.Marshal(request)
-	default:
-		return nil, safeMessageError{message: "不支持的素材操作"}
-	}
-	return callVolcengineAssetAPI(ctx, config, scope.outbound, action, body)
+		return callVolcengineAssetAPI(ctx, config, scope.outbound, action, body)
+	})
 }
 
-// VolcengineAssetAdminGroupAction forwards one group-management action with the configured project/group defaults.
-func VolcengineAssetAdminGroupAction(ctx context.Context, headers http.Header, query url.Values, action string, raw []byte) (json.RawMessage, error) {
+func withVolcengineAssetActionCharge(user model.AuthUser, config model.VolcengineAssetConfig, action string, call func() (json.RawMessage, error)) (json.RawMessage, error) {
+	cost := config.ActionPrice(action)
+	if cost <= 0 {
+		return call()
+	}
+	credits := model.NewDecimal(int64(cost))
+	operationID := newID("volc_asset")
+	path := "/api/v1/doubao/open/" + action
+	if err := ConsumeUserCreditsOnce(user.ID, "volc-asset/"+action, credits, path, operationID); err != nil {
+		return nil, err
+	}
+	result, err := call()
+	if err == nil {
+		return result, nil
+	}
+	if refundErr := RefundUserCreditsOnce(user.ID, "volc-asset/"+action, credits, path, operationID); refundErr != nil {
+		return nil, refundErr
+	}
+	return nil, err
+}
+
+func VolcengineAssetAdminGroupAction(ctx context.Context, user model.AuthUser, headers http.Header, query url.Values, action string, raw []byte) (json.RawMessage, error) {
 	switch action {
 	case "CreateAssetGroup", "ListAssetGroups", "GetAssetGroup", "UpdateAssetGroup", "DeleteAssetGroup":
 	default:
@@ -414,6 +393,9 @@ func VolcengineAssetAdminGroupAction(ctx context.Context, headers http.Header, q
 	}
 	config, err := repository.GetVolcengineAssetConfig()
 	if err != nil {
+		return nil, err
+	}
+	if err := checkVolcengineAssetRateLimit(config, user.ID); err != nil {
 		return nil, err
 	}
 	outbound, ok := resolveVolcengineAssetOutbound(config, strings.TrimSpace(headers.Get(config.SelectorHeader())), strings.TrimSpace(query.Get("outbound")))
@@ -528,6 +510,8 @@ func ensureVolcengineAssetScope(ctx context.Context, config model.VolcengineAsse
 	if user.EnterpriseID != "" {
 		scopeType, enterpriseID = model.VolcengineAssetScopeEnterprise, user.EnterpriseID
 	}
+	volcengineAssetProvisionMu.Lock()
+	defer volcengineAssetProvisionMu.Unlock()
 	binding, found, err := repository.GetVolcengineAssetGroupBinding(scopeType, enterpriseID, user.ID, outbound.EffectiveID())
 	if err != nil {
 		return nil, err
@@ -953,18 +937,29 @@ func parseCustomVolcengineAssetResponse(template model.VolcengineAssetActionTemp
 			items = gjson.GetBytes(resultRaw, template.ItemsPath)
 		}
 		index := 0
+		var mappingErr error
 		items.ForEach(func(_, item gjson.Result) bool {
 			mapped := []byte("{}")
 			for _, mapping := range template.ItemMapping {
 				value := item.Get(mapping.From)
-				if value.Exists() {
-					mapped, _ = sjson.SetRawBytes(mapped, mapping.To, []byte(value.Raw))
+				if !value.Exists() {
+					continue
+				}
+				mapped, mappingErr = sjson.SetRawBytes(mapped, mapping.To, []byte(value.Raw))
+				if mappingErr != nil {
+					return false
 				}
 			}
-			canonical, _ = sjson.SetRawBytes(canonical, fmt.Sprintf("Items.%d", index), mapped)
+			canonical, mappingErr = sjson.SetRawBytes(canonical, fmt.Sprintf("Items.%d", index), mapped)
+			if mappingErr != nil {
+				return false
+			}
 			index++
 			return true
 		})
+		if mappingErr != nil {
+			return nil, safeMessageError{message: "素材库格式配置无效"}
+		}
 	}
 	return json.RawMessage(canonical), nil
 }
@@ -979,6 +974,7 @@ func volcengineAssetTemplateContext(outbound model.VolcengineAssetOutbound, acti
 		"{project_name}": outbound.ProjectName,
 		"{region}":       outbound.RegionOrDefault(),
 		"{group_type}":   outbound.GroupTypeOrDefault(),
+		"{uuid}":         uuid.NewString(),
 	}
 }
 

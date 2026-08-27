@@ -62,12 +62,17 @@ func VolcengineAssetUserAction(w http.ResponseWriter, r *http.Request, action st
 }
 
 func VolcengineAssetAdminGroupAction(w http.ResponseWriter, r *http.Request, action string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
 	body, err := readRequestBody(r)
 	if err != nil {
 		Fail(w, "请求 JSON 无效")
 		return
 	}
-	result, err := service.VolcengineAssetAdminGroupAction(r.Context(), r.Header, r.URL.Query(), action, body)
+	result, err := service.VolcengineAssetAdminGroupAction(r.Context(), user, r.Header, r.URL.Query(), action, body)
 	if err != nil {
 		FailError(w, err)
 		return

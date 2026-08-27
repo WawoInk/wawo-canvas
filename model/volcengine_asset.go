@@ -240,15 +240,8 @@ func (config VolcengineAssetConfig) Redacted() VolcengineAssetConfig {
 	result := config
 	result.Outbounds = append([]VolcengineAssetOutbound(nil), config.Outbounds...)
 	for i := range result.Outbounds {
-		result.Outbounds[i].BaseURL = ""
-		result.Outbounds[i].SignHost = ""
-		result.Outbounds[i].AccessKey = ""
 		result.Outbounds[i].SecretKey = ""
 		result.Outbounds[i].AccessToken = ""
-	}
-	result.CustomFormats = make([]VolcengineAssetCustomFormat, 0, len(config.CustomFormats))
-	for _, format := range config.CustomFormats {
-		result.CustomFormats = append(result.CustomFormats, VolcengineAssetCustomFormat{ID: format.ID, Name: format.Name})
 	}
 	return result
 }

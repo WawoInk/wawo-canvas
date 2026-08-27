@@ -7,7 +7,7 @@ type SettingKey string
 const (
 	SettingKeyPublic          SettingKey = "public"
 	SettingKeyPrivate         SettingKey = "private"
-	SettingKeyVolcAssetConfig SettingKey = "volc_asset_config"
+	SettingKeyVolcAssetConfig SettingKey = "VolcAssetConfig"
 )
 
 // ModelChannel 模型渠道配置。
