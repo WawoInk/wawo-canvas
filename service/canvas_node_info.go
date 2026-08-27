@@ -16,19 +16,25 @@ type canvasNodeProjectJSON struct {
 	Nodes []json.RawMessage `json:"nodes"`
 }
 
+type canvasNodeMetadata struct {
+	Content          string `json:"content"`
+	UpstreamTaskID   string `json:"upstreamTaskId"`
+	PlatformTaskID   string `json:"platformTaskId"`
+	GenerationTaskID string `json:"generationTaskId"`
+}
+
 type canvasNodeJSON struct {
-	ID        string `json:"id"`
-	CreatedAt string `json:"createdAt"`
-	Metadata  struct {
-		Content        string `json:"content"`
-		UpstreamTaskID string `json:"upstreamTaskId"`
-	} `json:"metadata"`
+	ID        string             `json:"id"`
+	CreatedAt string             `json:"createdAt"`
+	Metadata  canvasNodeMetadata `json:"metadata"`
 }
 
 type adminCanvasNodeItem struct {
 	model.CanvasNodeInfo
-	createdAt    time.Time
-	hasCreatedAt bool
+	platformTaskID   string
+	generationTaskID string
+	createdAt        time.Time
+	hasCreatedAt     bool
 }
 
 // ListAdminCanvasNodes 从当前画布项目快照解析并分页返回节点信息。
@@ -58,7 +64,7 @@ func ListAdminCanvasNodes(q model.CanvasNodeInfoQuery) (model.CanvasNodeInfoList
 			if err != nil {
 				node.CreatedAt = ""
 			}
-			item := adminCanvasNodeItem{
+			items = append(items, adminCanvasNodeItem{
 				CanvasNodeInfo: model.CanvasNodeInfo{
 					UserID:         project.UserID,
 					Username:       project.Username,
@@ -67,15 +73,24 @@ func ListAdminCanvasNodes(q model.CanvasNodeInfoQuery) (model.CanvasNodeInfoList
 					CreatedAt:      node.CreatedAt,
 					ResultURL:      canvasNodeResultURL(node.Metadata.Content),
 				},
-				createdAt:    createdAt,
-				hasCreatedAt: err == nil,
-			}
-			if canvasNodeMatches(item, q, startAt, endAt) {
-				items = append(items, item)
-			}
+				platformTaskID:   node.Metadata.PlatformTaskID,
+				generationTaskID: node.Metadata.GenerationTaskID,
+				createdAt:        createdAt,
+				hasCreatedAt:     err == nil,
+			})
 		}
 	}
+	if err := hydrateCanvasNodeUpstreamTaskIDs(items); err != nil {
+		return model.CanvasNodeInfoList{}, err
+	}
 
+	filtered := items[:0]
+	for _, item := range items {
+		if canvasNodeMatches(item, q, startAt, endAt) {
+			filtered = append(filtered, item)
+		}
+	}
+	items = filtered
 	sort.SliceStable(items, func(i, j int) bool {
 		left, right := items[i], items[j]
 		if left.hasCreatedAt != right.hasCreatedAt {
@@ -112,6 +127,51 @@ func ListAdminCanvasNodes(q model.CanvasNodeInfoQuery) (model.CanvasNodeInfoList
 		result.Items = append(result.Items, item.CanvasNodeInfo)
 	}
 	return result, nil
+}
+
+func hydrateCanvasNodeUpstreamTaskIDs(items []adminCanvasNodeItem) error {
+	seen := make(map[string]struct{})
+	ids := make([]string, 0)
+	for _, item := range items {
+		for _, id := range []string{item.platformTaskID, item.generationTaskID, item.UpstreamTaskID} {
+			if id == "" {
+				continue
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+		}
+	}
+	tasks, err := repository.ListGenerationTasksByIDs(ids)
+	if err != nil {
+		return err
+	}
+	upstreamByTask := make(map[string]string, len(tasks))
+	for _, task := range tasks {
+		upstreamByTask[canvasNodeTaskKey(task.UserID, task.ID)] = task.UpstreamTaskID
+	}
+	for index := range items {
+		item := &items[index]
+		if item.UpstreamTaskID != "" {
+			if upstreamTaskID := upstreamByTask[canvasNodeTaskKey(item.UserID, item.UpstreamTaskID)]; upstreamTaskID != "" {
+				item.UpstreamTaskID = upstreamTaskID
+			}
+			continue
+		}
+		for _, id := range []string{item.platformTaskID, item.generationTaskID} {
+			if upstreamTaskID := upstreamByTask[canvasNodeTaskKey(item.UserID, id)]; upstreamTaskID != "" {
+				item.UpstreamTaskID = upstreamTaskID
+				break
+			}
+		}
+	}
+	return nil
+}
+
+func canvasNodeTaskKey(userID, taskID string) string {
+	return userID + "\x00" + taskID
 }
 
 func canvasNodeCreatedAtRange(q model.CanvasNodeInfoQuery) (time.Time, time.Time, error) {

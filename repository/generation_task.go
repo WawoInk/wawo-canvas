@@ -56,6 +56,20 @@ func GetGenerationTaskByID(id string) (model.GenerationTask, error) {
 	return task, result.Error
 }
 
+// ListGenerationTasksByIDs 查询指定生成任务的归属及上游任务 ID。
+func ListGenerationTasksByIDs(ids []string) ([]model.GenerationTask, error) {
+	if len(ids) == 0 {
+		return []model.GenerationTask{}, nil
+	}
+	db, err := DB()
+	if err != nil {
+		return nil, err
+	}
+	var tasks []model.GenerationTask
+	err = db.Select("id, user_id, upstream_task_id").Where("id IN ? AND upstream_task_id <> ''", ids).Find(&tasks).Error
+	return tasks, err
+}
+
 // GetGenerationTaskByIDAndUser 根据 ID 和用户 ID 查询任务（所有权校验）。
 func GetGenerationTaskByIDAndUser(id, userID string) (model.GenerationTask, error) {
 	db, err := DB()
