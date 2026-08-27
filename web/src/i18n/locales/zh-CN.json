@@ -2141,6 +2141,10 @@
                 "title": "素材库 | Canvan",
                 "description": "浏览并保存公共创作素材。"
             },
+            "volcengineAssets": {
+                "title": "火山素材库 | Canvan",
+                "description": "浏览和管理已配置火山引擎素材库中的远端素材。"
+            },
             "account": {
                 "title": "账户设置 | Canvan",
                 "description": "管理账户资料、安全设置和使用记录。"

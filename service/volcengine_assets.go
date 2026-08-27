@@ -301,9 +301,14 @@ func VolcengineAssetOutbounds() ([]model.VolcengineAssetOutboundView, error) {
 	}
 	result := make([]model.VolcengineAssetOutboundView, 0)
 	for _, outbound := range config.EffectiveOutbounds() {
-		if config.OutboundConfigured(outbound) {
-			result = append(result, model.VolcengineAssetOutboundView{ID: outbound.EffectiveID(), Name: outbound.Name, Format: outbound.EffectiveFormat(), ProjectName: outbound.ProjectName, GroupType: outbound.GroupTypeOrDefault()})
+		if !config.OutboundConfigured(outbound) {
+			continue
 		}
+		name := strings.TrimSpace(outbound.Name)
+		if name == "" {
+			name = outbound.EffectiveID()
+		}
+		result = append(result, model.VolcengineAssetOutboundView{ID: outbound.EffectiveID(), Name: name, Format: outbound.EffectiveFormat(), ProjectName: outbound.ProjectName, GroupType: outbound.GroupTypeOrDefault()})
 	}
 	return result, nil
 }
@@ -626,19 +631,28 @@ func ensureVolcengineAssetScope(ctx context.Context, config model.VolcengineAsse
 	if user.EnterpriseID != "" {
 		scopeType, enterpriseID = model.VolcengineAssetScopeEnterprise, user.EnterpriseID
 	}
-	volcengineAssetProvisionMu.Lock()
-	defer volcengineAssetProvisionMu.Unlock()
+	needsProvision := func(binding model.VolcengineAssetGroupBinding, found bool) bool {
+		return !found || binding.GroupID == "" || binding.ProjectName != outbound.ProjectName || binding.Format != outbound.EffectiveFormat()
+	}
 	binding, found, err := repository.GetVolcengineAssetGroupBinding(scopeType, enterpriseID, user.ID, outbound.EffectiveID())
 	if err != nil {
 		return nil, err
 	}
-	if !found || binding.GroupID == "" || binding.ProjectName != outbound.ProjectName || binding.Format != outbound.EffectiveFormat() {
-		binding, err = provisionVolcengineAssetGroup(ctx, config, outbound, user, scopeType, enterpriseID)
+	if needsProvision(binding, found) {
+		volcengineAssetProvisionMu.Lock()
+		defer volcengineAssetProvisionMu.Unlock()
+		binding, found, err = repository.GetVolcengineAssetGroupBinding(scopeType, enterpriseID, user.ID, outbound.EffectiveID())
 		if err != nil {
 			return nil, err
 		}
+		if needsProvision(binding, found) {
+			binding, err = provisionVolcengineAssetGroup(ctx, config, outbound, user, scopeType, enterpriseID)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
-	if binding.ProjectName != outbound.ProjectName || binding.GroupID == "" {
+	if needsProvision(binding, true) {
 		return nil, safeMessageError{message: "素材库分组配置无效"}
 	}
 	groupType := binding.GroupType
@@ -780,7 +794,7 @@ func callVolcengineFormat(ctx context.Context, outbound model.VolcengineAssetOut
 		signVolcengineAssetRequest(request, body, outbound.AccessKey, outbound.SecretKey, outbound.RegionOrDefault(), signHost)
 	})
 	if err != nil {
-		return nil, volcengineAssetUpstreamError{message: err.Error()}
+		return nil, volcengineAssetUpstreamError{}
 	}
 	if status < http.StatusOK || status >= http.StatusMultipleChoices {
 		return nil, volcengineAssetErrorFromResponse(response, status)
@@ -800,16 +814,25 @@ func callNewAPIAssetFormat(ctx context.Context, outbound model.VolcengineAssetOu
 	}
 	response, status, err := sendVolcengineAssetHTTP(ctx, http.MethodPost, strings.TrimRight(outbound.BaseURL, "/")+"/"+action, map[string]string{"Authorization": "Bearer " + outbound.AccessToken, "X-Track-Id": uuid.NewString()}, body, nil)
 	if err != nil {
-		return nil, volcengineAssetUpstreamError{message: err.Error()}
+		return nil, volcengineAssetUpstreamError{}
 	}
 	if status < http.StatusOK || status >= http.StatusMultipleChoices {
 		return nil, volcengineAssetErrorFromResponse(response, status)
 	}
 	if code := strings.TrimSpace(gjson.GetBytes(response, "code").String()); code != "" {
+		data := gjson.GetBytes(response, "data")
 		if code != "0" {
-			return nil, volcengineAssetUpstreamError{code: code, message: gjson.GetBytes(response, "msg").String(), status: status}
+			errorCode := strings.TrimSpace(data.Get("error.code").String())
+			if errorCode == "" {
+				errorCode = code
+			}
+			errorMessage := strings.TrimSpace(data.Get("error.message").String())
+			if errorMessage == "" {
+				errorMessage = gjson.GetBytes(response, "msg").String()
+			}
+			return nil, volcengineAssetUpstreamError{code: errorCode, message: errorMessage, status: status}
 		}
-		if data := gjson.GetBytes(response, "data"); data.Exists() && data.Raw != "null" {
+		if data.Exists() {
 			return json.RawMessage(data.Raw), nil
 		}
 	}
@@ -824,7 +847,7 @@ func callCustomAssetFormat(ctx context.Context, outbound model.VolcengineAssetOu
 	}
 	response, status, err := sendVolcengineAssetHTTP(ctx, method, requestURL, headers, body, nil)
 	if err != nil {
-		return nil, volcengineAssetUpstreamError{message: err.Error()}
+		return nil, volcengineAssetUpstreamError{}
 	}
 	if status < http.StatusOK || status >= http.StatusMultipleChoices {
 		return nil, volcengineAssetErrorFromResponse(response, status)

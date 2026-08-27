@@ -237,6 +237,15 @@ func TestVolcengineAssetsAdminConfigRedactsAndRetainsSecretsThroughHTTP(t *testi
 			t.Fatalf("token leaked in redacted outbound: %#v", item)
 		}
 	}
+	redactedOutbounds := redactedValue["outbounds"].([]any)
+	nestedOutbound := redactedOutbounds[0].(map[string]any)
+	if nestedOutbound["base_url"] != "http://127.0.0.1:9999" || nestedOutbound["access_key"] != nil {
+		t.Fatalf("non-secret outbound config was not preserved: %#v", nestedOutbound)
+	}
+	signedOutbound := redactedOutbounds[1].(map[string]any)
+	if signedOutbound["access_key"] != "access-key" {
+		t.Fatalf("access key was unexpectedly redacted: %#v", signedOutbound)
+	}
 
 	retained := doJSON[volcAssetConfigHTTP](t, http.MethodPost, server.URL+"/api/admin/volcengine-assets/config", admin.Token, map[string]string{"config": redacted.Data.Config})
 	if retained.Code != 0 {
@@ -453,5 +462,37 @@ func TestVolcengineAssetFailoverUsesNextConfiguredOutbound(t *testing.T) {
 	call := upstream.latest(t, "ListAssets")
 	if got := call.Authorization; got != "Bearer backup-token" {
 		t.Fatalf("failover authorization = %q", got)
+	}
+}
+
+func TestVolcengineAssetUpstreamErrorsExposeSafeCode(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "volc-asset-upstream-error-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"error":{"code":"UNAVAILABLE","message":"temporary outage"}}`))
+	}))
+	defer upstream.Close()
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	admin := volcAssetTestSession(t, server.URL, "volc-upstream-error-admin", model.UserRoleAdmin)
+	user := volcAssetTestSession(t, server.URL, "volc-upstream-error-user", model.UserRoleUser)
+
+	configured := map[string]any{
+		"outbounds": []map[string]any{{"id": "nested", "format": "newapi", "base_url": upstream.URL, "access_token": "nested-token", "project_name": "canvas-assets"}},
+	}
+	if saved := doJSON[volcAssetConfigHTTP](t, http.MethodPost, server.URL+"/api/admin/volcengine-assets/config", admin.Token, map[string]string{"config": volcAssetConfigJSON(t, configured)}); saved.Code != 0 {
+		t.Fatalf("save config = %#v", saved)
+	}
+
+	response := doJSON[map[string]any](t, http.MethodPost, server.URL+"/api/v1/doubao/open/ListAssets?outbound=nested", user.Token, map[string]any{"PageNumber": 1, "PageSize": 20})
+	if response.Code != 1 || response.Msg != "上游素材库请求失败" {
+		t.Fatalf("upstream error = %#v", response)
+	}
+	if errorData := volcAssetObject(response.Data, "error"); volcAssetString(errorData, "code") != "UNAVAILABLE" || volcAssetString(errorData, "message") != "temporary outage" {
+		t.Fatalf("upstream error data = %#v", response.Data)
 	}
 }

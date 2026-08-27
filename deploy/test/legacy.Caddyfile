@@ -10,6 +10,10 @@
         reverse_proxy api:8088
     }
 
+    handle /v1/* {
+        reverse_proxy api:8088
+    }
+
     handle {
         root * /usr/share/nginx/html
         file_server

@@ -10,6 +10,10 @@
         reverse_proxy {$API_UPSTREAM}
     }
 
+    handle /v1/* {
+        reverse_proxy {$API_UPSTREAM}
+    }
+
     handle {
         root * /usr/share/nginx/html
         route {

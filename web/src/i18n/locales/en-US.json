@@ -2141,6 +2141,10 @@
                 "title": "Asset Library | Canvan",
                 "description": "Browse and save shared creation assets."
             },
+            "volcengineAssets": {
+                "title": "Volcengine Assets | Canvan",
+                "description": "Browse and manage remote assets in configured Volcengine asset libraries."
+            },
             "account": {
                 "title": "Account Settings | Canvan",
                 "description": "Manage your profile, security settings, and usage records."

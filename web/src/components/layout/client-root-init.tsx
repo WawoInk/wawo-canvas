@@ -137,6 +137,7 @@ function seoPage(pathname: string) {
     if (pathname === "/prompts") return "prompts";
     if (pathname === "/assets") return "assets";
     if (pathname === "/asset-library") return "assetLibrary";
+    if (pathname === "/volcengine-assets") return "volcengineAssets";
     if (pathname === "/account") return "account";
     if (pathname === "/enterprise-assets") return "enterpriseAssets";
     if (pathname.startsWith("/admin")) return "admin";
