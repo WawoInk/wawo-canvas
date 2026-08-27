@@ -11,9 +11,3 @@ data/
 dist/
 .claude/artifacts/
 /deploy/test/fixture-api/server
-.kilocode/worktrees/
-.agents/worktrees/
-coord
-coord-views
-.serena
-.codegraph
