@@ -76,6 +76,7 @@
         "video": "Video studio",
         "prompts": "Prompt library",
         "assets": "My assets",
+        "volcengineAssets": "Volcengine assets",
         "enterpriseAssets": "Enterprise assets"
     },
     "home": {
@@ -1100,6 +1101,7 @@
             "prompts": "Prompts",
             "assets": "Asset library",
             "assetsManagement": "Asset management",
+            "volcengineAssets": "Volcengine assets",
             "settings": "System settings"
         },
         "common": {

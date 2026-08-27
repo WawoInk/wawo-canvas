@@ -76,6 +76,7 @@
         "video": "视频创作台",
         "prompts": "提示词库",
         "assets": "我的素材",
+        "volcengineAssets": "火山素材库",
         "enterpriseAssets": "企业素材库"
     },
     "home": {
@@ -1100,6 +1101,7 @@
             "prompts": "提示词管理",
             "assets": "素材库",
             "assetsManagement": "素材库管理",
+            "volcengineAssets": "火山引擎资产",
             "settings": "系统设置"
         },
         "common": {

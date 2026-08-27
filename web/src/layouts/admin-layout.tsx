@@ -1,4 +1,4 @@
-import { ExperimentOutlined, FileTextOutlined, HomeOutlined, LogoutOutlined, NodeIndexOutlined, PictureOutlined, SettingOutlined, TeamOutlined, TransactionOutlined, UserOutlined } from "@ant-design/icons";
+import { CloudServerOutlined, ExperimentOutlined, FileTextOutlined, HomeOutlined, LogoutOutlined, NodeIndexOutlined, PictureOutlined, SettingOutlined, TeamOutlined, TransactionOutlined, UserOutlined } from "@ant-design/icons";
 import { Button, Flex, Layout, Menu, Typography, theme } from "antd";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
@@ -29,13 +29,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         { key: "/admin/canvas-nodes", icon: <NodeIndexOutlined />, label: t("admin.menus.canvasNodes") },
         { key: "/admin/prompts", icon: <FileTextOutlined />, label: t("admin.menus.prompts") },
         { key: "/admin/assets", icon: <PictureOutlined />, label: t("admin.menus.assets") },
+        { key: "/admin/volcengine-assets", icon: <CloudServerOutlined />, label: t("admin.menus.volcengineAssets") },
         { key: "/admin/settings", icon: <SettingOutlined />, label: t("admin.menus.settings") },
     ];
     const activeKey = appPath.startsWith("/admin/enterprises")
         ? "/admin/enterprises"
-        : appPath.startsWith("/admin/settings")
-          ? "/admin/settings"
-          : appPath.startsWith("/admin/assets")
+        : appPath.startsWith("/admin/volcengine-assets")
+          ? "/admin/volcengine-assets"
+          : appPath.startsWith("/admin/settings")
+            ? "/admin/settings"
+            : appPath.startsWith("/admin/assets")
             ? "/admin/assets"
             : appPath.startsWith("/admin/generation-tasks")
               ? "/admin/generation-tasks"
@@ -50,9 +53,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                       : "";
     const pageTitle = appPath.startsWith("/admin/enterprises")
         ? t("admin.menus.enterprises")
-        : appPath.startsWith("/admin/settings")
-          ? t("admin.menus.settings")
-          : appPath.startsWith("/admin/assets")
+        : appPath.startsWith("/admin/volcengine-assets")
+          ? t("admin.menus.volcengineAssets")
+          : appPath.startsWith("/admin/settings")
+            ? t("admin.menus.settings")
+            : appPath.startsWith("/admin/assets")
             ? t("admin.menus.assetsManagement")
             : appPath.startsWith("/admin/generation-tasks")
               ? t("admin.menus.generationTasks")

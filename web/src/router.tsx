@@ -17,6 +17,7 @@ import AssetsPage from "@/pages/assets";
 import AssetLibraryPage from "@/pages/asset-library";
 import AccountPage from "@/pages/account";
 import EnterpriseAssetsPage from "@/pages/enterprise-assets";
+import VolcengineAssetsPage from "@/pages/volcengine-assets";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminUsers from "@/pages/admin/users";
 import AdminEnterprises from "@/pages/admin/enterprises";
@@ -26,6 +27,7 @@ import AdminCanvasNodes from "@/pages/admin/canvas-nodes";
 import AdminPrompts from "@/pages/admin/prompts";
 import AdminAssets from "@/pages/admin/assets";
 import AdminSettings from "@/pages/admin/settings";
+import AdminVolcengineAssets from "@/pages/admin/volcengine-assets";
 import NotFound from "@/pages/not-found";
 
 function LocaleBoundary() {
@@ -69,6 +71,7 @@ export const router = createBrowserRouter([
                     { path: "video", element: <VideoPage /> },
                     { path: "prompts", element: <PromptsPage /> },
                     { path: "assets", element: <AssetsPage /> },
+                    { path: "volcengine-assets", element: <VolcengineAssetsPage /> },
                     { path: "asset-library", element: <AssetLibraryPage /> },
                     { path: "account", element: <AccountPage /> },
                     { path: "enterprise-assets", element: <EnterpriseAssetsPage /> },
@@ -89,6 +92,7 @@ export const router = createBrowserRouter([
                     { path: "admin/canvas-nodes", element: <AdminCanvasNodes /> },
                     { path: "admin/prompts", element: <AdminPrompts /> },
                     { path: "admin/assets", element: <AdminAssets /> },
+                    { path: "admin/volcengine-assets", element: <AdminVolcengineAssets /> },
                     { path: "admin/settings", element: <AdminSettings /> },
                 ],
             },

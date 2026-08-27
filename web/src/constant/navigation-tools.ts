@@ -28,6 +28,11 @@ export const navigationTools = [
         labelKey: "navigation.assets",
         icon: Images,
     },
+    {
+        slug: "volcengine-assets",
+        labelKey: "navigation.volcengineAssets",
+        icon: Images,
+    },
 ] as const;
 
 export const enterpriseNavigationTool = {
