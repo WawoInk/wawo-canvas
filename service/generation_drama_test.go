@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -116,6 +119,100 @@ func TestCreateGenerationRejectsInvalidViduDramaInput(t *testing.T) {
 		if !errors.As(err, &validationErr) || validationErr.Code != "INVALID_SETTING" || !strings.HasPrefix(validationErr.FieldPath, "intent.settings.") || validationErr.Retryable {
 			t.Fatalf("settings %#v error = %#v", settings, err)
 		}
+	}
+}
+
+func TestCreateGenerationAcceptsVolcengineDramaAsset(t *testing.T) {
+	previousProfiles := generationProfiles
+	previousChannel := generationChannel
+	defer func() {
+		generationProfiles = previousProfiles
+		generationChannel = previousChannel
+	}()
+	profile, _ := findGenerationProfile(GenerationProfiles(), "vidu-q3-drama")
+	generationProfiles = func() []model.GenerationProfile { return []model.GenerationProfile{profile} }
+	routeErr := errors.New("route reached")
+	generationChannel = func(string) (model.ModelChannel, error) { return model.ModelChannel{}, routeErr }
+
+	asset := model.ShortDramaAsset{SourceNodeID: "image-asset", Role: model.ShortDramaAssetCharacter, Name: "林尘", Reference: model.MediaReference{AssetID: "asset-drama-image-1", SourceNodeID: "image-asset", Name: "林尘"}}
+	_, err := CreateGeneration(context.Background(), model.AuthUser{ID: "drama-asset-user"}, dramaCommand("drama-asset-"+uuid.NewString(), asset, nil))
+	if !errors.Is(err, routeErr) {
+		t.Fatalf("error = %v, want route reached", err)
+	}
+}
+
+func TestCreateGenerationPassesVolcengineDramaAssetToVidu(t *testing.T) {
+	var gotBody map[string]any
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("decode upstream request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"drama-asset-task","status":"failed","error":{"code":"INPUT_REJECTED","message":"done"}}`))
+	}))
+	defer upstream.Close()
+
+	previousProfiles := generationProfiles
+	previousChannel := generationChannel
+	previousRouteChannel := generationRouteChannel
+	previousClient := generationHTTPClient
+	previousCost := generationCost
+	previousDispatch := generationDispatch
+	previousPresign := generationPresign
+	defer func() {
+		generationProfiles = previousProfiles
+		generationChannel = previousChannel
+		generationRouteChannel = previousRouteChannel
+		generationHTTPClient = previousClient
+		generationCost = previousCost
+		generationDispatch = previousDispatch
+		generationPresign = previousPresign
+	}()
+	profile, _ := findGenerationProfile(GenerationProfiles(), "vidu-q3-drama")
+	generationProfiles = func() []model.GenerationProfile { return []model.GenerationProfile{profile} }
+	generationChannel = func(string) (model.ModelChannel, error) { return model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"}, nil }
+	generationRouteChannel = func(string, string) (model.ModelChannel, error) { return generationChannel("") }
+	generationHTTPClient = upstream.Client()
+	generationCost = func(string) (model.Decimal, error) { return credit(0), nil }
+	generationDispatch = func(ctx context.Context, taskID string) { processGenerationTask(ctx, taskID, "drama-asset-worker") }
+	generationPresign = func(context.Context, string, time.Duration) (string, error) {
+		t.Fatal("asset references must not be loaded from user files")
+		return "", nil
+	}
+
+	asset := model.ShortDramaAsset{SourceNodeID: "image-asset", Role: model.ShortDramaAssetCharacter, Name: "林尘", Reference: model.MediaReference{AssetID: "asset-drama-image-1", SourceNodeID: "image-asset", Name: "林尘"}}
+	if _, err := CreateGeneration(context.Background(), model.AuthUser{ID: "drama-asset-payload-user"}, dramaCommand("drama-asset-payload-"+uuid.NewString(), asset, nil)); err != nil {
+		t.Fatalf("CreateGeneration: %v", err)
+	}
+	assets, _ := gotBody["assets"].([]any)
+	if len(assets) != 1 {
+		t.Fatalf("assets = %#v", gotBody["assets"])
+	}
+	item, _ := assets[0].(map[string]any)
+	if item["image_uri"] != "asset://asset-drama-image-1" {
+		t.Fatalf("asset payload = %#v", gotBody)
+	}
+}
+
+func TestCreateGenerationRejectsInvalidDramaAssetReferences(t *testing.T) {
+	previousProfiles := generationProfiles
+	defer func() { generationProfiles = previousProfiles }()
+	profile, _ := findGenerationProfile(GenerationProfiles(), "vidu-q3-drama")
+	generationProfiles = func() []model.GenerationProfile { return []model.GenerationProfile{profile} }
+	for _, testCase := range []struct {
+		name      string
+		reference model.MediaReference
+		fieldPath string
+	}{
+		{"missing IDs", model.MediaReference{SourceNodeID: "image-asset"}, "intent.assets.0.reference.fileId"},
+		{"both IDs", model.MediaReference{FileID: "file-image-1", AssetID: "asset-image-1", SourceNodeID: "image-asset"}, "intent.assets.0.reference"},
+		{"unsafe asset ID", model.MediaReference{AssetID: "asset://drama-image-1", SourceNodeID: "image-asset"}, "intent.assets.0.reference.assetId"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			asset := model.ShortDramaAsset{SourceNodeID: "image-asset", Role: model.ShortDramaAssetCharacter, Name: "林尘", Reference: testCase.reference}
+			_, err := CreateGeneration(context.Background(), model.AuthUser{ID: "invalid-drama-asset-user"}, dramaCommand("invalid-drama-asset-"+uuid.NewString(), asset, nil))
+			assertGenerationValidationError(t, err, "INVALID_COMMAND", testCase.fieldPath, "image-asset")
+		})
 	}
 }
 
