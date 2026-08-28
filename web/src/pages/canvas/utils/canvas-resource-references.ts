@@ -84,9 +84,10 @@ function isResourceNode(node: CanvasNodeData) {
 }
 
 function resourceKind(node: CanvasNodeData): CanvasResourceKind | null {
-    if (node.type === CanvasNodeType.Image && node.metadata?.content) return "image";
-    if (node.type === CanvasNodeType.Video && node.metadata?.content) return "video";
-    if (node.type === CanvasNodeType.Audio && node.metadata?.content) return "audio";
+    const hasVolcengineAsset = node.metadata?.materialSource === "volcengine" && Boolean(node.metadata.volcengineAssetId);
+    if (node.type === CanvasNodeType.Image && (node.metadata?.content || hasVolcengineAsset)) return "image";
+    if (node.type === CanvasNodeType.Video && (node.metadata?.content || hasVolcengineAsset)) return "video";
+    if (node.type === CanvasNodeType.Audio && (node.metadata?.content || hasVolcengineAsset)) return "audio";
     if (node.type === CanvasNodeType.Text && (node.metadata?.content || node.metadata?.prompt)) return "text";
     return null;
 }

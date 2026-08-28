@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { defaultConfig } from "../../stores/use-config-store.ts";
 import i18n from "../../i18n/index.ts";
-import { buildVideoGenerationPayload, pollVideoGenerationTask } from "./video.ts";
+import { buildVideoGenerationPayload, createVideoGenerationTask, pollVideoGenerationTask } from "./video.ts";
 
 const config = (model, videoNegativePrompt = "") => ({
     ...defaultConfig,
@@ -50,6 +50,59 @@ test("accepts 500 negative-prompt characters and rejects more", async () => {
         extra_params: { negative_prompt: accepted },
     });
     await assert.rejects(() => buildVideoGenerationPayload(config(model, `${accepted}差`), model, "人物走进雨夜街道"), /negative prompt cannot exceed 500 characters/i);
+});
+
+test("keeps asset URLs intact across OpenAI, Sora, and Seedance compatibility payloads", async () => {
+    const imageUrl = "asset://image-reference-001";
+    const videoUrl = "asset://video-reference-001";
+    const audioUrl = "asset://audio-reference-001";
+    const references = [{ id: "image-reference", name: "image.png", type: "image/png", url: "https://preview.example/image.png", dataUrl: "data:image/png;base64,should-not-be-used", storageKey: "local-image-storage-key", assetId: "image-reference-001" }];
+    const videoReferences = [{ id: "video-reference", name: "video.mp4", type: "video/mp4", url: "https://preview.example/video.mp4", storageKey: "local-video-storage-key", assetId: "video-reference-001" }];
+    const audioReferences = [{ id: "audio-reference", name: "audio.mp3", type: "audio/mpeg", url: "https://preview.example/audio.mp3", storageKey: "local-audio-storage-key", assetId: "audio-reference-001" }];
+
+    for (const model of ["grok-imagine-video", "sora-2", "doubao-seedance-2.0"]) {
+        const payload = await buildVideoGenerationPayload(config(model), model, "让参考素材动起来", references, videoReferences, audioReferences);
+        assert.deepEqual(payload.content.slice(-3), [
+            { type: "image_url", image_url: { url: imageUrl }, role: "reference_image" },
+            { type: "video_url", video_url: { url: videoUrl }, role: "reference_video" },
+            { type: "audio_url", audio_url: { url: audioUrl }, role: "reference_audio" },
+        ]);
+        const serialized = JSON.stringify(payload);
+        assert.equal(serialized.includes("should-not-be-used"), false);
+        assert.equal(serialized.includes("local-image-storage-key"), false);
+        assert.equal(serialized.includes("local-video-storage-key"), false);
+        assert.equal(serialized.includes("local-audio-storage-key"), false);
+    }
+});
+
+test("preserves an asset incompatibility detail from the compatibility video service", async (t) => {
+    const downstreamMessage = "Volcengine asset is unsupported by this downstream";
+    const server = createServer((_request, response) => {
+        response.statusCode = 400;
+        response.setHeader("Content-Type", "application/json");
+        response.end(JSON.stringify({ error: { code: "ASSET_REFERENCE_UNSUPPORTED", message: downstreamMessage } }));
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    t.after(() => server.close());
+
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const localConfig = {
+        ...config("seedance-local"),
+        channelMode: "local",
+        baseUrl,
+        apiKey: "test-key",
+        channels: [{ id: "test-channel", name: "Test", baseUrl, apiKey: "test-key", apiFormat: "openai", models: ["seedance-local"] }],
+    };
+
+    await assert.rejects(
+        () => createVideoGenerationTask(localConfig, "让参考图动起来", [{ id: "image-reference", name: "image.png", type: "image/png", url: "asset://image-reference-001", dataUrl: "data:image/png;base64,not-used" }]),
+        (error) => {
+            assert.equal(error instanceof Error ? error.message : String(error), downstreamMessage);
+            return true;
+        },
+    );
 });
 
 test("reports the concrete compatibility task failure instead of the coarse provider message", async (t) => {

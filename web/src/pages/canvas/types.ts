@@ -21,6 +21,7 @@ export type CanvasNodeStatus = "idle" | "success" | "loading" | "error";
 export type CanvasGenerationTaskStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 export type CanvasGenerationMode = "text" | "image" | "video" | "audio";
 export type CanvasImageGenerationType = "generation" | "edit";
+export type CanvasMaterialSource = "local" | "volcengine";
 
 export type CanvasNodeMetadata = {
     content?: string;
@@ -60,6 +61,10 @@ export type CanvasNodeMetadata = {
     storageKey?: string;
     mimeType?: string;
     fileId?: string;
+    materialSource?: CanvasMaterialSource;
+    volcengineAssetId?: string;
+    volcengineAssetOutboundId?: string;
+    volcengineAssetOutboundName?: string;
     bytes?: number;
     durationMs?: number;
     upstreamTaskId?: string;

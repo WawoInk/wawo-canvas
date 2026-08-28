@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import i18n from "@/i18n";
-import { buildNodeGenerationContext, buildShortDramaGenerationIntent, buildVideoGenerationIntent, cleanShortDramaAssetMappings, locateGenerationError, prepareFirstPartyCanvasVideoRun } from "./canvas-node-generation.ts";
+import { buildNodeGenerationContext, buildShortDramaGenerationIntent, buildVideoGenerationIntent, cleanShortDramaAssetMappings, hydrateNodeGenerationContext, locateGenerationError, prepareFirstPartyCanvasVideoRun } from "./canvas-node-generation.ts";
 
 const image = {
     id: "image-1",
@@ -39,6 +39,71 @@ test("compiles Canvas media and settings as a first-party intent", () => {
     });
     const serialized = JSON.stringify(intent);
     for (const providerField of ["dataUrl", "storageKey", "image_url", "generate_audio", "ratio"]) assert.equal(serialized.includes(`"${providerField}":`), false);
+});
+
+test("compiles Volcengine Canvas media as asset references", () => {
+    const volcengineImage = { ...image, metadata: { ...image.metadata, materialSource: "volcengine", volcengineAssetId: "asset-image-1" } };
+    const volcengineVideo = { id: "video-asset-1", type: "video", title: "动作参考", metadata: { materialSource: "volcengine", volcengineAssetId: "asset-video-1" } };
+    const volcengineAudio = { id: "audio-asset-1", type: "audio", title: "配乐参考", metadata: { materialSource: "volcengine", volcengineAssetId: "asset-audio-1" } };
+    const settings = { aspectRatio: "9:16", resolution: "1080p", durationSeconds: 10, generateAudio: false, watermark: true };
+
+    assert.deepEqual(
+        buildVideoGenerationIntent(
+            "video-1",
+            [volcengineImage, volcengineVideo, volcengineAudio, videoTarget],
+            [
+                { id: "connection-image", fromNodeId: "image-1", toNodeId: "video-1" },
+                { id: "connection-video", fromNodeId: "video-asset-1", toNodeId: "video-1" },
+                { id: "connection-audio", fromNodeId: "audio-asset-1", toNodeId: "video-1" },
+            ],
+            "人物走进雨夜街道",
+            settings,
+        ),
+        {
+            kind: "video.generate",
+            prompt: "人物走进雨夜街道",
+            references: {
+                images: [{ assetId: "asset-image-1", sourceNodeId: "image-1", name: "人物参考" }],
+                videos: [{ assetId: "asset-video-1", sourceNodeId: "video-asset-1", name: "动作参考" }],
+                audios: [{ assetId: "asset-audio-1", sourceNodeId: "audio-asset-1", name: "配乐参考" }],
+            },
+            settings,
+        },
+    );
+});
+
+test("keeps Volcengine asset IDs in compatibility video references", () => {
+    const volcengineImage = { ...image, metadata: { content: "", materialSource: "volcengine", volcengineAssetId: "asset-image-1" } };
+    const volcengineVideo = { id: "video-asset-1", type: "video", title: "动作参考", metadata: { content: "", materialSource: "volcengine", volcengineAssetId: "asset-video-1" } };
+    const volcengineAudio = { id: "audio-asset-1", type: "audio", title: "配乐参考", metadata: { content: "", materialSource: "volcengine", volcengineAssetId: "asset-audio-1" } };
+    const context = buildNodeGenerationContext(
+        "video-1",
+        [volcengineImage, volcengineVideo, volcengineAudio, videoTarget],
+        [
+            { id: "connection-image", fromNodeId: "image-1", toNodeId: "video-1" },
+            { id: "connection-video", fromNodeId: "video-asset-1", toNodeId: "video-1" },
+            { id: "connection-audio", fromNodeId: "audio-asset-1", toNodeId: "video-1" },
+        ],
+        "让参考素材动起来",
+    );
+
+    assert.deepEqual(
+        [context.referenceImages[0].assetId, context.referenceVideos[0].assetId, context.referenceAudios[0].assetId],
+        ["asset-image-1", "asset-video-1", "asset-audio-1"],
+    );
+});
+
+test("does not hydrate a Volcengine asset through its preview URL", async () => {
+    const context = buildNodeGenerationContext(
+        "video-1",
+        [{ ...image, metadata: { content: "", materialSource: "volcengine", volcengineAssetId: "asset-image-1" } }, videoTarget],
+        [{ id: "connection-image", fromNodeId: "image-1", toNodeId: "video-1" }],
+        "让参考素材动起来",
+    );
+
+    const hydrated = await hydrateNodeGenerationContext(context);
+    assert.equal(hydrated.referenceImages[0].assetId, "asset-image-1");
+    assert.equal(hydrated.referenceImages[0].dataUrl, "");
 });
 
 test("rejects connected first-party media without a platform file", () => {
@@ -113,6 +178,24 @@ test("compiles connected Drama assets with roles stored on each target node", ()
         settings: dramaSettings,
     });
     assert.equal(otherTarget.metadata.dramaAssetRoles["image-1"], "scene");
+});
+
+test("compiles Volcengine Drama images as asset references", () => {
+    const volcengineImage = { ...image, metadata: { ...image.metadata, materialSource: "volcengine", volcengineAssetId: "asset-drama-image-1" } };
+    const target = {
+        ...videoTarget,
+        title: "典当行退婚",
+        metadata: { dramaAssetRoles: { "image-1": "character" } },
+    };
+    const settings = { aspectRatio: "9:16", resolution: "1080p", durationSeconds: "auto", quality: "high" };
+
+    assert.deepEqual(buildShortDramaGenerationIntent("video-1", [volcengineImage, target], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], "人物：林尘。分镜1-1：林尘在典当行擦拭柜台，神情淡然。", settings), {
+        kind: "video.short-drama",
+        title: "典当行退婚",
+        script: "人物：林尘。分镜1-1：林尘在典当行擦拭柜台，神情淡然。",
+        assets: [{ sourceNodeId: "image-1", role: "character", name: "人物参考", reference: { assetId: "asset-drama-image-1", sourceNodeId: "image-1", name: "人物参考" } }],
+        settings,
+    });
 });
 
 test("cleans disconnected Drama asset mappings", () => {

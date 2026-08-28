@@ -32,6 +32,7 @@ import { DOCS_URL } from "@/constant/env";
 import { defaultConfig, modelOptionName, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { resolveImageUrl, uploadImage, type UploadedImage, resolveMediaUrl, type UploadedFile } from "@/services/blob-storage";
 import { uploadBlob, uploadUrlToS3, type UploadResult } from "@/services/upload-blob";
+import type { VolcengineAsset, VolcengineAssetOutbound } from "@/services/api/volcengine-assets";
 import { nanoid } from "nanoid";
 import { getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
 import { isCurrentSession } from "@/lib/account-storage";
@@ -77,6 +78,8 @@ import { CanvasNodePromptPanel, type CanvasNodeGenerationMode } from "../compone
 import { CanvasOverviewSidebar } from "../components/canvas-overview-sidebar";
 import { CanvasToolbar } from "../components/canvas-toolbar";
 import { AssetPickerModal, type InsertAssetPayload } from "../components/asset-picker-modal";
+import { VolcengineAssetImportModal } from "../components/volcengine-asset-import-modal";
+import { clearVolcengineMaterialMetadata, createVolcengineAssetNode, replaceWithVolcengineAsset, volcengineAssetNodeType } from "../components/volcengine-asset-import";
 import { CanvasZoomControls } from "../components/canvas-zoom-controls";
 import { CanvasLocalAgentPanel } from "../components/canvas-local-agent-panel";
 import { useCanvasAgentStore } from "../stores/use-canvas-agent-store";
@@ -357,6 +360,7 @@ function InfiniteCanvasPage() {
     const [showImageInfo, setShowImageInfo] = useState(false);
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
     const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+    const [materialImportOpen, setMaterialImportOpen] = useState(false);
     const [overviewCollapsed, setOverviewCollapsed] = useState(false);
     const [projectLoaded, setProjectLoaded] = useState(false);
     const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null);
@@ -1454,7 +1458,7 @@ function InfiniteCanvasPage() {
             position: { x: position.x - size.width / 2, y: position.y - size.height / 2 },
             width: size.width,
             height: size.height,
-            metadata: imageMetadata(image),
+            metadata: clearVolcengineMaterialMetadata(imageMetadata(image)),
         };
 
         setNodes((prev) => [...prev, newNode]);
@@ -1477,7 +1481,7 @@ function InfiniteCanvasPage() {
                 position: { x: position.x - size.width / 2, y: position.y - size.height / 2 },
                 width: size.width,
                 height: size.height,
-                metadata: videoMetadata(video),
+                metadata: clearVolcengineMaterialMetadata(videoMetadata(video)),
             },
         ]);
         setSelectedNodeIds(new Set([id]));
@@ -1499,7 +1503,7 @@ function InfiniteCanvasPage() {
                 position: { x: position.x - spec.width / 2, y: position.y - spec.height / 2 },
                 width: spec.width,
                 height: spec.height,
-                metadata: audioMetadata(audio),
+                metadata: clearVolcengineMaterialMetadata(audioMetadata(audio)),
             },
         ]);
         setSelectedNodeIds(new Set([id]));
@@ -2057,8 +2061,38 @@ function InfiniteCanvasPage() {
 
     const handleUploadRequest = useCallback((nodeId?: string, position?: Position) => {
         uploadTargetRef.current = { nodeId, position };
+        setMaterialImportOpen(true);
+    }, []);
+
+    const handleLocalMaterialImport = useCallback(() => {
+        setMaterialImportOpen(false);
         imageInputRef.current?.click();
     }, []);
+
+    const handleVolcengineAssetImport = useCallback(
+        (asset: VolcengineAsset, outbound: VolcengineAssetOutbound) => {
+            const target = uploadTargetRef.current;
+            const targetNode = target?.nodeId ? nodesRef.current.find((node) => node.id === target.nodeId) : undefined;
+            const position = target?.position || screenToCanvas((containerRef.current?.getBoundingClientRect().left || 0) + size.width / 2, (containerRef.current?.getBoundingClientRect().top || 0) + size.height / 2);
+            const importedNode = targetNode
+                ? replaceWithVolcengineAsset(targetNode, asset, outbound)
+                : createVolcengineAssetNode({
+                      asset,
+                      outbound,
+                      id: `${volcengineAssetNodeType(asset)}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                      createdAt: new Date().toISOString(),
+                      position,
+                  });
+
+            setNodes((prev) => (targetNode ? prev.map((node) => (node.id === targetNode.id ? importedNode : node)) : [...prev, importedNode]));
+            setSelectedNodeIds(new Set([importedNode.id]));
+            setSelectedConnectionId(null);
+            if (importedNode.type !== CanvasNodeType.Audio) setDialogNodeId(importedNode.id);
+            uploadTargetRef.current = null;
+            setMaterialImportOpen(false);
+        },
+        [screenToCanvas, size.height, size.width],
+    );
 
     const handleImageInputChange = useCallback(
         async (event: ReactChangeEvent<HTMLInputElement>) => {
@@ -2080,7 +2114,7 @@ function InfiniteCanvasPage() {
                                       position: { x: node.position.x + node.width / 2 - spec.width / 2, y: node.position.y + node.height / 2 - spec.height / 2 },
                                       width: spec.width,
                                       height: spec.height,
-                                      metadata: { ...node.metadata, ...audioMetadata(audio), errorDetails: undefined },
+                                      metadata: { ...clearVolcengineMaterialMetadata(node.metadata), ...audioMetadata(audio), errorDetails: undefined },
                                   }
                                 : node,
                         ),
@@ -2104,7 +2138,7 @@ function InfiniteCanvasPage() {
                                       position: { x: node.position.x + node.width / 2 - nextSize.width / 2, y: node.position.y + node.height / 2 - nextSize.height / 2 },
                                       width: nextSize.width,
                                       height: nextSize.height,
-                                      metadata: { ...node.metadata, ...videoMetadata(video), errorDetails: undefined },
+                                      metadata: { ...clearVolcengineMaterialMetadata(node.metadata), ...videoMetadata(video), errorDetails: undefined },
                                   }
                                 : node,
                         ),
@@ -2128,7 +2162,7 @@ function InfiniteCanvasPage() {
                                   width: size.width,
                                   height: size.height,
                                   metadata: {
-                                      ...node.metadata,
+                                      ...clearVolcengineMaterialMetadata(node.metadata),
                                       ...imageMetadata(image),
                                       errorDetails: undefined,
                                       freeResize: false,
@@ -2244,20 +2278,23 @@ function InfiniteCanvasPage() {
                     const isConfigNode = sourceNode?.type === CanvasNodeType.Config;
                     const isImageNode = sourceNode?.type === CanvasNodeType.Image;
                     const isEmptyImageNode = isImageNode && !sourceNode?.metadata?.content;
+                    const sourceAssetId = isImageNode && sourceNode?.metadata?.materialSource === "volcengine" ? sourceNode.metadata.volcengineAssetId : undefined;
                     const sourceReference =
-                        isImageNode && sourceNode?.metadata?.content
+                        isImageNode && (sourceNode?.metadata?.content || sourceAssetId)
                             ? [
                                   {
                                       id: sourceNode.id,
                                       name: `${sourceNode.title || sourceNode.id}.png`,
-                                      type: sourceNode.metadata.mimeType || "image/png",
-                                      dataUrl: sourceNode.metadata.content,
-                                      storageKey: sourceNode.metadata.storageKey,
-                                      fileId: sourceNode.metadata.fileId,
+                                      type: sourceNode.metadata?.mimeType || "image/png",
+                                      dataUrl: sourceNode.metadata?.content || "",
+                                      ...(sourceAssetId ? { url: `asset://${sourceAssetId}`, assetId: sourceAssetId } : {}),
+                                      storageKey: sourceNode.metadata?.storageKey,
+                                      fileId: sourceNode.metadata?.fileId,
                                   },
                               ]
                             : [];
                     const referenceImages = [...sourceReference, ...generationContext.referenceImages.filter((image) => image.id !== sourceNode?.id)];
+                    if (referenceImages.some((image) => image.assetId)) throw new Error(t("canvas.generation.errors.volcengineAssetImageUnsupported"));
                     const generationType = referenceImages.length ? ("edit" as const) : ("generation" as const);
                     const generationMetadata = buildImageGenerationMetadata(generationType, generationConfig, count, referenceImages);
                     const parentConfig = NODE_DEFAULT_SIZE[isConfigNode ? CanvasNodeType.Config : isImageNode ? CanvasNodeType.Image : CanvasNodeType.Text];
@@ -3293,6 +3330,16 @@ function InfiniteCanvasPage() {
                 ) : null}
 
                 <input ref={imageInputRef} type="file" accept="image/*,video/*,audio/mpeg,audio/wav,audio/x-wav,.mp3,.wav" className="hidden" onChange={handleImageInputChange} />
+                <VolcengineAssetImportModal
+                    open={materialImportOpen}
+                    targetNode={uploadTargetRef.current?.nodeId ? nodes.find((node) => node.id === uploadTargetRef.current?.nodeId) : undefined}
+                    onChooseLocal={handleLocalMaterialImport}
+                    onImport={handleVolcengineAssetImport}
+                    onClose={() => {
+                        setMaterialImportOpen(false);
+                        uploadTargetRef.current = null;
+                    }}
+                />
 
                 <CanvasNodeInfoModal node={infoNode} open={Boolean(infoNode)} onClose={() => setInfoNodeId(null)} />
 
@@ -3621,14 +3668,14 @@ function buildAudioGenerationMetadata(config: AiConfig): CanvasNodeMetadata {
 }
 
 function referenceUrl(image: ReferenceImage) {
-    return image.storageKey || image.url || (!image.dataUrl.startsWith("data:") ? image.dataUrl : undefined);
+    return image.assetId ? `asset://${image.assetId}` : image.storageKey || image.url || (!image.dataUrl.startsWith("data:") ? image.dataUrl : undefined);
 }
 
-function generationReferenceUrls(context: { referenceImages: ReferenceImage[]; referenceVideos: Array<{ storageKey?: string; url?: string }>; referenceAudios?: Array<{ storageKey?: string; url?: string }> }) {
+function generationReferenceUrls(context: { referenceImages: ReferenceImage[]; referenceVideos: Array<{ storageKey?: string; url?: string; assetId?: string }>; referenceAudios?: Array<{ storageKey?: string; url?: string; assetId?: string }> }) {
     return [
         ...context.referenceImages.map(referenceUrl).filter((url): url is string => Boolean(url)),
-        ...context.referenceVideos.map((video) => video.storageKey || video.url).filter((url): url is string => Boolean(url)),
-        ...(context.referenceAudios || []).map((audio) => audio.storageKey || audio.url).filter((url): url is string => Boolean(url)),
+        ...context.referenceVideos.map((video) => (video.assetId ? `asset://${video.assetId}` : video.storageKey || video.url)).filter((url): url is string => Boolean(url)),
+        ...(context.referenceAudios || []).map((audio) => (audio.assetId ? `asset://${audio.assetId}` : audio.storageKey || audio.url)).filter((url): url is string => Boolean(url)),
     ];
 }
 

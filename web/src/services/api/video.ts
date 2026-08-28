@@ -156,7 +156,13 @@ async function buildSeedanceContent(config: AiConfig, prompt: string, references
     return content;
 }
 
+function assetReferenceUrl(assetId?: string) {
+    return assetId ? `asset://${assetId}` : "";
+}
+
 async function resolveSeedanceImageUrl(config: AiConfig, image: ReferenceImage) {
+    const assetUrl = assetReferenceUrl(image.assetId);
+    if (assetUrl) return assetUrl;
     const directUrl = image.url || image.dataUrl;
     if (isPublicMediaUrl(directUrl) || directUrl.startsWith("asset://")) return directUrl;
     const dataUrl = await imageToDataUrl(image);
@@ -165,6 +171,8 @@ async function resolveSeedanceImageUrl(config: AiConfig, image: ReferenceImage) 
 }
 
 async function resolveSeedanceVideoUrl(video: ReferenceVideo) {
+    const assetUrl = assetReferenceUrl(video.assetId);
+    if (assetUrl) return assetUrl;
     if (isPublicMediaUrl(video.url) || video.url.startsWith("asset://")) return video.url;
     let blob: Blob | null = null;
     if (video.storageKey) blob = await getMediaBlob(video.storageKey);
@@ -174,6 +182,8 @@ async function resolveSeedanceVideoUrl(video: ReferenceVideo) {
 }
 
 async function resolveSeedanceAudioUrl(audio: ReferenceAudio) {
+    const assetUrl = assetReferenceUrl(audio.assetId);
+    if (assetUrl) return assetUrl;
     if (isPublicMediaUrl(audio.url) || audio.url.startsWith("asset://")) return audio.url;
     let blob: Blob | null = null;
     if (audio.storageKey) blob = await getMediaBlob(audio.storageKey);
@@ -208,6 +218,7 @@ function unwrapSeedanceTask(payload: ApiEnvelope<SeedanceTask>) {
 
 function providerVideoFailureMessage(code?: string, message?: string) {
     const text = `${code || ""} ${message || ""}`.toLowerCase();
+    if (text.includes("asset://") || text.includes("asset_reference")) return message || code || "";
     if (text.includes("timeout") || text.includes("timed out") || text.includes("deadline") || text.includes("expired")) return i18n.t("errors.video.failureReasons.timeout");
     if (text.includes("rate limit") || text.includes("rate_limit") || text.includes("too many requests") || text.includes("over quota")) return i18n.t("errors.video.failureReasons.rateLimited");
     if (text.includes("unauthorized") || text.includes("authentication") || text.includes("invalid api key") || text.includes("invalid_api_key")) return i18n.t("errors.video.failureReasons.upstreamAuthFailed");

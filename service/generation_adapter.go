@@ -115,26 +115,38 @@ func (a SeedanceContentsV1Adapter) Create(ctx context.Context, req AdapterCreate
 }
 
 func (a SoraVideosV1Adapter) Create(ctx context.Context, req AdapterCreateRequest) (ProviderTaskRef, error) {
-	metadata := make(map[string]any, len(req.Metadata)+1)
+	metadata := make(map[string]any, len(req.Metadata)+3)
 	for key, value := range req.Metadata {
 		metadata[key] = value
 	}
-	metadata["aspect_ratio"] = generationSetting(req, "aspectRatio", "16:9")
-	payload := map[string]any{
-		"model":    req.Profile.UpstreamModel,
-		"prompt":   req.Intent.Prompt,
-		"duration": generationSetting(req, "durationSeconds", 4),
-		"size":     generationSetting(req, "resolution", "720p"),
-		"metadata": metadata,
-	}
-	if len(req.References.Images) > 0 {
-		payload["images"] = req.References.Images
-	}
-	if len(req.References.Videos) > 0 {
-		metadata["video_urls"] = req.References.Videos
-	}
-	if len(req.References.Audios) > 0 {
-		metadata["audio_urls"] = req.References.Audios
+	payload := map[string]any{"model": req.Profile.UpstreamModel, "prompt": req.Intent.Prompt, "metadata": metadata}
+	if hasRawAssetReference(req.References) {
+		metadata["resolution"] = generationSetting(req, "resolution", "720p")
+		metadata["ratio"] = generationSetting(req, "aspectRatio", "16:9")
+		metadata["content"] = soraAssetReferenceContent(req.References)
+		payload["seconds"] = fmt.Sprint(generationSetting(req, "durationSeconds", 4))
+		if images := nonAssetReferences(req.References.Images); len(images) > 0 {
+			payload["images"] = images
+		}
+		if videos := nonAssetReferences(req.References.Videos); len(videos) > 0 {
+			metadata["video_urls"] = videos
+		}
+		if audios := nonAssetReferences(req.References.Audios); len(audios) > 0 {
+			metadata["audio_urls"] = audios
+		}
+	} else {
+		metadata["aspect_ratio"] = generationSetting(req, "aspectRatio", "16:9")
+		payload["duration"] = generationSetting(req, "durationSeconds", 4)
+		payload["size"] = generationSetting(req, "resolution", "720p")
+		if len(req.References.Images) > 0 {
+			payload["images"] = req.References.Images
+		}
+		if len(req.References.Videos) > 0 {
+			metadata["video_urls"] = req.References.Videos
+		}
+		if len(req.References.Audios) > 0 {
+			metadata["audio_urls"] = req.References.Audios
+		}
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -159,6 +171,51 @@ func NewViduShortDramaV1Adapter(client *http.Client) ViduShortDramaV1Adapter {
 		client = http.DefaultClient
 	}
 	return ViduShortDramaV1Adapter{client: client}
+}
+
+func isRawAssetReference(value string) bool {
+	return strings.HasPrefix(strings.TrimSpace(value), "asset://")
+}
+
+func soraAssetReferenceContent(references AdapterMediaReferences) []map[string]any {
+	content := make([]map[string]any, 0)
+	for _, item := range references.Images {
+		if isRawAssetReference(item) {
+			content = append(content, map[string]any{"type": "image_url", "image_url": map[string]string{"url": item}, "role": "reference_image"})
+		}
+	}
+	for _, item := range references.Videos {
+		if isRawAssetReference(item) {
+			content = append(content, map[string]any{"type": "video_url", "video_url": map[string]string{"url": item}, "role": "reference_video"})
+		}
+	}
+	for _, item := range references.Audios {
+		if isRawAssetReference(item) {
+			content = append(content, map[string]any{"type": "audio_url", "audio_url": map[string]string{"url": item}, "role": "reference_audio"})
+		}
+	}
+	return content
+}
+
+func nonAssetReferences(items []string) []string {
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		if !isRawAssetReference(item) {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func hasRawAssetReference(references AdapterMediaReferences) bool {
+	for _, items := range [][]string{references.Images, references.Videos, references.Audios} {
+		for _, item := range items {
+			if isRawAssetReference(item) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (a ViduShortDramaV1Adapter) Create(ctx context.Context, req AdapterCreateRequest) (ProviderTaskRef, error) {
