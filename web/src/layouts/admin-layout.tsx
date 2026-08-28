@@ -39,18 +39,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           : appPath.startsWith("/admin/settings")
             ? "/admin/settings"
             : appPath.startsWith("/admin/assets")
-            ? "/admin/assets"
-            : appPath.startsWith("/admin/generation-tasks")
-              ? "/admin/generation-tasks"
-              : appPath.startsWith("/admin/canvas-nodes")
-                ? "/admin/canvas-nodes"
-                : appPath.startsWith("/admin/prompts")
-                  ? "/admin/prompts"
-                  : appPath.startsWith("/admin/credit-logs")
-                    ? "/admin/credit-logs"
-                    : appPath.startsWith("/admin/users")
-                      ? "/admin/users"
-                      : "";
+              ? "/admin/assets"
+              : appPath.startsWith("/admin/generation-tasks")
+                ? "/admin/generation-tasks"
+                : appPath.startsWith("/admin/canvas-nodes")
+                  ? "/admin/canvas-nodes"
+                  : appPath.startsWith("/admin/prompts")
+                    ? "/admin/prompts"
+                    : appPath.startsWith("/admin/credit-logs")
+                      ? "/admin/credit-logs"
+                      : appPath.startsWith("/admin/users")
+                        ? "/admin/users"
+                        : "";
     const pageTitle = appPath.startsWith("/admin/enterprises")
         ? t("admin.menus.enterprises")
         : appPath.startsWith("/admin/volcengine-assets")
@@ -58,16 +58,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           : appPath.startsWith("/admin/settings")
             ? t("admin.menus.settings")
             : appPath.startsWith("/admin/assets")
-            ? t("admin.menus.assetsManagement")
-            : appPath.startsWith("/admin/generation-tasks")
-              ? t("admin.menus.generationTasks")
-              : appPath.startsWith("/admin/canvas-nodes")
-                ? t("admin.menus.canvasNodes")
-                : appPath.startsWith("/admin/prompts")
-                  ? t("admin.menus.prompts")
-                  : appPath.startsWith("/admin/credit-logs")
-                    ? t("admin.menus.creditLogs")
-                    : t("admin.menus.users");
+              ? t("admin.menus.assetsManagement")
+              : appPath.startsWith("/admin/generation-tasks")
+                ? t("admin.menus.generationTasks")
+                : appPath.startsWith("/admin/canvas-nodes")
+                  ? t("admin.menus.canvasNodes")
+                  : appPath.startsWith("/admin/prompts")
+                    ? t("admin.menus.prompts")
+                    : appPath.startsWith("/admin/credit-logs")
+                      ? t("admin.menus.creditLogs")
+                      : t("admin.menus.users");
 
     useEffect(() => {
         if (!isReady) return;
