@@ -16,12 +16,14 @@ import {
     Upload,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { saveAs } from "file-saver";
 import { Alert, App, Button, Collapse, Drawer, Empty, Input, InputNumber, Popconfirm, Progress, Select, Switch, Table, Tabs, Tag } from "antd";
 import type { TableProps } from "antd";
 
 import { ModelPicker } from "@/components/model-picker";
 import { generateStoryboard } from "@/services/api/storyboard";
 import { useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
+import { useUserStore } from "@/stores/use-user-store";
 import { deleteStoryboardRecord, listStoryboardRecords, saveStoryboardRecord } from "./storyboard-storage";
 import {
     defaultStoryboardOptions,
@@ -59,6 +61,7 @@ export function StoryboardStudio({ activeTab, onTabChange }: StoryboardStudioPro
     const updateConfig = useConfigStore((state) => state.updateConfig);
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
+    const accountId = useUserStore((state) => state.user?.id || "anonymous");
     const controllerRef = useRef<AbortController | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const [title, setTitle] = useState("");
@@ -76,7 +79,9 @@ export function StoryboardStudio({ activeTab, onTabChange }: StoryboardStudioPro
 
     useEffect(() => {
         let active = true;
-        void listStoryboardRecords()
+        setRecords([]);
+        resetStudio();
+        void listStoryboardRecords(accountId)
             .then((items) => {
                 if (!active) return;
                 setRecords(items);
@@ -87,7 +92,7 @@ export function StoryboardStudio({ activeTab, onTabChange }: StoryboardStudioPro
             active = false;
             controllerRef.current?.abort();
         };
-    }, []);
+    }, [accountId]);
 
     const sceneRows = record?.document.scenes || [];
     const shotRows = useMemo<ShotRow[]>(
@@ -180,7 +185,7 @@ export function StoryboardStudio({ activeTab, onTabChange }: StoryboardStudioPro
             setRecord(nextRecord);
             setRecords((items) => [nextRecord, ...items]);
             try {
-                await saveStoryboardRecord(nextRecord);
+                await saveStoryboardRecord(nextRecord, accountId);
             } catch {
                 message.warning(text("messages.historySaveFailed", "分镜已生成，但保存历史记录失败"));
             }
@@ -206,7 +211,7 @@ export function StoryboardStudio({ activeTab, onTabChange }: StoryboardStudioPro
 
     async function removeRecord(id: string) {
         try {
-            await deleteStoryboardRecord(id);
+            await deleteStoryboardRecord(id, accountId);
             const remaining = records.filter((item) => item.id !== id);
             setRecords(remaining);
             if (record?.id === id) {
@@ -223,12 +228,7 @@ export function StoryboardStudio({ activeTab, onTabChange }: StoryboardStudioPro
         const extension = format === "json" ? "json" : "md";
         const content = format === "json" ? JSON.stringify(record.document, null, 2) : storyboardToMarkdown(record.document);
         const blob = new Blob([content], { type: format === "json" ? "application/json;charset=utf-8" : "text/markdown;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = `${safeFilename(record.title)}-storyboard.${extension}`;
-        anchor.click();
-        URL.revokeObjectURL(url);
+        saveAs(blob, `${safeFilename(record.title)}-storyboard.${extension}`);
     }
 
     const historyContent = (

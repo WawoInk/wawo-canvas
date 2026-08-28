@@ -274,17 +274,23 @@ export function validateStoryboardDocument(document: StoryboardDocument, source:
     const normalizedSource = compactText(source);
     let totalDuration = 0;
 
+    if (document.aspectRatio !== options.aspectRatio) errors.push(issue("ASPECT_RATIO_MISMATCH", `分镜画幅必须为 ${options.aspectRatio}`, "aspectRatio"));
+    if (document.targetDurationSec !== options.targetDurationSec) errors.push(issue("TARGET_DURATION_MISMATCH", `分镜目标时长必须为 ${options.targetDurationSec} 秒`, "targetDurationSec"));
+
     document.scenes.forEach((scene, sceneIndex) => {
         const scenePath = `scenes[${sceneIndex}]`;
+        if (scene.sceneNo !== sceneIndex + 1) errors.push(issue("SCENE_NUMBER_INVALID", "场次编号必须连续", `${scenePath}.sceneNo`));
         if (!scene.sourceRefs.length) warnings.push(issue("SOURCE_REF_MISSING", "场次缺少原文定位", `${scenePath}.sourceRefs`));
         scene.segments.forEach((segment, segmentIndex) => {
             const segmentPath = `${scenePath}.segments[${segmentIndex}]`;
             const shotDuration = segment.shots.reduce((sum, shot) => sum + shot.durationSec, 0);
             totalDuration += segment.durationSec;
+            if (segment.segmentNo !== segmentIndex + 1) errors.push(issue("SEGMENT_NUMBER_INVALID", "片段编号必须连续", `${segmentPath}.segmentNo`));
             if (segment.durationSec !== shotDuration) errors.push(issue("SEGMENT_DURATION_MISMATCH", "片段时长必须等于镜头时长之和", `${segmentPath}.durationSec`));
             if (segment.durationSec > options.maxSegmentDurationSec) errors.push(issue("SEGMENT_DURATION_EXCEEDED", `片段时长不能超过 ${options.maxSegmentDurationSec} 秒`, `${segmentPath}.durationSec`));
             segment.shots.forEach((shot, shotIndex) => {
                 const shotPath = `${segmentPath}.shots[${shotIndex}]`;
+                if (shot.shotNo !== shotIndex + 1) errors.push(issue("SHOT_NUMBER_INVALID", "镜头编号必须连续", `${shotPath}.shotNo`));
                 if (shot.durationSec <= 0) errors.push(issue("SHOT_DURATION_INVALID", "镜头时长必须大于 0", `${shotPath}.durationSec`));
                 if (shot.durationSec > options.maxShotDurationSec) errors.push(issue("SHOT_DURATION_EXCEEDED", `镜头时长不能超过 ${options.maxShotDurationSec} 秒`, `${shotPath}.durationSec`));
                 if (!shot.visual.trim()) errors.push(issue("SHOT_VISUAL_REQUIRED", "镜头画面不能为空", `${shotPath}.visual`));

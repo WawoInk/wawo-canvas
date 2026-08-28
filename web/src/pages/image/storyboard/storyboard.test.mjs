@@ -118,7 +118,9 @@ test("structured completion accepts fenced JSON when a provider returns content 
 
 test("validator reports duration, dialogue and music violations through document paths", () => {
     const invalid = structuredClone(document);
+    invalid.aspectRatio = "16:9";
     invalid.scenes[0].segments[0].durationSec = 3;
+    invalid.scenes[0].segments[0].shots[1].shotNo = 3;
     invalid.scenes[0].segments[0].shots[1].durationSec = 9;
     invalid.scenes[0].segments[0].shots[1].dialogue = "保安：我没有说过这句话。";
     invalid.scenes[0].segments[0].shots[1].sound = "紧张配乐响起";
@@ -134,6 +136,8 @@ test("validator reports duration, dialogue and music violations through document
     });
 
     assert.equal(report.status, "failed");
+    assert.ok(report.errors.some((issue) => issue.code === "ASPECT_RATIO_MISMATCH" && issue.path === "aspectRatio"));
+    assert.ok(report.errors.some((issue) => issue.code === "SHOT_NUMBER_INVALID" && issue.path === "scenes[0].segments[0].shots[1].shotNo"));
     assert.ok(report.errors.some((issue) => issue.code === "SEGMENT_DURATION_MISMATCH" && issue.path === "scenes[0].segments[0].durationSec"));
     assert.ok(report.errors.some((issue) => issue.code === "SHOT_DURATION_EXCEEDED" && issue.path === "scenes[0].segments[0].shots[1].durationSec"));
     assert.ok(report.errors.some((issue) => issue.code === "DIALOGUE_NOT_IN_SOURCE" && issue.path === "scenes[0].segments[0].shots[1].dialogue"));
