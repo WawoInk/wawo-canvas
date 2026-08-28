@@ -208,6 +208,7 @@ function unwrapSeedanceTask(payload: ApiEnvelope<SeedanceTask>) {
 
 function providerVideoFailureMessage(code?: string, message?: string) {
     const text = `${code || ""} ${message || ""}`.toLowerCase();
+    if (text.includes("asset://")) return message || code || "";
     if (text.includes("timeout") || text.includes("timed out") || text.includes("deadline") || text.includes("expired")) return i18n.t("errors.video.failureReasons.timeout");
     if (text.includes("rate limit") || text.includes("rate_limit") || text.includes("too many requests") || text.includes("over quota")) return i18n.t("errors.video.failureReasons.rateLimited");
     if (text.includes("unauthorized") || text.includes("authentication") || text.includes("invalid api key") || text.includes("invalid_api_key")) return i18n.t("errors.video.failureReasons.upstreamAuthFailed");
