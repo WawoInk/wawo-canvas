@@ -1,5 +1,9 @@
 import { apiGet, apiPost, apiPostForm } from "@/services/api/request";
 
+import { runVolcengineAssetBatch, type VolcengineAssetBatchResult } from "./volcengine-assets-batch";
+
+export type { VolcengineAssetBatchResult } from "./volcengine-assets-batch";
+
 export const volcengineAssetTypes = ["Image", "Video", "Audio"] as const;
 
 export type VolcengineAssetType = (typeof volcengineAssetTypes)[number];
@@ -81,12 +85,20 @@ export function createVolcengineAsset(token: string, outboundID: string, input: 
     );
 }
 
+export function createVolcengineAssets(token: string, outboundID: string, inputs: VolcengineAssetInput[]): Promise<VolcengineAssetBatchResult> {
+    return runVolcengineAssetBatch(inputs, (input) => createVolcengineAsset(token, outboundID, input));
+}
+
 export function uploadVolcengineAsset(token: string, outboundID: string, input: VolcengineLocalAssetInput) {
     const form = new FormData();
     form.set("file", input.file);
     form.set("name", input.name.trim());
     form.set("assetType", input.assetType);
     return apiPostForm<VolcengineAsset>(`/api/v1/volcengine-assets/upload?outbound=${encodeURIComponent(outboundID)}`, form, token);
+}
+
+export function uploadVolcengineAssets(token: string, outboundID: string, inputs: VolcengineLocalAssetInput[]): Promise<VolcengineAssetBatchResult> {
+    return runVolcengineAssetBatch(inputs, (input) => uploadVolcengineAsset(token, outboundID, input));
 }
 
 export function updateVolcengineAsset(token: string, outboundID: string, id: string, name: string) {
