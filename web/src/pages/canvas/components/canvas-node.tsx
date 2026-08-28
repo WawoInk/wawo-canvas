@@ -475,7 +475,10 @@ function TextContent({ node, theme, t, isEditingContent, textareaRef, mentionRef
 
 function VolcengineSourceBadge({ libraryName, accent, t }: { libraryName?: string; accent: { background: string; border: string; text: string }; t: TFunction }) {
     return (
-        <span className="pointer-events-none absolute left-3 top-3 z-30 flex max-w-[calc(100%-24px)] items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium shadow-sm backdrop-blur-sm" style={{ background: accent.background, borderColor: accent.border, color: accent.text }}>
+        <span
+            className="pointer-events-none absolute left-3 top-3 z-30 flex max-w-[calc(100%-24px)] items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium shadow-sm backdrop-blur-sm"
+            style={{ background: accent.background, borderColor: accent.border, color: accent.text }}
+        >
             <Cloud className="size-3 shrink-0" />
             <span>{t("canvas.node.source.volcengine")}</span>
             <span className="min-w-0 truncate opacity-80">· {libraryName || t("canvas.node.source.library")}</span>

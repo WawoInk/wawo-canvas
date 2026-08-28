@@ -125,10 +125,21 @@ export function VolcengineAssetImportModal({ open, targetNode, onChooseLocal, on
                         </Button>
                     </div>
 
-                    {!isReady ? <div className="flex h-64 items-center justify-center"><Spin /></div> : null}
+                    {!isReady ? (
+                        <div className="flex h-64 items-center justify-center">
+                            <Spin />
+                        </div>
+                    ) : null}
                     {isReady && !token ? <Result status="403" title={t("canvas.editor.materialImport.volcengine.loginRequired")} /> : null}
                     {isReady && token && outboundsLoading && !outbounds.length ? <AssetSkeleton /> : null}
-                    {isReady && token && outboundsError ? <Result status="error" title={t("canvas.editor.materialImport.volcengine.loadLibrariesFailed")} subTitle={outboundsError} extra={<Button onClick={() => void loadOutbounds()}>{t("canvas.editor.materialImport.actions.retry")}</Button>} /> : null}
+                    {isReady && token && outboundsError ? (
+                        <Result
+                            status="error"
+                            title={t("canvas.editor.materialImport.volcengine.loadLibrariesFailed")}
+                            subTitle={outboundsError}
+                            extra={<Button onClick={() => void loadOutbounds()}>{t("canvas.editor.materialImport.actions.retry")}</Button>}
+                        />
+                    ) : null}
                     {isReady && token && !outboundsLoading && !outboundsError && !outbounds.length ? <Empty description={t("canvas.editor.materialImport.volcengine.noLibraries")} /> : null}
                     {isReady && token && !outboundsError && outbounds.length ? (
                         <div className="mt-5">
@@ -166,15 +177,29 @@ export function VolcengineAssetImportModal({ open, targetNode, onChooseLocal, on
                                         }}
                                     />
                                     {assetsLoading ? <AssetSkeleton /> : null}
-                                    {assetsError ? <Result status="error" title={t("canvas.editor.materialImport.volcengine.loadAssetsFailed")} subTitle={assetsError} extra={<Button onClick={() => void loadAssets()}>{t("canvas.editor.materialImport.actions.retry")}</Button>} /> : null}
-                                    {!assetsLoading && !assetsError && !assetItems.length ? <Empty className="py-10" description={keyword ? t("canvas.editor.materialImport.volcengine.noMatch") : t("canvas.editor.materialImport.volcengine.empty")} /> : null}
+                                    {assetsError ? (
+                                        <Result
+                                            status="error"
+                                            title={t("canvas.editor.materialImport.volcengine.loadAssetsFailed")}
+                                            subTitle={assetsError}
+                                            extra={<Button onClick={() => void loadAssets()}>{t("canvas.editor.materialImport.actions.retry")}</Button>}
+                                        />
+                                    ) : null}
+                                    {!assetsLoading && !assetsError && !assetItems.length ? (
+                                        <Empty className="py-10" description={keyword ? t("canvas.editor.materialImport.volcengine.noMatch") : t("canvas.editor.materialImport.volcengine.empty")} />
+                                    ) : null}
                                     {!assetsLoading && !assetsError && assetItems.length ? (
                                         <>
                                             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                                                 {assetItems.map((asset) => (
-                                                    <VolcengineAssetCard key={asset.Id} asset={asset} actionLabel={t(`canvas.editor.materialImport.actions.${actionKey}`)} onImport={() => {
-                                                        if (selectedOutbound) onImport(asset, selectedOutbound);
-                                                    }} />
+                                                    <VolcengineAssetCard
+                                                        key={asset.Id}
+                                                        asset={asset}
+                                                        actionLabel={t(`canvas.editor.materialImport.actions.${actionKey}`)}
+                                                        onImport={() => {
+                                                            if (selectedOutbound) onImport(asset, selectedOutbound);
+                                                        }}
+                                                    />
                                                 ))}
                                             </div>
                                             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
@@ -232,10 +257,22 @@ function AssetPreview({ asset }: { asset: VolcengineAsset }) {
     const url = isSafeMediaURL(asset.URL) ? asset.URL : "";
     const Icon = asset.AssetType === "Audio" ? FileAudio : asset.AssetType === "Video" ? FileVideo : FileImage;
 
-    if (url && asset.AssetType === "Image" && !failed) return <img src={url} alt={asset.Name || t("canvas.editor.materialImport.volcengine.unnamed")} className="aspect-[4/3] w-full bg-muted/30 object-contain" loading="lazy" onError={() => setFailed(true)} />;
+    if (url && asset.AssetType === "Image" && !failed)
+        return <img src={url} alt={asset.Name || t("canvas.editor.materialImport.volcengine.unnamed")} className="aspect-[4/3] w-full bg-muted/30 object-contain" loading="lazy" onError={() => setFailed(true)} />;
     if (url && asset.AssetType === "Video" && !failed) return <video src={url} className="aspect-[4/3] w-full bg-black object-contain" muted controls preload="metadata" onError={() => setFailed(true)} />;
-    if (url && asset.AssetType === "Audio" && !failed) return <div className="flex aspect-[4/3] flex-col items-center justify-center gap-3 bg-muted/30 px-3"><FileAudio className="size-9 text-muted-foreground" /><audio src={url} className="w-full" controls preload="metadata" onError={() => setFailed(true)} /></div>;
-    return <div className="flex aspect-[4/3] flex-col items-center justify-center gap-2 bg-muted/30 text-xs text-muted-foreground"><Icon className="size-8" /><span>{t(failed ? "canvas.editor.materialImport.volcengine.previewFailed" : "canvas.editor.materialImport.volcengine.previewUnavailable")}</span></div>;
+    if (url && asset.AssetType === "Audio" && !failed)
+        return (
+            <div className="flex aspect-[4/3] flex-col items-center justify-center gap-3 bg-muted/30 px-3">
+                <FileAudio className="size-9 text-muted-foreground" />
+                <audio src={url} className="w-full" controls preload="metadata" onError={() => setFailed(true)} />
+            </div>
+        );
+    return (
+        <div className="flex aspect-[4/3] flex-col items-center justify-center gap-2 bg-muted/30 text-xs text-muted-foreground">
+            <Icon className="size-8" />
+            <span>{t(failed ? "canvas.editor.materialImport.volcengine.previewFailed" : "canvas.editor.materialImport.volcengine.previewUnavailable")}</span>
+        </div>
+    );
 }
 
 function isSafeMediaURL(value: string) {

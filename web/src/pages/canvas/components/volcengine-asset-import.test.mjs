@@ -58,8 +58,8 @@ test("replaces local media without retaining a stale platform file reference", (
 });
 
 test("clears Volcengine identifiers for local uploads", () => {
-    assert.deepEqual(
-        clearVolcengineMaterialMetadata({ materialSource: "volcengine", volcengineAssetId: "asset-1", volcengineAssetOutboundId: "library-1", volcengineAssetOutboundName: "素材库", fileId: "file-1" }),
-        { materialSource: "local", fileId: "file-1" },
-    );
+    assert.deepEqual(clearVolcengineMaterialMetadata({ materialSource: "volcengine", volcengineAssetId: "asset-1", volcengineAssetOutboundId: "library-1", volcengineAssetOutboundName: "素材库", fileId: "file-1" }), {
+        materialSource: "local",
+        fileId: "file-1",
+    });
 });

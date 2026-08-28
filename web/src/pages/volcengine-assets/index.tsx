@@ -402,7 +402,13 @@ export default function VolcengineAssetsPage() {
                                     <Input placeholder="https://example.com/media.jpg" autoComplete="url" />
                                 </Form.Item>
                             ) : (
-                                <Form.Item name="file" label={t("volcengineAssets.form.file")} valuePropName="fileList" getValueFromEvent={(event) => event?.fileList?.slice(-1) || []} rules={[{ required: true, message: t("volcengineAssets.form.fileRequired") }]}>
+                                <Form.Item
+                                    name="file"
+                                    label={t("volcengineAssets.form.file")}
+                                    valuePropName="fileList"
+                                    getValueFromEvent={(event) => event?.fileList?.slice(-1) || []}
+                                    rules={[{ required: true, message: t("volcengineAssets.form.fileRequired") }]}
+                                >
                                     <Upload
                                         accept="image/*,video/*,audio/*"
                                         beforeUpload={(file) => {

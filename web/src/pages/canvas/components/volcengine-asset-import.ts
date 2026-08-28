@@ -15,7 +15,26 @@ type CreateVolcengineNodeInput = VolcengineNodeInput & {
 };
 
 const volcengineMetadataFields = ["materialSource", "volcengineAssetId", "volcengineAssetOutboundId", "volcengineAssetOutboundName"] as const;
-const replacedMediaFields = ["content", "status", "errorDetails", "naturalWidth", "naturalHeight", "storageKey", "fileId", "mimeType", "bytes", "durationMs", "freeResize", "isBatchRoot", "batchRootId", "batchChildIds", "batchUsesReferenceImages", "primaryImageId", "imageBatchExpanded", ...volcengineMetadataFields] as const;
+const replacedMediaFields = [
+    "content",
+    "status",
+    "errorDetails",
+    "naturalWidth",
+    "naturalHeight",
+    "storageKey",
+    "fileId",
+    "mimeType",
+    "bytes",
+    "durationMs",
+    "freeResize",
+    "isBatchRoot",
+    "batchRootId",
+    "batchChildIds",
+    "batchUsesReferenceImages",
+    "primaryImageId",
+    "imageBatchExpanded",
+    ...volcengineMetadataFields,
+] as const;
 
 function omitMetadata(metadata: CanvasNodeMetadata = {}, fields: readonly (keyof CanvasNodeMetadata)[]) {
     const next = { ...metadata };

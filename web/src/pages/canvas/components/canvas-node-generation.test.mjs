@@ -87,10 +87,7 @@ test("keeps Volcengine asset IDs in compatibility video references", () => {
         "让参考素材动起来",
     );
 
-    assert.deepEqual(
-        [context.referenceImages[0].assetId, context.referenceVideos[0].assetId, context.referenceAudios[0].assetId],
-        ["asset-image-1", "asset-video-1", "asset-audio-1"],
-    );
+    assert.deepEqual([context.referenceImages[0].assetId, context.referenceVideos[0].assetId, context.referenceAudios[0].assetId], ["asset-image-1", "asset-video-1", "asset-audio-1"]);
 });
 
 test("does not hydrate a Volcengine asset through its preview URL", async () => {
