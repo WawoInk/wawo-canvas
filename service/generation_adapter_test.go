@@ -98,6 +98,53 @@ func TestCreateGenerationAcceptsGeneratedImageReference(t *testing.T) {
 	}
 }
 
+func TestCreateGenerationAcceptsVolcengineAssetReference(t *testing.T) {
+	previousProfiles := generationProfiles
+	previousChannel := generationChannel
+	defer func() {
+		generationProfiles = previousProfiles
+		generationChannel = previousChannel
+	}()
+	generationProfiles = func() []model.GenerationProfile {
+		return []model.GenerationProfile{{ID: "seedance-asset-media", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "seedance-asset-media", Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}}
+	}
+	routeErr := errors.New("route reached")
+	generationChannel = func(string) (model.ModelChannel, error) { return model.ModelChannel{}, routeErr }
+
+	_, err := CreateGeneration(context.Background(), model.AuthUser{ID: "asset-media-user"}, model.GenerationCommand{
+		CommandVersion: 1, ClientRequestID: "request-asset-media-" + uuid.NewString(), ModelProfileID: "seedance-asset-media", Source: string(model.SourceCanvas),
+		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "test", References: model.GenerationReferences{Images: []model.MediaReference{{AssetID: "asset-image-1", SourceNodeID: "node-1"}}}},
+	})
+	if !errors.Is(err, routeErr) {
+		t.Fatalf("error = %v, want route reached", err)
+	}
+}
+
+func TestCreateGenerationRejectsInvalidMediaReferences(t *testing.T) {
+	previousProfiles := generationProfiles
+	defer func() { generationProfiles = previousProfiles }()
+	generationProfiles = func() []model.GenerationProfile {
+		return []model.GenerationProfile{{ID: "seedance-invalid-media", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "seedance-invalid-media", Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}}
+	}
+	for _, testCase := range []struct {
+		name      string
+		reference model.MediaReference
+		fieldPath string
+	}{
+		{"missing IDs", model.MediaReference{SourceNodeID: "node-1"}, "intent.references.images.0.fileId"},
+		{"both IDs", model.MediaReference{FileID: "file-image-1", AssetID: "asset-image-1", SourceNodeID: "node-1"}, "intent.references.images.0"},
+		{"unsafe asset ID", model.MediaReference{AssetID: "asset://image-1", SourceNodeID: "node-1"}, "intent.references.images.0.assetId"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := CreateGeneration(context.Background(), model.AuthUser{ID: "invalid-media-user"}, model.GenerationCommand{
+				CommandVersion: 1, ClientRequestID: "request-invalid-media-" + uuid.NewString(), ModelProfileID: "seedance-invalid-media", Source: string(model.SourceCanvas),
+				Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "test", References: model.GenerationReferences{Images: []model.MediaReference{testCase.reference}}},
+			})
+			assertGenerationValidationError(t, err, "INVALID_COMMAND", testCase.fieldPath, "node-1")
+		})
+	}
+}
+
 func TestGenerationFileMatchesMediaType(t *testing.T) {
 	for _, testCase := range []struct {
 		fileType string
@@ -174,6 +221,70 @@ func TestCreateGenerationAppliesProfileSettingsToSeedance(t *testing.T) {
 		if strings.Contains(string(body), platformKey) {
 			t.Fatalf("upstream body leaked %q: %s", platformKey, body)
 		}
+	}
+}
+
+func TestCreateGenerationPassesVolcengineAssetsToSeedance(t *testing.T) {
+	var gotBody map[string]any
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("decode upstream request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"asset-reference-task","status":"failed","error":{"code":"INPUT_REJECTED","message":"done"}}`))
+	}))
+	defer upstream.Close()
+
+	previousProfiles := generationProfiles
+	previousChannel := generationChannel
+	previousRouteChannel := generationRouteChannel
+	previousClient := generationHTTPClient
+	previousCost := generationCost
+	previousDispatch := generationDispatch
+	previousPresign := generationPresign
+	defer func() {
+		generationProfiles = previousProfiles
+		generationChannel = previousChannel
+		generationRouteChannel = previousRouteChannel
+		generationHTTPClient = previousClient
+		generationCost = previousCost
+		generationDispatch = previousDispatch
+		generationPresign = previousPresign
+	}()
+	generationProfiles = func() []model.GenerationProfile {
+		return []model.GenerationProfile{{ID: "seedance-asset-payload", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "seedance-asset-payload", Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}}
+	}
+	generationChannel = func(string) (model.ModelChannel, error) {
+		return model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"}, nil
+	}
+	generationRouteChannel = func(string, string) (model.ModelChannel, error) { return generationChannel("") }
+	generationHTTPClient = upstream.Client()
+	generationCost = func(string) (model.Decimal, error) { return credit(0), nil }
+	generationDispatch = func(ctx context.Context, taskID string) { processGenerationTask(ctx, taskID, "asset-reference-worker") }
+	generationPresign = func(context.Context, string, time.Duration) (string, error) {
+		t.Fatal("asset references must not be loaded from user files")
+		return "", nil
+	}
+
+	_, err := CreateGeneration(context.Background(), model.AuthUser{ID: "asset-payload-user"}, model.GenerationCommand{
+		CommandVersion: 1, ClientRequestID: "request-asset-payload-" + uuid.NewString(), ModelProfileID: "seedance-asset-payload", Source: string(model.SourceCanvas),
+		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "asset references", References: model.GenerationReferences{
+			Images: []model.MediaReference{{AssetID: "asset-image-1", SourceNodeID: "image-1"}},
+			Videos: []model.MediaReference{{AssetID: "asset-video-1", SourceNodeID: "video-1"}},
+			Audios: []model.MediaReference{{AssetID: "asset-audio-1", SourceNodeID: "audio-1"}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateGeneration: %v", err)
+	}
+	want := []any{
+		map[string]any{"type": "text", "text": "asset references"},
+		map[string]any{"type": "image_url", "image_url": map[string]any{"url": "asset://asset-image-1"}, "role": "reference_image"},
+		map[string]any{"type": "video_url", "video_url": map[string]any{"url": "asset://asset-video-1"}, "role": "reference_video"},
+		map[string]any{"type": "audio_url", "audio_url": map[string]any{"url": "asset://asset-audio-1"}, "role": "reference_audio"},
+	}
+	if !jsonEqual(gotBody["content"], want) {
+		t.Fatalf("content = %#v, want %#v", gotBody["content"], want)
 	}
 }
 
@@ -1238,6 +1349,32 @@ func TestSoraAdapterCreatesImageToVideoTask(t *testing.T) {
 	}
 }
 
+func TestSoraAdapterRejectsVolcengineAssetReferences(t *testing.T) {
+	called := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"unexpected","status":"queued"}`))
+	}))
+	defer upstream.Close()
+
+	ref, err := NewSoraVideosV1Adapter(upstream.Client()).Create(context.Background(), AdapterCreateRequest{
+		Profile: model.GenerationProfile{UpstreamModel: "sora-asset", Capabilities: soraCapabilities()},
+		Channel: model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"},
+		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "asset", Settings: model.ScalarSettings{
+			"aspectRatio": "16:9", "resolution": "720p", "durationSeconds": 6,
+		}},
+		References: AdapterMediaReferences{
+			Images: []string{"asset://asset-image-1"},
+			Videos: []string{"asset://asset-video-1"},
+			Audios: []string{"asset://asset-audio-1"},
+		},
+	})
+	if err == nil || ref.Error == nil || ref.Error.Code != "ASSET_REFERENCE_UNSUPPORTED" || ref.Error.Message != "当前模型不支持火山素材引用，请改用本地上传素材或选择支持火山素材的模型" || ref.Error.Retryable || called {
+		t.Fatalf("ref=%#v err=%v called=%v", ref, err, called)
+	}
+}
+
 func TestSoraAdapterCreatesReferenceToVideoTask(t *testing.T) {
 	profile := model.GenerationProfile{UpstreamModel: "sora-r2v", Capabilities: soraCapabilities()}
 	settings, err := normalizeGenerationSettings(profile, model.ScalarSettings{
@@ -1364,6 +1501,16 @@ func TestViduShortDramaAdapterCreatesGoldenPayloads(t *testing.T) {
 			imageURLs: []string{"https://cdn.example/linchen.png"},
 			wantAssets: []any{
 				map[string]any{"id": "1", "type": "character", "name": "林尘", "image_uri": "https://cdn.example/linchen.png"},
+			},
+		},
+		{
+			name: "Volcengine asset",
+			intent: model.GenerationIntent{Kind: model.IntentVideoShortDrama, Title: "火山短剧", Script: "人物：林尘。分镜1-1：林尘在典当行擦拭柜台，神情淡然。", Assets: []model.ShortDramaAsset{
+				{SourceNodeID: "image-asset", Role: model.ShortDramaAssetCharacter, Name: "林尘", Reference: model.MediaReference{AssetID: "asset-drama-image-1", SourceNodeID: "image-asset"}},
+			}},
+			imageURLs: []string{"asset://asset-drama-image-1"},
+			wantAssets: []any{
+				map[string]any{"id": "1", "type": "character", "name": "林尘", "image_uri": "asset://asset-drama-image-1"},
 			},
 		},
 		{

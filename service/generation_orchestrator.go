@@ -189,11 +189,15 @@ func generationCommandSummary(command model.GenerationCommand) model.GenerationC
 	fileIDs := make([]string, 0, len(command.Intent.References.Images)+len(command.Intent.References.Videos)+len(command.Intent.References.Audios)+len(command.Intent.Assets))
 	for _, references := range [][]model.MediaReference{command.Intent.References.Images, command.Intent.References.Videos, command.Intent.References.Audios} {
 		for _, reference := range references {
-			fileIDs = append(fileIDs, reference.FileID)
+			if fileID := strings.TrimSpace(reference.FileID); fileID != "" {
+				fileIDs = append(fileIDs, fileID)
+			}
 		}
 	}
 	for _, asset := range command.Intent.Assets {
-		fileIDs = append(fileIDs, asset.Reference.FileID)
+		if fileID := strings.TrimSpace(asset.Reference.FileID); fileID != "" {
+			fileIDs = append(fileIDs, fileID)
+		}
 	}
 	return model.GenerationCommandSummary{
 		CommandVersion: command.CommandVersion, ClientRequestID: command.ClientRequestID, ModelProfileID: command.ModelProfileID,
@@ -258,8 +262,11 @@ func validateGenerationIntent(profile model.GenerationProfile, intent *model.Gen
 		if utf8.RuneCountInString(name) > profile.Capabilities.Assets.NameMaxLength {
 			return invalidCommand(field+".name", "资产名称不能超过 30 个字符", resourceID)
 		}
-		if strings.TrimSpace(asset.Reference.FileID) == "" || asset.Reference.SourceNodeID != resourceID {
-			return invalidCommand(field+".reference.fileId", "平台文件引用无效", resourceID)
+		if asset.Reference.SourceNodeID != resourceID {
+			return invalidCommand(field+".reference.sourceNodeId", "资产引用来源节点无效", resourceID)
+		}
+		if _, _, err := generationMediaReferenceIDs(asset.Reference, field+".reference", resourceID); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -285,8 +292,15 @@ func shortDramaRoleAllowed(roles []model.ShortDramaAssetRole, role model.ShortDr
 
 func validateShortDramaReferences(userID string, profile model.GenerationProfile, assets []model.ShortDramaAsset) error {
 	for index, asset := range assets {
+		fileID, assetID, err := generationMediaReferenceIDs(asset.Reference, fmt.Sprintf("intent.assets.%d.reference", index), asset.SourceNodeID)
+		if err != nil {
+			return err
+		}
+		if assetID != "" {
+			continue
+		}
 		fieldPath := fmt.Sprintf("intent.assets.%d.reference.fileId", index)
-		item, ok, err := repository.GetUserFileByID(strings.TrimSpace(asset.Reference.FileID), userID)
+		item, ok, err := repository.GetUserFileByID(fileID, userID)
 		if err != nil {
 			return err
 		}
@@ -314,14 +328,49 @@ func generationFileMatchesMediaType(fileType, expected string) bool {
 	return fileType == expected || fileType == "results/"+expected
 }
 
+func generationMediaReferenceIDs(reference model.MediaReference, fieldPath, resourceID string) (string, string, error) {
+	fileID := strings.TrimSpace(reference.FileID)
+	assetID := strings.TrimSpace(reference.AssetID)
+	if fileID == "" && assetID == "" {
+		return "", "", invalidCommand(fieldPath+".fileId", "素材引用必须且只能包含 fileId 或 assetId", resourceID)
+	}
+	if fileID != "" && assetID != "" {
+		return "", "", invalidCommand(fieldPath, "素材引用必须且只能包含 fileId 或 assetId", resourceID)
+	}
+	if assetID != "" && !validGenerationAssetID(reference.AssetID) {
+		return "", "", invalidCommand(fieldPath+".assetId", "火山素材 ID 无效", resourceID)
+	}
+	return fileID, assetID, nil
+}
+
+func validGenerationAssetID(value string) bool {
+	if len(value) == 0 || len(value) > 255 {
+		return false
+	}
+	for _, current := range []byte(value) {
+		if current >= 'a' && current <= 'z' || current >= 'A' && current <= 'Z' || current >= '0' && current <= '9' || current == '-' || current == '_' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 func validateGenerationReferences(userID string, references model.GenerationReferences) error {
 	for fileType, items := range map[string][]model.MediaReference{
 		"images": references.Images,
 		"videos": references.Videos,
 		"audios": references.Audios,
 	} {
-		for _, reference := range items {
-			item, ok, err := repository.GetUserFileByID(strings.TrimSpace(reference.FileID), userID)
+		for index, reference := range items {
+			fileID, assetID, err := generationMediaReferenceIDs(reference, fmt.Sprintf("intent.references.%s.%d", fileType, index), reference.SourceNodeID)
+			if err != nil {
+				return err
+			}
+			if assetID != "" {
+				continue
+			}
+			item, ok, err := repository.GetUserFileByID(fileID, userID)
 			if err != nil {
 				return err
 			}
@@ -520,6 +569,10 @@ func generationIntentFromTask(ctx context.Context, task model.GenerationTask) (m
 			imageReferences = append(imageReferences, asset.Reference)
 		}
 	}
+	assetFieldPath := "intent.references.images"
+	if command.Intent.Kind == model.IntentVideoShortDrama {
+		assetFieldPath = "intent.assets"
+	}
 	for _, group := range []struct {
 		fileType string
 		items    []model.MediaReference
@@ -529,8 +582,20 @@ func generationIntentFromTask(ctx context.Context, task model.GenerationTask) (m
 		{"videos", command.Intent.References.Videos, &references.Videos},
 		{"audios", command.Intent.References.Audios, &references.Audios},
 	} {
-		for _, reference := range group.items {
-			item, ok, err := repository.GetUserFileByID(strings.TrimSpace(reference.FileID), task.UserID)
+		fieldPath := "intent.references." + group.fileType
+		if group.fileType == "images" {
+			fieldPath = assetFieldPath
+		}
+		for index, reference := range group.items {
+			fileID, assetID, err := generationMediaReferenceIDs(reference, fmt.Sprintf("%s.%d", fieldPath, index), reference.SourceNodeID)
+			if err != nil {
+				return model.GenerationIntent{}, AdapterMediaReferences{}, nil, err
+			}
+			if assetID != "" {
+				*group.target = append(*group.target, "asset://"+assetID)
+				continue
+			}
+			item, ok, err := repository.GetUserFileByID(fileID, task.UserID)
 			if err != nil {
 				return model.GenerationIntent{}, AdapterMediaReferences{}, nil, err
 			}
@@ -544,6 +609,7 @@ func generationIntentFromTask(ctx context.Context, task model.GenerationTask) (m
 			*group.target = append(*group.target, url)
 		}
 	}
+
 	return command.Intent, references, stored.UpstreamMetadata, nil
 }
 

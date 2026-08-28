@@ -115,6 +115,9 @@ func (a SeedanceContentsV1Adapter) Create(ctx context.Context, req AdapterCreate
 }
 
 func (a SoraVideosV1Adapter) Create(ctx context.Context, req AdapterCreateRequest) (ProviderTaskRef, error) {
+	if hasRawAssetReference(req.References) {
+		return ProviderTaskRef{Error: &model.GenerationError{Code: "ASSET_REFERENCE_UNSUPPORTED", Message: "当前模型不支持火山素材引用，请改用本地上传素材或选择支持火山素材的模型"}}, errors.New("asset references are unsupported by sora-videos-v1")
+	}
 	metadata := make(map[string]any, len(req.Metadata)+1)
 	for key, value := range req.Metadata {
 		metadata[key] = value
@@ -159,6 +162,17 @@ func NewViduShortDramaV1Adapter(client *http.Client) ViduShortDramaV1Adapter {
 		client = http.DefaultClient
 	}
 	return ViduShortDramaV1Adapter{client: client}
+}
+
+func hasRawAssetReference(references AdapterMediaReferences) bool {
+	for _, items := range [][]string{references.Images, references.Videos, references.Audios} {
+		for _, item := range items {
+			if strings.HasPrefix(strings.TrimSpace(item), "asset://") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (a ViduShortDramaV1Adapter) Create(ctx context.Context, req AdapterCreateRequest) (ProviderTaskRef, error) {
