@@ -1,4 +1,18 @@
-import { CloudServerOutlined, ExperimentOutlined, FileTextOutlined, HomeOutlined, LogoutOutlined, NodeIndexOutlined, PictureOutlined, SettingOutlined, TeamOutlined, TransactionOutlined, UserOutlined } from "@ant-design/icons";
+import {
+    CloudServerOutlined,
+    ExperimentOutlined,
+    FileTextOutlined,
+    FolderOpenOutlined,
+    HomeOutlined,
+    LogoutOutlined,
+    NodeIndexOutlined,
+    PictureOutlined,
+    SettingOutlined,
+    TeamOutlined,
+    ToolOutlined,
+    TransactionOutlined,
+    UserOutlined,
+} from "@ant-design/icons";
 import { Button, Flex, Layout, Menu, Typography, theme } from "antd";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
@@ -22,52 +36,41 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     const isReady = useUserStore((state) => state.isReady);
     const logout = useUserStore((state) => state.clearSession);
     const adminMenus = [
-        { key: "/admin/enterprises", icon: <TeamOutlined />, label: t("admin.menus.enterprises") },
-        { key: "/admin/users", icon: <UserOutlined />, label: t("admin.menus.users") },
-        { key: "/admin/credit-logs", icon: <TransactionOutlined />, label: t("admin.menus.creditLogs") },
-        { key: "/admin/generation-tasks", icon: <ExperimentOutlined />, label: t("admin.menus.generationTasks") },
-        { key: "/admin/canvas-nodes", icon: <NodeIndexOutlined />, label: t("admin.menus.canvasNodes") },
-        { key: "/admin/prompts", icon: <FileTextOutlined />, label: t("admin.menus.prompts") },
-        { key: "/admin/assets", icon: <PictureOutlined />, label: t("admin.menus.assets") },
-        { key: "/admin/volcengine-assets", icon: <CloudServerOutlined />, label: t("admin.menus.volcengineAssets") },
-        { key: "/admin/settings", icon: <SettingOutlined />, label: t("admin.menus.settings") },
+        {
+            key: "member-management",
+            icon: <TeamOutlined />,
+            label: t("admin.menus.memberManagement"),
+            children: [
+                { key: "/admin/enterprises", icon: <TeamOutlined />, label: t("admin.menus.enterprises") },
+                { key: "/admin/users", icon: <UserOutlined />, label: t("admin.menus.users") },
+            ],
+        },
+        {
+            key: "content-management",
+            icon: <FolderOpenOutlined />,
+            label: t("admin.menus.contentManagement"),
+            children: [
+                { key: "/admin/prompts", icon: <FileTextOutlined />, label: t("admin.menus.prompts") },
+                { key: "/admin/assets", icon: <PictureOutlined />, label: t("admin.menus.assets") },
+                { key: "/admin/volcengine-assets", icon: <CloudServerOutlined />, label: t("admin.menus.volcengineAssets") },
+            ],
+        },
+        {
+            key: "operations-management",
+            icon: <ToolOutlined />,
+            label: t("admin.menus.operationsManagement"),
+            children: [
+                { key: "/admin/credit-logs", icon: <TransactionOutlined />, label: t("admin.menus.creditLogs") },
+                { key: "/admin/generation-tasks", icon: <ExperimentOutlined />, label: t("admin.menus.generationTasks") },
+                { key: "/admin/canvas-nodes", icon: <NodeIndexOutlined />, label: t("admin.menus.canvasNodes") },
+                { key: "/admin/settings", icon: <SettingOutlined />, label: t("admin.menus.settings") },
+            ],
+        },
     ];
-    const activeKey = appPath.startsWith("/admin/enterprises")
-        ? "/admin/enterprises"
-        : appPath.startsWith("/admin/volcengine-assets")
-          ? "/admin/volcengine-assets"
-          : appPath.startsWith("/admin/settings")
-            ? "/admin/settings"
-            : appPath.startsWith("/admin/assets")
-              ? "/admin/assets"
-              : appPath.startsWith("/admin/generation-tasks")
-                ? "/admin/generation-tasks"
-                : appPath.startsWith("/admin/canvas-nodes")
-                  ? "/admin/canvas-nodes"
-                  : appPath.startsWith("/admin/prompts")
-                    ? "/admin/prompts"
-                    : appPath.startsWith("/admin/credit-logs")
-                      ? "/admin/credit-logs"
-                      : appPath.startsWith("/admin/users")
-                        ? "/admin/users"
-                        : "";
-    const pageTitle = appPath.startsWith("/admin/enterprises")
-        ? t("admin.menus.enterprises")
-        : appPath.startsWith("/admin/volcengine-assets")
-          ? t("admin.menus.volcengineAssets")
-          : appPath.startsWith("/admin/settings")
-            ? t("admin.menus.settings")
-            : appPath.startsWith("/admin/assets")
-              ? t("admin.menus.assetsManagement")
-              : appPath.startsWith("/admin/generation-tasks")
-                ? t("admin.menus.generationTasks")
-                : appPath.startsWith("/admin/canvas-nodes")
-                  ? t("admin.menus.canvasNodes")
-                  : appPath.startsWith("/admin/prompts")
-                    ? t("admin.menus.prompts")
-                    : appPath.startsWith("/admin/credit-logs")
-                      ? t("admin.menus.creditLogs")
-                      : t("admin.menus.users");
+    const activeItem = adminMenus.flatMap((group) => group.children).find((item) => appPath.startsWith(item.key));
+    const activeKey = activeItem?.key || "";
+    const activeGroup = adminMenus.find((group) => group.children.some((item) => item.key === activeKey));
+    const pageTitle = activeKey === "/admin/assets" ? t("admin.menus.assetsManagement") : activeItem?.label || t("admin.menus.users");
 
     useEffect(() => {
         if (!isReady) return;
@@ -98,17 +101,22 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     </Typography.Text>
                 </Flex>
                 <Menu
+                    key={activeGroup?.key}
                     mode="inline"
                     selectedKeys={[activeKey]}
+                    defaultOpenKeys={activeGroup ? [activeGroup.key] : []}
                     style={adminLayoutStyle.menu}
-                    items={adminMenus.map((item) => ({
-                        ...item,
-                        label: (
-                            <Link to={item.key} style={{ color: "inherit" }}>
-                                {item.label}
-                            </Link>
-                        ),
-                        style: adminLayoutStyle.menuItem,
+                    items={adminMenus.map((group) => ({
+                        ...group,
+                        children: group.children.map((item) => ({
+                            ...item,
+                            label: (
+                                <Link to={item.key} style={{ color: "inherit" }}>
+                                    {item.label}
+                                </Link>
+                            ),
+                            style: adminLayoutStyle.menuItem,
+                        })),
                     }))}
                 />
                 <Flex vertical gap={8} style={{ position: "absolute", bottom: 0, insetInline: 0, padding: 12, borderTop: `1px solid ${antToken.colorBorder}`, background: antToken.colorBgContainer }}>

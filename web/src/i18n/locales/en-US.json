@@ -1093,6 +1093,9 @@
     },
     "admin": {
         "menus": {
+            "memberManagement": "Member management",
+            "contentManagement": "Content management",
+            "operationsManagement": "Operations management",
             "enterprises": "Enterprises",
             "users": "Users",
             "creditLogs": "Credit logs",
