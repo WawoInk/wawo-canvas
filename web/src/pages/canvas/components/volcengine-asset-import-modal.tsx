@@ -195,6 +195,16 @@ export function VolcengineAssetImportModal({ open, targetNode, onChooseLocal, on
     );
 }
 
+function AssetSkeleton() {
+    return (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }, (_, index) => (
+                <Skeleton key={index} active className="h-52" />
+            ))}
+        </div>
+    );
+}
+
 function VolcengineAssetCard({ asset, actionLabel, onImport }: { asset: VolcengineAsset; actionLabel: string; onImport: () => void }) {
     const { t } = useTranslation();
     return (
