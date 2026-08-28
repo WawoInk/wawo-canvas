@@ -182,7 +182,7 @@ export default function VolcengineAssetsPage() {
     useEffect(() => {
         if (!formOpen) return;
         setUploadSource("url");
-        form.setFieldsValue(editing ? { name: editing.Name } : { name: "", url: "", assetType: undefined, file: [] });
+        form.setFieldsValue(editing ? { name: editing.Name } : { name: "", url: "", assetType: "Image", file: [] });
     }, [editing, form, formOpen]);
 
     if (!isReady) {
