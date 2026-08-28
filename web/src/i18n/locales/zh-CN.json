@@ -1093,6 +1093,9 @@
     },
     "admin": {
         "menus": {
+            "memberManagement": "成员管理",
+            "contentManagement": "内容管理",
+            "operationsManagement": "运维管理",
             "enterprises": "企业管理",
             "users": "用户管理",
             "creditLogs": "算力点日志",
