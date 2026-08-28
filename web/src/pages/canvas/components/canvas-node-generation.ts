@@ -283,7 +283,7 @@ export function buildNodeResponseMessages(context: NodeGenerationContext): AiTex
 
 export async function hydrateNodeGenerationContext(context: NodeGenerationContext) {
     const { imageToDataUrl } = await import("@/services/blob-storage");
-    return { ...context, referenceImages: await Promise.all(context.referenceImages.map(async (image) => ({ ...image, dataUrl: await imageToDataUrl(image) }))) };
+    return { ...context, referenceImages: await Promise.all(context.referenceImages.map(async (image) => (image.assetId ? image : { ...image, dataUrl: await imageToDataUrl(image) }))) };
 }
 
 function readNodeTextInput(node: CanvasNodeData) {
@@ -296,40 +296,46 @@ function generationLabel(type: NodeGenerationInput["type"], index: number) {
 }
 
 function readReferenceImage(node: CanvasNodeData): ReferenceImage | null {
-    if (node.type !== CanvasNodeType.Image || !node.metadata?.content) return null;
+    const assetId = node.metadata?.materialSource === "volcengine" ? node.metadata.volcengineAssetId : undefined;
+    if (node.type !== CanvasNodeType.Image || (!node.metadata?.content && !assetId)) return null;
     return {
         id: node.id,
         name: `${node.title || node.id}.png`,
-        type: node.metadata.mimeType || "image/png",
-        dataUrl: node.metadata.content,
-        storageKey: node.metadata.storageKey,
-        fileId: node.metadata.fileId,
+        type: node.metadata?.mimeType || "image/png",
+        dataUrl: node.metadata?.content || "",
+        ...(assetId ? { url: `asset://${assetId}`, assetId } : {}),
+        storageKey: node.metadata?.storageKey,
+        fileId: node.metadata?.fileId,
     };
 }
 
 function readReferenceVideo(node: CanvasNodeData): ReferenceVideo | null {
-    if (node.type !== CanvasNodeType.Video || !node.metadata?.content) return null;
+    const assetId = node.metadata?.materialSource === "volcengine" ? node.metadata.volcengineAssetId : undefined;
+    if (node.type !== CanvasNodeType.Video || (!node.metadata?.content && !assetId)) return null;
     return {
         id: node.id,
         name: `${node.title || node.id}.mp4`,
-        type: node.metadata.mimeType || "video/mp4",
-        url: node.metadata.content,
-        storageKey: node.metadata.storageKey,
-        bytes: node.metadata.bytes,
-        width: node.metadata.naturalWidth,
-        height: node.metadata.naturalHeight,
-        durationMs: node.metadata.durationMs,
+        type: node.metadata?.mimeType || "video/mp4",
+        url: assetId ? `asset://${assetId}` : node.metadata?.content || "",
+        ...(assetId ? { assetId } : {}),
+        storageKey: node.metadata?.storageKey,
+        bytes: node.metadata?.bytes,
+        width: node.metadata?.naturalWidth,
+        height: node.metadata?.naturalHeight,
+        durationMs: node.metadata?.durationMs,
     };
 }
 
 function readReferenceAudio(node: CanvasNodeData): ReferenceAudio | null {
-    if (node.type !== CanvasNodeType.Audio || !node.metadata?.content) return null;
+    const assetId = node.metadata?.materialSource === "volcengine" ? node.metadata.volcengineAssetId : undefined;
+    if (node.type !== CanvasNodeType.Audio || (!node.metadata?.content && !assetId)) return null;
     return {
         id: node.id,
         name: `${node.title || node.id}.mp3`,
-        type: node.metadata.mimeType || "audio/mpeg",
-        url: node.metadata.content,
-        storageKey: node.metadata.storageKey,
-        durationMs: node.metadata.durationMs,
+        type: node.metadata?.mimeType || "audio/mpeg",
+        url: assetId ? `asset://${assetId}` : node.metadata?.content || "",
+        ...(assetId ? { assetId } : {}),
+        storageKey: node.metadata?.storageKey,
+        durationMs: node.metadata?.durationMs,
     };
 }

@@ -1349,29 +1349,46 @@ func TestSoraAdapterCreatesImageToVideoTask(t *testing.T) {
 	}
 }
 
-func TestSoraAdapterRejectsVolcengineAssetReferences(t *testing.T) {
-	called := false
+func TestSoraAdapterCreatesVolcengineAssetReferences(t *testing.T) {
+	var gotBody map[string]any
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("decode upstream request: %v", err)
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"unexpected","status":"queued"}`))
+		_, _ = w.Write([]byte(`{"id":"sora-asset-task","status":"queued"}`))
 	}))
 	defer upstream.Close()
 
 	ref, err := NewSoraVideosV1Adapter(upstream.Client()).Create(context.Background(), AdapterCreateRequest{
 		Profile: model.GenerationProfile{UpstreamModel: "sora-asset", Capabilities: soraCapabilities()},
 		Channel: model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"},
-		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "asset", Settings: model.ScalarSettings{
-			"aspectRatio": "16:9", "resolution": "720p", "durationSeconds": 6,
+		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "让人物自然转头并微笑", Settings: model.ScalarSettings{
+			"aspectRatio": "16:9", "resolution": "1080p", "durationSeconds": 5,
 		}},
 		References: AdapterMediaReferences{
 			Images: []string{"asset://asset-image-1"},
 			Videos: []string{"asset://asset-video-1"},
 			Audios: []string{"asset://asset-audio-1"},
 		},
+		Metadata: map[string]string{"action": "template_hq_i2v"},
 	})
-	if err == nil || ref.Error == nil || ref.Error.Code != "ASSET_REFERENCE_UNSUPPORTED" || ref.Error.Message != "当前模型不支持火山素材引用，请改用本地上传素材或选择支持火山素材的模型" || ref.Error.Retryable || called {
-		t.Fatalf("ref=%#v err=%v called=%v", ref, err, called)
+	if err != nil || ref.ID != "sora-asset-task" || ref.Status != model.TaskStatusRunning {
+		t.Fatalf("ref=%#v err=%v", ref, err)
+	}
+	want := map[string]any{
+		"model": "sora-asset", "prompt": "让人物自然转头并微笑", "seconds": "5",
+		"metadata": map[string]any{
+			"action": "template_hq_i2v", "resolution": "1080p", "ratio": "16:9",
+			"content": []any{
+				map[string]any{"type": "image_url", "image_url": map[string]any{"url": "asset://asset-image-1"}, "role": "reference_image"},
+				map[string]any{"type": "video_url", "video_url": map[string]any{"url": "asset://asset-video-1"}, "role": "reference_video"},
+				map[string]any{"type": "audio_url", "audio_url": map[string]any{"url": "asset://asset-audio-1"}, "role": "reference_audio"},
+			},
+		},
+	}
+	if !jsonEqual(gotBody, want) {
+		t.Fatalf("body = %#v, want %#v", gotBody, want)
 	}
 }
 

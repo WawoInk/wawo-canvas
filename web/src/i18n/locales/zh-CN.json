@@ -2869,7 +2869,8 @@
                 "shortDramaScriptRequired": "请输入短剧脚本",
                 "shortDramaAssetRequired": "请连接至少一张短剧资产图片",
                 "shortDramaRoleRequired": "请为图片「{{name}}」选择角色",
-                "imageNotUploaded": "图片「{{name}}」尚未上传到平台文件库"
+                "imageNotUploaded": "图片「{{name}}」尚未上传到平台文件库",
+                "volcengineAssetImageUnsupported": "当前图片生成不支持火山素材引用，请改用支持 asset:// 的视频模型或上传本地素材"
             }
         },
         "export": {

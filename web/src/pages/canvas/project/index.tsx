@@ -2278,20 +2278,23 @@ function InfiniteCanvasPage() {
                     const isConfigNode = sourceNode?.type === CanvasNodeType.Config;
                     const isImageNode = sourceNode?.type === CanvasNodeType.Image;
                     const isEmptyImageNode = isImageNode && !sourceNode?.metadata?.content;
+                    const sourceAssetId = isImageNode && sourceNode?.metadata?.materialSource === "volcengine" ? sourceNode.metadata.volcengineAssetId : undefined;
                     const sourceReference =
-                        isImageNode && sourceNode?.metadata?.content
+                        isImageNode && (sourceNode?.metadata?.content || sourceAssetId)
                             ? [
                                   {
                                       id: sourceNode.id,
                                       name: `${sourceNode.title || sourceNode.id}.png`,
-                                      type: sourceNode.metadata.mimeType || "image/png",
-                                      dataUrl: sourceNode.metadata.content,
-                                      storageKey: sourceNode.metadata.storageKey,
-                                      fileId: sourceNode.metadata.fileId,
+                                      type: sourceNode.metadata?.mimeType || "image/png",
+                                      dataUrl: sourceNode.metadata?.content || "",
+                                      ...(sourceAssetId ? { url: `asset://${sourceAssetId}`, assetId: sourceAssetId } : {}),
+                                      storageKey: sourceNode.metadata?.storageKey,
+                                      fileId: sourceNode.metadata?.fileId,
                                   },
                               ]
                             : [];
                     const referenceImages = [...sourceReference, ...generationContext.referenceImages.filter((image) => image.id !== sourceNode?.id)];
+                    if (referenceImages.some((image) => image.assetId)) throw new Error(t("canvas.generation.errors.volcengineAssetImageUnsupported"));
                     const generationType = referenceImages.length ? ("edit" as const) : ("generation" as const);
                     const generationMetadata = buildImageGenerationMetadata(generationType, generationConfig, count, referenceImages);
                     const parentConfig = NODE_DEFAULT_SIZE[isConfigNode ? CanvasNodeType.Config : isImageNode ? CanvasNodeType.Image : CanvasNodeType.Text];
@@ -3665,14 +3668,14 @@ function buildAudioGenerationMetadata(config: AiConfig): CanvasNodeMetadata {
 }
 
 function referenceUrl(image: ReferenceImage) {
-    return image.storageKey || image.url || (!image.dataUrl.startsWith("data:") ? image.dataUrl : undefined);
+    return image.assetId ? `asset://${image.assetId}` : image.storageKey || image.url || (!image.dataUrl.startsWith("data:") ? image.dataUrl : undefined);
 }
 
-function generationReferenceUrls(context: { referenceImages: ReferenceImage[]; referenceVideos: Array<{ storageKey?: string; url?: string }>; referenceAudios?: Array<{ storageKey?: string; url?: string }> }) {
+function generationReferenceUrls(context: { referenceImages: ReferenceImage[]; referenceVideos: Array<{ storageKey?: string; url?: string; assetId?: string }>; referenceAudios?: Array<{ storageKey?: string; url?: string; assetId?: string }> }) {
     return [
         ...context.referenceImages.map(referenceUrl).filter((url): url is string => Boolean(url)),
-        ...context.referenceVideos.map((video) => video.storageKey || video.url).filter((url): url is string => Boolean(url)),
-        ...(context.referenceAudios || []).map((audio) => audio.storageKey || audio.url).filter((url): url is string => Boolean(url)),
+        ...context.referenceVideos.map((video) => (video.assetId ? `asset://${video.assetId}` : video.storageKey || video.url)).filter((url): url is string => Boolean(url)),
+        ...(context.referenceAudios || []).map((audio) => (audio.assetId ? `asset://${audio.assetId}` : audio.storageKey || audio.url)).filter((url): url is string => Boolean(url)),
     ];
 }
 

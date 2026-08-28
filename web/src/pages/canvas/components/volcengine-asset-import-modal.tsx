@@ -172,7 +172,7 @@ export function VolcengineAssetImportModal({ open, targetNode, onChooseLocal, on
                                         <>
                                             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                                                 {assetItems.map((asset) => (
-                                                    <VolcengineAssetCard key={asset.Id} asset={asset} actionLabel={t(`canvas.editor.materialImport.actions.${actionKey}`)} disabled={!isSafeMediaURL(asset.URL)} onImport={() => {
+                                                    <VolcengineAssetCard key={asset.Id} asset={asset} actionLabel={t(`canvas.editor.materialImport.actions.${actionKey}`)} onImport={() => {
                                                         if (selectedOutbound) onImport(asset, selectedOutbound);
                                                     }} />
                                                 ))}
@@ -195,7 +195,7 @@ export function VolcengineAssetImportModal({ open, targetNode, onChooseLocal, on
     );
 }
 
-function VolcengineAssetCard({ asset, actionLabel, disabled, onImport }: { asset: VolcengineAsset; actionLabel: string; disabled: boolean; onImport: () => void }) {
+function VolcengineAssetCard({ asset, actionLabel, onImport }: { asset: VolcengineAsset; actionLabel: string; onImport: () => void }) {
     const { t } = useTranslation();
     return (
         <article className="overflow-hidden rounded-xl border bg-card">
@@ -208,10 +208,9 @@ function VolcengineAssetCard({ asset, actionLabel, disabled, onImport }: { asset
                     </div>
                     {asset.Status ? <Tag className="m-0 shrink-0 text-[10px]">{asset.Status}</Tag> : null}
                 </div>
-                <Button className="mt-3 w-full" size="small" type="primary" disabled={disabled} onClick={onImport}>
+                <Button className="mt-3 w-full" size="small" type="primary" onClick={onImport}>
                     {actionLabel}
                 </Button>
-                {disabled ? <span className="mt-2 block text-[11px] text-muted-foreground">{t("canvas.editor.materialImport.volcengine.previewUnavailable")}</span> : null}
             </div>
         </article>
     );

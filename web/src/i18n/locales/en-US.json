@@ -2869,7 +2869,8 @@
                 "shortDramaScriptRequired": "Enter a short drama script",
                 "shortDramaAssetRequired": "Connect at least one short drama asset image",
                 "shortDramaRoleRequired": "Select a role for image \"{{name}}\"",
-                "imageNotUploaded": "Image \"{{name}}\" has not been uploaded to the platform file library"
+                "imageNotUploaded": "Image \"{{name}}\" has not been uploaded to the platform file library",
+                "volcengineAssetImageUnsupported": "Image generation does not support Volcengine asset references. Use an asset://-compatible video model or upload local media."
             }
         },
         "export": {

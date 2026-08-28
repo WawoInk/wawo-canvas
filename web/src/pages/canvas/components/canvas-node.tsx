@@ -111,8 +111,7 @@ export const CanvasNode = React.memo(function CanvasNode({
     onContextMenu,
 }: CanvasNodeProps) {
     const { t } = useTranslation();
-    const themeName = useThemeStore((state) => state.theme);
-    const theme = canvasThemes[themeName];
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const [hovered, setHovered] = useState(false);
     const [isEditingContent, setIsEditingContent] = useState(false);
     const isImageLoading = data.type === CanvasNodeType.Image && data.metadata?.status === "loading";
@@ -123,7 +122,7 @@ export const CanvasNode = React.memo(function CanvasNode({
     const isBatchChild = data.type === CanvasNodeType.Image && Boolean(data.metadata?.batchRootId);
     const isActive = isConnectionTarget || isSelected || isFocusRelated;
     const isVolcengineAsset = data.metadata?.materialSource === "volcengine";
-    const volcengineAccent = themeName === "dark" ? { background: "rgba(14, 116, 144, .32)", border: "#38BDF8", text: "#BAE6FD" } : { background: "rgba(14, 116, 144, .10)", border: "#0E7490", text: "#0F5C70" };
+    const volcengineAccent = { background: theme.toolbar.activeBg, border: theme.node.activeStroke, text: theme.toolbar.activeText };
     // ponytail: loading image border matches video's default inactive border (theme.node.stroke)
     const imageBorderColor = isImageLoading ? theme.node.stroke : isActive ? selectionBlue : isRelated && !isBatchChild ? theme.node.muted : isVolcengineAsset ? volcengineAccent.border : "transparent";
     const nodeBorderColor = hasImageContent ? imageBorderColor : isActive ? selectionBlue : isRelated ? theme.node.muted : isVolcengineAsset ? volcengineAccent.border : theme.node.stroke;

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import i18n from "@/i18n";
-import { buildNodeGenerationContext, buildShortDramaGenerationIntent, buildVideoGenerationIntent, cleanShortDramaAssetMappings, locateGenerationError, prepareFirstPartyCanvasVideoRun } from "./canvas-node-generation.ts";
+import { buildNodeGenerationContext, buildShortDramaGenerationIntent, buildVideoGenerationIntent, cleanShortDramaAssetMappings, hydrateNodeGenerationContext, locateGenerationError, prepareFirstPartyCanvasVideoRun } from "./canvas-node-generation.ts";
 
 const image = {
     id: "image-1",
@@ -70,6 +70,40 @@ test("compiles Volcengine Canvas media as asset references", () => {
             settings,
         },
     );
+});
+
+test("keeps Volcengine asset IDs in compatibility video references", () => {
+    const volcengineImage = { ...image, metadata: { content: "", materialSource: "volcengine", volcengineAssetId: "asset-image-1" } };
+    const volcengineVideo = { id: "video-asset-1", type: "video", title: "动作参考", metadata: { content: "", materialSource: "volcengine", volcengineAssetId: "asset-video-1" } };
+    const volcengineAudio = { id: "audio-asset-1", type: "audio", title: "配乐参考", metadata: { content: "", materialSource: "volcengine", volcengineAssetId: "asset-audio-1" } };
+    const context = buildNodeGenerationContext(
+        "video-1",
+        [volcengineImage, volcengineVideo, volcengineAudio, videoTarget],
+        [
+            { id: "connection-image", fromNodeId: "image-1", toNodeId: "video-1" },
+            { id: "connection-video", fromNodeId: "video-asset-1", toNodeId: "video-1" },
+            { id: "connection-audio", fromNodeId: "audio-asset-1", toNodeId: "video-1" },
+        ],
+        "让参考素材动起来",
+    );
+
+    assert.deepEqual(
+        [context.referenceImages[0].assetId, context.referenceVideos[0].assetId, context.referenceAudios[0].assetId],
+        ["asset-image-1", "asset-video-1", "asset-audio-1"],
+    );
+});
+
+test("does not hydrate a Volcengine asset through its preview URL", async () => {
+    const context = buildNodeGenerationContext(
+        "video-1",
+        [{ ...image, metadata: { content: "", materialSource: "volcengine", volcengineAssetId: "asset-image-1" } }, videoTarget],
+        [{ id: "connection-image", fromNodeId: "image-1", toNodeId: "video-1" }],
+        "让参考素材动起来",
+    );
+
+    const hydrated = await hydrateNodeGenerationContext(context);
+    assert.equal(hydrated.referenceImages[0].assetId, "asset-image-1");
+    assert.equal(hydrated.referenceImages[0].dataUrl, "");
 });
 
 test("rejects connected first-party media without a platform file", () => {
