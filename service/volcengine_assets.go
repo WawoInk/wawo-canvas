@@ -316,6 +316,62 @@ func VolcengineAssetOutbounds() ([]model.VolcengineAssetOutboundView, error) {
 	return result, nil
 }
 
+// VolcengineAssetUploadSizeLimit returns the largest configured local media limit.
+func VolcengineAssetUploadSizeLimit() int64 {
+	var limit int64
+	for _, fileType := range []string{"images", "videos", "audios"} {
+		if value := UserFileSizeLimit(fileType); value > limit {
+			limit = value
+		}
+	}
+	if limit == 0 {
+		return 50 << 20
+	}
+	return limit
+}
+
+// VolcengineAssetLocalUpload persists a local media file, then registers its public URL with the existing scoped CreateAsset flow.
+func VolcengineAssetLocalUpload(ctx context.Context, user model.AuthUser, headers http.Header, query url.Values, filename, mimeType, name, assetType string, size int64, file io.Reader) (json.RawMessage, error) {
+	assetType = strings.TrimSpace(assetType)
+	fileType, mimePrefix := "", ""
+	switch assetType {
+	case "Image":
+		fileType, mimePrefix = "images", "image/"
+	case "Video":
+		fileType, mimePrefix = "videos", "video/"
+	case "Audio":
+		fileType, mimePrefix = "audios", "audio/"
+	default:
+		return nil, safeMessageError{message: "素材类型必须是 Image、Video 或 Audio"}
+	}
+	filename, name = strings.TrimSpace(filename), strings.TrimSpace(name)
+	if filename == "" {
+		return nil, safeMessageError{message: "请选择本地素材文件"}
+	}
+	if name == "" {
+		return nil, safeMessageError{message: "素材名称不能为空"}
+	}
+	if err := validateFileSize(fileType, size); err != nil {
+		return nil, err
+	}
+	mimeType = strings.ToLower(strings.TrimSpace(strings.Split(mimeType, ";")[0]))
+	if !strings.HasPrefix(mimeType, mimePrefix) {
+		return nil, safeMessageError{message: "本地文件类型与素材类型不匹配"}
+	}
+	key := fmt.Sprintf("volcengine-materials/%s/%s%s", user.ID, uuid.NewString(), fileExt(filename))
+	publicURL, err := S3Upload(ctx, key, file, mimeType)
+	if err != nil {
+		return nil, err
+	}
+	body, _ := json.Marshal(volcengineAssetCreateRequest{URL: publicURL, Name: name, AssetType: assetType})
+	result, err := VolcengineAssetUserAction(ctx, user, headers, query, "CreateAsset", body)
+	if err != nil {
+		_ = S3Delete(context.Background(), key)
+		return nil, err
+	}
+	return result, nil
+}
+
 func validateVolcengineAssetUserAction(action string) error {
 	switch action {
 	case "ListAssets", "GetAsset", "CreateAsset", "UpdateAsset", "DeleteAsset":

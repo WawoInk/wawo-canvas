@@ -42,6 +42,7 @@ func New() *gin.Engine {
 	}
 	registerVolcengineUserRoutes := func(group *gin.RouterGroup) {
 		group.GET("/volcengine-assets/outbounds", gin.WrapF(handler.VolcengineAssetOutbounds))
+		group.POST("/volcengine-assets/upload", gin.WrapF(handler.VolcengineAssetLocalUpload))
 		for _, action := range []string{"ListAssets", "GetAsset", "CreateAsset", "UpdateAsset", "DeleteAsset"} {
 			assetAction := action
 			group.POST("/doubao/open/"+assetAction, func(c *gin.Context) {

@@ -2028,6 +2028,7 @@
             "refresh": "Refresh",
             "rename": "Rename",
             "registerURL": "Register URL asset",
+            "uploadLocal": "Upload local file",
             "saveName": "Save name",
             "cancel": "Cancel",
             "view": "View",
@@ -2067,6 +2068,12 @@
             "total": "{{count}} assets total"
         },
         "form": {
+            "urlSource": "Public URL",
+            "localSource": "Local upload",
+            "localDescription": "Choose a local image, video, or audio file. It is stored in S3 first, then its public URL is registered in this asset library.",
+            "file": "Local file",
+            "fileRequired": "Choose a local file",
+            "selectFile": "Choose file",
             "editDescription": "Editing only updates the asset name; the URL and asset type cannot be changed.",
             "createDescription": "Register an image, video, or audio asset in the current library using a public http or https media URL.",
             "url": "Media URL",

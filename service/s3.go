@@ -16,11 +16,15 @@ import (
 	canvasConfig "github.com/basketikun/infinite-canvas/config"
 )
 
-var s3Client *s3.Client
+var (
+	s3Client         *s3.Client
+	s3ClientEndpoint string
+)
 
 // S3 返回全局 S3 客户端（延迟初始化）。
 func S3() (*s3.Client, error) {
-	if s3Client != nil {
+	endpoint := os.Getenv("AWS_ENDPOINT_URL_S3")
+	if s3Client != nil && s3ClientEndpoint == endpoint {
 		return s3Client, nil
 	}
 	cfg, err := config.LoadDefaultConfig(context.Background(),
@@ -35,10 +39,11 @@ func S3() (*s3.Client, error) {
 		return nil, fmt.Errorf("s3: %w", err)
 	}
 	options := []func(*s3.Options){}
-	if os.Getenv("AWS_ENDPOINT_URL_S3") != "" {
+	if endpoint != "" {
 		options = append(options, func(options *s3.Options) { options.UsePathStyle = true })
 	}
 	s3Client = s3.NewFromConfig(cfg, options...)
+	s3ClientEndpoint = endpoint
 	return s3Client, nil
 }
 

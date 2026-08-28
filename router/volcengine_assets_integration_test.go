@@ -1,10 +1,13 @@
 package router_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"strings"
 	"sync"
 	"testing"
@@ -495,4 +498,91 @@ func TestVolcengineAssetUpstreamErrorsExposeSafeCode(t *testing.T) {
 	if errorData := volcAssetObject(response.Data, "error"); volcAssetString(errorData, "code") != "UNAVAILABLE" || volcAssetString(errorData, "message") != "temporary outage" {
 		t.Fatalf("upstream error data = %#v", response.Data)
 	}
+}
+
+func TestVolcengineAssetLocalUploadPersistsAndRegistersThroughHTTP(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	previousRegion := config.Cfg.AmazonRegion
+	previousURL := config.Cfg.AmazonS3URL
+	previousAccessKey := config.Cfg.AmazonS3AccessKey
+	previousSecretKey := config.Cfg.AmazonS3SecretKey
+	config.Cfg.JWTSecret = "volc-asset-local-upload-test-secret"
+	config.Cfg.AmazonRegion = "us-east-1"
+	config.Cfg.AmazonS3URL = "https://volcengine-materials-test.s3.amazonaws.com"
+	config.Cfg.AmazonS3AccessKey = "test-access-key"
+	config.Cfg.AmazonS3SecretKey = "test-secret-key"
+	t.Cleanup(func() {
+		config.Cfg.JWTSecret = previousJWTSecret
+		config.Cfg.AmazonRegion = previousRegion
+		config.Cfg.AmazonS3URL = previousURL
+		config.Cfg.AmazonS3AccessKey = previousAccessKey
+		config.Cfg.AmazonS3SecretKey = previousSecretKey
+	})
+
+	objectServer := newObjectStorageStub(t)
+	t.Setenv("AWS_ENDPOINT_URL_S3", objectServer.URL)
+	upstream := newVolcAssetTestUpstream()
+	upstreamServer := httptest.NewServer(upstream)
+	defer upstreamServer.Close()
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	admin := volcAssetTestSession(t, server.URL, "volc-local-upload-admin", model.UserRoleAdmin)
+	user := volcAssetTestSession(t, server.URL, "volc-local-upload-user", model.UserRoleUser)
+
+	configured := map[string]any{
+		"outbounds": []map[string]any{{"id": "local", "format": "newapi", "base_url": upstreamServer.URL, "access_token": "local-token", "project_name": "canvas-assets"}},
+	}
+	if saved := doJSON[volcAssetConfigHTTP](t, http.MethodPost, server.URL+"/api/admin/volcengine-assets/config", admin.Token, map[string]string{"config": volcAssetConfigJSON(t, configured)}); saved.Code != 0 {
+		t.Fatalf("save config = %#v", saved)
+	}
+
+	response := doVolcengineAssetLocalUpload(t, server.URL+"/api/v1/volcengine-assets/upload?outbound=local", user.Token, "portrait.png", "image/png", "肖像", "Image", []byte("local-image"))
+	if response.Code != 0 || volcAssetString(response.Data, "Id") == "" {
+		t.Fatalf("local upload response = %#v", response)
+	}
+	create := upstream.latest(t, "CreateAsset")
+	url := volcAssetString(create.Body, "URL")
+	prefix := "https://volcengine-materials-test.s3.amazonaws.com/volcengine-materials/" + user.User.ID + "/"
+	if !strings.HasPrefix(url, prefix) || !strings.HasSuffix(url, ".png") || volcAssetString(create.Body, "Name") != "肖像" || volcAssetString(create.Body, "AssetType") != "Image" {
+		t.Fatalf("upstream CreateAsset payload = %#v", create.Body)
+	}
+
+	objectServer.mu.Lock()
+	defer objectServer.mu.Unlock()
+	for key, content := range objectServer.objects {
+		if strings.HasPrefix(key, "/volcengine-materials-test/volcengine-materials/"+user.User.ID+"/") && bytes.Equal(content, []byte("local-image")) {
+			return
+		}
+	}
+	t.Fatalf("missing persisted local upload: %#v", objectServer.objects)
+}
+
+func doVolcengineAssetLocalUpload(t *testing.T, endpoint, token, fileName, mimeType, name, assetType string, content []byte) apiResponse[map[string]any] {
+	t.Helper()
+	body := bytes.NewBuffer(nil)
+	writer := multipart.NewWriter(body)
+	for key, value := range map[string]string{"name": name, "assetType": assetType} {
+		if err := writer.WriteField(key, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	header := textproto.MIMEHeader{}
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, fileName))
+	header.Set("Content-Type", mimeType)
+	part, err := writer.CreatePart(header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, raw := doRawRequest(t, http.MethodPost, endpoint, token, writer.FormDataContentType(), body)
+	var response apiResponse[map[string]any]
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatalf("decode local upload response: %v: %s", err, raw)
+	}
+	return response
 }
