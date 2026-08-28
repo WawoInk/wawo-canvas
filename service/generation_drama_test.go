@@ -170,7 +170,9 @@ func TestCreateGenerationPassesVolcengineDramaAssetToVidu(t *testing.T) {
 	}()
 	profile, _ := findGenerationProfile(GenerationProfiles(), "vidu-q3-drama")
 	generationProfiles = func() []model.GenerationProfile { return []model.GenerationProfile{profile} }
-	generationChannel = func(string) (model.ModelChannel, error) { return model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"}, nil }
+	generationChannel = func(string) (model.ModelChannel, error) {
+		return model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"}, nil
+	}
 	generationRouteChannel = func(string, string) (model.ModelChannel, error) { return generationChannel("") }
 	generationHTTPClient = upstream.Client()
 	generationCost = func(string) (model.Decimal, error) { return credit(0), nil }

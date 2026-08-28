@@ -254,7 +254,9 @@ func TestCreateGenerationPassesVolcengineAssetsToSeedance(t *testing.T) {
 	generationProfiles = func() []model.GenerationProfile {
 		return []model.GenerationProfile{{ID: "seedance-asset-payload", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "seedance-asset-payload", Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities()}}
 	}
-	generationChannel = func(string) (model.ModelChannel, error) { return model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"}, nil }
+	generationChannel = func(string) (model.ModelChannel, error) {
+		return model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"}, nil
+	}
 	generationRouteChannel = func(string, string) (model.ModelChannel, error) { return generationChannel("") }
 	generationHTTPClient = upstream.Client()
 	generationCost = func(string) (model.Decimal, error) { return credit(0), nil }
