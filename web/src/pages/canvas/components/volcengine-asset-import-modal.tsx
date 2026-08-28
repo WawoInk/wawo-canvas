@@ -226,7 +226,7 @@ function AssetPreview({ asset }: { asset: VolcengineAsset }) {
     if (url && asset.AssetType === "Image" && !failed) return <img src={url} alt={asset.Name || t("canvas.editor.materialImport.volcengine.unnamed")} className="aspect-[4/3] w-full bg-muted/30 object-contain" loading="lazy" onError={() => setFailed(true)} />;
     if (url && asset.AssetType === "Video" && !failed) return <video src={url} className="aspect-[4/3] w-full bg-black object-contain" muted controls preload="metadata" onError={() => setFailed(true)} />;
     if (url && asset.AssetType === "Audio" && !failed) return <div className="flex aspect-[4/3] flex-col items-center justify-center gap-3 bg-muted/30 px-3"><FileAudio className="size-9 text-muted-foreground" /><audio src={url} className="w-full" controls preload="metadata" onError={() => setFailed(true)} /></div>;
-    return <div className="flex aspect-[4/3] flex-col items-center justify-center gap-2 bg-muted/30 text-xs text-muted-foreground"><Icon className="size-8" /><span>{t("canvas.editor.materialImport.volcengine.previewUnavailable")}</span></div>;
+    return <div className="flex aspect-[4/3] flex-col items-center justify-center gap-2 bg-muted/30 text-xs text-muted-foreground"><Icon className="size-8" /><span>{t(failed ? "canvas.editor.materialImport.volcengine.previewFailed" : "canvas.editor.materialImport.volcengine.previewUnavailable")}</span></div>;
 }
 
 function isSafeMediaURL(value: string) {

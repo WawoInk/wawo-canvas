@@ -2614,7 +2614,8 @@
                     "empty": "当前素材库还没有素材",
                     "total": "共 {{count}} 项素材",
                     "unnamed": "未命名素材",
-                    "previewUnavailable": "暂无可预览的媒体"
+                    "previewUnavailable": "暂无可预览的媒体",
+                    "previewFailed": "媒体预览加载失败"
                 }
             }
         },

@@ -2614,7 +2614,8 @@
                     "empty": "This asset library has no media yet",
                     "total": "{{count}} assets",
                     "unnamed": "Untitled asset",
-                    "previewUnavailable": "No preview is available"
+                    "previewUnavailable": "No preview is available",
+                    "previewFailed": "Media preview could not be loaded"
                 }
             }
         },
