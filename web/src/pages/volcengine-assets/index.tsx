@@ -36,7 +36,10 @@ type AssetFormValues = VolcengineAssetInput & { file?: UploadFile[] };
 type AssetUploadSource = "url" | "local";
 
 function mediaURLs(value: string) {
-    return value.split(/\r?\n/).map((url) => url.trim()).filter(Boolean);
+    return value
+        .split(/\r?\n/)
+        .map((url) => url.trim())
+        .filter(Boolean);
 }
 
 function mediaAssetType(mimeType: string): VolcengineAssetType | undefined {
@@ -428,7 +431,12 @@ export default function VolcengineAssetsPage() {
                                 }}
                             />
                             {uploadSource === "url" ? (
-                                <Form.Item name="url" label={t("volcengineAssets.form.url")} extra={t("volcengineAssets.form.urlDescription")} rules={[{ required: true, message: t("volcengineAssets.form.urlRequired") }, { validator: (_, value) => validateMediaURL(_, value, t) }]}>
+                                <Form.Item
+                                    name="url"
+                                    label={t("volcengineAssets.form.url")}
+                                    extra={t("volcengineAssets.form.urlDescription")}
+                                    rules={[{ required: true, message: t("volcengineAssets.form.urlRequired") }, { validator: (_, value) => validateMediaURL(_, value, t) }]}
+                                >
                                     <Input.TextArea placeholder={"https://example.com/media-1.jpg\nhttps://example.com/media-2.jpg"} autoSize={{ minRows: 3, maxRows: 6 }} />
                                 </Form.Item>
                             ) : (
