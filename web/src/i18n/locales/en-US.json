@@ -73,6 +73,7 @@
         "brandHome": "Canvan home",
         "canvas": "My canvases",
         "image": "Image studio",
+        "storyboard": "Storyboard studio",
         "video": "Video studio",
         "prompts": "Prompt library",
         "assets": "My assets",
@@ -693,10 +694,6 @@
         "parameters": "Parameters",
         "model": "Model",
         "configRequired": "Complete the configuration first",
-        "tabs": {
-            "image": "Image Generation",
-            "storyboard": "Storyboard Studio"
-        },
         "mobile": {
             "logs": "History"
         },
@@ -778,10 +775,6 @@
     "storyboardStudio": {
         "title": "Storyboard Studio",
         "description": "Turn scripts into validated, exportable structured storyboard documents",
-        "tabs": {
-            "image": "Image Generation",
-            "storyboard": "Storyboard Studio"
-        },
         "input": {
             "title": "Title",
             "titlePlaceholder": "For example: The Visitor in the Rain",
@@ -2239,6 +2232,10 @@
             "image": {
                 "title": "Image Studio | Canvan",
                 "description": "Generate and edit images with AI."
+            },
+            "storyboard": {
+                "title": "Storyboard Studio | Canvan",
+                "description": "Turn scripts into validated, exportable structured storyboard documents."
             },
             "video": {
                 "title": "Video Studio | Canvan",

@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { saveAs } from "file-saver";
-import { Alert, App, Button, Collapse, Drawer, Empty, Input, InputNumber, Popconfirm, Progress, Select, Switch, Table, Tabs, Tag } from "antd";
+import { Alert, App, Button, Collapse, Drawer, Empty, Input, InputNumber, Popconfirm, Progress, Select, Switch, Table, Tag } from "antd";
 import type { TableProps } from "antd";
 
 import { ModelPicker } from "@/components/model-picker";
@@ -35,11 +35,6 @@ import {
     type StoryboardStage,
 } from "./storyboard";
 
-export type StoryboardStudioProps = {
-    activeTab: "image" | "storyboard";
-    onTabChange: (tab: "image" | "storyboard") => void;
-};
-
 type ShotRow = StoryboardShot & {
     key: string;
     sceneNo: number;
@@ -54,7 +49,7 @@ const stageProgress: Record<StoryboardStage, number> = {
 
 const aspectRatios: StoryboardAspectRatio[] = ["16:9", "9:16", "1:1", "4:3", "3:4"];
 
-export function StoryboardStudio({ activeTab, onTabChange }: StoryboardStudioProps) {
+export function StoryboardStudio() {
     const { t, i18n } = useTranslation();
     const { message } = App.useApp();
     const effectiveConfig = useEffectiveConfig();
@@ -325,17 +320,6 @@ export function StoryboardStudio({ activeTab, onTabChange }: StoryboardStudioPro
 
             <section className="grid gap-3 lg:min-h-0 lg:overflow-hidden xl:grid-cols-[420px_minmax(0,1fr)]">
                 <div className="thin-scrollbar flex flex-col rounded-lg border bg-card p-4 shadow-sm lg:min-h-0 lg:overflow-y-auto">
-                    <Tabs
-                        activeKey={activeTab}
-                        items={[
-                            { key: "image", label: text("tabs.image", "图片生成") },
-                            { key: "storyboard", label: text("tabs.storyboard", "分镜创作室") },
-                        ]}
-                        onChange={(key) => {
-                            if (key === "image" || key === "storyboard") onTabChange(key);
-                        }}
-                    />
-
                     <div className="flex items-start justify-between gap-3">
                         <div>
                             <h1 className="text-2xl font-semibold">{text("title", "分镜创作室")}</h1>

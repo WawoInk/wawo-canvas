@@ -133,6 +133,7 @@ function seoPage(pathname: string) {
     if (pathname === "/login" || pathname === "/admin/login") return "login";
     if (pathname === "/canvas" || pathname.startsWith("/canvas/")) return "canvas";
     if (pathname === "/image") return "image";
+    if (pathname === "/storyboard") return "storyboard";
     if (pathname === "/video") return "video";
     if (pathname === "/prompts") return "prompts";
     if (pathname === "/assets") return "assets";

@@ -73,6 +73,7 @@
         "brandHome": "Canvan 首页",
         "canvas": "我的画布",
         "image": "生图工作台",
+        "storyboard": "分镜创作室",
         "video": "视频创作台",
         "prompts": "提示词库",
         "assets": "我的素材",
@@ -693,10 +694,6 @@
         "parameters": "参数",
         "model": "模型",
         "configRequired": "请先完成配置",
-        "tabs": {
-            "image": "图片生成",
-            "storyboard": "分镜创作室"
-        },
         "mobile": {
             "logs": "记录"
         },
@@ -778,10 +775,6 @@
     "storyboardStudio": {
         "title": "分镜创作室",
         "description": "将剧本转成可校验、可导出的结构化分镜文档",
-        "tabs": {
-            "image": "图片生成",
-            "storyboard": "分镜创作室"
-        },
         "input": {
             "title": "作品标题",
             "titlePlaceholder": "例如：雨夜来客",
@@ -2239,6 +2232,10 @@
             "image": {
                 "title": "生图工作台 | Canvan",
                 "description": "使用 AI 生成和编辑图片。"
+            },
+            "storyboard": {
+                "title": "分镜创作室 | Canvan",
+                "description": "将剧本生成可校验、可导出的结构化分镜文档。"
             },
             "video": {
                 "title": "视频创作台 | Canvan",

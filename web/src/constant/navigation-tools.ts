@@ -1,17 +1,22 @@
-import { Building2, FileText, ImagePlus, Images, Maximize2, Video } from "lucide-react";
+import { Building2, Clapperboard, FileText, ImagePlus, Images, Maximize2, Video } from "lucide-react";
 
 import { enterpriseCapabilities, type EnterpriseIdentity } from "@/lib/account-access";
 
 export const navigationTools = [
     {
-        slug: "canvas",
-        labelKey: "navigation.canvas",
-        icon: Maximize2,
-    },
-    {
         slug: "image",
         labelKey: "navigation.image",
         icon: ImagePlus,
+    },
+    {
+        slug: "storyboard",
+        labelKey: "navigation.storyboard",
+        icon: Clapperboard,
+    },
+    {
+        slug: "canvas",
+        labelKey: "navigation.canvas",
+        icon: Maximize2,
     },
     {
         slug: "video",
