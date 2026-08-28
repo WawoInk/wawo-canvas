@@ -2585,6 +2585,38 @@
                     "standard": "标准"
                 },
                 "label": "AI 多角度：{{horizontal}}，{{pitch}}，镜头距离 {{distance}}，{{lens}}镜头"
+            },
+            "materialImport": {
+                "title": "导入素材",
+                "description": "从设备上传，或从已配置的火山素材库导入图片、视频和音频。",
+                "replaceHint": "正在替换“{{title}}”，请选择新的素材来源。",
+                "local": {
+                    "title": "本地素材",
+                    "description": "从当前设备上传图片、视频或音频，只添加到当前画布。",
+                    "hint": "不会保存到我的素材库。"
+                },
+                "actions": {
+                    "add": "添加到画布",
+                    "replace": "替换节点",
+                    "refresh": "刷新",
+                    "retry": "重试"
+                },
+                "volcengine": {
+                    "title": "火山素材",
+                    "description": "浏览已配置火山素材库中的远端素材。",
+                    "loginRequired": "请先登录后浏览火山素材。",
+                    "loadLibrariesFailed": "无法加载火山素材库",
+                    "noLibraries": "暂无可用的火山素材库",
+                    "selectLibrary": "选择素材库",
+                    "searchPlaceholder": "按素材名称搜索",
+                    "loadAssetsFailed": "无法加载素材",
+                    "noMatch": "没有匹配的素材",
+                    "empty": "当前素材库还没有素材",
+                    "total": "共 {{count}} 项素材",
+                    "unnamed": "未命名素材",
+                    "previewUnavailable": "暂无可预览的媒体",
+                    "previewFailed": "媒体预览加载失败"
+                }
             }
         },
         "actions": {
@@ -2754,6 +2786,10 @@
                     "prompt": "提示词",
                     "imageSize": "图片大小"
                 }
+            },
+            "source": {
+                "volcengine": "火山素材",
+                "library": "素材库"
             }
         },
         "angle": {

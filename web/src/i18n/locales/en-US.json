@@ -2585,6 +2585,38 @@
                     "standard": "standard"
                 },
                 "label": "AI multi-angle: {{horizontal}}, {{pitch}}, camera distance {{distance}}, {{lens}} lens"
+            },
+            "materialImport": {
+                "title": "Import media",
+                "description": "Upload from this device or import images, videos, and audio from configured Volcengine asset libraries.",
+                "replaceHint": "Choose a new source to replace “{{title}}”.",
+                "local": {
+                    "title": "Local media",
+                    "description": "Upload an image, video, or audio file from this device. It is added only to this canvas.",
+                    "hint": "It will not be saved to My assets."
+                },
+                "actions": {
+                    "add": "Add to canvas",
+                    "replace": "Replace node",
+                    "refresh": "Refresh",
+                    "retry": "Retry"
+                },
+                "volcengine": {
+                    "title": "Volcengine media",
+                    "description": "Browse remote media in configured Volcengine asset libraries.",
+                    "loginRequired": "Sign in to browse Volcengine media.",
+                    "loadLibrariesFailed": "Unable to load Volcengine asset libraries",
+                    "noLibraries": "No Volcengine asset libraries are available",
+                    "selectLibrary": "Select an asset library",
+                    "searchPlaceholder": "Search by asset name",
+                    "loadAssetsFailed": "Unable to load assets",
+                    "noMatch": "No matching assets",
+                    "empty": "This asset library has no media yet",
+                    "total": "{{count}} assets",
+                    "unnamed": "Untitled asset",
+                    "previewUnavailable": "No preview is available",
+                    "previewFailed": "Media preview could not be loaded"
+                }
             }
         },
         "actions": {
@@ -2754,6 +2786,10 @@
                     "prompt": "Prompt",
                     "imageSize": "Image Size"
                 }
+            },
+            "source": {
+                "volcengine": "Volcengine",
+                "library": "Asset library"
             }
         },
         "angle": {
