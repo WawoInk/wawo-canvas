@@ -3,9 +3,9 @@ import { test } from "node:test";
 
 import { navigationTools } from "./navigation-tools.ts";
 
-test("primary creation navigation places storyboard between image workbench and canvas", () => {
+test("top navigation follows the requested product order", () => {
     assert.deepEqual(
-        navigationTools.slice(0, 3).map((tool) => tool.slug),
-        ["image", "storyboard", "canvas"],
+        navigationTools.map((tool) => tool.slug),
+        ["canvas", "storyboard", "image", "video", "assets", "volcengine-assets", "prompts"],
     );
 });

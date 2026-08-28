@@ -4,9 +4,9 @@ import { enterpriseCapabilities, type EnterpriseIdentity } from "@/lib/account-a
 
 export const navigationTools = [
     {
-        slug: "image",
-        labelKey: "navigation.image",
-        icon: ImagePlus,
+        slug: "canvas",
+        labelKey: "navigation.canvas",
+        icon: Maximize2,
     },
     {
         slug: "storyboard",
@@ -14,19 +14,14 @@ export const navigationTools = [
         icon: Clapperboard,
     },
     {
-        slug: "canvas",
-        labelKey: "navigation.canvas",
-        icon: Maximize2,
+        slug: "image",
+        labelKey: "navigation.image",
+        icon: ImagePlus,
     },
     {
         slug: "video",
         labelKey: "navigation.video",
         icon: Video,
-    },
-    {
-        slug: "prompts",
-        labelKey: "navigation.prompts",
-        icon: FileText,
     },
     {
         slug: "assets",
@@ -37,6 +32,11 @@ export const navigationTools = [
         slug: "volcengine-assets",
         labelKey: "navigation.volcengineAssets",
         icon: Images,
+    },
+    {
+        slug: "prompts",
+        labelKey: "navigation.prompts",
+        icon: FileText,
     },
 ] as const;
 
