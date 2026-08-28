@@ -8,15 +8,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, App, Button, Card, Drawer, Empty, Form, Input, Modal, Pagination, Popconfirm, Result, Select, Skeleton, Spin, Tabs, Tag, Typography, Upload, type UploadFile } from "antd";
 
 import {
-    createVolcengineAsset,
+    createVolcengineAssets,
     deleteVolcengineAsset,
     fetchVolcengineAssetOutbounds,
     getVolcengineAsset,
     listVolcengineAssets,
     updateVolcengineAsset,
-    uploadVolcengineAsset,
+    uploadVolcengineAssets,
     volcengineAssetTypes,
     type VolcengineAsset,
+    type VolcengineAssetBatchResult,
     type VolcengineAssetInput,
     type VolcengineLocalAssetInput,
     type VolcengineAssetType,
@@ -33,6 +34,21 @@ type AssetScope = {
 
 type AssetFormValues = VolcengineAssetInput & { file?: UploadFile[] };
 type AssetUploadSource = "url" | "local";
+
+function mediaURLs(value: string) {
+    return value.split(/\r?\n/).map((url) => url.trim()).filter(Boolean);
+}
+
+function mediaAssetType(mimeType: string): VolcengineAssetType | undefined {
+    if (mimeType.startsWith("image/")) return "Image";
+    if (mimeType.startsWith("video/")) return "Video";
+    if (mimeType.startsWith("audio/")) return "Audio";
+}
+
+function batchAssetName(name: string, index: number, total: number) {
+    const suffix = total === 1 ? "" : ` ${index + 1}`;
+    return `${name.trim().slice(0, 200 - suffix.length)}${suffix}`;
+}
 
 function outboundsQueryKey(scope: AssetScope) {
     return ["volcengine-assets", "outbounds", scope.userID, scope.enterpriseID] as const;
@@ -99,25 +115,26 @@ export default function VolcengineAssetsPage() {
     const invalidateAssets = (targetScope: AssetScope, outboundID: string) =>
         Promise.all([queryClient.invalidateQueries({ queryKey: assetListQueryPrefix(targetScope, outboundID) }), queryClient.invalidateQueries({ queryKey: assetDetailQueryPrefix(targetScope, outboundID) })]);
 
-    const createMutation = useMutation({
-        mutationFn: ({ targetScope, outboundID, input }: { targetScope: AssetScope; outboundID: string; input: AssetFormValues }) => createVolcengineAsset(token, outboundID, input),
-        onSuccess: async (_, variables) => {
+    const completeAssetBatch = async (result: VolcengineAssetBatchResult, variables: { targetScope: AssetScope; outboundID: string }) => {
+        if (result.successCount) {
             setFormOpen(false);
             setPage(1);
-            message.success(t("volcengineAssets.messages.created"));
-            await invalidateAssets(variables.targetScope, variables.outboundID);
-        },
+        }
+        if (!result.failedCount) message.success(t(result.total === 1 ? "volcengineAssets.messages.created" : "volcengineAssets.messages.batchCreated", { count: result.successCount }));
+        else if (result.successCount) message.warning(t("volcengineAssets.messages.batchPartial", { success: result.successCount, failed: result.failedCount }));
+        else message.error(errorMessage(result.firstError, t("volcengineAssets.messages.createFailed")));
+        await invalidateAssets(variables.targetScope, variables.outboundID);
+    };
+
+    const createMutation = useMutation({
+        mutationFn: ({ targetScope, outboundID, input }: { targetScope: AssetScope; outboundID: string; input: VolcengineAssetInput[] }) => createVolcengineAssets(token, outboundID, input),
+        onSuccess: completeAssetBatch,
         onError: (error) => message.error(errorMessage(error, t("volcengineAssets.messages.createFailed"))),
     });
 
     const localUploadMutation = useMutation({
-        mutationFn: ({ targetScope, outboundID, input }: { targetScope: AssetScope; outboundID: string; input: VolcengineLocalAssetInput }) => uploadVolcengineAsset(token, outboundID, input),
-        onSuccess: async (_, variables) => {
-            setFormOpen(false);
-            setPage(1);
-            message.success(t("volcengineAssets.messages.created"));
-            await invalidateAssets(variables.targetScope, variables.outboundID);
-        },
+        mutationFn: ({ targetScope, outboundID, input }: { targetScope: AssetScope; outboundID: string; input: VolcengineLocalAssetInput[] }) => uploadVolcengineAssets(token, outboundID, input),
+        onSuccess: completeAssetBatch,
         onError: (error) => message.error(errorMessage(error, t("volcengineAssets.messages.createFailed"))),
     });
 
@@ -372,15 +389,28 @@ export default function VolcengineAssetsPage() {
                             return;
                         }
                         if (uploadSource === "local") {
-                            const file = values.file?.[0]?.originFileObj;
-                            if (!file) {
+                            const files = values.file?.flatMap((item) => (item.originFileObj ? [item.originFileObj] : [])) || [];
+                            if (!files.length) {
                                 message.error(t("volcengineAssets.form.fileRequired"));
                                 return;
                             }
-                            localUploadMutation.mutate({ targetScope: scope, outboundID: selectedOutboundID, input: { file, name: values.name, assetType: values.assetType } });
+                            if (files.some((file) => mediaAssetType(file.type) !== values.assetType)) {
+                                message.error(t("volcengineAssets.form.fileTypeMismatch"));
+                                return;
+                            }
+                            localUploadMutation.mutate({
+                                targetScope: scope,
+                                outboundID: selectedOutboundID,
+                                input: files.map((file, index) => ({ file, name: batchAssetName(values.name, index, files.length), assetType: values.assetType })),
+                            });
                             return;
                         }
-                        createMutation.mutate({ targetScope: scope, outboundID: selectedOutboundID, input: values });
+                        const urls = mediaURLs(values.url);
+                        createMutation.mutate({
+                            targetScope: scope,
+                            outboundID: selectedOutboundID,
+                            input: urls.map((url, index) => ({ url, name: batchAssetName(values.name, index, urls.length), assetType: values.assetType })),
+                        });
                     }}
                 >
                     {!editing ? (
@@ -398,27 +428,25 @@ export default function VolcengineAssetsPage() {
                                 }}
                             />
                             {uploadSource === "url" ? (
-                                <Form.Item name="url" label={t("volcengineAssets.form.url")} rules={[{ required: true, message: t("volcengineAssets.form.urlRequired") }, { validator: (_, value) => validateMediaURL(_, value, t) }]}>
-                                    <Input placeholder="https://example.com/media.jpg" autoComplete="url" />
+                                <Form.Item name="url" label={t("volcengineAssets.form.url")} extra={t("volcengineAssets.form.urlDescription")} rules={[{ required: true, message: t("volcengineAssets.form.urlRequired") }, { validator: (_, value) => validateMediaURL(_, value, t) }]}>
+                                    <Input.TextArea placeholder={"https://example.com/media-1.jpg\nhttps://example.com/media-2.jpg"} autoSize={{ minRows: 3, maxRows: 6 }} />
                                 </Form.Item>
                             ) : (
-                                <Form.Item
-                                    name="file"
-                                    label={t("volcengineAssets.form.file")}
-                                    valuePropName="fileList"
-                                    getValueFromEvent={(event) => event?.fileList?.slice(-1) || []}
-                                    rules={[{ required: true, message: t("volcengineAssets.form.fileRequired") }]}
-                                >
+                                <Form.Item name="file" label={t("volcengineAssets.form.file")} valuePropName="fileList" getValueFromEvent={(event) => event?.fileList || []} rules={[{ required: true, message: t("volcengineAssets.form.fileRequired") }]}>
                                     <Upload
                                         accept="image/*,video/*,audio/*"
+                                        multiple
                                         beforeUpload={(file) => {
+                                            const fileType = mediaAssetType(file.type);
+                                            const selectedType = form.getFieldValue("assetType") as VolcengineAssetType | undefined;
+                                            if (!fileType || (selectedType && fileType !== selectedType)) {
+                                                message.error(t("volcengineAssets.form.fileTypeMismatch"));
+                                                return Upload.LIST_IGNORE;
+                                            }
+                                            if (!selectedType) form.setFieldValue("assetType", fileType);
                                             if (!form.getFieldValue("name")) form.setFieldValue("name", file.name.replace(/\.[^/.]+$/, ""));
-                                            if (file.type.startsWith("image/")) form.setFieldValue("assetType", "Image");
-                                            if (file.type.startsWith("video/")) form.setFieldValue("assetType", "Video");
-                                            if (file.type.startsWith("audio/")) form.setFieldValue("assetType", "Audio");
                                             return false;
                                         }}
-                                        maxCount={1}
                                     >
                                         <Button>{t("volcengineAssets.form.selectFile")}</Button>
                                     </Upload>
@@ -624,7 +652,8 @@ function isSafeMediaURL(value: string) {
 }
 
 function validateMediaURL(_: unknown, value: string, t: (key: string) => string) {
-    return !value || isSafeMediaURL(value) ? Promise.resolve() : Promise.reject(new Error(t("volcengineAssets.form.urlInvalid")));
+    const urls = mediaURLs(value || "");
+    return !value || (urls.length > 0 && urls.every(isSafeMediaURL)) ? Promise.resolve() : Promise.reject(new Error(t("volcengineAssets.form.urlInvalid")));
 }
 
 function errorMessage(error: unknown, fallback: string) {
