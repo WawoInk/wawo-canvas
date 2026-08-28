@@ -2028,6 +2028,7 @@
             "refresh": "刷新",
             "rename": "重命名",
             "registerURL": "登记 URL 素材",
+            "uploadLocal": "本地上传",
             "saveName": "保存名称",
             "cancel": "取消",
             "view": "查看",
@@ -2067,6 +2068,12 @@
             "total": "共 {{count}} 项素材"
         },
         "form": {
+            "urlSource": "公网 URL",
+            "localSource": "本地上传",
+            "localDescription": "选择本地图片、视频或音频。平台会先上传到 S3，再使用生成的公网 URL 登记到当前素材库。",
+            "file": "本地素材",
+            "fileRequired": "请选择本地素材",
+            "selectFile": "选择文件",
             "editDescription": "编辑仅会更新素材名称，不会修改 URL 或素材类型。",
             "createDescription": "通过公开的 http 或 https 媒体 URL 将图片、视频或音频登记到当前素材库。",
             "url": "媒体 URL",
