@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -168,8 +167,12 @@ type volcengineAssetRateWindow struct {
 
 var assetRateWindow = volcengineAssetRateWindow{hits: map[string][]time.Time{}}
 
-// ponytail: serialize rare first-use provisioning; shard per scope only if this becomes a measured bottleneck.
-var volcengineAssetProvisionMu sync.Mutex
+var (
+	volcengineAssetProxy = http.ProxyFromEnvironment
+
+	// ponytail: serialize rare first-use provisioning; shard per scope only if this becomes a measured bottleneck.
+	volcengineAssetProvisionMu sync.Mutex
+)
 
 // AdminVolcengineAssetConfig returns the redacted independent config as JSON for the admin editor.
 func AdminVolcengineAssetConfig() (string, error) {
@@ -895,21 +898,8 @@ func volcengineAssetHTTPClient(endpoint string) (*http.Client, func(), error) {
 		return nil, func() {}, errors.New("invalid transport")
 	}
 	transport := base.Clone()
-	if !volcengineAssetLoopbackHost(parsed.Hostname()) {
-		transport.Proxy = http.ProxyURL(&url.URL{Scheme: "http", Host: "127.0.0.1:7897"})
-	} else {
-		transport.Proxy = nil
-	}
+	transport.Proxy = volcengineAssetProxy
 	return &http.Client{Timeout: 30 * time.Second, Transport: transport}, transport.CloseIdleConnections, nil
-}
-
-func volcengineAssetLoopbackHost(host string) bool {
-	host = strings.TrimSuffix(strings.ToLower(host), ".")
-	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
 }
 
 func signVolcengineAssetRequest(request *http.Request, body []byte, accessKey, secretKey, region, signHost string) {
