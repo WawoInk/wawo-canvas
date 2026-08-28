@@ -71,7 +71,8 @@ type GenerationCapabilities struct {
 
 // MediaReference identifies an authorized platform file.
 type MediaReference struct {
-	FileID       string `json:"fileId"`
+	FileID       string `json:"fileId,omitempty"`
+	AssetID      string `json:"assetId,omitempty"`
 	SourceNodeID string `json:"sourceNodeId,omitempty"`
 	Name         string `json:"name,omitempty"`
 }
