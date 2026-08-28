@@ -2028,6 +2028,7 @@
             "refresh": "刷新",
             "rename": "重命名",
             "registerURL": "登记 URL 素材",
+            "uploadLocal": "本地上传",
             "saveName": "保存名称",
             "cancel": "取消",
             "view": "查看",
@@ -2067,6 +2068,12 @@
             "total": "共 {{count}} 项素材"
         },
         "form": {
+            "urlSource": "公网 URL",
+            "localSource": "本地上传",
+            "localDescription": "选择本地图片、视频或音频。平台会先上传到 S3，再使用生成的公网 URL 登记到当前素材库。",
+            "file": "本地素材",
+            "fileRequired": "请选择本地素材",
+            "selectFile": "选择文件",
             "editDescription": "编辑仅会更新素材名称，不会修改 URL 或素材类型。",
             "createDescription": "通过公开的 http 或 https 媒体 URL 将图片、视频或音频登记到当前素材库。",
             "url": "媒体 URL",
@@ -2585,6 +2592,38 @@
                     "standard": "标准"
                 },
                 "label": "AI 多角度：{{horizontal}}，{{pitch}}，镜头距离 {{distance}}，{{lens}}镜头"
+            },
+            "materialImport": {
+                "title": "导入素材",
+                "description": "从设备上传，或从已配置的火山素材库导入图片、视频和音频。",
+                "replaceHint": "正在替换“{{title}}”，请选择新的素材来源。",
+                "local": {
+                    "title": "本地素材",
+                    "description": "从当前设备上传图片、视频或音频，只添加到当前画布。",
+                    "hint": "不会保存到我的素材库。"
+                },
+                "actions": {
+                    "add": "添加到画布",
+                    "replace": "替换节点",
+                    "refresh": "刷新",
+                    "retry": "重试"
+                },
+                "volcengine": {
+                    "title": "火山素材",
+                    "description": "浏览已配置火山素材库中的远端素材。",
+                    "loginRequired": "请先登录后浏览火山素材。",
+                    "loadLibrariesFailed": "无法加载火山素材库",
+                    "noLibraries": "暂无可用的火山素材库",
+                    "selectLibrary": "选择素材库",
+                    "searchPlaceholder": "按素材名称搜索",
+                    "loadAssetsFailed": "无法加载素材",
+                    "noMatch": "没有匹配的素材",
+                    "empty": "当前素材库还没有素材",
+                    "total": "共 {{count}} 项素材",
+                    "unnamed": "未命名素材",
+                    "previewUnavailable": "暂无可预览的媒体",
+                    "previewFailed": "媒体预览加载失败"
+                }
             }
         },
         "actions": {
@@ -2754,6 +2793,10 @@
                     "prompt": "提示词",
                     "imageSize": "图片大小"
                 }
+            },
+            "source": {
+                "volcengine": "火山素材",
+                "library": "素材库"
             }
         },
         "angle": {
@@ -2833,7 +2876,8 @@
                 "shortDramaScriptRequired": "请输入短剧脚本",
                 "shortDramaAssetRequired": "请连接至少一张短剧资产图片",
                 "shortDramaRoleRequired": "请为图片「{{name}}」选择角色",
-                "imageNotUploaded": "图片「{{name}}」尚未上传到平台文件库"
+                "imageNotUploaded": "图片「{{name}}」尚未上传到平台文件库",
+                "volcengineAssetImageUnsupported": "当前图片生成不支持火山素材引用，请改用支持 asset:// 的视频模型或上传本地素材"
             }
         },
         "export": {

@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "@/services/api/request";
+import { apiGet, apiPost, apiPostForm } from "@/services/api/request";
 
 export const volcengineAssetTypes = ["Image", "Video", "Audio"] as const;
 
@@ -41,6 +41,10 @@ export type VolcengineAssetInput = {
     assetType: VolcengineAssetType;
 };
 
+export type VolcengineLocalAssetInput = Omit<VolcengineAssetInput, "url"> & {
+    file: File;
+};
+
 function actionURL(action: "ListAssets" | "GetAsset" | "CreateAsset" | "UpdateAsset" | "DeleteAsset", outboundID: string) {
     return `/api/v1/doubao/open/${action}?outbound=${encodeURIComponent(outboundID)}`;
 }
@@ -75,6 +79,14 @@ export function createVolcengineAsset(token: string, outboundID: string, input: 
         },
         token,
     );
+}
+
+export function uploadVolcengineAsset(token: string, outboundID: string, input: VolcengineLocalAssetInput) {
+    const form = new FormData();
+    form.set("file", input.file);
+    form.set("name", input.name.trim());
+    form.set("assetType", input.assetType);
+    return apiPostForm<VolcengineAsset>(`/api/v1/volcengine-assets/upload?outbound=${encodeURIComponent(outboundID)}`, form, token);
 }
 
 export function updateVolcengineAsset(token: string, outboundID: string, id: string, name: string) {

@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, App, Button, Card, Drawer, Empty, Form, Input, Modal, Pagination, Popconfirm, Result, Select, Skeleton, Spin, Tabs, Tag, Typography } from "antd";
+import { Alert, App, Button, Card, Drawer, Empty, Form, Input, Modal, Pagination, Popconfirm, Result, Select, Skeleton, Spin, Tabs, Tag, Typography, Upload, type UploadFile } from "antd";
 
 import {
     createVolcengineAsset,
@@ -14,9 +14,11 @@ import {
     getVolcengineAsset,
     listVolcengineAssets,
     updateVolcengineAsset,
+    uploadVolcengineAsset,
     volcengineAssetTypes,
     type VolcengineAsset,
     type VolcengineAssetInput,
+    type VolcengineLocalAssetInput,
     type VolcengineAssetType,
 } from "@/services/api/volcengine-assets";
 import { useUserStore } from "@/stores/use-user-store";
@@ -29,7 +31,8 @@ type AssetScope = {
     enterpriseID: string;
 };
 
-type AssetFormValues = VolcengineAssetInput;
+type AssetFormValues = VolcengineAssetInput & { file?: UploadFile[] };
+type AssetUploadSource = "url" | "local";
 
 function outboundsQueryKey(scope: AssetScope) {
     return ["volcengine-assets", "outbounds", scope.userID, scope.enterpriseID] as const;
@@ -68,6 +71,7 @@ export default function VolcengineAssetsPage() {
     const [preview, setPreview] = useState<VolcengineAsset | null>(null);
     const [editing, setEditing] = useState<VolcengineAsset | null>(null);
     const [formOpen, setFormOpen] = useState(false);
+    const [uploadSource, setUploadSource] = useState<AssetUploadSource>("url");
     const [form] = Form.useForm<AssetFormValues>();
 
     const outboundsQuery = useQuery({
@@ -106,6 +110,17 @@ export default function VolcengineAssetsPage() {
         onError: (error) => message.error(errorMessage(error, t("volcengineAssets.messages.createFailed"))),
     });
 
+    const localUploadMutation = useMutation({
+        mutationFn: ({ targetScope, outboundID, input }: { targetScope: AssetScope; outboundID: string; input: VolcengineLocalAssetInput }) => uploadVolcengineAsset(token, outboundID, input),
+        onSuccess: async (_, variables) => {
+            setFormOpen(false);
+            setPage(1);
+            message.success(t("volcengineAssets.messages.created"));
+            await invalidateAssets(variables.targetScope, variables.outboundID);
+        },
+        onError: (error) => message.error(errorMessage(error, t("volcengineAssets.messages.createFailed"))),
+    });
+
     const renameMutation = useMutation({
         mutationFn: ({ targetScope, outboundID, id, name }: { targetScope: AssetScope; outboundID: string; id: string; name: string }) => updateVolcengineAsset(token, outboundID, id, name),
         onSuccess: async (_, variables) => {
@@ -128,8 +143,8 @@ export default function VolcengineAssetsPage() {
         onError: (error) => message.error(errorMessage(error, t("volcengineAssets.messages.deleteFailed"))),
     });
 
-    const isMutating = createMutation.isPending || renameMutation.isPending || deleteMutation.isPending;
-    const isFormSubmitting = createMutation.isPending || renameMutation.isPending;
+    const isMutating = createMutation.isPending || localUploadMutation.isPending || renameMutation.isPending || deleteMutation.isPending;
+    const isFormSubmitting = createMutation.isPending || localUploadMutation.isPending || renameMutation.isPending;
 
     useEffect(() => {
         setPage(1);
@@ -138,6 +153,7 @@ export default function VolcengineAssetsPage() {
         setPreview(null);
         setEditing(null);
         setFormOpen(false);
+        setUploadSource("url");
         form.resetFields();
     }, [form, scopeKey]);
 
@@ -148,7 +164,8 @@ export default function VolcengineAssetsPage() {
 
     useEffect(() => {
         if (!formOpen) return;
-        form.setFieldsValue(editing ? { name: editing.Name } : { name: "", url: "", assetType: "Image" });
+        setUploadSource("url");
+        form.setFieldsValue(editing ? { name: editing.Name } : { name: "", url: "", assetType: "Image", file: [] });
     }, [editing, form, formOpen]);
 
     if (!isReady) {
@@ -318,7 +335,7 @@ export default function VolcengineAssetsPage() {
 
             <Modal
                 open={formOpen}
-                title={editing ? t("volcengineAssets.actions.rename") : t("volcengineAssets.actions.registerURL")}
+                title={editing ? t("volcengineAssets.actions.rename") : uploadSource === "local" ? t("volcengineAssets.actions.uploadLocal") : t("volcengineAssets.actions.registerURL")}
                 okText={editing ? t("volcengineAssets.actions.saveName") : t("volcengineAssets.actions.create")}
                 cancelText={t("volcengineAssets.actions.cancel")}
                 onCancel={() => {
@@ -343,7 +360,7 @@ export default function VolcengineAssetsPage() {
                     </div>
                 }
             >
-                <p className="mb-5 text-sm leading-6 text-muted-foreground">{editing ? t("volcengineAssets.form.editDescription") : t("volcengineAssets.form.createDescription")}</p>
+                <p className="mb-5 text-sm leading-6 text-muted-foreground">{editing ? t("volcengineAssets.form.editDescription") : uploadSource === "local" ? t("volcengineAssets.form.localDescription") : t("volcengineAssets.form.createDescription")}</p>
                 <Form
                     id={FORM_ID}
                     form={form}
@@ -354,14 +371,53 @@ export default function VolcengineAssetsPage() {
                             renameMutation.mutate({ targetScope: scope, outboundID: selectedOutboundID, id: editing.Id, name: values.name });
                             return;
                         }
+                        if (uploadSource === "local") {
+                            const file = values.file?.[0]?.originFileObj;
+                            if (!file) {
+                                message.error(t("volcengineAssets.form.fileRequired"));
+                                return;
+                            }
+                            localUploadMutation.mutate({ targetScope: scope, outboundID: selectedOutboundID, input: { file, name: values.name, assetType: values.assetType } });
+                            return;
+                        }
                         createMutation.mutate({ targetScope: scope, outboundID: selectedOutboundID, input: values });
                     }}
                 >
                     {!editing ? (
                         <>
-                            <Form.Item name="url" label={t("volcengineAssets.form.url")} rules={[{ required: true, message: t("volcengineAssets.form.urlRequired") }, { validator: (_, value) => validateMediaURL(_, value, t) }]}>
-                                <Input placeholder="https://example.com/media.jpg" autoComplete="url" />
-                            </Form.Item>
+                            <Tabs
+                                activeKey={uploadSource}
+                                className="mb-4"
+                                items={[
+                                    { key: "url", label: t("volcengineAssets.form.urlSource") },
+                                    { key: "local", label: t("volcengineAssets.form.localSource") },
+                                ]}
+                                onChange={(value) => {
+                                    setUploadSource(value as AssetUploadSource);
+                                    form.setFieldValue("file", []);
+                                }}
+                            />
+                            {uploadSource === "url" ? (
+                                <Form.Item name="url" label={t("volcengineAssets.form.url")} rules={[{ required: true, message: t("volcengineAssets.form.urlRequired") }, { validator: (_, value) => validateMediaURL(_, value, t) }]}>
+                                    <Input placeholder="https://example.com/media.jpg" autoComplete="url" />
+                                </Form.Item>
+                            ) : (
+                                <Form.Item name="file" label={t("volcengineAssets.form.file")} valuePropName="fileList" getValueFromEvent={(event) => event?.fileList?.slice(-1) || []} rules={[{ required: true, message: t("volcengineAssets.form.fileRequired") }]}>
+                                    <Upload
+                                        accept="image/*,video/*,audio/*"
+                                        beforeUpload={(file) => {
+                                            if (!form.getFieldValue("name")) form.setFieldValue("name", file.name.replace(/\.[^/.]+$/, ""));
+                                            if (file.type.startsWith("image/")) form.setFieldValue("assetType", "Image");
+                                            if (file.type.startsWith("video/")) form.setFieldValue("assetType", "Video");
+                                            if (file.type.startsWith("audio/")) form.setFieldValue("assetType", "Audio");
+                                            return false;
+                                        }}
+                                        maxCount={1}
+                                    >
+                                        <Button>{t("volcengineAssets.form.selectFile")}</Button>
+                                    </Upload>
+                                </Form.Item>
+                            )}
                             <Form.Item name="assetType" label={t("volcengineAssets.form.type")} rules={[{ required: true, message: t("volcengineAssets.form.typeRequired") }]}>
                                 <Select options={volcengineAssetTypes.map((value) => ({ value, label: assetTypeLabel(value, t) }))} />
                             </Form.Item>

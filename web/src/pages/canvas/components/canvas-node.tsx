@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { ChevronRight, Image as ImageIcon, Music2, RefreshCw, Star, Video } from "lucide-react";
+import { ChevronRight, Cloud, Image as ImageIcon, Music2, RefreshCw, Star, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -121,8 +121,11 @@ export const CanvasNode = React.memo(function CanvasNode({
     const isBatchRoot = data.type === CanvasNodeType.Image && Boolean(data.metadata?.isBatchRoot) && batchCount > 1;
     const isBatchChild = data.type === CanvasNodeType.Image && Boolean(data.metadata?.batchRootId);
     const isActive = isConnectionTarget || isSelected || isFocusRelated;
+    const isVolcengineAsset = data.metadata?.materialSource === "volcengine";
+    const volcengineAccent = { background: theme.toolbar.activeBg, border: theme.node.activeStroke, text: theme.toolbar.activeText };
     // ponytail: loading image border matches video's default inactive border (theme.node.stroke)
-    const imageBorderColor = isImageLoading ? theme.node.stroke : isActive ? selectionBlue : isRelated && !isBatchChild ? theme.node.muted : "transparent";
+    const imageBorderColor = isImageLoading ? theme.node.stroke : isActive ? selectionBlue : isRelated && !isBatchChild ? theme.node.muted : isVolcengineAsset ? volcengineAccent.border : "transparent";
+    const nodeBorderColor = hasImageContent ? imageBorderColor : isActive ? selectionBlue : isRelated ? theme.node.muted : isVolcengineAsset ? volcengineAccent.border : theme.node.stroke;
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const resizeRef = useRef({
         isResizing: false,
@@ -271,8 +274,8 @@ export const CanvasNode = React.memo(function CanvasNode({
                 className="relative h-full w-full overflow-visible rounded-3xl border-2"
                 style={{
                     background: hasImageContent || hasVideoContent ? "transparent" : theme.node.fill,
-                    borderColor: hasImageContent ? imageBorderColor : isActive ? selectionBlue : isRelated ? theme.node.muted : theme.node.stroke,
-                    boxShadow: isActive ? `0 0 0 1px ${selectionBlue}55` : isRelated && !isBatchChild ? `0 0 0 1px ${theme.node.muted}55, 0 18px 48px rgba(0,0,0,.14)` : undefined,
+                    borderColor: nodeBorderColor,
+                    boxShadow: isActive ? `0 0 0 1px ${selectionBlue}55` : isRelated && !isBatchChild ? `0 0 0 1px ${theme.node.muted}55, 0 18px 48px rgba(0,0,0,.14)` : isVolcengineAsset ? `0 0 0 1px ${volcengineAccent.border}44` : undefined,
                 }}
                 onMouseDown={(event) => onMouseDown(event, data.id)}
                 onDoubleClick={(event) => {
@@ -327,6 +330,7 @@ export const CanvasNode = React.memo(function CanvasNode({
                 </div>
 
                 {showImageInfo && hasImageContent ? <ImageInfoBar node={data} /> : null}
+                {isVolcengineAsset ? <VolcengineSourceBadge libraryName={data.metadata?.volcengineAssetOutboundName} accent={volcengineAccent} t={t} /> : null}
                 {resourceLabel ? <ResourceLabelBadge reference={resourceLabel} /> : null}
 
                 {!hasImageContent && !hasVideoContent && !hasAudioContent ? <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12" style={{ background: `linear-gradient(to top, ${theme.canvas.background}66, transparent)` }} /> : null}
@@ -466,6 +470,16 @@ function TextContent({ node, theme, t, isEditingContent, textareaRef, mentionRef
                 </div>
             )}
         </div>
+    );
+}
+
+function VolcengineSourceBadge({ libraryName, accent, t }: { libraryName?: string; accent: { background: string; border: string; text: string }; t: TFunction }) {
+    return (
+        <span className="pointer-events-none absolute left-3 top-3 z-30 flex max-w-[calc(100%-24px)] items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium shadow-sm backdrop-blur-sm" style={{ background: accent.background, borderColor: accent.border, color: accent.text }}>
+            <Cloud className="size-3 shrink-0" />
+            <span>{t("canvas.node.source.volcengine")}</span>
+            <span className="min-w-0 truncate opacity-80">· {libraryName || t("canvas.node.source.library")}</span>
+        </span>
     );
 }
 

@@ -87,7 +87,7 @@ export type GenerationProfile = {
     };
 };
 
-export type PlatformMediaReference = { fileId: string; sourceNodeId?: string; name?: string };
+export type PlatformMediaReference = { fileId?: string; assetId?: string; sourceNodeId?: string; name?: string };
 export type GeneratedFile = { fileId: string; mimeType: string; bytes?: number; width?: number; height?: number; durationMs?: number };
 export type GenerationShot = { index: number; durationSeconds?: number; fileId?: string; status: string };
 export type GenerationResult = { kind: "video"; file: GeneratedFile } | { kind: "short-drama"; file: GeneratedFile; thumbnailFileId?: string; shots?: GenerationShot[] };
