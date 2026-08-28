@@ -19,6 +19,27 @@
 - 补充时写成明确、可执行的规则，避免只写模糊描述。
 - 新规则应放到最相关的章节；找不到合适章节时放到“项目注意事项”。
 
+## Git Workflow Rules
+
+Before starting any development task, you MUST first determine the task type and select the correct parent branch:
+
+- **Feature development** → `dev`
+- **Bug fixes for issues existing in `main`** → `fix`
+- **Planned or large-scale refactoring** → `refactor`
+- **Urgent production hotfixes** → `main`
+
+You MUST NOT perform actual development directly on `main`, `dev`, `fix`, or `refactor`. All code changes must be made in a dedicated task branch created from the appropriate parent branch.
+
+Before creating a new task branch, you MUST:
+
+1. Identify the task type and corresponding parent branch.
+2. Fetch and synchronize the parent branch with its latest remote state.
+3. Ensure the local parent branch is up to date.
+4. Create a new dedicated task branch from the latest version of that parent branch.
+5. Only then begin development.
+
+Do NOT create a new branch from the current branch without first verifying that it is the correct and up-to-date parent branch. Do NOT reuse the same task branch for unrelated tasks. After completing a task, commit the changes and merge the task branch back into its corresponding parent branch through the appropriate review and validation process.
+
 ## 后端规范
 
 - 后端使用 Go + Gin + GORM。
