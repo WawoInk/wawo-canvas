@@ -2,7 +2,7 @@
 
 import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, ImagePlus, LoaderCircle, PenLine, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { App, Button, Checkbox, Drawer, Empty, Image, Input, Modal, Tabs, Tag, Tooltip, Typography } from "antd";
+import { App, Button, Checkbox, Drawer, Empty, Image, Input, Modal, Tag, Tooltip, Typography } from "antd";
 import localforage from "localforage";
 import { saveAs } from "file-saver";
 import { useTranslation } from "react-i18next";
@@ -30,7 +30,6 @@ import { fetchImageHistory, deleteGenerationTask, recordGenerationTask, type Ima
 import { syncClient } from "@/services/sync-client";
 import { syncScheduler } from "@/services/sync-scheduler";
 import { formatDateTime, formatDimensions, formatNumber } from "@/i18n/formatters";
-import { StoryboardStudio } from "./storyboard/storyboard-studio";
 import {
     completeImageWorkbenchTask,
     cancelImageWorkbenchTask,
@@ -90,8 +89,6 @@ type GenerationLog = {
 type GenerationLogConfig = Pick<AiConfig, "model" | "imageModel" | "quality" | "size" | "count">;
 
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
-type WorkbenchTab = "image" | "storyboard";
-
 const LOG_STORE_KEY = "infinite-canvas:image_generation_logs";
 const RESULT_ACTION_BUTTON_CLASS = "min-w-0 px-1.5 [&_.ant-btn-icon]:shrink-0 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate";
 
@@ -117,7 +114,6 @@ export default function ImagePage() {
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const addAsset = useAssetStore((state) => state.addAsset);
-    const [activeWorkbench, setActiveWorkbench] = useState<WorkbenchTab>("image");
     const [prompt, setPrompt] = useState("");
     const [references, setReferences] = useState<ReferenceImage[]>([]);
     const [results, setResults] = useState<GenerationResult[]>([]);
@@ -754,7 +750,7 @@ export default function ImagePage() {
     return (
         <div className="flex h-full flex-col overflow-hidden bg-background text-foreground">
             <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 lg:grid-cols-[300px_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[320px_minmax(0,1fr)]">
-                <aside className={`thin-scrollbar min-h-0 overflow-y-auto rounded-lg border bg-card p-4 shadow-sm ${activeWorkbench === "image" ? "hidden lg:block" : "hidden"}`}>
+                <aside className="thin-scrollbar hidden min-h-0 overflow-y-auto rounded-lg border bg-card p-4 shadow-sm lg:block">
                     <LogPanel
                         logs={logs}
                         selectedLogIds={selectedLogIds}
@@ -766,16 +762,8 @@ export default function ImagePage() {
                     />
                 </aside>
 
-                <section className={activeWorkbench === "image" ? "grid gap-3 lg:min-h-0 lg:overflow-hidden xl:grid-cols-[420px_minmax(0,1fr)]" : "hidden"}>
+                <section className="grid gap-3 lg:min-h-0 lg:overflow-hidden xl:grid-cols-[420px_minmax(0,1fr)]">
                     <div className="thin-scrollbar flex flex-col rounded-lg border bg-card p-4 shadow-sm lg:min-h-0 lg:overflow-y-auto">
-                        <Tabs
-                            activeKey={activeWorkbench}
-                            onChange={(key) => setActiveWorkbench(key as WorkbenchTab)}
-                            items={[
-                                { key: "image", label: t("imageWorkbench.tabs.image") },
-                                { key: "storyboard", label: t("imageWorkbench.tabs.storyboard") },
-                            ]}
-                        />
                         <div>
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
@@ -902,7 +890,6 @@ export default function ImagePage() {
                         )}
                     </div>
                 </section>
-                {activeWorkbench === "storyboard" ? <StoryboardStudio activeTab={activeWorkbench} onTabChange={setActiveWorkbench} /> : null}
             </main>
             <input
                 ref={fileInputRef}

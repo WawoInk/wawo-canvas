@@ -1,6 +1,6 @@
 import { requestToolResponse } from "@/services/api/image";
 import type { AiConfig } from "@/stores/use-config-store";
-import { runStoryboardPipeline, type StoryboardPipelineInput, type StoryboardStage } from "@/pages/image/storyboard/storyboard";
+import { runStoryboardPipeline, type StoryboardPipelineInput, type StoryboardStage } from "@/pages/storyboard/storyboard";
 
 export function generateStoryboard(config: AiConfig, input: StoryboardPipelineInput, options?: { signal?: AbortSignal; onStage?: (stage: StoryboardStage) => void }) {
     return runStoryboardPipeline(
