@@ -62,21 +62,21 @@ function safeRecord(value: unknown): ScriptAgentWorkspaceRecord | null {
         title: typeof record.title === "string" ? record.title : "",
         source: typeof record.source === "string" ? record.source : "",
         messages: Array.isArray(record.messages)
-            ? record.messages.filter((message): message is ScriptAgentMessage => Boolean(message && typeof message === "object" && (message as ScriptAgentMessage).role && typeof (message as ScriptAgentMessage).content === "string")).map((message) => ({
-                  id: typeof message.id === "string" ? message.id : id("message"),
-                  role: message.role === "user" ? "user" : "assistant",
-                  content: message.content,
-                  createdAt: typeof message.createdAt === "string" ? message.createdAt : new Date().toISOString(),
-              }))
+            ? record.messages
+                  .filter((message): message is ScriptAgentMessage => Boolean(message && typeof message === "object" && (message as ScriptAgentMessage).role && typeof (message as ScriptAgentMessage).content === "string"))
+                  .map((message) => ({
+                      id: typeof message.id === "string" ? message.id : id("message"),
+                      role: message.role === "user" ? "user" : "assistant",
+                      content: message.content,
+                      createdAt: typeof message.createdAt === "string" ? message.createdAt : new Date().toISOString(),
+                  }))
             : [],
     };
 }
 
 function persistedRecord(workspace: ScriptAgentWorkspaceRecord): ScriptAgentWorkspaceRecord {
     const allowedConfigKeys: (keyof ScriptProjectConfigInput)[] = ["totalEpisodes", "episodeMinutes", "startChapter", "endChapter", "chapterIndexes", "platform", "aspectRatio", "style", "paywall"];
-    const configDraft = workspace.configDraft
-        ? Object.fromEntries(allowedConfigKeys.flatMap((key) => (workspace.configDraft?.[key] === undefined ? [] : [[key, workspace.configDraft[key]]])))
-        : undefined;
+    const configDraft = workspace.configDraft ? Object.fromEntries(allowedConfigKeys.flatMap((key) => (workspace.configDraft?.[key] === undefined ? [] : [[key, workspace.configDraft[key]]]))) : undefined;
     return {
         id: workspace.id,
         projectId: workspace.projectId,

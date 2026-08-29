@@ -9,7 +9,7 @@ import {
     transitionScriptAgentStage,
     validateScriptBatch,
     validateScriptProjectConfig,
-    type ScriptAgentError,
+    ScriptAgentError,
     type ScriptAgentStage,
     type ScriptArtifactReview,
     type ScriptProjectConfig,
@@ -19,16 +19,14 @@ import {
 } from "@/pages/storyboard/script-agent";
 import type { ScriptAgentWorkspaceRecord } from "@/pages/storyboard/script-agent-storage";
 
-export type ScriptAgentEvent =
-    | { type: "phase"; phase: ScriptAgentStage }
-    | { type: "delta"; text: string };
+export type ScriptAgentEvent = { type: "phase"; phase: ScriptAgentStage } | { type: "delta"; text: string };
 
 export type ScriptAgentRequestOptions = {
     signal?: AbortSignal;
     onEvent?: (event: ScriptAgentEvent) => void;
 };
 
-export type ScriptAgentAction = "confirm" | "approve" | "fix" | "redo" | "continue";
+export type ScriptAgentAction = "confirm" | "approve" | "fix" | "redo" | "continue" | "retry";
 
 type ToolResult = { content: string; toolCalls: Array<{ function?: { name?: string; arguments?: string } }> };
 type ConfigDecision = {
@@ -64,7 +62,12 @@ async function complete(config: AiConfig, prompt: string, requestTool: ResponseF
 
 function structuredJson(result: ToolResult, toolName: string): Record<string, unknown> {
     const call = result.toolCalls.find((item) => item.function?.name === toolName);
-    const raw = call?.function?.arguments || result.content.trim().replace(/^```json\s*/i, "").replace(/\s*```$/, "");
+    const raw =
+        call?.function?.arguments ||
+        result.content
+            .trim()
+            .replace(/^```json\s*/i, "")
+            .replace(/\s*```$/, "");
     if (!raw) throw new Error(`缺少结构化结果：${toolName}`);
     try {
         const value: unknown = JSON.parse(raw);
@@ -109,7 +112,18 @@ function completeConfig(title: string, source: string, draft: Partial<ScriptProj
     const config = { ...draft };
     if (!config.chapterIndexes?.length && config.startChapter && config.endChapter) config.chapterIndexes = chapterIndexesForRange(config.startChapter, config.endChapter);
     if (!title || !source) return null;
-    if (config.totalEpisodes === undefined || config.episodeMinutes === undefined || config.startChapter === undefined || config.endChapter === undefined || !config.chapterIndexes?.length || !config.platform || !config.aspectRatio || !config.style || !config.paywall) return null;
+    if (
+        config.totalEpisodes === undefined ||
+        config.episodeMinutes === undefined ||
+        config.startChapter === undefined ||
+        config.endChapter === undefined ||
+        !config.chapterIndexes?.length ||
+        !config.platform ||
+        !config.aspectRatio ||
+        !config.style ||
+        !config.paywall
+    )
+        return null;
     return validateScriptProjectConfig(config as ScriptProjectConfigInput);
 }
 
@@ -283,7 +297,8 @@ function scriptPrompt(workspace: ScriptAgentWorkspaceRecord, episodeNumber: numb
 function parseReview(result: ToolResult, type: "story_skeleton" | "adaptation_strategy", version: number): ScriptArtifactReview {
     const root = structuredJson(result, "submit_artifact_review");
     const grades: ScriptReviewGrade[] = ["A", "B", "C", "D"];
-    const grade = grades.includes(root.grade as ScriptReviewGrade) ? (root.grade as ScriptReviewGrade) : "C";
+    if (!grades.includes(root.grade as ScriptReviewGrade)) throw new ScriptAgentError("STRUCTURED_OUTPUT_INVALID", "审核等级必须是 A、B、C 或 D", "review.grade");
+    const grade = root.grade as ScriptReviewGrade;
     const issues: ScriptReviewIssue[] = Array.isArray(root.issues)
         ? root.issues.flatMap((issue) => {
               if (!issue || typeof issue !== "object") return [];
@@ -364,7 +379,8 @@ async function runAdaptationStrategy(config: AiConfig, workspace: ScriptAgentWor
     } catch (error) {
         if (options?.signal?.aborted) throw error;
         const message = errorMessage(error);
-        if (current.currentStage === "generating_adaptation_strategy" || current.currentStage === "reviewing_adaptation_strategy") current = patch(current, { currentStage: transitionScriptAgentStage(current.currentStage, "fail"), adaptationStatus: "failed" });
+        if (current.currentStage === "generating_adaptation_strategy" || current.currentStage === "reviewing_adaptation_strategy")
+            current = patch(current, { currentStage: transitionScriptAgentStage(current.currentStage, "fail"), adaptationStatus: "failed" });
         return assistant(current, `改编策略处理失败：${message}。你可以稍后重试。`);
     }
 }
@@ -374,7 +390,12 @@ function nextEpisodes(workspace: ScriptAgentWorkspaceRecord, count = 3) {
     const existing = new Set(workspace.scripts.map((script) => script.episodeNumber));
     let next = 1;
     while (existing.has(next)) next += 1;
-    return Array.from({ length: Math.min(count, total - next + 1) }, (_, index) => next + index);
+    const episodes: number[] = [];
+    while (episodes.length < Math.min(count, 5) && next <= total && !existing.has(next)) {
+        episodes.push(next);
+        next += 1;
+    }
+    return episodes;
 }
 
 async function runScriptBatch(config: AiConfig, workspace: ScriptAgentWorkspaceRecord, options?: ScriptAgentRequestOptions) {
@@ -414,6 +435,12 @@ async function confirmConfig(config: AiConfig, workspace: ScriptAgentWorkspaceRe
 
 async function applyAction(config: AiConfig, workspace: ScriptAgentWorkspaceRecord, action: ScriptAgentAction, instruction: string, options?: ScriptAgentRequestOptions) {
     if (action === "confirm") return confirmConfig(config, workspace, options);
+    if (action === "retry" && workspace.currentStage === "failed") {
+        if (workspace.storySkeletonStatus === "failed") return runStorySkeleton(config, patch(workspace, { currentStage: transitionScriptAgentStage(workspace.currentStage, "retry_story_skeleton"), storySkeletonStatus: "ready" }), instruction, options);
+        if (workspace.adaptationStatus === "failed")
+            return runAdaptationStrategy(config, patch(workspace, { currentStage: transitionScriptAgentStage(workspace.currentStage, "retry_adaptation_strategy"), adaptationStatus: "ready" }), instruction, options);
+        if (workspace.projectConfig && workspace.adaptationStatus === "approved") return runScriptBatch(config, patch(workspace, { currentStage: transitionScriptAgentStage(workspace.currentStage, "retry_script_batch") }), options);
+    }
     if (workspace.currentStage === "awaiting_story_skeleton_decision") {
         if (action === "approve") return runAdaptationStrategy(config, patch(workspace, { storySkeletonStatus: "approved", currentStage: transitionScriptAgentStage(workspace.currentStage, "approve_story_skeleton") }), "", options);
         if (action === "fix" || action === "redo") {
@@ -446,7 +473,12 @@ async function applyAction(config: AiConfig, workspace: ScriptAgentWorkspaceReco
 }
 
 async function decide(config: AiConfig, workspace: ScriptAgentWorkspaceRecord, message: string, options?: ScriptAgentRequestOptions) {
-    const result = await complete(config, `当前阶段需要用户确认。当前审核结果：${JSON.stringify(workspace.storySkeletonReview || workspace.adaptationReview || {})}\n用户消息：${message}\n请识别为批准、修复、重做、继续或 none。只有明确表达意图才使用 approve/fix/redo/continue。`, decisionTool, options);
+    const result = await complete(
+        config,
+        `当前阶段需要用户确认。当前审核结果：${JSON.stringify(workspace.storySkeletonReview || workspace.adaptationReview || {})}\n用户消息：${message}\n请识别为批准、修复、重做、继续或 none。只有明确表达意图才使用 approve/fix/redo/continue。`,
+        decisionTool,
+        options,
+    );
     const root = structuredJson(result, "submit_workflow_decision") as Partial<WorkflowDecision>;
     const action = root.action === "approve" || root.action === "fix" || root.action === "redo" || root.action === "continue" ? root.action : "none";
     if (action === "none") return assistant(workspace, stringValue(root.reply) || "请告诉我：批准、修复，或重做。");
@@ -472,7 +504,7 @@ export async function sendScriptAgentTurn(config: AiConfig, workspace: ScriptAge
         if (workspace.currentStage === "ready_for_story_skeleton") return runStorySkeleton(config, workspace, text, options);
         if (workspace.currentStage === "ready_for_adaptation_strategy") return runAdaptationStrategy(config, workspace, text, options);
         if (workspace.currentStage === "ready_for_script") return runScriptBatch(config, workspace, options);
-        return assistant(workspace, workspace.currentStage === "completed" ? "全部剧本已完成。" : "正在处理当前阶段，请稍候或点击停止。" );
+        return assistant(workspace, workspace.currentStage === "completed" ? "全部剧本已完成。" : "正在处理当前阶段，请稍候或点击停止。");
     } catch (error) {
         if (options?.signal?.aborted) throw error;
         return assistant(workspace, `处理失败：${errorMessage(error)}`);

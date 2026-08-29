@@ -317,6 +317,9 @@ export type ScriptAgentTransition =
     | "finish_script_batch"
     | "continue_scripts"
     | "finish_all_scripts"
+    | "retry_story_skeleton"
+    | "retry_adaptation_strategy"
+    | "retry_script_batch"
     | "fail";
 
 const SCRIPT_STAGE_TRANSITIONS: Partial<Record<ScriptAgentStage, Partial<Record<ScriptAgentTransition, ScriptAgentStage>>>> = {
@@ -341,6 +344,11 @@ const SCRIPT_STAGE_TRANSITIONS: Partial<Record<ScriptAgentStage, Partial<Record<
     selecting_script_batch: { select_script_batch: "generating_script_batch" },
     generating_script_batch: { finish_script_batch: "script_batch_completed", fail: "failed" },
     script_batch_completed: { continue_scripts: "ready_for_script", finish_all_scripts: "completed" },
+    failed: {
+        retry_story_skeleton: "ready_for_story_skeleton",
+        retry_adaptation_strategy: "ready_for_adaptation_strategy",
+        retry_script_batch: "ready_for_script",
+    },
 };
 
 export function transitionScriptAgentStage(stage: ScriptAgentStage, transition: ScriptAgentTransition): ScriptAgentStage {

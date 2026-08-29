@@ -308,3 +308,9 @@ test("single episode parser rejects missing screenplay markers and title mismatc
         (error) => error.code === "STRUCTURED_OUTPUT_INVALID" && error.path === "script.name",
     );
 });
+
+test("failed stages expose a guarded retry path for the failed artifact", () => {
+    assert.equal(transitionScriptAgentStage("failed", "retry_story_skeleton"), "ready_for_story_skeleton");
+    assert.equal(transitionScriptAgentStage("failed", "retry_adaptation_strategy"), "ready_for_adaptation_strategy");
+    assert.equal(transitionScriptAgentStage("failed", "retry_script_batch"), "ready_for_script");
+});
