@@ -401,7 +401,9 @@ function nextEpisodes(workspace: ScriptAgentWorkspaceRecord, count = 3) {
 async function runScriptBatch(config: AiConfig, workspace: ScriptAgentWorkspaceRecord, options?: ScriptAgentRequestOptions) {
     let current = workspace;
     try {
-        const episodes = assertCanGenerateScriptBatch(current, nextEpisodes(current));
+        const pendingEpisodes = nextEpisodes(current);
+        if (!pendingEpisodes.length && current.projectConfig) return assistant(patch(current, { currentStage: "completed" }), "全部剧本已经完成。");
+        const episodes = assertCanGenerateScriptBatch(current, pendingEpisodes);
         current = patch(current, { currentStage: transitionScriptAgentStage(current.currentStage, "open_script_batch_selection") });
         current = patch(current, { currentStage: transitionScriptAgentStage(current.currentStage, "select_script_batch") });
         emitPhase(options, current.currentStage);

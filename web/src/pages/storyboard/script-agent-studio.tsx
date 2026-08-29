@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import copyToClipboard from "copy-to-clipboard";
 import { Alert, App, Button, Input, InputNumber, Select, Tag } from "antd";
-import { Check, Clipboard, FileText, LoaderCircle, RotateCcw, Send, Sparkles, Square, Wrench } from "lucide-react";
+import { Check, LoaderCircle, Send, Sparkles, Square } from "lucide-react";
 
 import { ModelPicker } from "@/components/model-picker";
 import { useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
@@ -10,6 +10,7 @@ import { useUserStore } from "@/stores/use-user-store";
 import { appendScriptAgentMessage, loadScriptAgentWorkspace, saveScriptAgentWorkspace, type ScriptAgentWorkspaceRecord } from "./script-agent-storage";
 import { sendScriptAgentTurn, submitScriptAgentAction, type ScriptAgentAction, type ScriptAgentEvent } from "@/services/api/script-agent";
 import type { ScriptAgentStage, ScriptAspectRatio } from "./script-agent";
+import { ScriptAgentWorkspacePanel } from "./script-agent-workspace-panel";
 
 const aspectRatios: ScriptAspectRatio[] = ["16:9", "9:16", "1:1", "4:3", "3:4"];
 
@@ -46,17 +47,22 @@ export function ScriptAgentStudio() {
     const [workspace, setWorkspace] = useState<ScriptAgentWorkspaceRecord | null>(null);
     const [draft, setDraft] = useState("");
     const [running, setRunning] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [workspaceMutating, setWorkspaceMutating] = useState(false);
     const [error, setError] = useState("");
     const controllerRef = useRef<AbortController | null>(null);
     const activeAccountRef = useRef(accountId);
     const text = (key: string, fallback: string) => t(`scriptAgent.${key}`, { defaultValue: fallback });
     const model = config.textModel || config.model;
+    const busy = running || saving || workspaceMutating;
 
     useEffect(() => {
         activeAccountRef.current = accountId;
         let active = true;
         controllerRef.current?.abort();
         setWorkspace(null);
+        setSaving(false);
+        setWorkspaceMutating(false);
         setError("");
         void loadScriptAgentWorkspace(accountId)
             .then((value) => {
@@ -73,17 +79,20 @@ export function ScriptAgentStudio() {
 
     async function persist(value: ScriptAgentWorkspaceRecord) {
         if (activeAccountRef.current !== accountId) return;
+        setSaving(true);
         setWorkspace(value);
         try {
             const saved = await saveScriptAgentWorkspace(accountId, value);
             if (activeAccountRef.current === accountId) setWorkspace(saved);
         } catch {
             message.warning(text("messages.saveFailed", "工作区已更新，但保存失败"));
+        } finally {
+            if (activeAccountRef.current === accountId) setSaving(false);
         }
     }
 
     async function run(operation: (signal: AbortSignal, onEvent: (event: ScriptAgentEvent) => void) => Promise<ScriptAgentWorkspaceRecord>) {
-        if (!workspace || running) return;
+        if (!workspace || busy) return;
         if (!model || !isAiConfigReady({ ...config, model, textModel: model }, model)) {
             message.warning(text("messages.configRequired", "请先配置可用的文本模型"));
             openConfigDialog(false);
@@ -112,7 +121,7 @@ export function ScriptAgentStudio() {
 
     async function send() {
         const value = draft.trim();
-        if (!value || !workspace) return;
+        if (!value || !workspace || saving || workspaceMutating) return;
         setDraft("");
         const next = appendScriptAgentMessage(workspace, "user", value);
         await persist(next);
@@ -120,7 +129,7 @@ export function ScriptAgentStudio() {
     }
 
     async function action(actionName: ScriptAgentAction, instruction = "") {
-        if (!workspace) return;
+        if (!workspace || saving || workspaceMutating) return;
         const labels: Record<ScriptAgentAction, string> = { confirm: "确认配置", approve: "批准继续", fix: "要求修复", redo: "要求重做", continue: "继续生成", retry: "重试" };
         const next = appendScriptAgentMessage(workspace, "user", instruction ? `${labels[actionName]}：${instruction}` : labels[actionName]);
         await persist(next);
@@ -144,8 +153,6 @@ export function ScriptAgentStudio() {
             </div>
         );
 
-    const review = workspace.currentStage === "awaiting_story_skeleton_decision" ? workspace.storySkeletonReview : workspace.currentStage === "awaiting_adaptation_decision" ? workspace.adaptationReview : undefined;
-    const configComplete = Boolean(workspace.title && workspace.source && workspace.projectConfig);
     const canConfirm =
         workspace.currentStage === "collecting_config" &&
         Boolean(
@@ -160,8 +167,6 @@ export function ScriptAgentStudio() {
             workspace.configDraft?.style &&
             workspace.configDraft?.paywall,
         );
-    const totalEpisodes = workspace.projectConfig?.totalEpisodes || 0;
-    const nextEpisode = workspace.scripts.length ? Math.max(...workspace.scripts.map((item) => item.episodeNumber)) + 1 : 1;
 
     return (
         <div className="grid min-h-0 flex-1 gap-3 overflow-hidden lg:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)]">
@@ -202,7 +207,7 @@ export function ScriptAgentStudio() {
                                 void send();
                             }
                         }}
-                        disabled={running}
+                        disabled={busy}
                         autoSize={{ minRows: 3, maxRows: 7 }}
                         placeholder="输入配置或告诉我批准、修复、重做、继续……（Shift+Enter 换行）"
                     />
@@ -212,7 +217,7 @@ export function ScriptAgentStudio() {
                             type={running ? "default" : "primary"}
                             danger={running}
                             icon={running ? <Square className="size-4" /> : <Send className="size-4" />}
-                            disabled={running ? false : !draft.trim()}
+                            disabled={running ? false : busy || !draft.trim()}
                             onClick={() => (running ? stop() : void send())}
                         >
                             {running ? "停止" : "发送"}
@@ -221,130 +226,40 @@ export function ScriptAgentStudio() {
                 </div>
             </section>
 
-            <aside className="thin-scrollbar min-h-0 overflow-y-auto rounded-lg border bg-card p-4 shadow-sm">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                    <h3 className="font-semibold">项目工作区</h3>
-                    <ModelPicker config={config} value={model} capability="text" fullWidth={false} onChange={(value) => updateConfig("textModel", value)} onMissingConfig={() => openConfigDialog(false)} disabled={running} />
+            <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card shadow-sm">
+                <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+                    <div className="min-w-0">
+                        <h3 className="font-semibold">剧本工作区</h3>
+                        <p className="truncate text-xs text-muted-foreground">{workspace.title || "未命名作品"}</p>
+                    </div>
+                    <ModelPicker config={config} value={model} capability="text" fullWidth={false} onChange={(value) => updateConfig("textModel", value)} onMissingConfig={() => openConfigDialog(false)} disabled={busy} />
                 </div>
-                <div className="space-y-3 text-sm">
-                    <div className="rounded-lg border p-3">
-                        <div className="mb-2 font-medium">配置摘要</div>
-                        <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-muted-foreground">
-                            <span>作品</span>
-                            <span className="text-right text-foreground">{workspace.title || "待填写"}</span>
-                            <span>素材</span>
-                            <span className="text-right text-foreground">{workspace.source ? `${workspace.source.length} 字` : "待填写"}</span>
-                            {workspace.projectConfig ? (
-                                <>
-                                    <span>规模</span>
-                                    <span className="text-right text-foreground">
-                                        {workspace.projectConfig.totalEpisodes} 集 · {workspace.projectConfig.episodeMinutes} 分钟/集
-                                    </span>
-                                    <span>章节</span>
-                                    <span className="text-right text-foreground">
-                                        第 {workspace.projectConfig.startChapter}-{workspace.projectConfig.endChapter} 章
-                                    </span>
-                                    <span>平台 / 画幅</span>
-                                    <span className="text-right text-foreground">
-                                        {workspace.projectConfig.platform} · {workspace.projectConfig.aspectRatio}
-                                    </span>
-                                    <span>风格 / 付费</span>
-                                    <span className="text-right text-foreground">
-                                        {workspace.projectConfig.style} · {workspace.projectConfig.paywall}
-                                    </span>
-                                </>
-                            ) : (
-                                <span className="col-span-2 text-muted-foreground">请在左侧对话中补充完整配置</span>
-                            )}
-                        </div>
+                <div className="border-b px-4 py-3">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                        <span>素材 {workspace.source ? `${workspace.source.length} 字` : "待填写"}</span>
+                        {workspace.projectConfig ? (
+                            <>
+                                <span>
+                                    {workspace.projectConfig.totalEpisodes} 集 · {workspace.projectConfig.episodeMinutes} 分钟/集
+                                </span>
+                                <span>
+                                    第 {workspace.projectConfig.startChapter}-{workspace.projectConfig.endChapter} 章
+                                </span>
+                                <span>
+                                    {workspace.projectConfig.platform} · {workspace.projectConfig.aspectRatio}
+                                </span>
+                            </>
+                        ) : (
+                            <span>请在左侧对话中补充完整配置</span>
+                        )}
                     </div>
                     {canConfirm ? (
-                        <Button block type="primary" icon={<Check className="size-4" />} disabled={running} onClick={() => void action("confirm")}>
+                        <Button className="mt-3" type="primary" icon={<Check className="size-4" />} disabled={busy} onClick={() => void action("confirm")}>
                             确认配置并生成故事骨架
                         </Button>
                     ) : null}
-                    {configComplete ? (
-                        <div className="rounded-lg border p-3">
-                            <div className="mb-2 flex items-center gap-2 font-medium">
-                                <FileText className="size-4" />
-                                创作进度
-                            </div>
-                            <div className="space-y-1 text-sm text-muted-foreground">
-                                <div>故事骨架：{workspace.storySkeleton ? "已生成" : "未生成"}</div>
-                                <div>改编策略：{workspace.adaptationStrategy ? "已生成" : "未生成"}</div>
-                                <div>
-                                    剧本：{workspace.scripts.length}/{totalEpisodes} 集
-                                </div>
-                            </div>
-                        </div>
-                    ) : null}
-                    {review ? (
-                        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-                            <div className="mb-2 flex items-center justify-between">
-                                <span className="font-medium">审核报告</span>
-                                <Tag color={review.grade === "A" ? "green" : review.grade === "D" ? "red" : "gold"}>{review.grade} 级</Tag>
-                            </div>
-                            <div className="whitespace-pre-wrap text-sm leading-6">{review.markdown}</div>
-                            {review.issues.length ? (
-                                <div className="mt-3 space-y-2 border-t pt-3">
-                                    {review.issues.map((issue, index) => (
-                                        <div key={`${issue.check}-${index}`} className="text-sm">
-                                            <span className="font-medium">{issue.check || "检查项"}</span>：{issue.problem}
-                                            <div className="text-muted-foreground">建议：{issue.suggestion}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : null}
-                            <div className="mt-3 flex flex-wrap gap-2">
-                                <Button type="primary" size="small" icon={<Check className="size-3.5" />} disabled={running} onClick={() => void action("approve")}>
-                                    批准继续
-                                </Button>
-                                <Button size="small" icon={<Wrench className="size-3.5" />} disabled={running} onClick={() => void action("fix", "请根据审核报告修复当前产物。")}>
-                                    修复
-                                </Button>
-                                <Button size="small" icon={<RotateCcw className="size-3.5" />} disabled={running} onClick={() => void action("redo", "请重新生成当前产物。")}>
-                                    重做
-                                </Button>
-                            </div>
-                        </div>
-                    ) : null}
-                    {workspace.storySkeleton && workspace.currentStage !== "awaiting_story_skeleton_decision" ? (
-                        <div className="rounded-lg border p-3">
-                            <div className="mb-2 font-medium">故事骨架</div>
-                            <div className="whitespace-pre-wrap text-sm leading-6">{workspace.storySkeleton}</div>
-                        </div>
-                    ) : null}
-                    {workspace.adaptationStrategy && workspace.currentStage !== "awaiting_adaptation_decision" ? (
-                        <div className="rounded-lg border p-3">
-                            <div className="mb-2 font-medium">改编策略</div>
-                            <div className="whitespace-pre-wrap text-sm leading-6">{workspace.adaptationStrategy}</div>
-                        </div>
-                    ) : null}
-                    {workspace.scripts.map((script) => (
-                        <div key={`${script.episodeNumber}-${script.version || 0}`} className="rounded-lg border p-3">
-                            <div className="mb-2 flex items-center justify-between gap-2">
-                                <div className="font-medium">
-                                    EP{String(script.episodeNumber).padStart(2, "0")} · {script.name}
-                                </div>
-                                <Button size="small" icon={<Clipboard className="size-3.5" />} onClick={() => copyScript(script.content)}>
-                                    复制正文
-                                </Button>
-                            </div>
-                            <div className="whitespace-pre-wrap text-sm leading-6">{script.content}</div>
-                        </div>
-                    ))}
-                    {workspace.currentStage === "script_batch_completed" && nextEpisode <= totalEpisodes ? (
-                        <Button block icon={<Sparkles className="size-4" />} disabled={running} onClick={() => void action("continue")}>
-                            继续生成接下来的 3 集
-                        </Button>
-                    ) : null}
-                    {workspace.currentStage === "failed" ? (
-                        <Button block icon={<RotateCcw className="size-4" />} disabled={running} onClick={() => void action("retry")}>
-                            重试当前阶段
-                        </Button>
-                    ) : null}
-                    {workspace.currentStage === "completed" ? <Alert type="success" showIcon message="全部剧本已完成" /> : null}
                 </div>
+                <ScriptAgentWorkspacePanel workspace={workspace} running={busy} onChange={persist} onAction={action} onCopyScript={copyScript} onBusyChange={setWorkspaceMutating} />
             </aside>
         </div>
     );
