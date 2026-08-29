@@ -131,6 +131,139 @@ function positiveInteger(value: unknown): value is number {
     return Number.isInteger(value) && Number(value) > 0;
 }
 
+export type ScriptAgentStructuredCompletion = {
+    content: string;
+    toolCalls: Array<{ function: { name: string; arguments: string } }>;
+};
+
+export type StorySkeletonResult = { content: string };
+export type AdaptationStrategyResult = { content: string };
+export type ScriptEpisodeResult = { script: ScriptItem };
+
+const STORY_SKELETON_SECTIONS = ["故事核", "隐线", "人物小传", "三幕结构", "分集决策", "全局删减决策记录", "付费卡点设计", "股价级反转登记表"] as const;
+const ADAPTATION_STRATEGY_SECTIONS = ["核心改编原则", "主要删除决策", "世界观呈现策略"] as const;
+
+export function parseStorySkeletonResult(value: unknown): StorySkeletonResult {
+    const root = object(readStructuredResult(value, "submit_story_skeleton"), "storySkeleton");
+    const content = requiredString(root.content, "storySkeleton.content");
+    validateStorySkeletonMarkdown(content);
+    return { content };
+}
+
+export function validateStorySkeletonMarkdown(content: string): void {
+    requireMarkdownTitle(content, "故事骨架");
+    requireMarkdownSections(content, STORY_SKELETON_SECTIONS);
+}
+
+export function parseAdaptationStrategyResult(value: unknown): AdaptationStrategyResult {
+    const root = object(readStructuredResult(value, "submit_adaptation_strategy"), "adaptationStrategy");
+    const content = requiredString(root.content, "adaptationStrategy.content");
+    validateAdaptationStrategyMarkdown(content);
+    return { content };
+}
+
+export function validateAdaptationStrategyMarkdown(content: string): void {
+    requireMarkdownTitle(content, "关键决策记录");
+    requireMarkdownSections(content, ADAPTATION_STRATEGY_SECTIONS);
+}
+
+export function parseScriptEpisodeResult(value: unknown): ScriptEpisodeResult {
+    const root = object(readStructuredResult(value, "submit_script_episode"), "scriptEpisode");
+    if ("scripts" in root) throw new ScriptAgentError("STRUCTURED_OUTPUT_INVALID", "单次调用只能返回一个 script", "scriptEpisode.scripts");
+    const script = object(root.script, "scriptEpisode.script");
+    const episodeNumber = positiveIntegerValue(script.episodeNumber, "scriptEpisode.script.episodeNumber");
+    const name = requiredString(script.name, "scriptEpisode.script.name");
+    const content = requiredString(script.content, "scriptEpisode.script.content");
+    const sourceChapterIndexes = positiveIntegerArray(script.sourceChapterIndexes, "scriptEpisode.script.sourceChapterIndexes");
+    validateScriptMarkdown(content, name, episodeNumber);
+    return { script: { episodeNumber, name, content, sourceChapterIndexes: [...new Set(sourceChapterIndexes)].sort((a, b) => a - b) } };
+}
+
+export function validateScriptMarkdown(content: string, name: string, episodeNumber: number): void {
+    const lines = content.trim().split(/\r?\n/);
+    if (lines[0]?.trim() !== `# ${name}`) throw new ScriptAgentError("STRUCTURED_OUTPUT_INVALID", "剧本名称必须与 Markdown 标题一致", "script.name");
+    const namedEpisode = name.match(/\bEP(\d+)\b/i);
+    if (!namedEpisode || Number(namedEpisode[1]) !== episodeNumber) throw new ScriptAgentError("STRUCTURED_OUTPUT_INVALID", "剧本名称中的集号必须与 episodeNumber 一致", "script.episodeNumber");
+    requireMarkdownLine(content, /^#\s*目标时长：\s*\S/m, "目标时长");
+    requireMarkdownLine(content, /^#\s*平台：\s*\S/m, "平台");
+    requireMarkdownSections(content, ["剧情梗概"]);
+    requireMarkdownLine(content, /^---\s*$/m, "场景分隔符");
+    requireMarkdownLine(content, /^\d+-\d+\s+.+\s+(?:日|夜|晨|午|晚)\/(?:内|外)\s*$/m, "场景标题");
+    requireMarkdownLine(content, /^人物：\s*\S/m, "人物");
+    requireMarkdownLine(content, /^△\S/m, "场景描述");
+}
+
+function readStructuredResult(value: unknown, toolName: string): unknown {
+    if (!value || typeof value !== "object" || !("toolCalls" in value)) return value;
+    const completion = value as ScriptAgentStructuredCompletion;
+    const toolCall = completion.toolCalls?.find((item) => item.function?.name === toolName);
+    const json = toolCall?.function.arguments || stripJsonFence(completion.content || "");
+    if (!json) throw new ScriptAgentError("STRUCTURED_OUTPUT_INVALID", `缺少 ${toolName} 结构化结果`);
+    try {
+        return JSON.parse(json);
+    } catch {
+        throw new ScriptAgentError("STRUCTURED_OUTPUT_INVALID", `${toolName} 返回的 JSON 无效`);
+    }
+}
+
+function stripJsonFence(value: string): string {
+    const trimmed = value.trim();
+    const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+    return fenced?.[1] ?? trimmed;
+}
+
+function requireMarkdownTitle(content: string, title: string): void {
+    if (!new RegExp(`^#\\s+.+${escapeRegExp(title)}.*$`, "m").test(content)) {
+        throw new ScriptAgentError("MARKDOWN_SECTION_MISSING", `Markdown 缺少 ${title} 标题`, title);
+    }
+}
+
+function requireMarkdownSections(content: string, sections: readonly string[]): void {
+    const lines = content.split(/\r?\n/);
+    for (const section of sections) {
+        const index = lines.findIndex((line) => new RegExp(`^#{2,4}\\s+.*${escapeRegExp(section)}.*$`).test(line));
+        if (index < 0) throw new ScriptAgentError("MARKDOWN_SECTION_MISSING", `Markdown 缺少 ${section} 章节`, section);
+        const level = lines[index].match(/^(#+)/)?.[1].length ?? 2;
+        let end = index + 1;
+        while (end < lines.length) {
+            const nextLevel = lines[end].match(/^(#+)\s+/)?.[1].length;
+            if (nextLevel && nextLevel <= level) break;
+            end += 1;
+        }
+        const hasContent = lines.slice(index + 1, end).some((line) => !/^\s*(?:#{1,6}\s+|---\s*$)/.test(line) && /[\p{L}\p{N}]/u.test(line));
+        if (!hasContent) throw new ScriptAgentError("MARKDOWN_SECTION_MISSING", `Markdown 的 ${section} 章节不能为空`, section);
+    }
+}
+
+function object(value: unknown, path: string): Record<string, unknown> {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new ScriptAgentError("STRUCTURED_OUTPUT_INVALID", `${path} 必须是对象`, path);
+    return value as Record<string, unknown>;
+}
+
+function requiredString(value: unknown, path: string): string {
+    if (typeof value !== "string" || !value.trim()) throw new ScriptAgentError("STRUCTURED_OUTPUT_INVALID", `${path} 必须是非空字符串`, path);
+    return value;
+}
+
+function positiveIntegerValue(value: unknown, path: string): number {
+    if (!positiveInteger(value)) throw new ScriptAgentError("STRUCTURED_OUTPUT_INVALID", `${path} 必须是正整数`, path);
+    return value;
+}
+
+function positiveIntegerArray(value: unknown, path: string): number[] {
+    if (!Array.isArray(value) || !value.length || value.some((item) => !positiveInteger(item))) {
+        throw new ScriptAgentError("STRUCTURED_OUTPUT_INVALID", `${path} 必须是非空正整数数组`, path);
+    }
+    return value;
+}
+
+function requireMarkdownLine(content: string, pattern: RegExp, label: string): void {
+    if (!pattern.test(content)) throw new ScriptAgentError("MARKDOWN_SECTION_MISSING", `Markdown 缺少 ${label}`, label);
+}
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 export function validateScriptBatch(episodes: readonly number[], totalEpisodes: number, nextEpisodeNumber: number): number[] {
     if (episodes.length > 5) throw new ScriptAgentError("SCRIPT_BATCH_TOO_LARGE", "单批最多生成 5 集");
