@@ -130,3 +130,94 @@ export function validateScriptProjectConfig(input: ScriptProjectConfigInput, ava
 function positiveInteger(value: unknown): value is number {
     return Number.isInteger(value) && Number(value) > 0;
 }
+
+
+export function validateScriptBatch(episodes: readonly number[], totalEpisodes: number, nextEpisodeNumber: number): number[] {
+    if (episodes.length > 5) throw new ScriptAgentError("SCRIPT_BATCH_TOO_LARGE", "单批最多生成 5 集");
+    if (!episodes.length || !positiveInteger(totalEpisodes) || !positiveInteger(nextEpisodeNumber) || episodes.some((episode, index) => !positiveInteger(episode) || episode !== nextEpisodeNumber + index || episode > totalEpisodes)) {
+        throw new ScriptAgentError("SCRIPT_EPISODE_OUT_OF_ORDER", "剧本集号必须从下一集开始连续递增");
+    }
+    return [...episodes];
+}
+
+export function assertCanGenerateScriptBatch(workspace: ScriptAgentWorkspace, episodes: readonly number[]): number[] {
+    if (!workspace.projectConfig) throw new ScriptAgentError("PROJECT_CONFIG_REQUIRED", "请先确认项目配置");
+    if (!workspace.adaptationStrategy.trim()) throw new ScriptAgentError("ADAPTATION_STRATEGY_REQUIRED", "请先生成改编策略");
+    if (workspace.adaptationStatus !== "approved" || workspace.adaptationReview?.artifactType !== "adaptation_strategy") {
+        throw new ScriptAgentError("ADAPTATION_APPROVAL_REQUIRED", "改编策略必须审核并由用户批准");
+    }
+    if (workspace.currentStage !== "ready_for_script" && workspace.currentStage !== "selecting_script_batch") {
+        throw new ScriptAgentError("INVALID_STAGE_TRANSITION", `当前阶段 ${workspace.currentStage} 不能生成剧本`);
+    }
+    const existing = new Set(workspace.scripts.map((script) => script.episodeNumber));
+    let nextEpisodeNumber = 1;
+    while (existing.has(nextEpisodeNumber)) nextEpisodeNumber += 1;
+    return validateScriptBatch(episodes, workspace.projectConfig.totalEpisodes, nextEpisodeNumber);
+}
+
+export function assertCanGenerateAdaptationStrategy(workspace: ScriptAgentWorkspace): void {
+    if (!workspace.storySkeleton.trim()) throw new ScriptAgentError("STORY_SKELETON_REQUIRED", "请先生成故事骨架");
+    if (workspace.storySkeletonStatus !== "approved" || workspace.storySkeletonReview?.artifactType !== "story_skeleton") {
+        throw new ScriptAgentError("STORY_SKELETON_APPROVAL_REQUIRED", "故事骨架必须审核并由用户批准");
+    }
+    if (workspace.currentStage !== "ready_for_adaptation_strategy") {
+        throw new ScriptAgentError("INVALID_STAGE_TRANSITION", `当前阶段 ${workspace.currentStage} 不能生成改编策略`);
+    }
+}
+
+export type ScriptAgentTransition =
+    | "confirm_project_config"
+    | "start_story_skeleton"
+    | "finish_story_skeleton"
+    | "finish_story_skeleton_review"
+    | "approve_story_skeleton"
+    | "request_story_skeleton_revision"
+    | "request_story_skeleton_redo"
+    | "start_adaptation_strategy"
+    | "finish_adaptation_strategy"
+    | "finish_adaptation_review"
+    | "approve_adaptation_strategy"
+    | "request_adaptation_revision"
+    | "request_adaptation_redo"
+    | "open_script_batch_selection"
+    | "select_script_batch"
+    | "finish_script_batch"
+    | "continue_scripts"
+    | "finish_all_scripts"
+    | "fail";
+
+const SCRIPT_STAGE_TRANSITIONS: Partial<Record<ScriptAgentStage, Partial<Record<ScriptAgentTransition, ScriptAgentStage>>>> = {
+    collecting_config: { confirm_project_config: "ready_for_story_skeleton" },
+    ready_for_story_skeleton: { start_story_skeleton: "generating_story_skeleton" },
+    generating_story_skeleton: { finish_story_skeleton: "reviewing_story_skeleton", fail: "failed" },
+    reviewing_story_skeleton: { finish_story_skeleton_review: "awaiting_story_skeleton_decision", fail: "failed" },
+    awaiting_story_skeleton_decision: {
+        approve_story_skeleton: "ready_for_adaptation_strategy",
+        request_story_skeleton_revision: "ready_for_story_skeleton",
+        request_story_skeleton_redo: "ready_for_story_skeleton",
+    },
+    ready_for_adaptation_strategy: { start_adaptation_strategy: "generating_adaptation_strategy" },
+    generating_adaptation_strategy: { finish_adaptation_strategy: "reviewing_adaptation_strategy", fail: "failed" },
+    reviewing_adaptation_strategy: { finish_adaptation_review: "awaiting_adaptation_decision", fail: "failed" },
+    awaiting_adaptation_decision: {
+        approve_adaptation_strategy: "ready_for_script",
+        request_adaptation_revision: "ready_for_adaptation_strategy",
+        request_adaptation_redo: "ready_for_adaptation_strategy",
+    },
+    ready_for_script: { open_script_batch_selection: "selecting_script_batch" },
+    selecting_script_batch: { select_script_batch: "generating_script_batch" },
+    generating_script_batch: { finish_script_batch: "script_batch_completed", fail: "failed" },
+    script_batch_completed: { continue_scripts: "ready_for_script", finish_all_scripts: "completed" },
+};
+
+export function transitionScriptAgentStage(stage: ScriptAgentStage, transition: ScriptAgentTransition): ScriptAgentStage {
+    const next = SCRIPT_STAGE_TRANSITIONS[stage]?.[transition];
+    if (next) return next;
+    if (transition === "start_adaptation_strategy" && stage === "awaiting_story_skeleton_decision") {
+        throw new ScriptAgentError("STORY_SKELETON_APPROVAL_REQUIRED", "需要用户明确批准故事骨架");
+    }
+    if (transition === "open_script_batch_selection" && stage === "awaiting_adaptation_decision") {
+        throw new ScriptAgentError("ADAPTATION_APPROVAL_REQUIRED", "需要用户明确批准改编策略");
+    }
+    throw new ScriptAgentError("INVALID_STAGE_TRANSITION", `不能从 ${stage} 执行 ${transition}`);
+}

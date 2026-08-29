@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { validateScriptProjectConfig } from "./script-agent.ts";
+import { assertCanGenerateAdaptationStrategy, assertCanGenerateScriptBatch, transitionScriptAgentStage, validateScriptBatch, validateScriptProjectConfig } from "./script-agent.ts";
 
 test("project config is normalized and derives words per episode", () => {
     assert.deepEqual(
@@ -57,4 +57,93 @@ test("project config rejects incomplete, invalid and unavailable chapter data", 
     code({ ...valid, chapterIndexes: [1, 4] }, "CHAPTER_RANGE_INVALID");
     code({ ...valid, style: " " }, "PROJECT_CONFIG_INVALID");
     code({ ...valid, aspectRatio: "2:1" }, "PROJECT_CONFIG_INVALID");
+});
+
+
+const approvedWorkspace = {
+    id: "workspace-1",
+    projectId: "project-1",
+    currentStage: "ready_for_script",
+    projectConfig: {
+        totalEpisodes: 8,
+        episodeMinutes: 2,
+        startChapter: 1,
+        endChapter: 8,
+        chapterIndexes: [1, 2, 3, 4, 5, 6, 7, 8],
+        platform: "vertical_short_drama",
+        aspectRatio: "9:16",
+        style: "悬疑逆袭",
+        paywall: "前3集免费",
+        wordsPerEpisode: 300,
+    },
+    storySkeleton: "# 故事骨架",
+    storySkeletonStatus: "approved",
+    storySkeletonReview: { artifactType: "story_skeleton", artifactVersion: 1, grade: "A", summary: "通过", issues: [], decisions: [], markdown: "# 审核" },
+    adaptationStrategy: "# 关键决策记录",
+    adaptationStatus: "approved",
+    adaptationReview: { artifactType: "adaptation_strategy", artifactVersion: 1, grade: "B", summary: "可继续", issues: [], decisions: [], markdown: "# 审核" },
+    scripts: [],
+    version: 1,
+    updatedAt: "2026-08-29T00:00:00.000Z",
+};
+
+test("workflow transitions require explicit user decisions at both approval gates", () => {
+    assert.equal(transitionScriptAgentStage("collecting_config", "confirm_project_config"), "ready_for_story_skeleton");
+    assert.equal(transitionScriptAgentStage("ready_for_story_skeleton", "start_story_skeleton"), "generating_story_skeleton");
+    assert.equal(transitionScriptAgentStage("generating_story_skeleton", "finish_story_skeleton"), "reviewing_story_skeleton");
+    assert.equal(transitionScriptAgentStage("reviewing_story_skeleton", "finish_story_skeleton_review"), "awaiting_story_skeleton_decision");
+    assert.throws(
+        () => transitionScriptAgentStage("awaiting_story_skeleton_decision", "start_adaptation_strategy"),
+        (error) => error.code === "STORY_SKELETON_APPROVAL_REQUIRED",
+    );
+    assert.equal(transitionScriptAgentStage("awaiting_story_skeleton_decision", "approve_story_skeleton"), "ready_for_adaptation_strategy");
+    assert.equal(transitionScriptAgentStage("ready_for_adaptation_strategy", "start_adaptation_strategy"), "generating_adaptation_strategy");
+    assert.equal(transitionScriptAgentStage("generating_adaptation_strategy", "finish_adaptation_strategy"), "reviewing_adaptation_strategy");
+    assert.equal(transitionScriptAgentStage("reviewing_adaptation_strategy", "finish_adaptation_review"), "awaiting_adaptation_decision");
+    assert.throws(
+        () => transitionScriptAgentStage("awaiting_adaptation_decision", "open_script_batch_selection"),
+        (error) => error.code === "ADAPTATION_APPROVAL_REQUIRED",
+    );
+    assert.equal(transitionScriptAgentStage("awaiting_adaptation_decision", "approve_adaptation_strategy"), "ready_for_script");
+});
+
+
+test("adaptation generation requires an explicitly approved reviewed story skeleton", () => {
+    assert.doesNotThrow(() =>
+        assertCanGenerateAdaptationStrategy({ ...approvedWorkspace, currentStage: "ready_for_adaptation_strategy" }),
+    );
+    assert.throws(
+        () => assertCanGenerateAdaptationStrategy({ ...approvedWorkspace, currentStage: "ready_for_adaptation_strategy", storySkeleton: "" }),
+        (error) => error.code === "STORY_SKELETON_REQUIRED",
+    );
+    assert.throws(
+        () => assertCanGenerateAdaptationStrategy({ ...approvedWorkspace, currentStage: "ready_for_adaptation_strategy", storySkeletonStatus: "generated" }),
+        (error) => error.code === "STORY_SKELETON_APPROVAL_REQUIRED",
+    );
+    assert.throws(
+        () => assertCanGenerateAdaptationStrategy({ ...approvedWorkspace, currentStage: "ready_for_adaptation_strategy", storySkeletonReview: undefined }),
+        (error) => error.code === "STORY_SKELETON_APPROVAL_REQUIRED",
+    );
+});
+
+
+test("script batches contain at most five consecutive episodes starting at the next episode", () => {
+    assert.deepEqual(validateScriptBatch([4, 5, 6], 8, 4), [4, 5, 6]);
+    assert.throws(() => validateScriptBatch([1, 2, 3, 4, 5, 6], 8, 1), (error) => error.code === "SCRIPT_BATCH_TOO_LARGE");
+    assert.throws(() => validateScriptBatch([], 8, 1), (error) => error.code === "SCRIPT_EPISODE_OUT_OF_ORDER");
+    assert.throws(() => validateScriptBatch([4, 6], 8, 4), (error) => error.code === "SCRIPT_EPISODE_OUT_OF_ORDER");
+    assert.throws(() => validateScriptBatch([3, 4], 8, 4), (error) => error.code === "SCRIPT_EPISODE_OUT_OF_ORDER");
+    assert.throws(() => validateScriptBatch([8, 9], 8, 8), (error) => error.code === "SCRIPT_EPISODE_OUT_OF_ORDER");
+});
+
+
+test("script generation requires approved adaptation and the next missing episode batch", () => {
+    assert.deepEqual(assertCanGenerateScriptBatch(approvedWorkspace, [1, 2, 3]), [1, 2, 3]);
+    const withScripts = { ...approvedWorkspace, scripts: [{ episodeNumber: 1 }, { episodeNumber: 2 }] };
+    assert.deepEqual(assertCanGenerateScriptBatch(withScripts, [3, 4]), [3, 4]);
+    assert.throws(() => assertCanGenerateScriptBatch({ ...approvedWorkspace, projectConfig: null }, [1]), (error) => error.code === "PROJECT_CONFIG_REQUIRED");
+    assert.throws(() => assertCanGenerateScriptBatch({ ...approvedWorkspace, adaptationStrategy: "" }, [1]), (error) => error.code === "ADAPTATION_STRATEGY_REQUIRED");
+    assert.throws(() => assertCanGenerateScriptBatch({ ...approvedWorkspace, adaptationStatus: "generated" }, [1]), (error) => error.code === "ADAPTATION_APPROVAL_REQUIRED");
+    assert.throws(() => assertCanGenerateScriptBatch({ ...approvedWorkspace, adaptationReview: undefined }, [1]), (error) => error.code === "ADAPTATION_APPROVAL_REQUIRED");
+    assert.throws(() => assertCanGenerateScriptBatch(withScripts, [4]), (error) => error.code === "SCRIPT_EPISODE_OUT_OF_ORDER");
 });
