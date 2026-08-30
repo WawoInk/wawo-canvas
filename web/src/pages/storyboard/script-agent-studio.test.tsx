@@ -44,6 +44,7 @@ let loadedProjectId = "";
 let savedRevision = 0;
 let loadMode: "success" | "missing" = "success";
 let saveMode: "success" | "failure" | "conflict" = "success";
+// @ts-expect-error Bun provides module mocking at test runtime.
 const { mock } = await import("bun:test");
 mock.module("react-i18next", () => ({ useTranslation: () => ({ t: (_key: string, options?: { defaultValue?: string }) => options?.defaultValue || _key }) }));
 mock.module("@/stores/use-user-store", () => ({ useUserStore: (selector: (state: unknown) => unknown) => selector({ user: { id: "user-1" } }) }));
@@ -87,7 +88,7 @@ async function flush() {
     await Promise.resolve();
 }
 
-async function mount(onWorkspaceChange: (value: typeof workspace) => void = () => {}, onBack = () => {}) {
+async function mount(onWorkspaceChange: (value: { revision?: number }) => void = () => {}, onBack = () => {}) {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -105,7 +106,7 @@ async function mount(onWorkspaceChange: (value: typeof workspace) => void = () =
 test("具体剧本工作区按项目加载并在服务端保存成功后更新", async () => {
     loadMode = "success";
     saveMode = "success";
-    const saved: (typeof workspace)[] = [];
+    const saved: Array<{ revision?: number }> = [];
     const { container, root } = await mount((value) => saved.push(value));
 
     assert.equal(loadedProjectId, "project-1");
@@ -123,7 +124,7 @@ test("具体剧本工作区按项目加载并在服务端保存成功后更新",
 test("修订冲突会恢复已持久化工作区且不通知列表保存成功", async () => {
     loadMode = "success";
     saveMode = "conflict";
-    const saved: (typeof workspace)[] = [];
+    const saved: Array<{ revision?: number }> = [];
     const { container, root } = await mount((value) => saved.push(value));
 
     await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="history"]')?.click());
