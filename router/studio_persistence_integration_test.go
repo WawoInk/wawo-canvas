@@ -4,11 +4,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/basketikun/infinite-canvas/config"
 	"github.com/basketikun/infinite-canvas/model"
@@ -230,6 +235,95 @@ func TestStoryboardPersistenceUpdateConflictStableIDsOwnershipAndArtifactSafety(
 	deleted := doJSON[map[string]any](t, http.MethodDelete, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, nil)
 	if deleted.Code != 0 || objectServer.objectCount() != 0 {
 		t.Fatalf("delete updated storyboard = %#v objects=%d", deleted, objectServer.objectCount())
+	}
+}
+
+func TestStoryboardPersistenceConcurrentContentUpdateReturnsCompleteConflict(t *testing.T) {
+	objectServer := setupStudioPersistence(t)
+	gate := newStoryboardObjectGate(t, objectServer.URL)
+	t.Setenv("AWS_ENDPOINT_URL_S3", gate.URL)
+	server, first, _ := studioPersistenceServer(t)
+	defer server.Close()
+
+	id := "storyboard-" + uuid.NewString()
+	created := doJSON[storyboardDetailView](t, http.MethodPost, server.URL+"/api/v1/storyboards", first.Data.Token, storyboardPayload(id))
+	if created.Code != 0 || created.Data.Revision != 1 {
+		t.Fatalf("create storyboard = %#v", created)
+	}
+
+	entered, release := gate.blockNext(http.MethodGet)
+	stale := storyboardPayload(id)
+	stale["title"] = "过期并发更新"
+	stale["expectedRevision"] = 1
+	staleResult := asyncJSONRequest(http.MethodPut, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, stale)
+	waitForSignal(t, entered, "stale update artifact read")
+
+	winner := storyboardPayload(id)
+	winner["title"] = "并发胜出版本"
+	winner["expectedRevision"] = 1
+	winnerDocument := winner["document"].(map[string]any)
+	winnerScene := winnerDocument["scenes"].([]any)[0].(map[string]any)
+	winnerSegment := winnerScene["segments"].([]any)[0].(map[string]any)
+	winnerSegment["shots"] = append(winnerSegment["shots"].([]any), map[string]any{"shotNo": 3, "visual": "胜出镜头"})
+	won := doJSON[storyboardDetailView](t, http.MethodPut, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, winner)
+	if won.Code != 0 || won.Data.Revision != 2 || won.Data.ShotCount != 3 {
+		t.Fatalf("winning storyboard update = %#v", won)
+	}
+
+	close(release)
+	result := waitForAsyncRequest(t, staleResult)
+	var conflict apiResponse[persistenceConflictView[storyboardDetailView]]
+	if err := json.Unmarshal(result.body, &conflict); err != nil {
+		t.Fatalf("decode concurrent storyboard conflict: %v: %s", err, result.body)
+	}
+	if result.status != http.StatusConflict || conflict.Code != -1 || conflict.Data.Current.ID != id || conflict.Data.Current.Title != "并发胜出版本" || conflict.Data.Current.Revision != 2 || conflict.Data.Current.ShotCount != 3 {
+		t.Fatalf("concurrent storyboard conflict status=%d response=%#v", result.status, conflict)
+	}
+	assertSameStoryboardIDs(t, decodeStoryboardDocument(t, won.Data.Document), decodeStoryboardDocument(t, conflict.Data.Current.Document))
+	if objectServer.objectCount() != 1 {
+		t.Fatalf("concurrent storyboard objects=%d keys=%v", objectServer.objectCount(), objectKeys(objectServer))
+	}
+}
+
+func TestStoryboardPersistenceConcurrentDeleteReturnsNotFoundAndCleansRolledBackUpload(t *testing.T) {
+	objectServer := setupStudioPersistence(t)
+	gate := newStoryboardObjectGate(t, objectServer.URL)
+	t.Setenv("AWS_ENDPOINT_URL_S3", gate.URL)
+	server, first, _ := studioPersistenceServer(t)
+	defer server.Close()
+
+	id := "storyboard-" + uuid.NewString()
+	created := doJSON[storyboardDetailView](t, http.MethodPost, server.URL+"/api/v1/storyboards", first.Data.Token, storyboardPayload(id))
+	if created.Code != 0 || created.Data.Revision != 1 {
+		t.Fatalf("create storyboard = %#v", created)
+	}
+
+	entered, release := gate.blockNext(http.MethodPut)
+	update := storyboardPayload(id)
+	update["expectedRevision"] = 1
+	document := update["document"].(map[string]any)
+	scene := document["scenes"].([]any)[0].(map[string]any)
+	segment := scene["segments"].([]any)[0].(map[string]any)
+	segment["shots"] = append(segment["shots"].([]any), map[string]any{"shotNo": 3, "visual": "删除竞态镜头"})
+	updateResult := asyncJSONRequest(http.MethodPut, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, update)
+	waitForSignal(t, entered, "concurrent update artifact upload")
+
+	deleted := doJSON[map[string]any](t, http.MethodDelete, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, nil)
+	if deleted.Code != 0 || objectServer.objectCount() != 0 {
+		t.Fatalf("concurrent delete = %#v objects=%d", deleted, objectServer.objectCount())
+	}
+
+	close(release)
+	result := waitForAsyncRequest(t, updateResult)
+	var response apiResponse[storyboardDetailView]
+	if err := json.Unmarshal(result.body, &response); err != nil {
+		t.Fatalf("decode concurrent delete response: %v: %s", err, result.body)
+	}
+	if result.status != http.StatusNotFound || response.Code == 0 {
+		t.Fatalf("concurrent delete update status=%d response=%#v", result.status, response)
+	}
+	if objectServer.objectCount() != 0 {
+		t.Fatalf("rolled-back upload was not cleaned: keys=%v", objectKeys(objectServer))
 	}
 }
 
@@ -568,6 +662,104 @@ func assertSameStoryboardIDs(t *testing.T, before, after storyboardDocumentView)
 			t.Fatalf("shot %d id changed: before=%#v after=%#v", i, before, after)
 		}
 	}
+}
+
+type asyncRequestResult struct {
+	status int
+	body   []byte
+	err    error
+}
+
+func asyncJSONRequest(method, requestURL, token string, payload any) <-chan asyncRequestResult {
+	result := make(chan asyncRequestResult, 1)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		result <- asyncRequestResult{err: err}
+		return result
+	}
+	go func() {
+		request, requestErr := http.NewRequest(method, requestURL, bytes.NewReader(body))
+		if requestErr != nil {
+			result <- asyncRequestResult{err: requestErr}
+			return
+		}
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Authorization", "Bearer "+token)
+		response, requestErr := http.DefaultClient.Do(request)
+		if requestErr != nil {
+			result <- asyncRequestResult{err: requestErr}
+			return
+		}
+		defer response.Body.Close()
+		content, readErr := io.ReadAll(response.Body)
+		result <- asyncRequestResult{status: response.StatusCode, body: content, err: readErr}
+	}()
+	return result
+}
+
+func waitForAsyncRequest(t *testing.T, result <-chan asyncRequestResult) asyncRequestResult {
+	t.Helper()
+	select {
+	case response := <-result:
+		if response.err != nil {
+			t.Fatal(response.err)
+		}
+		return response
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for async request")
+		return asyncRequestResult{}
+	}
+}
+
+func waitForSignal(t *testing.T, signal <-chan struct{}, description string) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for %s", description)
+	}
+}
+
+type storyboardObjectGate struct {
+	*httptest.Server
+	mu      sync.Mutex
+	method  string
+	entered chan struct{}
+	release chan struct{}
+	proxy   *httputil.ReverseProxy
+}
+
+func newStoryboardObjectGate(t *testing.T, targetURL string) *storyboardObjectGate {
+	t.Helper()
+	target, err := url.Parse(targetURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := &storyboardObjectGate{proxy: httputil.NewSingleHostReverseProxy(target)}
+	gate.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gate.mu.Lock()
+		if gate.method == r.Method {
+			entered, release := gate.entered, gate.release
+			gate.method = ""
+			close(entered)
+			gate.mu.Unlock()
+			<-release
+		} else {
+			gate.mu.Unlock()
+		}
+		gate.proxy.ServeHTTP(w, r)
+	}))
+	t.Cleanup(gate.Close)
+	return gate
+}
+
+func (gate *storyboardObjectGate) blockNext(method string) (<-chan struct{}, chan<- struct{}) {
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	gate.method = method
+	gate.entered = make(chan struct{})
+	gate.release = make(chan struct{})
+	return gate.entered, gate.release
 }
 
 func rejectStoryboardProjectUpdates(t *testing.T) func() {

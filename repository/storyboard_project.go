@@ -69,6 +69,16 @@ func UpdateStoryboardProjectWithLock(project model.StoryboardProject, expectedRe
 	})
 }
 
+func StoryboardProjectReferencesFile(fileID string) (bool, error) {
+	db, err := DB()
+	if err != nil {
+		return false, err
+	}
+	var count int64
+	err = db.Model(&model.StoryboardProject{}).Where("artifact_file_id = ?", fileID).Count(&count).Error
+	return count > 0, err
+}
+
 func DeleteStoryboardProject(id, userID string) (model.StoryboardProject, model.UserFile, error) {
 	db, err := DB()
 	if err != nil {

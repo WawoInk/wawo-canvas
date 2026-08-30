@@ -97,15 +97,26 @@ func CreateStoryboardProject(ctx context.Context, userID string, input CreateSto
 }
 
 func GetStoryboardProject(ctx context.Context, id, userID string) (model.StoryboardProjectDetail, error) {
-	project, err := repository.GetStoryboardProject(id, userID)
-	if err != nil {
-		return model.StoryboardProjectDetail{}, studioProjectError(err)
+	var lastErr error
+	for range 3 {
+		project, err := repository.GetStoryboardProject(id, userID)
+		if err != nil {
+			return model.StoryboardProjectDetail{}, studioProjectError(err)
+		}
+		snapshot, err := readStoryboardSnapshot(ctx, project, userID)
+		if err == nil {
+			return storyboardDetail(project, snapshot), nil
+		}
+		lastErr = err
+		latest, latestErr := repository.GetStoryboardProject(id, userID)
+		if latestErr != nil {
+			return model.StoryboardProjectDetail{}, studioProjectError(latestErr)
+		}
+		if latest.Revision == project.Revision && latest.ArtifactFileID == project.ArtifactFileID {
+			return model.StoryboardProjectDetail{}, err
+		}
 	}
-	snapshot, err := readStoryboardSnapshot(ctx, project, userID)
-	if err != nil {
-		return model.StoryboardProjectDetail{}, err
-	}
-	return storyboardDetail(project, snapshot), nil
+	return model.StoryboardProjectDetail{}, lastErr
 }
 
 func UpdateStoryboardProject(ctx context.Context, id, userID string, input CreateStoryboardProjectInput, expectedRevision uint64) (model.StoryboardProjectDetail, error) {
@@ -125,7 +136,7 @@ func UpdateStoryboardProject(ctx context.Context, id, userID string, input Creat
 	}
 	existingSnapshot, err := readStoryboardSnapshot(ctx, existing, userID)
 	if err != nil {
-		return model.StoryboardProjectDetail{}, err
+		return storyboardUpdateReadError(ctx, id, userID, expectedRevision, err)
 	}
 	title := strings.TrimSpace(input.Title)
 	if title == "" {
@@ -163,7 +174,7 @@ func UpdateStoryboardProject(ctx context.Context, id, userID string, input Creat
 	if hash != existing.ArtifactHash {
 		oldFile, err = requireStudioFile(existing.ArtifactFileID, userID)
 		if err != nil {
-			return model.StoryboardProjectDetail{}, err
+			return storyboardUpdateReadError(ctx, id, userID, expectedRevision, err)
 		}
 		uploaded, uploadErr := uploadStudioJSON(ctx, "storyboards", "storyboards", userID, id, body)
 		if uploadErr != nil {
@@ -174,13 +185,20 @@ func UpdateStoryboardProject(ctx context.Context, id, userID string, input Creat
 	}
 	if err := repository.UpdateStoryboardProjectWithLock(project, expectedRevision, newFile, existing.ArtifactFileID); err != nil {
 		if newFile != nil {
-			_ = S3Delete(context.Background(), newFile.S3Key)
+			referenced, referenceErr := repository.StoryboardProjectReferencesFile(newFile.ID)
+			if referenceErr == nil && referenced {
+				return GetStoryboardProject(ctx, id, userID)
+			}
+			if referenceErr == nil {
+				_ = S3Delete(context.Background(), newFile.S3Key)
+			}
 		}
 		if errors.Is(err, repository.ErrConflict) {
 			current, readErr := GetStoryboardProject(ctx, id, userID)
-			if readErr == nil {
-				return current, err
+			if readErr != nil {
+				return model.StoryboardProjectDetail{}, readErr
 			}
+			return current, err
 		}
 		return model.StoryboardProjectDetail{}, err
 	}
@@ -188,6 +206,17 @@ func UpdateStoryboardProject(ctx context.Context, id, userID string, input Creat
 		_ = S3Delete(context.Background(), oldFile.S3Key)
 	}
 	return storyboardDetail(project, snapshot), nil
+}
+
+func storyboardUpdateReadError(ctx context.Context, id, userID string, expectedRevision uint64, cause error) (model.StoryboardProjectDetail, error) {
+	current, err := GetStoryboardProject(ctx, id, userID)
+	if err != nil {
+		return model.StoryboardProjectDetail{}, err
+	}
+	if current.Revision != expectedRevision {
+		return current, repository.ErrConflict
+	}
+	return model.StoryboardProjectDetail{}, cause
 }
 
 func DeleteStoryboardProject(ctx context.Context, id, userID string) error {
