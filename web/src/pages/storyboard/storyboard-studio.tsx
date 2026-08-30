@@ -1,20 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-    AlertCircle,
-    CheckCircle2,
-    ChevronRight,
-    Download,
-    FileJson,
-    FileText,
-    History,
-    LoaderCircle,
-    Plus,
-    Sparkles,
-    Trash2,
-    Upload,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronRight, Download, FileJson, FileText, History, LoaderCircle, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { saveAs } from "file-saver";
 import { Alert, App, Button, Collapse, Drawer, Empty, Input, InputNumber, Popconfirm, Progress, Select, Switch, Table, Tag } from "antd";
@@ -25,15 +12,7 @@ import { generateStoryboard } from "@/services/api/storyboard";
 import { useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 import { deleteStoryboardRecord, listStoryboardRecords, loadStoryboardRecord, saveStoryboardRecord, type StoryboardRecordSummary } from "./storyboard-storage";
-import {
-    defaultStoryboardOptions,
-    storyboardToMarkdown,
-    type StoryboardAspectRatio,
-    type StoryboardRecord,
-    type StoryboardScene,
-    type StoryboardShot,
-    type StoryboardStage,
-} from "./storyboard";
+import { defaultStoryboardOptions, storyboardToMarkdown, type StoryboardAspectRatio, type StoryboardRecord, type StoryboardScene, type StoryboardShot, type StoryboardStage } from "./storyboard";
 
 type ShotRow = StoryboardShot & {
     key: string;
@@ -272,29 +251,15 @@ export function StoryboardStudio() {
             {records.length ? (
                 <div className="thin-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto">
                     {records.map((item) => (
-                        <div
-                            key={item.id}
-                            className={`group flex w-full items-start gap-1 rounded-lg border p-1 transition-colors ${record?.id === item.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
-                        >
+                        <div key={item.id} className={`group flex w-full items-start gap-1 rounded-lg border p-1 transition-colors ${record?.id === item.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}>
                             <button type="button" className="min-w-0 flex-1 p-2 text-left" onClick={() => void selectRecord(item)}>
                                 <div className="truncate text-sm font-medium">{item.title}</div>
                                 <div className="mt-1 text-xs text-muted-foreground">
                                     {formatTimestamp(item.updatedAt, i18n.language)} · {item.sceneCount} {text("units.scenes", "场")}
                                 </div>
                             </button>
-                            <Popconfirm
-                                title={text("history.deleteTitle", "删除这条分镜记录？")}
-                                okText={text("actions.delete", "删除")}
-                                cancelText={text("actions.cancel", "取消")}
-                                onConfirm={() => void removeRecord(item.id)}
-                            >
-                                <Button
-                                    type="text"
-                                    size="small"
-                                    aria-label={text("actions.delete", "删除")}
-                                    className="mt-1 shrink-0 text-muted-foreground sm:opacity-0 sm:group-hover:opacity-100"
-                                    icon={<Trash2 className="size-3.5" />}
-                                />
+                            <Popconfirm title={text("history.deleteTitle", "删除这条分镜记录？")} okText={text("actions.delete", "删除")} cancelText={text("actions.cancel", "取消")} onConfirm={() => void removeRecord(item.id)}>
+                                <Button type="text" size="small" aria-label={text("actions.delete", "删除")} className="mt-1 shrink-0 text-muted-foreground sm:opacity-0 sm:group-hover:opacity-100" icon={<Trash2 className="size-3.5" />} />
                             </Popconfirm>
                         </div>
                     ))}
@@ -364,7 +329,7 @@ export function StoryboardStudio() {
                     <div className="mt-6 space-y-5">
                         <label className="block">
                             <span className="mb-2 block text-base font-semibold">{text("input.title", "作品标题")}</span>
-                            <Input value={title} maxLength={100} placeholder={text("input.titlePlaceholder", "例如：雨夜来客") } onChange={(event) => setTitle(event.target.value)} />
+                            <Input value={title} maxLength={100} placeholder={text("input.titlePlaceholder", "例如：雨夜来客")} onChange={(event) => setTitle(event.target.value)} />
                         </label>
 
                         <div>
@@ -374,13 +339,7 @@ export function StoryboardStudio() {
                                     {text("input.upload", "上传 TXT / MD")}
                                 </Button>
                             </div>
-                            <Input.TextArea
-                                value={source}
-                                rows={10}
-                                showCount
-                                placeholder={text("input.placeholder", "粘贴完整剧本，保留场头、人物和台词结构…")}
-                                onChange={(event) => setSource(event.target.value)}
-                            />
+                            <Input.TextArea value={source} rows={10} showCount placeholder={text("input.placeholder", "粘贴完整剧本，保留场头、人物和台词结构…")} onChange={(event) => setSource(event.target.value)} />
                         </div>
 
                         <div>
@@ -388,15 +347,7 @@ export function StoryboardStudio() {
                             <div className="grid grid-cols-2 gap-3">
                                 <label className="col-span-2 block">
                                     <span className="mb-1.5 block text-sm text-muted-foreground">{text("options.model", "文本模型")}</span>
-                                    <ModelPicker
-                                        config={effectiveConfig}
-                                        value={model}
-                                        capability="text"
-                                        fullWidth
-                                        onChange={(value) => updateConfig("textModel", value)}
-                                        onMissingConfig={() => openConfigDialog(false)}
-                                        disabled={running}
-                                    />
+                                    <ModelPicker config={effectiveConfig} value={model} capability="text" fullWidth onChange={(value) => updateConfig("textModel", value)} onMissingConfig={() => openConfigDialog(false)} disabled={running} />
                                 </label>
                                 <label className="block">
                                     <span className="mb-1.5 block text-sm text-muted-foreground">{text("options.aspectRatio", "画幅")}</span>
@@ -447,12 +398,7 @@ export function StoryboardStudio() {
                                 </label>
                                 <div className="col-span-2 flex flex-wrap gap-x-6 gap-y-3 rounded-lg border px-3 py-2.5">
                                     <label className="flex items-center gap-2 text-sm">
-                                        <Switch
-                                            size="small"
-                                            checked={options.dialogueMustBeExact}
-                                            disabled={running}
-                                            onChange={(dialogueMustBeExact) => setOptions((value) => ({ ...value, dialogueMustBeExact }))}
-                                        />
+                                        <Switch size="small" checked={options.dialogueMustBeExact} disabled={running} onChange={(dialogueMustBeExact) => setOptions((value) => ({ ...value, dialogueMustBeExact }))} />
                                         {text("options.dialogueExact", "台词必须忠于原文")}
                                     </label>
                                     <label className="flex items-center gap-2 text-sm">
@@ -540,7 +486,9 @@ export function StoryboardStudio() {
                                                             <span className="ml-auto text-xs text-muted-foreground">{scene.estimatedDurationSec}s</span>
                                                         </div>
                                                         <p className="text-sm leading-6">{scene.summary}</p>
-                                                        <div className="mt-2 text-xs text-muted-foreground">{scene.characters.join("、")} · {scene.emotion}</div>
+                                                        <div className="mt-2 text-xs text-muted-foreground">
+                                                            {scene.characters.join("、")} · {scene.emotion}
+                                                        </div>
                                                     </div>
                                                 ))}
                                             </div>

@@ -46,12 +46,21 @@ function episodeResult(episodeNumber) {
     const name = `雾城追凶 EP${episodeNumber}`;
     return {
         content: "",
-        toolCalls: [{ function: { name: "submit_script_episode", arguments: JSON.stringify({ script: {
-            episodeNumber,
-            name,
-            content: `# ${name}\n# 目标时长：2分钟\n# 平台：短视频\n## 剧情梗概\n推进第 ${episodeNumber} 集。\n---\n1-1 客厅 夜/内\n人物：林岚\n△林岚推门。`,
-            sourceChapterIndexes: [1],
-        } }) } }],
+        toolCalls: [
+            {
+                function: {
+                    name: "submit_script_episode",
+                    arguments: JSON.stringify({
+                        script: {
+                            episodeNumber,
+                            name,
+                            content: `# ${name}\n# 目标时长：2分钟\n# 平台：短视频\n## 剧情梗概\n推进第 ${episodeNumber} 集。\n---\n1-1 客厅 夜/内\n人物：林岚\n△林岚推门。`,
+                            sourceChapterIndexes: [1],
+                        },
+                    }),
+                },
+            },
+        ],
     };
 }
 
@@ -102,14 +111,18 @@ test("故事骨架生成后在审核前提交可恢复检查点", async () => {
     const checkpoints = [];
     const workspace = { ...base, currentStage: "ready_for_story_skeleton", storySkeleton: "", storySkeletonStatus: "empty", adaptationStrategy: "", adaptationStatus: "empty", adaptationReview: undefined };
 
-    await assert.rejects(() => sendScriptAgentTurn({ model: "text-model", textModel: "text-model" }, workspace, "生成骨架", {
-        signal: controller.signal,
-        onCheckpoint: async (value) => {
-            checkpoints.push(value);
-            controller.abort();
-            return { ...value, revision: (value.revision || 0) + 1 };
-        },
-    }), /Abort/);
+    await assert.rejects(
+        () =>
+            sendScriptAgentTurn({ model: "text-model", textModel: "text-model" }, workspace, "生成骨架", {
+                signal: controller.signal,
+                onCheckpoint: async (value) => {
+                    checkpoints.push(value);
+                    controller.abort();
+                    return { ...value, revision: (value.revision || 0) + 1 };
+                },
+            }),
+        /Abort/,
+    );
 
     assert.equal(calls, 2);
     assert.equal(checkpoints.length, 1);

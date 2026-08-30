@@ -6,14 +6,9 @@ export function generateStoryboard(config: AiConfig, input: StoryboardPipelineIn
     return runStoryboardPipeline(
         input,
         (request) =>
-            requestToolResponse(
-                config,
-                [{ role: "user", content: request.prompt }],
-                [{ type: "function", function: { name: request.toolName, description: request.toolDescription, parameters: request.schema, strict: true } }],
-                "required",
-                undefined,
-                { signal: options?.signal },
-            ),
+            requestToolResponse(config, [{ role: "user", content: request.prompt }], [{ type: "function", function: { name: request.toolName, description: request.toolDescription, parameters: request.schema, strict: true } }], "required", undefined, {
+                signal: options?.signal,
+            }),
         options?.onStage,
     );
 }

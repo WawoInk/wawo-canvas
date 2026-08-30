@@ -19,7 +19,13 @@ async function render(pathname: string) {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
-    await act(async () => root.render(<MemoryRouter initialEntries={[pathname]}><StoryboardPage /></MemoryRouter>));
+    await act(async () =>
+        root.render(
+            <MemoryRouter initialEntries={[pathname]}>
+                <StoryboardPage />
+            </MemoryRouter>,
+        ),
+    );
     return { container, root };
 }
 

@@ -197,14 +197,7 @@ function ArtifactPanel({ title, description, content, status, review, editorLabe
 
             {awaitingDecision && !editing ? (
                 <section className="space-y-3 border-t pt-4" aria-label={`${title}审核操作`}>
-                    <Input.TextArea
-                        aria-label={`${title}修改要求`}
-                        value={instruction}
-                        onChange={(event) => setInstruction(event.target.value)}
-                        autoSize={{ minRows: 2, maxRows: 5 }}
-                        placeholder="补充修复或重做要求（可选）"
-                        disabled={running}
-                    />
+                    <Input.TextArea aria-label={`${title}修改要求`} value={instruction} onChange={(event) => setInstruction(event.target.value)} autoSize={{ minRows: 2, maxRows: 5 }} placeholder="补充修复或重做要求（可选）" disabled={running} />
                     <div className="flex flex-wrap gap-2">
                         <Button type="primary" icon={<Check className="size-4" />} disabled={running} onClick={() => submit("approve")}>
                             批准
@@ -266,7 +259,7 @@ function ScriptPanel({ workspace, running, stageNotice, onChange, onCopyScript, 
     const uploadQueueRef = useRef(Promise.resolve());
     const uploadCountRef = useRef(0);
     const visibleScripts = pendingScript ? [...workspace.scripts, pendingScript].sort((a, b) => a.episodeNumber - b.episodeNumber) : workspace.scripts;
-    const selected = pendingScript?.episodeNumber === selectedEpisode ? pendingScript : workspace.scripts.find((script) => script.episodeNumber === selectedEpisode) ?? null;
+    const selected = pendingScript?.episodeNumber === selectedEpisode ? pendingScript : (workspace.scripts.find((script) => script.episodeNumber === selectedEpisode) ?? null);
 
     useEffect(() => {
         workspaceRef.current = workspace;

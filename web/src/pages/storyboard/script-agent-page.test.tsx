@@ -54,13 +54,29 @@ mock.module("./script-agent-storage", () => ({
     },
 }));
 mock.module("./script-agent-space", () => ({
-    ScriptAgentSpace: ({ projects, onCreate, onRename, onDelete }: { projects: typeof summary[]; onCreate: (title: string, source: string) => Promise<void>; onRename: (id: string, title: string) => Promise<void>; onDelete: (id: string) => Promise<void> }) => (
+    ScriptAgentSpace: ({
+        projects,
+        onCreate,
+        onRename,
+        onDelete,
+    }: {
+        projects: (typeof summary)[];
+        onCreate: (title: string, source: string) => Promise<void>;
+        onRename: (id: string, title: string) => Promise<void>;
+        onDelete: (id: string) => Promise<void>;
+    }) => (
         <div data-testid="space">
             <span data-testid="count">{projects.length}</span>
             <span data-testid="project-title">{projects[0]?.title}</span>
-            <button data-testid="create" onClick={() => void onCreate("第二个剧本", "第二份素材").catch(() => {})}>创建</button>
-            <button data-testid="rename" onClick={() => void onRename("project-1", "新标题").catch(() => {})}>重命名</button>
-            <button data-testid="delete" onClick={() => void onDelete("project-1").catch(() => {})}>删除</button>
+            <button data-testid="create" onClick={() => void onCreate("第二个剧本", "第二份素材").catch(() => {})}>
+                创建
+            </button>
+            <button data-testid="rename" onClick={() => void onRename("project-1", "新标题").catch(() => {})}>
+                重命名
+            </button>
+            <button data-testid="delete" onClick={() => void onDelete("project-1").catch(() => {})}>
+                删除
+            </button>
         </div>
     ),
 }));
@@ -68,8 +84,12 @@ mock.module("./script-agent-studio", () => ({
     ScriptAgentStudio: ({ projectId, onBack, onWorkspaceChange }: { projectId: string; onBack: () => void; onWorkspaceChange: (workspace: typeof workspace) => void }) => (
         <div data-testid="studio">
             {projectId}
-            <button data-testid="save-workspace" onClick={() => onWorkspaceChange({ ...workspace, title: "Studio 最新标题", revision: 4 })}>保存工作区</button>
-            <button data-testid="back-space" onClick={onBack}>返回</button>
+            <button data-testid="save-workspace" onClick={() => onWorkspaceChange({ ...workspace, title: "Studio 最新标题", revision: 4 })}>
+                保存工作区
+            </button>
+            <button data-testid="back-space" onClick={onBack}>
+                返回
+            </button>
         </div>
     ),
 }));
@@ -91,9 +111,20 @@ async function mount(initialPath = "/storyboard/script-agent") {
     function Harness() {
         const { pathname } = useLocation();
         const routeProjectId = pathname.startsWith("/storyboard/script-agent/") ? decodeURIComponent(pathname.split("/").at(-1) || "") : undefined;
-        return <><span data-testid="pathname">{pathname}</span><ScriptAgentPage projectId={routeProjectId} /></>;
+        return (
+            <>
+                <span data-testid="pathname">{pathname}</span>
+                <ScriptAgentPage projectId={routeProjectId} />
+            </>
+        );
     }
-    await act(async () => root.render(<MemoryRouter initialEntries={[initialPath]}><Harness /></MemoryRouter>));
+    await act(async () =>
+        root.render(
+            <MemoryRouter initialEntries={[initialPath]}>
+                <Harness />
+            </MemoryRouter>,
+        ),
+    );
     await act(flush);
     return { container, root };
 }

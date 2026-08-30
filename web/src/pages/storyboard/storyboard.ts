@@ -104,12 +104,13 @@ export type StoryboardPipelineResult = {
     validation: StoryboardValidation;
 };
 
-export type StoryboardRecord = StoryboardPipelineResult & StoryboardPipelineInput & {
-    id: string;
-    model: string;
-    createdAt: number;
-    updatedAt: number;
-};
+export type StoryboardRecord = StoryboardPipelineResult &
+    StoryboardPipelineInput & {
+        id: string;
+        model: string;
+        createdAt: number;
+        updatedAt: number;
+    };
 
 export const defaultStoryboardOptions: StoryboardOptions = {
     aspectRatio: "9:16",
@@ -214,11 +215,7 @@ const storyboardDocumentSchema = {
     },
 };
 
-export async function runStoryboardPipeline(
-    input: StoryboardPipelineInput,
-    complete: (request: StoryboardCompletionRequest) => Promise<StructuredCompletion>,
-    onStage?: (stage: StoryboardStage) => void,
-): Promise<StoryboardPipelineResult> {
+export async function runStoryboardPipeline(input: StoryboardPipelineInput, complete: (request: StoryboardCompletionRequest) => Promise<StructuredCompletion>, onStage?: (stage: StoryboardStage) => void): Promise<StoryboardPipelineResult> {
     const title = input.title.trim() || "未命名分镜";
     const source = input.source.trim();
     if (!source) throw new Error("请输入剧本文本");
@@ -252,7 +249,10 @@ export async function runStoryboardPipeline(
 
 export function parseStructuredCompletion(result: StructuredCompletion, toolName: StoryboardCompletionRequest["toolName"]) {
     const raw = result.toolCalls.find((call) => call.function.name === toolName)?.function.arguments || result.content;
-    const text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+    const text = raw
+        .trim()
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```$/, "");
     if (!text) throw new Error("模型未返回结构化结果");
     try {
         return JSON.parse(text) as unknown;

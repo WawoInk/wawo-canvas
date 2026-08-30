@@ -6,14 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useUserStore } from "@/stores/use-user-store";
 import { ScriptAgentSpace } from "./script-agent-space";
 import { ScriptAgentStudio } from "./script-agent-studio";
-import {
-    createScriptAgentWorkspace,
-    deleteScriptAgentWorkspace,
-    loadScriptAgentProjects,
-    renameScriptAgentWorkspace,
-    type ScriptAgentProjectSummary,
-    type ScriptAgentWorkspaceRecord,
-} from "./script-agent-storage";
+import { createScriptAgentWorkspace, deleteScriptAgentWorkspace, loadScriptAgentProjects, renameScriptAgentWorkspace, type ScriptAgentProjectSummary, type ScriptAgentWorkspaceRecord } from "./script-agent-storage";
 
 function workspaceSummary(workspace: ScriptAgentWorkspaceRecord): ScriptAgentProjectSummary {
     return {

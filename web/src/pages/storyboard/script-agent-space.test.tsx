@@ -93,13 +93,7 @@ test("剧本卡片支持进入、重命名和二次确认删除", async () => {
     await act(async () =>
         root.render(
             <App>
-                <ScriptAgentSpace
-                    projects={[project]}
-                    onCreate={() => {}}
-                    onOpen={(projectId) => opened.push(projectId)}
-                    onRename={(projectId, title) => renamed.push([projectId, title])}
-                    onDelete={(projectId) => deleted.push(projectId)}
-                />
+                <ScriptAgentSpace projects={[project]} onCreate={() => {}} onOpen={(projectId) => opened.push(projectId)} onRename={(projectId, title) => renamed.push([projectId, title])} onDelete={(projectId) => deleted.push(projectId)} />
             </App>,
         ),
     );

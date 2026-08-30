@@ -13,7 +13,6 @@ import type { ScriptAgentStage } from "./script-agent";
 import { ScriptAgentConversations } from "./script-agent-conversations";
 import { ScriptAgentWorkspacePanel } from "./script-agent-workspace-panel";
 
-
 const stageLabels: Record<ScriptAgentStage, string> = {
     collecting_config: "收集项目配置",
     ready_for_story_skeleton: "等待生成故事骨架",
@@ -144,7 +143,6 @@ export function ScriptAgentStudio({ projectId, onBack, onWorkspaceChange }: { pr
         await saveWithFeedback(value);
     }
 
-
     async function persistArtifact(value: ScriptAgentWorkspaceRecord): Promise<boolean> {
         return Boolean(await saveWithFeedback(value));
     }
@@ -231,62 +229,62 @@ export function ScriptAgentStudio({ projectId, onBack, onWorkspaceChange }: { pr
             <section className="flex min-h-[640px] flex-col overflow-hidden rounded-lg border bg-card shadow-sm md:flex-row lg:min-h-0">
                 <ScriptAgentConversations workspace={workspace} busy={busy} onChange={persist} />
                 <div className="flex min-w-0 flex-1 flex-col p-4">
-                <div className="mb-4 flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-start gap-2">
-                        <Button type="text" size="small" aria-label="返回剧本空间" icon={<ArrowLeft className="size-4" />} disabled={busy} onClick={onBack} />
-                        <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                                <Sparkles className="size-5 text-primary" />
-                                <h2 className="truncate text-xl font-semibold">{workspace.title || text("title", "剧本 Agent")}</h2>
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start gap-2">
+                            <Button type="text" size="small" aria-label="返回剧本空间" icon={<ArrowLeft className="size-4" />} disabled={busy} onClick={onBack} />
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <Sparkles className="size-5 text-primary" />
+                                    <h2 className="truncate text-xl font-semibold">{workspace.title || text("title", "剧本 Agent")}</h2>
+                                </div>
+                                <p className="mt-1 text-sm text-muted-foreground">{text("subtitle", "用自然语言完成配置、审核与逐集剧本创作")}</p>
                             </div>
-                            <p className="mt-1 text-sm text-muted-foreground">{text("subtitle", "用自然语言完成配置、审核与逐集剧本创作")}</p>
+                        </div>
+                        <Tag color={workspace.currentStage === "failed" ? "error" : "blue"}>{stageLabels[workspace.currentStage]}</Tag>
+                    </div>
+                    <div className="thin-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+                        {!workspace.messages.length ? (
+                            <div className="rounded-lg border border-dashed p-5 text-sm leading-6 text-muted-foreground">
+                                告诉我作品标题、故事素材、总集数、单集时长、章节范围、平台、画幅、风格和付费策略，例如：“《雾城追凶》，24集，每集2分钟，改编第1-20章，竖屏悬疑逆袭，前8集免费。”
+                            </div>
+                        ) : null}
+                        {workspace.messages.map((item) => (
+                            <div key={item.id} className={`max-w-[92%] rounded-lg border px-3 py-2.5 text-sm leading-6 ${item.role === "user" ? "ml-auto border-primary/20 bg-primary/5" : "bg-muted/30"}`}>
+                                <div className="mb-1 text-xs text-muted-foreground">
+                                    {item.role === "user" ? "你" : "剧本助手"} · {formatDate(item.createdAt)}
+                                </div>
+                                <div className="whitespace-pre-wrap">{item.content}</div>
+                            </div>
+                        ))}
+                        {error ? <Alert type="error" showIcon message={error} /> : null}
+                    </div>
+                    <div className="mt-4 border-t pt-4">
+                        <Input.TextArea
+                            value={draft}
+                            onChange={(event) => setDraft(event.target.value)}
+                            onPressEnter={(event) => {
+                                if (!event.shiftKey) {
+                                    event.preventDefault();
+                                    void send();
+                                }
+                            }}
+                            disabled={busy}
+                            autoSize={{ minRows: 3, maxRows: 7 }}
+                            placeholder="输入配置或告诉我批准、修复、重做、继续……（Shift+Enter 换行）"
+                        />
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                            <span className="text-xs text-muted-foreground">当前模型：{model || "未配置"}</span>
+                            <Button
+                                type={running ? "default" : "primary"}
+                                danger={running}
+                                icon={running ? <Square className="size-4" /> : <Send className="size-4" />}
+                                disabled={running ? false : busy || !draft.trim()}
+                                onClick={() => (running ? stop() : void send())}
+                            >
+                                {running ? "停止" : "发送"}
+                            </Button>
                         </div>
                     </div>
-                    <Tag color={workspace.currentStage === "failed" ? "error" : "blue"}>{stageLabels[workspace.currentStage]}</Tag>
-                </div>
-                <div className="thin-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-                    {!workspace.messages.length ? (
-                        <div className="rounded-lg border border-dashed p-5 text-sm leading-6 text-muted-foreground">
-                            告诉我作品标题、故事素材、总集数、单集时长、章节范围、平台、画幅、风格和付费策略，例如：“《雾城追凶》，24集，每集2分钟，改编第1-20章，竖屏悬疑逆袭，前8集免费。”
-                        </div>
-                    ) : null}
-                    {workspace.messages.map((item) => (
-                        <div key={item.id} className={`max-w-[92%] rounded-lg border px-3 py-2.5 text-sm leading-6 ${item.role === "user" ? "ml-auto border-primary/20 bg-primary/5" : "bg-muted/30"}`}>
-                            <div className="mb-1 text-xs text-muted-foreground">
-                                {item.role === "user" ? "你" : "剧本助手"} · {formatDate(item.createdAt)}
-                            </div>
-                            <div className="whitespace-pre-wrap">{item.content}</div>
-                        </div>
-                    ))}
-                    {error ? <Alert type="error" showIcon message={error} /> : null}
-                </div>
-                <div className="mt-4 border-t pt-4">
-                    <Input.TextArea
-                        value={draft}
-                        onChange={(event) => setDraft(event.target.value)}
-                        onPressEnter={(event) => {
-                            if (!event.shiftKey) {
-                                event.preventDefault();
-                                void send();
-                            }
-                        }}
-                        disabled={busy}
-                        autoSize={{ minRows: 3, maxRows: 7 }}
-                        placeholder="输入配置或告诉我批准、修复、重做、继续……（Shift+Enter 换行）"
-                    />
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                        <span className="text-xs text-muted-foreground">当前模型：{model || "未配置"}</span>
-                        <Button
-                            type={running ? "default" : "primary"}
-                            danger={running}
-                            icon={running ? <Square className="size-4" /> : <Send className="size-4" />}
-                            disabled={running ? false : busy || !draft.trim()}
-                            onClick={() => (running ? stop() : void send())}
-                        >
-                            {running ? "停止" : "发送"}
-                        </Button>
-                    </div>
-                </div>
                 </div>
             </section>
 

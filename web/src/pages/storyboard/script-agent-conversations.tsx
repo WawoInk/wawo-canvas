@@ -25,13 +25,7 @@ export function ScriptAgentConversations({ workspace, busy = false, onChange }: 
         <aside className="flex h-72 min-h-0 w-full shrink-0 flex-col border-b bg-muted/15 md:h-auto md:w-64 md:border-b-0 md:border-r">
             <div className="flex items-center justify-between gap-3 border-b px-3 py-3">
                 <h3 className="font-semibold">历史记录</h3>
-                <Button
-                    type="text"
-                    size="small"
-                    icon={<MessageSquarePlus className="size-4" />}
-                    disabled={busy}
-                    onClick={() => void onChange(createScriptAgentConversation(workspace))}
-                >
+                <Button type="text" size="small" icon={<MessageSquarePlus className="size-4" />} disabled={busy} onClick={() => void onChange(createScriptAgentConversation(workspace))}>
                     新建对话
                 </Button>
             </div>
@@ -41,15 +35,7 @@ export function ScriptAgentConversations({ workspace, busy = false, onChange }: 
                     if (editingId === conversation.id) {
                         return (
                             <div key={conversation.id} className="flex items-center gap-1 rounded-md bg-primary/10 p-1.5">
-                                <Input
-                                    aria-label="会话名称"
-                                    size="small"
-                                    autoFocus
-                                    value={title}
-                                    disabled={busy}
-                                    onChange={(event) => setTitle(event.target.value)}
-                                    onPressEnter={() => saveTitle(conversation.id)}
-                                />
+                                <Input aria-label="会话名称" size="small" autoFocus value={title} disabled={busy} onChange={(event) => setTitle(event.target.value)} onPressEnter={() => saveTitle(conversation.id)} />
                                 <Button type="text" size="small" aria-label="保存名称" icon={<Check className="size-4" />} disabled={busy || !title.trim()} onClick={() => saveTitle(conversation.id)} />
                                 <Button type="text" size="small" aria-label="取消重命名" icon={<X className="size-4" />} disabled={busy} onClick={() => setEditingId("")} />
                             </div>
