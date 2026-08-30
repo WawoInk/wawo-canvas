@@ -128,11 +128,12 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     return <>{children}</>;
 }
 
-function seoPage(pathname: string) {
+export function seoPage(pathname: string) {
     if (pathname === "/") return "home";
     if (pathname === "/login" || pathname === "/admin/login") return "login";
     if (pathname === "/canvas" || pathname.startsWith("/canvas/")) return "canvas";
     if (pathname === "/image") return "image";
+    if (pathname === "/storyboard/script-agent" || pathname.startsWith("/storyboard/script-agent/")) return "scriptAgent";
     if (pathname === "/storyboard") return "storyboard";
     if (pathname === "/video") return "video";
     if (pathname === "/prompts") return "prompts";
