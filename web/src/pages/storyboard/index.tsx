@@ -5,9 +5,9 @@ import { StoryboardStudio } from "./storyboard-studio";
 
 export default function StoryboardPage() {
     return (
-        <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
+        <div className="thin-scrollbar h-full overflow-y-auto bg-background text-foreground">
             <Tabs
-                className="flex min-h-0 flex-1 flex-col"
+                className="mx-auto min-h-full w-full max-w-[2400px] px-4 sm:px-6"
                 defaultActiveKey="storyboard"
                 destroyOnHidden={false}
                 items={[
@@ -15,7 +15,7 @@ export default function StoryboardPage() {
                         key: "storyboard",
                         label: "分镜创作室",
                         children: (
-                            <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 lg:grid-cols-[300px_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[320px_minmax(0,1fr)]">
+                            <main className="grid min-h-full grid-cols-1 gap-4 py-4 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]">
                                 <StoryboardStudio />
                             </main>
                         ),
@@ -25,7 +25,7 @@ export default function StoryboardPage() {
                         label: "剧本 Agent",
                         forceRender: true,
                         children: (
-                            <div className="h-full min-h-0 overflow-y-auto p-3">
+                            <div className="min-h-full py-4">
                                 <ScriptAgentStudio />
                             </div>
                         ),

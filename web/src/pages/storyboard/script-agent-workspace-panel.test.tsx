@@ -3,7 +3,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { test } from "node:test";
 import type { ScriptAgentWorkspaceRecord } from "./script-agent-storage";
 
-GlobalRegistrator.register();
+if (typeof window === "undefined") GlobalRegistrator.register();
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
