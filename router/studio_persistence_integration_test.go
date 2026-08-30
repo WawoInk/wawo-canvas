@@ -53,21 +53,19 @@ type scriptConversationView struct {
 }
 
 type scriptSummaryView struct {
-	ID                string `json:"id"`
-	Title             string `json:"title"`
-	Source            string `json:"source"`
-	CurrentStage      string `json:"currentStage"`
-	ConversationCount int    `json:"conversationCount"`
-	ScriptCount       int    `json:"scriptCount"`
-	Revision          uint64 `json:"revision"`
-	CreatedAt         string `json:"createdAt"`
-	UpdatedAt         string `json:"updatedAt"`
+	ID           string `json:"id"`
+	ProjectID    string `json:"projectId"`
+	Title        string `json:"title"`
+	Source       string `json:"source"`
+	CurrentStage string `json:"currentStage"`
+	Version      int    `json:"version"`
+	Revision     uint64 `json:"revision"`
+	CreatedAt    string `json:"createdAt"`
+	UpdatedAt    string `json:"updatedAt"`
 }
 
 type scriptDetailView struct {
 	scriptSummaryView
-	ProjectID            string                   `json:"projectId"`
-	Version              int                      `json:"version"`
 	ProjectConfig        json.RawMessage          `json:"projectConfig"`
 	ConfigDraft          json.RawMessage          `json:"configDraft"`
 	StorySkeleton        string                   `json:"storySkeleton"`
@@ -91,7 +89,9 @@ func TestStoryboardPersistenceCreateListDetailOwnershipDeleteAndS3Prefix(t *test
 	server, first, second := studioPersistenceServer(t)
 	defer server.Close()
 
+	id := "storyboard-" + uuid.NewString()
 	payload := map[string]any{
+		"id":         id,
 		"title":      "第一集",
 		"source":     "场景一：雨夜。",
 		"options":    map[string]any{"aspectRatio": "9:16", "targetDurationSec": 60, "style": "电影叙事", "maxSegmentDurationSec": 15, "maxShotDurationSec": 8, "dialogueMustBeExact": true, "allowMusic": false},
@@ -108,10 +108,9 @@ func TestStoryboardPersistenceCreateListDetailOwnershipDeleteAndS3Prefix(t *test
 	}
 
 	created := doJSON[storyboardDetailView](t, http.MethodPost, server.URL+"/api/v1/storyboards", first.Data.Token, payload)
-	if created.Code != 0 || created.Data.ID == "" || created.Data.Title != "第一集" || created.Data.SceneCount != 1 || created.Data.ShotCount != 2 || created.Data.ValidationStatus != "warning" {
+	if created.Code != 0 || created.Data.ID != id || created.Data.Title != "第一集" || created.Data.SceneCount != 1 || created.Data.ShotCount != 2 || created.Data.ValidationStatus != "warning" {
 		t.Fatalf("create storyboard = %#v", created)
 	}
-	id := created.Data.ID
 	if bytes.Contains(mustJSON(t, created), []byte("s3Key")) {
 		t.Fatalf("create response leaked s3 key: %#v", created)
 	}
@@ -158,31 +157,46 @@ func TestScriptPersistenceCreateListDetailUpdateRenameConflictOwnershipDeleteAnd
 	server, first, second := studioPersistenceServer(t)
 	defer server.Close()
 
-	created := doJSON[scriptDetailView](t, http.MethodPost, server.URL+"/api/v1/scripts", first.Data.Token, map[string]any{"title": " 长篇改编 ", "source": " 第一章和第二章 "})
-	if created.Code != 0 || created.Data.ID == "" || created.Data.ProjectID != created.Data.ID || created.Data.Title != "长篇改编" || created.Data.Source != "第一章和第二章" || created.Data.CurrentStage != "collecting_config" || created.Data.Revision != 1 || len(created.Data.Conversations) != 1 {
+	projectID := "project-" + uuid.NewString()
+	conversationOne := "conversation-" + uuid.NewString()
+	conversationTwo := "conversation-" + uuid.NewString()
+	workspace := scriptPayload(projectID, conversationOne, conversationTwo)
+	workspace["title"] = " 长篇改编 "
+	workspace["source"] = " 第一章和第二章 "
+	created := doJSON[scriptDetailView](t, http.MethodPost, server.URL+"/api/v1/scripts", first.Data.Token, workspace)
+	if created.Code != 0 || created.Data.ID != projectID || created.Data.ProjectID != projectID || created.Data.Title != "长篇改编" || created.Data.Source != "第一章和第二章" || created.Data.CurrentStage != "ready_for_script" || created.Data.Version != 1 || created.Data.Revision != 1 || len(created.Data.Conversations) != 2 || len(created.Data.Messages) != 1 {
 		t.Fatalf("create script = %#v", created)
 	}
-	projectID := created.Data.ID
 	createKeys := objectKeys(objectServer)
 	wantPrefix := "/studio-persistence-test/scripts/" + first.Data.User.ID + "/" + projectID + "/"
 	if len(createKeys) != 1 || !strings.HasPrefix(createKeys[0], wantPrefix) || !strings.HasSuffix(createKeys[0], ".json") {
 		t.Fatalf("script create s3 keys = %v, want prefix %q", createKeys, wantPrefix)
 	}
+	firstArtifactKey := createKeys[0]
 
-	conversationOne := "conversation-" + uuid.NewString()
-	conversationTwo := "conversation-" + uuid.NewString()
-	workspace := scriptPayload(projectID, conversationOne, conversationTwo)
-	populated := doJSON[scriptDetailView](t, http.MethodPut, server.URL+"/api/v1/scripts/"+projectID, first.Data.Token, map[string]any{"workspace": workspace, "expectedRevision": 1})
-	keys := objectKeys(objectServer)
-	if populated.Code != 0 || populated.Data.Revision != 2 || len(populated.Data.Conversations) != 2 || len(populated.Data.Messages) != 1 || populated.Data.Messages[0].Content != "继续拆解" || len(keys) != 1 || keys[0] == createKeys[0] {
-		t.Fatalf("populate script = %#v, keys=%v", populated, keys)
+	status, raw := doRawRequest(t, http.MethodGet, server.URL+"/api/v1/scripts", first.Data.Token, "", nil)
+	var listed apiResponse[[]map[string]json.RawMessage]
+	if err := json.Unmarshal(raw, &listed); err != nil {
+		t.Fatalf("decode script list: %v: %s", err, raw)
 	}
-	firstArtifactKey := keys[0]
+	if status != http.StatusOK || listed.Code != 0 || len(listed.Data) != 1 {
+		t.Fatalf("list scripts status=%d response=%#v", status, listed)
+	}
+	item := listed.Data[0]
+	if _, ok := item["conversationCount"]; ok {
+		t.Fatalf("script summary exposed conversationCount: %s", raw)
+	}
+	if _, ok := item["scriptCount"]; ok {
+		t.Fatalf("script summary exposed scriptCount: %s", raw)
+	}
+	var summary scriptSummaryView
+	if err := json.Unmarshal(mustJSON(t, item), &summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.ID != projectID || summary.ProjectID != projectID || summary.Version != 1 || summary.Revision != 1 {
+		t.Fatalf("script summary = %#v", summary)
+	}
 
-	listed := doJSON[[]scriptSummaryView](t, http.MethodGet, server.URL+"/api/v1/scripts", first.Data.Token, nil)
-	if listed.Code != 0 || len(listed.Data) != 1 || listed.Data[0].ID != projectID || listed.Data[0].Revision != 2 || listed.Data[0].ConversationCount != 2 || listed.Data[0].ScriptCount != 1 {
-		t.Fatalf("list scripts = %#v", listed)
-	}
 	detail := doJSON[scriptDetailView](t, http.MethodGet, server.URL+"/api/v1/scripts/"+projectID, first.Data.Token, nil)
 	if detail.Code != 0 || len(detail.Data.Conversations[0].Messages) != 2 || detail.Data.ActiveConversationID != conversationTwo || len(detail.Data.Messages) != 1 || detail.Data.Messages[0].ID != "message-3" || !bytes.Contains(detail.Data.Scripts, []byte("第1集")) {
 		t.Fatalf("script detail = %#v", detail)
@@ -190,39 +204,56 @@ func TestScriptPersistenceCreateListDetailUpdateRenameConflictOwnershipDeleteAnd
 
 	messageOnly := scriptPayload(projectID, conversationOne, conversationTwo)
 	messageOnly["version"] = 2
+	messageOnly["expectedRevision"] = 1
 	conversations := messageOnly["conversations"].([]any)
 	active := conversations[1].(map[string]any)
 	active["messages"] = append(active["messages"].([]any), map[string]any{"id": "message-4", "role": "assistant", "content": "已完成", "createdAt": "2026-08-30T08:03:00Z"})
-	updated := doJSON[scriptDetailView](t, http.MethodPut, server.URL+"/api/v1/scripts/"+projectID, first.Data.Token, map[string]any{"workspace": messageOnly, "expectedRevision": 2})
-	if updated.Code != 0 || updated.Data.Revision != 3 || len(updated.Data.Messages) != 2 || updated.Data.Messages[1].Content != "已完成" || objectServer.objectCount() != 1 || objectKeys(objectServer)[0] != firstArtifactKey {
+	updated := doJSON[scriptDetailView](t, http.MethodPut, server.URL+"/api/v1/scripts/"+projectID, first.Data.Token, messageOnly)
+	if updated.Code != 0 || updated.Data.Revision != 2 || updated.Data.Version != 2 || len(updated.Data.Messages) != 2 || updated.Data.Messages[1].Content != "已完成" || objectServer.objectCount() != 1 || objectKeys(objectServer)[0] != firstArtifactKey {
 		t.Fatalf("message-only update = %#v, keys=%v", updated, objectKeys(objectServer))
 	}
 
 	artifactWorkspace := scriptPayload(projectID, conversationOne, conversationTwo)
 	artifactWorkspace["version"] = 3
 	artifactWorkspace["storySkeleton"] = "新的故事骨架"
-	artifactUpdated := doJSON[scriptDetailView](t, http.MethodPut, server.URL+"/api/v1/scripts/"+projectID, first.Data.Token, map[string]any{"workspace": artifactWorkspace, "expectedRevision": 3})
-	keys = objectKeys(objectServer)
-	if artifactUpdated.Code != 0 || artifactUpdated.Data.Revision != 4 || artifactUpdated.Data.StorySkeleton != "新的故事骨架" || len(keys) != 1 || keys[0] == firstArtifactKey {
+	artifactWorkspace["expectedRevision"] = 2
+	artifactUpdated := doJSON[scriptDetailView](t, http.MethodPut, server.URL+"/api/v1/scripts/"+projectID, first.Data.Token, artifactWorkspace)
+	keys := objectKeys(objectServer)
+	if artifactUpdated.Code != 0 || artifactUpdated.Data.Revision != 3 || artifactUpdated.Data.Version != 3 || artifactUpdated.Data.StorySkeleton != "新的故事骨架" || len(keys) != 1 || keys[0] == firstArtifactKey {
 		t.Fatalf("artifact update = %#v, keys=%v", artifactUpdated, keys)
 	}
 	currentArtifactKey := keys[0]
 
-	conflictingWorkspace := scriptPayload(projectID, conversationOne, conversationTwo)
-	conflictingWorkspace["adaptationStrategy"] = "冲突版本"
-	conflicting := map[string]any{"workspace": conflictingWorkspace, "expectedRevision": 3}
-	status, raw := doRawRequest(t, http.MethodPut, server.URL+"/api/v1/scripts/"+projectID, first.Data.Token, "application/json", bytes.NewReader(mustJSON(t, conflicting)))
+	conflicting := scriptPayload(projectID, conversationOne, conversationTwo)
+	conflicting["adaptationStrategy"] = "冲突版本"
+	conflicting["expectedRevision"] = 2
+	status, raw = doRawRequest(t, http.MethodPut, server.URL+"/api/v1/scripts/"+projectID, first.Data.Token, "application/json", bytes.NewReader(mustJSON(t, conflicting)))
 	var conflict apiResponse[persistenceConflictView[scriptDetailView]]
 	if err := json.Unmarshal(raw, &conflict); err != nil {
 		t.Fatalf("decode script conflict: %v: %s", err, raw)
 	}
-	if status != http.StatusConflict || conflict.Code != -1 || conflict.Data.Current.Revision != 4 || objectServer.objectCount() != 1 || objectKeys(objectServer)[0] != currentArtifactKey {
+	var conflictEnvelope struct {
+		Data map[string]json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &conflictEnvelope); err != nil {
+		t.Fatalf("decode script conflict envelope: %v: %s", err, raw)
+	}
+	if status != http.StatusConflict || conflict.Code != -1 || len(conflictEnvelope.Data) != 1 || conflict.Data.Current.Revision != 3 || conflict.Data.Current.ProjectID != projectID || len(conflict.Data.Current.Conversations) != 2 || conflict.Data.Current.StorySkeleton != "新的故事骨架" || objectServer.objectCount() != 1 || objectKeys(objectServer)[0] != currentArtifactKey {
 		t.Fatalf("script conflict status=%d response=%#v keys=%v", status, conflict, objectKeys(objectServer))
 	}
 
-	renamed := doJSON[scriptSummaryView](t, http.MethodPut, server.URL+"/api/v1/scripts/"+projectID+"/title", first.Data.Token, map[string]any{"title": "新标题", "expectedRevision": 4})
-	if renamed.Code != 0 || renamed.Data.Title != "新标题" || renamed.Data.Revision != 5 || renamed.Data.ConversationCount != 2 || renamed.Data.ScriptCount != 1 || objectKeys(objectServer)[0] != currentArtifactKey {
+	renamed := doJSON[scriptDetailView](t, http.MethodPut, server.URL+"/api/v1/scripts/"+projectID+"/title", first.Data.Token, map[string]any{"title": "新标题", "expectedRevision": 3})
+	if renamed.Code != 0 || renamed.Data.Title != "新标题" || renamed.Data.Revision != 4 || renamed.Data.ProjectID != projectID || len(renamed.Data.Conversations) != 2 || renamed.Data.StorySkeleton != "新的故事骨架" || objectKeys(objectServer)[0] != currentArtifactKey {
 		t.Fatalf("rename script = %#v, keys=%v", renamed, objectKeys(objectServer))
+	}
+
+	status, raw = doRawRequest(t, http.MethodPut, server.URL+"/api/v1/scripts/"+projectID+"/title", first.Data.Token, "application/json", bytes.NewReader(mustJSON(t, map[string]any{"title": "过期标题", "expectedRevision": 3})))
+	var renameConflict apiResponse[persistenceConflictView[scriptDetailView]]
+	if err := json.Unmarshal(raw, &renameConflict); err != nil {
+		t.Fatalf("decode rename conflict: %v: %s", err, raw)
+	}
+	if status != http.StatusConflict || renameConflict.Code != -1 || renameConflict.Data.Current.Revision != 4 || renameConflict.Data.Current.Title != "新标题" || len(renameConflict.Data.Current.Conversations) != 2 || renameConflict.Data.Current.StorySkeleton != "新的故事骨架" || objectKeys(objectServer)[0] != currentArtifactKey {
+		t.Fatalf("rename conflict status=%d response=%#v keys=%v", status, renameConflict, objectKeys(objectServer))
 	}
 
 	otherList := doJSON[[]scriptSummaryView](t, http.MethodGet, server.URL+"/api/v1/scripts", second.Data.Token, nil)

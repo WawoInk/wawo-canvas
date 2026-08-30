@@ -71,24 +71,15 @@ func ListScriptProjects(userID string) ([]model.ScriptProjectSummary, error) {
 	return items, nil
 }
 
-func CreateScriptProject(ctx context.Context, userID, title, source string) (model.ScriptProjectDetail, error) {
-	id := "script-" + uuid.NewString()
-	now := studioNow()
-	conversationID := "conversation-" + uuid.NewString()
-	workspace := ScriptProjectWorkspaceInput{
-		ID:                   id,
-		ProjectID:            id,
-		Title:                title,
-		Source:               source,
-		CurrentStage:         "collecting_config",
-		ProjectConfig:        json.RawMessage("null"),
-		ConfigDraft:          json.RawMessage("{}"),
-		StorySkeletonStatus:  "empty",
-		AdaptationStatus:     "empty",
-		Scripts:              json.RawMessage("[]"),
-		ActiveConversationID: conversationID,
-		Conversations:        []ScriptConversationInput{{ID: conversationID, Title: "新对话", CreatedAt: now, UpdatedAt: now, Messages: []ScriptMessageInput{}}},
+func CreateScriptProject(ctx context.Context, userID string, workspace ScriptProjectWorkspaceInput) (model.ScriptProjectDetail, error) {
+	id := strings.TrimSpace(workspace.ID)
+	projectID := strings.TrimSpace(workspace.ProjectID)
+	if id == "" || projectID == "" || id != projectID {
+		return model.ScriptProjectDetail{}, safeMessageError{message: "项目 ID 无效"}
 	}
+	workspace.ID = id
+	workspace.ProjectID = id
+	now := studioNow()
 	project, conversations, messages, snapshot, body, err := normalizeScriptWorkspace(id, userID, now, workspace, "")
 	if err != nil {
 		return model.ScriptProjectDetail{}, err
@@ -122,6 +113,9 @@ func GetScriptProject(ctx context.Context, id, userID string) (model.ScriptProje
 }
 
 func UpdateScriptProject(ctx context.Context, id, userID string, workspace ScriptProjectWorkspaceInput, expectedRevision uint64) (model.ScriptProjectDetail, error) {
+	if strings.TrimSpace(workspace.ID) != id || strings.TrimSpace(workspace.ProjectID) != id {
+		return model.ScriptProjectDetail{}, safeMessageError{message: "项目 ID 无效"}
+	}
 	existing, err := repository.GetScriptProject(id, userID)
 	if err != nil {
 		return model.ScriptProjectDetail{}, studioProjectError(err)
@@ -171,32 +165,32 @@ func UpdateScriptProject(ctx context.Context, id, userID string, workspace Scrip
 	return scriptDetail(project, conversations, messages, snapshot), nil
 }
 
-func RenameScriptProject(ctx context.Context, id, userID, title string, expectedRevision uint64) (model.ScriptProjectSummary, error) {
+func RenameScriptProject(ctx context.Context, id, userID, title string, expectedRevision uint64) (model.ScriptProjectDetail, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
-		return model.ScriptProjectSummary{}, safeMessageError{message: "项目标题不能为空"}
+		return model.ScriptProjectDetail{}, safeMessageError{message: "项目标题不能为空"}
 	}
 	existing, err := repository.GetScriptProject(id, userID)
 	if err != nil {
-		return model.ScriptProjectSummary{}, studioProjectError(err)
+		return model.ScriptProjectDetail{}, studioProjectError(err)
 	}
 	if existing.Revision != expectedRevision {
-		return scriptSummary(existing), repository.ErrConflict
+		current, readErr := GetScriptProject(ctx, id, userID)
+		if readErr != nil {
+			return model.ScriptProjectDetail{}, readErr
+		}
+		return current, repository.ErrConflict
 	}
 	if err := repository.RenameScriptProjectWithLock(id, userID, title, expectedRevision, studioNow()); err != nil {
 		if errors.Is(err, repository.ErrConflict) {
-			current, readErr := repository.GetScriptProject(id, userID)
+			current, readErr := GetScriptProject(ctx, id, userID)
 			if readErr == nil {
-				return scriptSummary(current), err
+				return current, err
 			}
 		}
-		return model.ScriptProjectSummary{}, err
+		return model.ScriptProjectDetail{}, err
 	}
-	current, err := repository.GetScriptProject(id, userID)
-	if err != nil {
-		return model.ScriptProjectSummary{}, err
-	}
-	return scriptSummary(current), nil
+	return GetScriptProject(ctx, id, userID)
 }
 
 func DeleteScriptProject(ctx context.Context, id, userID string) error {
@@ -314,8 +308,6 @@ func normalizeScriptWorkspace(id, userID, createdAt string, workspace ScriptProj
 		Version:              workspace.Version,
 		Revision:             1,
 		ArtifactHash:         hex.EncodeToString(hash[:]),
-		ScriptCount:          len(scriptItems),
-		ConversationCount:    len(conversations),
 		CreatedAt:            createdAt,
 		UpdatedAt:            now,
 	}
@@ -351,7 +343,7 @@ func requireStudioFile(id, userID string) (model.UserFile, error) {
 }
 
 func scriptSummary(project model.ScriptProject) model.ScriptProjectSummary {
-	return model.ScriptProjectSummary{ID: project.ID, Title: project.Title, Source: project.Source, CurrentStage: project.CurrentStage, ConversationCount: project.ConversationCount, ScriptCount: project.ScriptCount, Revision: project.Revision, CreatedAt: project.CreatedAt, UpdatedAt: project.UpdatedAt}
+	return model.ScriptProjectSummary{ID: project.ID, ProjectID: project.ID, Title: project.Title, Source: project.Source, CurrentStage: project.CurrentStage, Version: project.Version, Revision: project.Revision, CreatedAt: project.CreatedAt, UpdatedAt: project.UpdatedAt}
 }
 
 func scriptDetail(project model.ScriptProject, conversations []model.ScriptConversation, messages []model.ScriptMessage, snapshot scriptArtifactSnapshot) model.ScriptProjectDetail {
@@ -373,7 +365,6 @@ func scriptDetail(project model.ScriptProject, conversations []model.ScriptConve
 	}
 	return model.ScriptProjectDetail{
 		ScriptProjectSummary: scriptSummary(project),
-		ProjectID:            project.ID,
 		ProjectConfig:        json.RawMessage(project.ProjectConfigJSON),
 		ConfigDraft:          json.RawMessage(project.ConfigDraftJSON),
 		StorySkeleton:        snapshot.StorySkeleton,
@@ -386,7 +377,6 @@ func scriptDetail(project model.ScriptProject, conversations []model.ScriptConve
 		Messages:             activeMessages,
 		Conversations:        views,
 		ActiveConversationID: project.ActiveConversationID,
-		Version:              project.Version,
 	}
 }
 

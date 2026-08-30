@@ -90,8 +90,6 @@ func UpdateScriptProjectWithLock(project model.ScriptProject, expectedRevision u
 				"version":                project.Version,
 				"artifact_file_id":       project.ArtifactFileID,
 				"artifact_hash":          project.ArtifactHash,
-				"script_count":           project.ScriptCount,
-				"conversation_count":     project.ConversationCount,
 				"revision":               gorm.Expr("revision + 1"),
 				"updated_at":             project.UpdatedAt,
 			})

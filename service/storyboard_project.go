@@ -16,6 +16,7 @@ import (
 )
 
 type CreateStoryboardProjectInput struct {
+	ID           string          `json:"id"`
 	Title        string          `json:"title"`
 	Source       string          `json:"source"`
 	Options      json.RawMessage `json:"options"`
@@ -45,6 +46,10 @@ func ListStoryboardProjects(userID string) ([]model.StoryboardProjectSummary, er
 }
 
 func CreateStoryboardProject(ctx context.Context, userID string, input CreateStoryboardProjectInput) (model.StoryboardProjectDetail, error) {
+	id := strings.TrimSpace(input.ID)
+	if id == "" {
+		return model.StoryboardProjectDetail{}, safeMessageError{message: "项目 ID 无效"}
+	}
 	title := strings.TrimSpace(input.Title)
 	if title == "" {
 		title = "未命名分镜"
@@ -70,7 +75,6 @@ func CreateStoryboardProject(ctx context.Context, userID string, input CreateSto
 	if err != nil {
 		return model.StoryboardProjectDetail{}, err
 	}
-	id := "storyboard-" + uuid.NewString()
 	file, err := uploadStudioJSON(ctx, "storyboards", "storyboards", userID, id, body)
 	if err != nil {
 		return model.StoryboardProjectDetail{}, err
@@ -141,16 +145,12 @@ func readStoryboardSnapshot(ctx context.Context, project model.StoryboardProject
 }
 
 func storyboardSummary(project model.StoryboardProject) model.StoryboardProjectSummary {
-	return model.StoryboardProjectSummary{ID: project.ID, Title: project.Title, Model: project.Model, SourceHash: project.SourceHash, SceneCount: project.SceneCount, CreatedAt: project.CreatedAt, UpdatedAt: project.UpdatedAt}
+	return model.StoryboardProjectSummary{ID: project.ID, Title: project.Title, Source: project.Source, Options: json.RawMessage(project.OptionsJSON), Model: project.Model, SourceHash: project.SourceHash, ValidationStatus: project.ValidationStatus, SceneCount: project.SceneCount, ShotCount: project.ShotCount, CreatedAt: project.CreatedAt, UpdatedAt: project.UpdatedAt}
 }
 
 func storyboardDetail(project model.StoryboardProject, snapshot storyboardSnapshot) model.StoryboardProjectDetail {
 	return model.StoryboardProjectDetail{
 		StoryboardProjectSummary: storyboardSummary(project),
-		Source:                   project.Source,
-		Options:                  json.RawMessage(project.OptionsJSON),
-		ValidationStatus:         project.ValidationStatus,
-		ShotCount:                project.ShotCount,
 		DirectorPlan:             snapshot.DirectorPlan,
 		Document:                 snapshot.Document,
 		Validation:               snapshot.Validation,

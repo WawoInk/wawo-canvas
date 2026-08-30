@@ -20,22 +20,22 @@ type StoryboardProject struct {
 }
 
 type StoryboardProjectSummary struct {
-	ID         string `json:"id"`
-	Title      string `json:"title"`
-	Model      string `json:"model"`
-	SourceHash string `json:"sourceHash"`
-	SceneCount int    `json:"sceneCount"`
-	CreatedAt  string `json:"createdAt"`
-	UpdatedAt  string `json:"updatedAt"`
+	ID               string          `json:"id"`
+	Title            string          `json:"title"`
+	Source           string          `json:"source"`
+	Options          json.RawMessage `json:"options"`
+	Model            string          `json:"model"`
+	SourceHash       string          `json:"sourceHash"`
+	ValidationStatus string          `json:"validationStatus"`
+	SceneCount       int             `json:"sceneCount"`
+	ShotCount        int             `json:"shotCount"`
+	CreatedAt        string          `json:"createdAt"`
+	UpdatedAt        string          `json:"updatedAt"`
 }
 
 type StoryboardProjectDetail struct {
 	StoryboardProjectSummary
-	Source           string          `json:"source"`
-	Options          json.RawMessage `json:"options"`
-	ValidationStatus string          `json:"validationStatus"`
-	ShotCount        int             `json:"shotCount"`
-	DirectorPlan     json.RawMessage `json:"directorPlan"`
-	Document         json.RawMessage `json:"document"`
-	Validation       json.RawMessage `json:"validation"`
+	DirectorPlan json.RawMessage `json:"directorPlan"`
+	Document     json.RawMessage `json:"document"`
+	Validation   json.RawMessage `json:"validation"`
 }

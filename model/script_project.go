@@ -18,8 +18,6 @@ type ScriptProject struct {
 	Revision             uint64 `json:"revision" gorm:"not null;default:1"`
 	ArtifactFileID       string `json:"-" gorm:"not null;uniqueIndex"`
 	ArtifactHash         string `json:"-" gorm:"not null"`
-	ScriptCount          int    `json:"scriptCount"`
-	ConversationCount    int    `json:"conversationCount"`
 	CreatedAt            string `json:"createdAt"`
 	UpdatedAt            string `json:"updatedAt" gorm:"index:idx_script_user_updated,priority:2"`
 }
@@ -54,20 +52,19 @@ type ScriptConversationView struct {
 }
 
 type ScriptProjectSummary struct {
-	ID                string `json:"id"`
-	Title             string `json:"title"`
-	Source            string `json:"source"`
-	CurrentStage      string `json:"currentStage"`
-	ConversationCount int    `json:"conversationCount"`
-	ScriptCount       int    `json:"scriptCount"`
-	Revision          uint64 `json:"revision"`
-	CreatedAt         string `json:"createdAt"`
-	UpdatedAt         string `json:"updatedAt"`
+	ID           string `json:"id"`
+	ProjectID    string `json:"projectId"`
+	Title        string `json:"title"`
+	Source       string `json:"source"`
+	CurrentStage string `json:"currentStage"`
+	Version      int    `json:"version"`
+	Revision     uint64 `json:"revision"`
+	CreatedAt    string `json:"createdAt"`
+	UpdatedAt    string `json:"updatedAt"`
 }
 
 type ScriptProjectDetail struct {
 	ScriptProjectSummary
-	ProjectID            string                   `json:"projectId"`
 	ProjectConfig        json.RawMessage          `json:"projectConfig"`
 	ConfigDraft          json.RawMessage          `json:"configDraft,omitempty"`
 	StorySkeleton        string                   `json:"storySkeleton"`
@@ -80,5 +77,4 @@ type ScriptProjectDetail struct {
 	Messages             []ScriptMessage          `json:"messages"`
 	Conversations        []ScriptConversationView `json:"conversations"`
 	ActiveConversationID string                   `json:"activeConversationId"`
-	Version              int                      `json:"version"`
 }
