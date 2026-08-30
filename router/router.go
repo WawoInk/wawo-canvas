@@ -177,6 +177,30 @@ func New() *gin.Engine {
 	v1.DELETE("/canvas/projects/:id", func(c *gin.Context) {
 		handler.DeleteCanvasProject(c.Writer, c.Request, c.Param("id"))
 	})
+	// Storyboard Studio persistence
+	v1.GET("/storyboards", gin.WrapF(handler.ListStoryboardProjects))
+	v1.POST("/storyboards", gin.WrapF(handler.CreateStoryboardProject))
+	v1.GET("/storyboards/:id", func(c *gin.Context) {
+		handler.GetStoryboardProject(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.DELETE("/storyboards/:id", func(c *gin.Context) {
+		handler.DeleteStoryboardProject(c.Writer, c.Request, c.Param("id"))
+	})
+	// Script Agent persistence
+	v1.GET("/scripts", gin.WrapF(handler.ListScriptProjects))
+	v1.POST("/scripts", gin.WrapF(handler.CreateScriptProject))
+	v1.GET("/scripts/:id", func(c *gin.Context) {
+		handler.GetScriptProject(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.PUT("/scripts/:id", func(c *gin.Context) {
+		handler.UpdateScriptProject(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.PUT("/scripts/:id/title", func(c *gin.Context) {
+		handler.RenameScriptProject(c.Writer, c.Request, c.Param("id"))
+	})
+	v1.DELETE("/scripts/:id", func(c *gin.Context) {
+		handler.DeleteScriptProject(c.Writer, c.Request, c.Param("id"))
+	})
 	// User assets (CRUD with user scope via UserAuth)
 	v1.GET("/assets", gin.WrapF(handler.Assets))
 	v1.POST("/assets", gin.WrapF(handler.SaveAsset))
