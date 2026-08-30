@@ -40,6 +40,7 @@ const workspace = {
 
 let createFails = false;
 let deleteFails = false;
+// @ts-expect-error Bun provides module mocking at test runtime.
 const { mock } = await import("bun:test");
 mock.module("@/stores/use-user-store", () => ({ useUserStore: (selector: (state: unknown) => unknown) => selector({ user: { id: "user-1" } }) }));
 mock.module("./script-agent-storage", () => ({
@@ -81,7 +82,7 @@ mock.module("./script-agent-space", () => ({
     ),
 }));
 mock.module("./script-agent-studio", () => ({
-    ScriptAgentStudio: ({ projectId, onBack, onWorkspaceChange }: { projectId: string; onBack: () => void; onWorkspaceChange: (workspace: typeof workspace) => void }) => (
+    ScriptAgentStudio: ({ projectId, onBack, onWorkspaceChange }: { projectId: string; onBack: () => void; onWorkspaceChange: (value: typeof workspace) => void }) => (
         <div data-testid="studio">
             {projectId}
             <button data-testid="save-workspace" onClick={() => onWorkspaceChange({ ...workspace, title: "Studio 最新标题", revision: 4 })}>
