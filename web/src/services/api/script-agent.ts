@@ -24,6 +24,7 @@ export type ScriptAgentEvent = { type: "phase"; phase: ScriptAgentStage } | { ty
 export type ScriptAgentRequestOptions = {
     signal?: AbortSignal;
     onEvent?: (event: ScriptAgentEvent) => void;
+    onCheckpoint?: (workspace: ScriptAgentWorkspaceRecord) => Promise<ScriptAgentWorkspaceRecord>;
 };
 
 export type ScriptAgentAction = "confirm" | "approve" | "fix" | "redo" | "continue" | "retry";
@@ -137,6 +138,10 @@ function errorMessage(error: unknown) {
 
 function emitPhase(options: ScriptAgentRequestOptions | undefined, phase: ScriptAgentStage) {
     options?.onEvent?.({ type: "phase", phase });
+}
+
+async function checkpoint(options: ScriptAgentRequestOptions | undefined, workspace: ScriptAgentWorkspaceRecord) {
+    return options?.onCheckpoint ? options.onCheckpoint(workspace) : workspace;
 }
 
 const configTool = tool("submit_project_config", "提取剧本项目配置，并判断用户是否明确确认了配置。", {
@@ -351,6 +356,7 @@ async function runStorySkeleton(config: AiConfig, workspace: ScriptAgentWorkspac
             storySkeletonStatus: "generated",
             storySkeletonReview: undefined,
         });
+        current = await checkpoint(options, current);
         current = patch(current, { storySkeletonStatus: "reviewing" });
         emitPhase(options, current.currentStage);
         const review = parseReview(await complete(config, reviewPrompt("story_skeleton", skeleton), reviewTool, options), "story_skeleton", artifactVersion);
@@ -384,6 +390,7 @@ async function runAdaptationStrategy(config: AiConfig, workspace: ScriptAgentWor
             adaptationStatus: "generated",
             adaptationReview: undefined,
         });
+        current = await checkpoint(options, current);
         current = patch(current, { adaptationStatus: "reviewing" });
         emitPhase(options, current.currentStage);
         const review = parseReview(await complete(config, reviewPrompt("adaptation_strategy", adaptation), reviewTool, options), "adaptation_strategy", artifactVersion);
@@ -429,6 +436,7 @@ async function runScriptBatch(config: AiConfig, workspace: ScriptAgentWorkspaceR
             const result = parseScriptEpisodeResult(await complete(config, scriptPrompt(current, episodeNumber), scriptEpisodeTool, options));
             validateScriptBatch([result.script.episodeNumber], current.projectConfig?.totalEpisodes || 0, episodeNumber);
             current = patch(current, { scripts: [...current.scripts, result.script] });
+            current = await checkpoint(options, current);
         }
         current = patch(current, { currentStage: transitionScriptAgentStage(current.currentStage, "finish_script_batch") });
         if (current.projectConfig && current.scripts.length >= current.projectConfig.totalEpisodes) current = patch(current, { currentStage: transitionScriptAgentStage(current.currentStage, "finish_all_scripts") });

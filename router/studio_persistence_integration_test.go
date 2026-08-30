@@ -133,13 +133,21 @@ func TestStoryboardPersistenceCreateListDetailOwnershipDeleteAndS3Prefix(t *test
 	if otherList.Code != 0 || len(otherList.Data) != 0 {
 		t.Fatalf("other user storyboard list = %#v", otherList)
 	}
-	otherDetail := doJSON[storyboardDetailView](t, http.MethodGet, server.URL+"/api/v1/storyboards/"+id, second.Data.Token, nil)
-	if otherDetail.Code == 0 {
-		t.Fatalf("other user read storyboard = %#v", otherDetail)
+	status, raw := doRawRequest(t, http.MethodGet, server.URL+"/api/v1/storyboards/"+id, second.Data.Token, "", nil)
+	var otherDetail apiResponse[storyboardDetailView]
+	if err := json.Unmarshal(raw, &otherDetail); err != nil {
+		t.Fatalf("decode other storyboard detail: %v: %s", err, raw)
 	}
-	otherDelete := doJSON[map[string]any](t, http.MethodDelete, server.URL+"/api/v1/storyboards/"+id, second.Data.Token, nil)
-	if otherDelete.Code == 0 || objectServer.objectCount() != 1 {
-		t.Fatalf("other user delete storyboard = %#v, objects=%d", otherDelete, objectServer.objectCount())
+	if status != http.StatusNotFound || otherDetail.Code == 0 {
+		t.Fatalf("other user read storyboard status=%d response=%#v", status, otherDetail)
+	}
+	status, raw = doRawRequest(t, http.MethodDelete, server.URL+"/api/v1/storyboards/"+id, second.Data.Token, "", nil)
+	var otherDelete apiResponse[map[string]any]
+	if err := json.Unmarshal(raw, &otherDelete); err != nil {
+		t.Fatalf("decode other storyboard delete: %v: %s", err, raw)
+	}
+	if status != http.StatusNotFound || otherDelete.Code == 0 || objectServer.objectCount() != 1 {
+		t.Fatalf("other user delete storyboard status=%d response=%#v, objects=%d", status, otherDelete, objectServer.objectCount())
 	}
 
 	deleted := doJSON[map[string]any](t, http.MethodDelete, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, nil)
@@ -149,6 +157,10 @@ func TestStoryboardPersistenceCreateListDetailOwnershipDeleteAndS3Prefix(t *test
 	afterDelete := doJSON[[]storyboardSummaryView](t, http.MethodGet, server.URL+"/api/v1/storyboards", first.Data.Token, nil)
 	if afterDelete.Code != 0 || len(afterDelete.Data) != 0 {
 		t.Fatalf("storyboard list after delete = %#v", afterDelete)
+	}
+	status, raw = doRawRequest(t, http.MethodGet, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, "", nil)
+	if status != http.StatusNotFound {
+		t.Fatalf("deleted storyboard detail status=%d body=%s", status, raw)
 	}
 }
 
@@ -198,7 +210,7 @@ func TestScriptPersistenceCreateListDetailUpdateRenameConflictOwnershipDeleteAnd
 	}
 
 	detail := doJSON[scriptDetailView](t, http.MethodGet, server.URL+"/api/v1/scripts/"+projectID, first.Data.Token, nil)
-	if detail.Code != 0 || len(detail.Data.Conversations[0].Messages) != 2 || detail.Data.ActiveConversationID != conversationTwo || len(detail.Data.Messages) != 1 || detail.Data.Messages[0].ID != "message-3" || !bytes.Contains(detail.Data.Scripts, []byte("第1集")) {
+	if detail.Code != 0 || len(detail.Data.Conversations[0].Messages) != 2 || detail.Data.ActiveConversationID != conversationTwo || len(detail.Data.Messages) != 1 || detail.Data.Messages[0].ID != "message-3-"+projectID || !bytes.Contains(detail.Data.Scripts, []byte("第1集")) {
 		t.Fatalf("script detail = %#v", detail)
 	}
 
@@ -260,18 +272,30 @@ func TestScriptPersistenceCreateListDetailUpdateRenameConflictOwnershipDeleteAnd
 	if otherList.Code != 0 || len(otherList.Data) != 0 {
 		t.Fatalf("other user script list = %#v", otherList)
 	}
-	otherDetail := doJSON[scriptDetailView](t, http.MethodGet, server.URL+"/api/v1/scripts/"+projectID, second.Data.Token, nil)
-	if otherDetail.Code == 0 {
-		t.Fatalf("other user read script = %#v", otherDetail)
+	status, raw = doRawRequest(t, http.MethodGet, server.URL+"/api/v1/scripts/"+projectID, second.Data.Token, "", nil)
+	var otherDetail apiResponse[scriptDetailView]
+	if err := json.Unmarshal(raw, &otherDetail); err != nil {
+		t.Fatalf("decode other script detail: %v: %s", err, raw)
 	}
-	otherDelete := doJSON[map[string]any](t, http.MethodDelete, server.URL+"/api/v1/scripts/"+projectID, second.Data.Token, nil)
-	if otherDelete.Code == 0 || objectServer.objectCount() != 1 {
-		t.Fatalf("other user delete script = %#v, objects=%d", otherDelete, objectServer.objectCount())
+	if status != http.StatusNotFound || otherDetail.Code == 0 {
+		t.Fatalf("other user read script status=%d response=%#v", status, otherDetail)
+	}
+	status, raw = doRawRequest(t, http.MethodDelete, server.URL+"/api/v1/scripts/"+projectID, second.Data.Token, "", nil)
+	var otherDelete apiResponse[map[string]any]
+	if err := json.Unmarshal(raw, &otherDelete); err != nil {
+		t.Fatalf("decode other script delete: %v: %s", err, raw)
+	}
+	if status != http.StatusNotFound || otherDelete.Code == 0 || objectServer.objectCount() != 1 {
+		t.Fatalf("other user delete script status=%d response=%#v, objects=%d", status, otherDelete, objectServer.objectCount())
 	}
 
 	deleted := doJSON[map[string]any](t, http.MethodDelete, server.URL+"/api/v1/scripts/"+projectID, first.Data.Token, nil)
 	if deleted.Code != 0 || objectServer.objectCount() != 0 {
 		t.Fatalf("delete script = %#v, objects=%d", deleted, objectServer.objectCount())
+	}
+	status, raw = doRawRequest(t, http.MethodGet, server.URL+"/api/v1/scripts/"+projectID, first.Data.Token, "", nil)
+	if status != http.StatusNotFound {
+		t.Fatalf("deleted script detail status=%d body=%s", status, raw)
 	}
 }
 
@@ -337,11 +361,11 @@ func scriptPayload(projectID, conversationOne, conversationTwo string) map[strin
 		"version":              1,
 		"conversations": []any{
 			map[string]any{"id": conversationOne, "title": "主线", "createdAt": "2026-08-30T08:00:00Z", "updatedAt": "2026-08-30T08:01:00Z", "messages": []any{
-				map[string]any{"id": "message-1", "role": "user", "content": "分析主线", "createdAt": "2026-08-30T08:00:00Z"},
-				map[string]any{"id": "message-2", "role": "assistant", "content": "主线已分析", "createdAt": "2026-08-30T08:01:00Z"},
+				map[string]any{"id": "message-1-" + projectID, "role": "user", "content": "分析主线", "createdAt": "2026-08-30T08:00:00Z"},
+				map[string]any{"id": "message-2-" + projectID, "role": "assistant", "content": "主线已分析", "createdAt": "2026-08-30T08:01:00Z"},
 			}},
 			map[string]any{"id": conversationTwo, "title": "分集", "createdAt": "2026-08-30T08:02:00Z", "updatedAt": "2026-08-30T08:02:00Z", "messages": []any{
-				map[string]any{"id": "message-3", "role": "user", "content": "继续拆解", "createdAt": "2026-08-30T08:02:00Z"},
+				map[string]any{"id": "message-3-" + projectID, "role": "user", "content": "继续拆解", "createdAt": "2026-08-30T08:02:00Z"},
 			}},
 		},
 	}

@@ -36,6 +36,7 @@ const changed = {
 
 let loadedProjectId = "";
 let savedRevision = 0;
+let loadMode: "success" | "missing" = "success";
 let saveMode: "success" | "failure" | "conflict" = "success";
 const { mock } = await import("bun:test");
 mock.module("react-i18next", () => ({ useTranslation: () => ({ t: (_key: string, options?: { defaultValue?: string }) => options?.defaultValue || _key }) }));
@@ -49,6 +50,7 @@ mock.module("@/services/api/script-agent", () => ({ sendScriptAgentTurn: async (
 mock.module("./script-agent-storage", () => ({
     loadScriptAgentWorkspace: async (projectId: string) => {
         loadedProjectId = projectId;
+        if (loadMode === "missing") throw Object.assign(new Error("not found"), { status: 404 });
         return structuredClone(workspace);
     },
     saveScriptAgentWorkspace: async (value: typeof workspace) => {
@@ -73,16 +75,17 @@ async function flush() {
     await Promise.resolve();
 }
 
-async function mount(onWorkspaceChange: (value: typeof workspace) => void = () => {}) {
+async function mount(onWorkspaceChange: (value: typeof workspace) => void = () => {}, onBack = () => {}) {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
-    await act(async () => root.render(<App><ScriptAgentStudio projectId="project-1" onBack={() => {}} onWorkspaceChange={onWorkspaceChange} /></App>));
+    await act(async () => root.render(<App><ScriptAgentStudio projectId="project-1" onBack={onBack} onWorkspaceChange={onWorkspaceChange} /></App>));
     await act(flush);
     return { container, root };
 }
 
 test("具体剧本工作区按项目加载并在服务端保存成功后更新", async () => {
+    loadMode = "success";
     saveMode = "success";
     const saved: typeof workspace[] = [];
     const { container, root } = await mount((value) => saved.push(value));
@@ -100,6 +103,7 @@ test("具体剧本工作区按项目加载并在服务端保存成功后更新",
 });
 
 test("修订冲突会恢复已持久化工作区且不通知列表保存成功", async () => {
+    loadMode = "success";
     saveMode = "conflict";
     const saved: typeof workspace[] = [];
     const { container, root } = await mount((value) => saved.push(value));
@@ -111,6 +115,19 @@ test("修订冲突会恢复已持久化工作区且不通知列表保存成功",
     assert.match(container.textContent || "", /服务端最新版本/);
     assert.match(container.textContent || "", /只属于当前会话/);
     assert.doesNotMatch(container.textContent || "", /未保存消息/);
+
+    await act(async () => root.unmount());
+    container.remove();
+});
+
+
+test("服务端项目已删除时返回剧本空间", async () => {
+    loadMode = "missing";
+    let backCount = 0;
+    const { container, root } = await mount(() => {}, () => { backCount += 1; });
+
+    assert.equal(backCount, 1);
+    assert.doesNotMatch(container.textContent || "", /工作区加载失败/);
 
     await act(async () => root.unmount());
     container.remove();

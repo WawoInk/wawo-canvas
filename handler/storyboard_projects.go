@@ -49,6 +49,10 @@ func GetStoryboardProject(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	project, err := service.GetStoryboardProject(r.Context(), id, user.ID)
 	if err != nil {
+		if service.IsStudioProjectNotFound(err) {
+			NotFound(w, "项目不存在或无权操作")
+			return
+		}
 		FailError(w, err)
 		return
 	}
@@ -62,6 +66,10 @@ func DeleteStoryboardProject(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 	if err := service.DeleteStoryboardProject(r.Context(), id, user.ID); err != nil {
+		if service.IsStudioProjectNotFound(err) {
+			NotFound(w, "项目不存在或无权操作")
+			return
+		}
 		FailError(w, err)
 		return
 	}

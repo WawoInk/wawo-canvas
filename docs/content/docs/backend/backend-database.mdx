@@ -55,7 +55,7 @@ description: 核心数据表和第一方生成任务事务约束
 
 `storyboard_projects` 保存分镜项目所有权和列表所需元数据：`user_id`、标题、原始剧本、生成选项、模型、`source_hash`、列表摘要以及指向 `user_files` 的快照文件引用。分镜记录在当前界面中创建后不可编辑；列表只读取 PostgreSQL 摘要，详情再由服务端读取快照并还原完整结果。
 
-完整的 `directorPlan`、`document` 和 `validation` 保存为私有 JSON 对象，Key 固定为 `storyboards/{user_id}/{entity_id}/{file_id}.json`。项目行只关联对应的 `user_files` 记录；接口不向前端返回原始 S3 Key、公开 URL 或可长期复用的预签名地址。上传对象后若数据库写入失败，服务端补偿删除新对象；删除项目时同步清理项目、文件记录和对象。
+完整的 `directorPlan`、`document` 和 `validation` 保存为私有 JSON 对象，Key 固定为 `storyboards/{user_id}/{entity_id}/{file_id}.json`。项目行只关联对应的 `user_files` 记录；接口不向前端返回原始 S3 Key、公开 URL 或可长期复用的预签名地址。上传对象后若数据库写入失败，服务端补偿删除新对象；删除项目时先同步清理项目与文件记录，再 best-effort 删除对象；对象删除失败时业务记录仍保持不可访问，遗留对象交由后续生命周期或清理任务回收。
 
 所有列表、详情和删除查询都使用当前认证账号限定 `user_id`。同账号可通过服务端 API 在不同会话或设备恢复分镜历史，但这不代表 Canvas、我的素材或其他浏览器本地数据已经统一云同步。
 
@@ -65,7 +65,7 @@ description: 核心数据表和第一方生成任务事务约束
 
 项目详情从 PostgreSQL 的会话和消息重建当前对话，并从私有 S3 JSON 恢复 `storySkeleton`、`adaptationStrategy`、`reviews` 和 `scripts`。产物对象使用不可变 Key `scripts/{user_id}/{entity_id}/{file_id}.json`；只有生成产物内容变化时才写入新对象并更新文件引用，纯消息保存复用现有产物文件。项目整体保存和列表页重命名都携带 `expectedRevision`，旧 revision 不能覆盖较新的服务端状态。
 
-脚本项目、会话、消息和文件记录都通过当前认证账号与项目关系做所有权校验。接口只返回重建后的业务数据，不暴露原始 S3 Key；数据库提交失败时补偿删除尚未引用的新对象，项目删除时清理关联会话、消息、文件记录和对象。
+脚本项目、会话、消息和文件记录都通过当前认证账号与项目关系做所有权校验。接口只返回重建后的业务数据，不暴露原始 S3 Key；数据库提交失败时补偿删除尚未引用的新对象，项目删除时先清理关联会话、消息和文件记录，再 best-effort 删除对象；对象删除失败时可能留下不可访问的孤儿对象，交由后续生命周期或清理任务回收。
 
 ## volcengine_asset_group_bindings
 

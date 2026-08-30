@@ -203,9 +203,23 @@ func studioNow() string {
 	return time.Now().UTC().Format(time.RFC3339Nano)
 }
 
+type studioProjectNotFoundError struct{}
+
+func (*studioProjectNotFoundError) Error() string       { return "studio project not found" }
+func (*studioProjectNotFoundError) SafeMessage() string { return "项目不存在或无权操作" }
+
+func IsStudioProjectNotFound(err error) bool {
+	var target *studioProjectNotFoundError
+	return errors.As(err, &target)
+}
+
+func IsStudioProjectConflict(err error) bool {
+	return errors.Is(err, repository.ErrConflict)
+}
+
 func studioProjectError(err error) error {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return safeMessageError{message: "项目不存在或无权操作"}
+		return &studioProjectNotFoundError{}
 	}
 	return err
 }

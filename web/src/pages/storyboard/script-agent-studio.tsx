@@ -134,6 +134,12 @@ export function ScriptAgentStudio({ projectId, onBack, onWorkspaceChange }: { pr
         }
     }
 
+    async function checkpoint(value: ScriptAgentWorkspaceRecord) {
+        const saved = await save(value);
+        if (!saved) throw new Error("工作区已切换，停止保存检查点");
+        return saved;
+    }
+
     async function persist(value: ScriptAgentWorkspaceRecord): Promise<void> {
         await saveWithFeedback(value);
     }
@@ -172,7 +178,7 @@ export function ScriptAgentStudio({ projectId, onBack, onWorkspaceChange }: { pr
         if (!value || !workspace || saving || workspaceMutating) return;
         setDraft("");
         const saved = await saveWithFeedback(appendScriptAgentMessage(workspace, "user", value));
-        if (saved) await run((signal, onEvent) => sendScriptAgentTurn({ ...config, model, textModel: model }, saved, value, { signal, onEvent }));
+        if (saved) await run((signal, onEvent) => sendScriptAgentTurn({ ...config, model, textModel: model }, saved, value, { signal, onEvent, onCheckpoint: checkpoint }));
     }
 
     async function action(actionName: ScriptAgentAction, instruction = "") {
@@ -180,7 +186,7 @@ export function ScriptAgentStudio({ projectId, onBack, onWorkspaceChange }: { pr
         const labels: Record<ScriptAgentAction, string> = { confirm: "确认配置", approve: "批准继续", fix: "要求修复", redo: "要求重做", continue: "继续生成", retry: "重试" };
         const next = appendScriptAgentMessage(workspace, "user", instruction ? `${labels[actionName]}：${instruction}` : labels[actionName]);
         const saved = await saveWithFeedback(next);
-        if (saved) await run((signal, onEvent) => submitScriptAgentAction({ ...config, model, textModel: model }, saved, { action: actionName, instruction }, { signal, onEvent }));
+        if (saved) await run((signal, onEvent) => submitScriptAgentAction({ ...config, model, textModel: model }, saved, { action: actionName, instruction }, { signal, onEvent, onCheckpoint: checkpoint }));
     }
 
     function stop() {

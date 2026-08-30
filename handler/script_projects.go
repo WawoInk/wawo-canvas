@@ -2,11 +2,9 @@ package handler
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"time"
 
-	"github.com/basketikun/infinite-canvas/repository"
 	"github.com/basketikun/infinite-canvas/service"
 )
 
@@ -61,6 +59,10 @@ func GetScriptProject(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	project, err := service.GetScriptProject(r.Context(), id, user.ID)
 	if err != nil {
+		if service.IsStudioProjectNotFound(err) {
+			NotFound(w, "项目不存在或无权操作")
+			return
+		}
 		FailError(w, err)
 		return
 	}
@@ -80,8 +82,12 @@ func UpdateScriptProject(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	project, err := service.UpdateScriptProject(r.Context(), id, user.ID, request.ScriptProjectWorkspaceInput, request.ExpectedRevision)
 	if err != nil {
-		if errors.Is(err, repository.ErrConflict) {
-			scriptProjectConflict(w, "剧本项目已被其他会话修改", project)
+		if service.IsStudioProjectConflict(err) {
+			Conflict(w, "剧本项目已被其他会话修改", project)
+			return
+		}
+		if service.IsStudioProjectNotFound(err) {
+			NotFound(w, "项目不存在或无权操作")
 			return
 		}
 		FailError(w, err)
@@ -103,8 +109,12 @@ func RenameScriptProject(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	project, err := service.RenameScriptProject(r.Context(), id, user.ID, request.Title, request.ExpectedRevision)
 	if err != nil {
-		if errors.Is(err, repository.ErrConflict) {
-			scriptProjectConflict(w, "剧本项目已被其他会话修改", project)
+		if service.IsStudioProjectConflict(err) {
+			Conflict(w, "剧本项目已被其他会话修改", project)
+			return
+		}
+		if service.IsStudioProjectNotFound(err) {
+			NotFound(w, "项目不存在或无权操作")
 			return
 		}
 		FailError(w, err)
@@ -120,14 +130,12 @@ func DeleteScriptProject(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	if err := service.DeleteScriptProject(r.Context(), id, user.ID); err != nil {
+		if service.IsStudioProjectNotFound(err) {
+			NotFound(w, "项目不存在或无权操作")
+			return
+		}
 		FailError(w, err)
 		return
 	}
 	OK(w, map[string]string{"id": id, "deletedAt": time.Now().UTC().Format(time.RFC3339Nano)})
-}
-
-func scriptProjectConflict(w http.ResponseWriter, msg string, current any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusConflict)
-	writeJSON(w, response{Code: -1, Data: map[string]any{"current": current}, Msg: msg})
 }
