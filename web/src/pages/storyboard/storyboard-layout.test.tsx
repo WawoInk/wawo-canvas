@@ -29,9 +29,15 @@ test("分镜创作室保留内容边界并提供页面级纵向滚动", async ()
 
     const tabs = container.querySelector(".ant-tabs");
     assert.ok(tabs);
-    assert.match(tabs.className, /mx-auto/);
-    assert.match(tabs.className, /max-w-\[2400px\]/);
-    assert.match(tabs.className, /px-4/);
+    const tabClasses = new Set(tabs.className.split(/\s+/));
+    assert.ok(tabClasses.has("mx-auto"));
+    assert.ok(tabClasses.has("max-w-[2400px]"));
+    assert.ok(tabClasses.has("[&_.ant-tabs-nav-wrap]:mx-auto"));
+    assert.ok(tabClasses.has("[&_.ant-tabs-nav-wrap]:max-w-7xl"));
+    assert.ok(tabClasses.has("[&_.ant-tabs-nav-wrap]:px-6"));
+    assert.ok(tabClasses.has("[&>.ant-tabs-content-holder]:px-4"));
+    assert.ok(tabClasses.has("sm:[&>.ant-tabs-content-holder]:px-6"));
+    assert.equal(tabClasses.has("px-4"), false);
 
     const storyboardPane = container.querySelector("main");
     assert.ok(storyboardPane);

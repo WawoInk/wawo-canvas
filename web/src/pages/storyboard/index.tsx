@@ -14,7 +14,7 @@ export default function StoryboardPage() {
     return (
         <div className="thin-scrollbar h-full overflow-y-auto bg-background text-foreground">
             <Tabs
-                className="mx-auto min-h-full w-full max-w-[2400px] px-4 sm:px-6"
+                className="mx-auto min-h-full w-full max-w-[2400px] [&_.ant-tabs-nav-wrap]:mx-auto [&_.ant-tabs-nav-wrap]:w-full [&_.ant-tabs-nav-wrap]:max-w-7xl [&_.ant-tabs-nav-wrap]:px-6 [&>.ant-tabs-content-holder]:px-4 sm:[&>.ant-tabs-content-holder]:px-6"
                 activeKey={activeKey}
                 onChange={(key) => navigate(key === "script-agent" ? "/storyboard/script-agent" : "/storyboard")}
                 destroyOnHidden={false}
