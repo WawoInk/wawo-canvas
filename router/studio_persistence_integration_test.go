@@ -3,6 +3,7 @@ package router_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/basketikun/infinite-canvas/config"
 	"github.com/basketikun/infinite-canvas/model"
+	"github.com/basketikun/infinite-canvas/repository"
 	"github.com/basketikun/infinite-canvas/router"
 	"github.com/basketikun/infinite-canvas/service"
 	"github.com/google/uuid"
@@ -23,6 +25,8 @@ type storyboardSummaryView struct {
 	Options          json.RawMessage `json:"options"`
 	Model            string          `json:"model"`
 	SourceHash       string          `json:"sourceHash"`
+	Status           string          `json:"status"`
+	Revision         uint64          `json:"revision"`
 	ValidationStatus string          `json:"validationStatus"`
 	SceneCount       int             `json:"sceneCount"`
 	ShotCount        int             `json:"shotCount"`
@@ -84,32 +88,21 @@ type persistenceConflictView[T any] struct {
 	Current T `json:"current"`
 }
 
-func TestStoryboardPersistenceCreateListDetailOwnershipDeleteAndS3Prefix(t *testing.T) {
+func TestStoryboardPersistenceDraftCreateListDetailOwnershipDeleteAndS3Prefix(t *testing.T) {
 	objectServer := setupStudioPersistence(t)
 	server, first, second := studioPersistenceServer(t)
 	defer server.Close()
 
 	id := "storyboard-" + uuid.NewString()
 	payload := map[string]any{
-		"id":         id,
-		"title":      "第一集",
-		"source":     "场景一：雨夜。",
-		"options":    map[string]any{"aspectRatio": "9:16", "targetDurationSec": 60, "style": "电影叙事", "maxSegmentDurationSec": 15, "maxShotDurationSec": 8, "dialogueMustBeExact": true, "allowMusic": false},
-		"model":      "test-model",
-		"sourceHash": "source-hash-1",
-		"directorPlan": map[string]any{
-			"schemaVersion": "1.0", "title": "第一集", "sourceType": "script", "scenes": []any{map[string]any{"sceneNo": 1, "summary": "雨夜相遇"}},
-		},
-		"document": map[string]any{
-			"schemaVersion": "1.0", "title": "第一集", "sourceType": "script", "aspectRatio": "9:16", "targetDurationSec": 60,
-			"scenes": []any{map[string]any{"sceneNo": 1, "segments": []any{map[string]any{"segmentNo": 1, "shots": []any{map[string]any{"shotNo": 1}, map[string]any{"shotNo": 2}}}}}},
-		},
-		"validation": map[string]any{"status": "warning", "errors": []any{}, "warnings": []any{map[string]any{"code": "SHORT", "message": "偏短", "path": "scenes[0]"}}},
+		"id": id, "title": "第一集", "source": "场景一：雨夜。", "options": map[string]any{"aspectRatio": "9:16"}, "model": "test-model", "sourceHash": "source-hash-1",
 	}
-
 	created := doJSON[storyboardDetailView](t, http.MethodPost, server.URL+"/api/v1/storyboards", first.Data.Token, payload)
-	if created.Code != 0 || created.Data.ID != id || created.Data.Title != "第一集" || created.Data.SceneCount != 1 || created.Data.ShotCount != 2 || created.Data.ValidationStatus != "warning" {
-		t.Fatalf("create storyboard = %#v", created)
+	if created.Code != 0 || created.Data.ID != id || created.Data.Status != "draft" || created.Data.Revision != 1 || created.Data.SceneCount != 0 || created.Data.ShotCount != 0 {
+		t.Fatalf("create draft storyboard = %#v", created)
+	}
+	if string(created.Data.DirectorPlan) != "null" || string(created.Data.Document) != "null" || string(created.Data.Validation) != "null" {
+		t.Fatalf("draft storyboard artifacts = plan:%s document:%s validation:%s", created.Data.DirectorPlan, created.Data.Document, created.Data.Validation)
 	}
 	if bytes.Contains(mustJSON(t, created), []byte("s3Key")) {
 		t.Fatalf("create response leaked s3 key: %#v", created)
@@ -121,12 +114,12 @@ func TestStoryboardPersistenceCreateListDetailOwnershipDeleteAndS3Prefix(t *test
 	}
 
 	listed := doJSON[[]storyboardSummaryView](t, http.MethodGet, server.URL+"/api/v1/storyboards", first.Data.Token, nil)
-	if listed.Code != 0 || len(listed.Data) != 1 || listed.Data[0].ID != id || listed.Data[0].SceneCount != 1 || listed.Data[0].ShotCount != 2 {
-		t.Fatalf("list storyboards = %#v", listed)
+	if listed.Code != 0 || len(listed.Data) != 1 || listed.Data[0].ID != id || listed.Data[0].Status != "draft" || listed.Data[0].Revision != 1 {
+		t.Fatalf("list draft storyboards = %#v", listed)
 	}
 	detail := doJSON[storyboardDetailView](t, http.MethodGet, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, nil)
-	if detail.Code != 0 || !bytes.Contains(detail.Data.DirectorPlan, []byte("雨夜相遇")) || !bytes.Contains(detail.Data.Document, []byte(`"shotNo":2`)) || !bytes.Contains(detail.Data.Validation, []byte(`"status":"warning"`)) {
-		t.Fatalf("storyboard detail = %#v", detail)
+	if detail.Code != 0 || detail.Data.Status != "draft" || string(detail.Data.Document) != "null" {
+		t.Fatalf("draft storyboard detail = %#v", detail)
 	}
 
 	otherList := doJSON[[]storyboardSummaryView](t, http.MethodGet, server.URL+"/api/v1/storyboards", second.Data.Token, nil)
@@ -134,33 +127,147 @@ func TestStoryboardPersistenceCreateListDetailOwnershipDeleteAndS3Prefix(t *test
 		t.Fatalf("other user storyboard list = %#v", otherList)
 	}
 	status, raw := doRawRequest(t, http.MethodGet, server.URL+"/api/v1/storyboards/"+id, second.Data.Token, "", nil)
-	var otherDetail apiResponse[storyboardDetailView]
-	if err := json.Unmarshal(raw, &otherDetail); err != nil {
-		t.Fatalf("decode other storyboard detail: %v: %s", err, raw)
-	}
-	if status != http.StatusNotFound || otherDetail.Code == 0 {
-		t.Fatalf("other user read storyboard status=%d response=%#v", status, otherDetail)
+	if status != http.StatusNotFound {
+		t.Fatalf("other user read storyboard status=%d body=%s", status, raw)
 	}
 	status, raw = doRawRequest(t, http.MethodDelete, server.URL+"/api/v1/storyboards/"+id, second.Data.Token, "", nil)
-	var otherDelete apiResponse[map[string]any]
-	if err := json.Unmarshal(raw, &otherDelete); err != nil {
-		t.Fatalf("decode other storyboard delete: %v: %s", err, raw)
-	}
-	if status != http.StatusNotFound || otherDelete.Code == 0 || objectServer.objectCount() != 1 {
-		t.Fatalf("other user delete storyboard status=%d response=%#v, objects=%d", status, otherDelete, objectServer.objectCount())
+	if status != http.StatusNotFound || objectServer.objectCount() != 1 {
+		t.Fatalf("other user delete storyboard status=%d body=%s objects=%d", status, raw, objectServer.objectCount())
 	}
 
 	deleted := doJSON[map[string]any](t, http.MethodDelete, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, nil)
 	if deleted.Code != 0 || objectServer.objectCount() != 0 {
 		t.Fatalf("delete storyboard = %#v, objects=%d", deleted, objectServer.objectCount())
 	}
-	afterDelete := doJSON[[]storyboardSummaryView](t, http.MethodGet, server.URL+"/api/v1/storyboards", first.Data.Token, nil)
-	if afterDelete.Code != 0 || len(afterDelete.Data) != 0 {
-		t.Fatalf("storyboard list after delete = %#v", afterDelete)
+	listed = doJSON[[]storyboardSummaryView](t, http.MethodGet, server.URL+"/api/v1/storyboards", first.Data.Token, nil)
+	if listed.Code != 0 || len(listed.Data) != 0 {
+		t.Fatalf("storyboard list after delete = %#v", listed)
 	}
-	status, raw = doRawRequest(t, http.MethodGet, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, "", nil)
-	if status != http.StatusNotFound {
-		t.Fatalf("deleted storyboard detail status=%d body=%s", status, raw)
+}
+
+func TestStoryboardPersistenceUpdateConflictStableIDsOwnershipAndArtifactSafety(t *testing.T) {
+	objectServer := setupStudioPersistence(t)
+	server, first, second := studioPersistenceServer(t)
+	defer server.Close()
+
+	id := "storyboard-" + uuid.NewString()
+	payload := storyboardPayload(id)
+	created := doJSON[storyboardDetailView](t, http.MethodPost, server.URL+"/api/v1/storyboards", first.Data.Token, payload)
+	if created.Code != 0 || created.Data.Status != "ready" || created.Data.Revision != 1 || created.Data.SceneCount != 1 || created.Data.ShotCount != 2 {
+		t.Fatalf("create ready storyboard = %#v", created)
+	}
+	createdDocument := decodeStoryboardDocument(t, created.Data.Document)
+	assertGeneratedStoryboardIDs(t, createdDocument, "model-id")
+	createdAt := created.Data.CreatedAt
+	originalKey := objectKeys(objectServer)[0]
+
+	missingRevision := storyboardPayload(id)
+	missingRevision["title"] = "不应更新"
+	status, raw := doRawRequest(t, http.MethodPut, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, "application/json", bytes.NewReader(mustJSON(t, missingRevision)))
+	var invalid apiResponse[storyboardDetailView]
+	if err := json.Unmarshal(raw, &invalid); err != nil {
+		t.Fatalf("decode missing revision response: %v: %s", err, raw)
+	}
+	if status != http.StatusOK || invalid.Code == 0 || objectKeys(objectServer)[0] != originalKey {
+		t.Fatalf("missing revision status=%d response=%#v keys=%v", status, invalid, objectKeys(objectServer))
+	}
+
+	metadataUpdate := storyboardPayload(id)
+	metadataUpdate["title"] = "第一集（修订）"
+	metadataUpdate["expectedRevision"] = 1
+	updated := doJSON[storyboardDetailView](t, http.MethodPut, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, metadataUpdate)
+	if updated.Code != 0 || updated.Data.Title != "第一集（修订）" || updated.Data.Revision != 2 || updated.Data.CreatedAt != createdAt || objectKeys(objectServer)[0] != originalKey {
+		t.Fatalf("metadata-only storyboard update = %#v keys=%v", updated, objectKeys(objectServer))
+	}
+	updatedDocument := decodeStoryboardDocument(t, updated.Data.Document)
+	assertSameStoryboardIDs(t, createdDocument, updatedDocument)
+
+	regenerated := storyboardPayload(id)
+	regenerated["title"] = "第一集（再生成）"
+	regenerated["expectedRevision"] = 2
+	document := regenerated["document"].(map[string]any)
+	scene := document["scenes"].([]any)[0].(map[string]any)
+	segment := scene["segments"].([]any)[0].(map[string]any)
+	segment["shots"] = append(segment["shots"].([]any), map[string]any{"id": "model-id", "shotNo": 3, "visual": "新镜头"})
+	regeneratedResult := doJSON[storyboardDetailView](t, http.MethodPut, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, regenerated)
+	if regeneratedResult.Code != 0 || regeneratedResult.Data.Revision != 3 || regeneratedResult.Data.ShotCount != 3 || objectServer.objectCount() != 1 {
+		t.Fatalf("regenerated storyboard = %#v objects=%d", regeneratedResult, objectServer.objectCount())
+	}
+	regeneratedDocument := decodeStoryboardDocument(t, regeneratedResult.Data.Document)
+	assertSameStoryboardIDs(t, updatedDocument, regeneratedDocument)
+	newShotID := regeneratedDocument.Scenes[0].Segments[0].Shots[2].ID
+	if newShotID == "" || newShotID == "model-id" {
+		t.Fatalf("new shot id = %q", newShotID)
+	}
+	if _, err := uuid.Parse(newShotID); err != nil {
+		t.Fatalf("new shot id is not uuid: %q: %v", newShotID, err)
+	}
+	regeneratedKey := objectKeys(objectServer)[0]
+	if regeneratedKey == originalKey {
+		t.Fatalf("changed artifact kept old key %q", regeneratedKey)
+	}
+
+	stale := storyboardPayload(id)
+	stale["title"] = "过期修改"
+	stale["expectedRevision"] = 2
+	status, raw = doRawRequest(t, http.MethodPut, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, "application/json", bytes.NewReader(mustJSON(t, stale)))
+	var conflict apiResponse[persistenceConflictView[storyboardDetailView]]
+	if err := json.Unmarshal(raw, &conflict); err != nil {
+		t.Fatalf("decode storyboard conflict: %v: %s", err, raw)
+	}
+	if status != http.StatusConflict || conflict.Code != -1 || conflict.Data.Current.Revision != 3 || conflict.Data.Current.Title != "第一集（再生成）" || objectKeys(objectServer)[0] != regeneratedKey {
+		t.Fatalf("storyboard conflict status=%d response=%#v keys=%v", status, conflict, objectKeys(objectServer))
+	}
+	assertSameStoryboardIDs(t, regeneratedDocument, decodeStoryboardDocument(t, conflict.Data.Current.Document))
+
+	owned := storyboardPayload(id)
+	owned["expectedRevision"] = 3
+	status, raw = doRawRequest(t, http.MethodPut, server.URL+"/api/v1/storyboards/"+id, second.Data.Token, "application/json", bytes.NewReader(mustJSON(t, owned)))
+	if status != http.StatusNotFound || objectKeys(objectServer)[0] != regeneratedKey {
+		t.Fatalf("other user update storyboard status=%d body=%s keys=%v", status, raw, objectKeys(objectServer))
+	}
+
+	deleted := doJSON[map[string]any](t, http.MethodDelete, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, nil)
+	if deleted.Code != 0 || objectServer.objectCount() != 0 {
+		t.Fatalf("delete updated storyboard = %#v objects=%d", deleted, objectServer.objectCount())
+	}
+}
+
+func TestStoryboardPersistenceFailedReplacementKeepsCurrentArtifact(t *testing.T) {
+	objectServer := setupStudioPersistence(t)
+	server, first, _ := studioPersistenceServer(t)
+	defer server.Close()
+
+	id := "storyboard-" + uuid.NewString()
+	created := doJSON[storyboardDetailView](t, http.MethodPost, server.URL+"/api/v1/storyboards", first.Data.Token, storyboardPayload(id))
+	createdDocument := decodeStoryboardDocument(t, created.Data.Document)
+	originalKey := objectKeys(objectServer)[0]
+	cleanup := rejectStoryboardProjectUpdates(t)
+	defer cleanup()
+
+	update := storyboardPayload(id)
+	update["expectedRevision"] = 1
+	document := update["document"].(map[string]any)
+	scene := document["scenes"].([]any)[0].(map[string]any)
+	segment := scene["segments"].([]any)[0].(map[string]any)
+	segment["shots"] = append(segment["shots"].([]any), map[string]any{"shotNo": 3, "visual": "事务失败的新镜头"})
+	status, raw := doRawRequest(t, http.MethodPut, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, "application/json", bytes.NewReader(mustJSON(t, update)))
+	var failed apiResponse[storyboardDetailView]
+	if err := json.Unmarshal(raw, &failed); err != nil {
+		t.Fatalf("decode failed replacement response: %v: %s", err, raw)
+	}
+	if status != http.StatusOK || failed.Code == 0 || objectServer.objectCount() != 1 || objectKeys(objectServer)[0] != originalKey {
+		t.Fatalf("failed replacement status=%d response=%#v keys=%v", status, failed, objectKeys(objectServer))
+	}
+
+	current := doJSON[storyboardDetailView](t, http.MethodGet, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, nil)
+	if current.Code != 0 || current.Data.Revision != 1 || current.Data.ShotCount != 2 {
+		t.Fatalf("current storyboard after failed replacement = %#v", current)
+	}
+	assertSameStoryboardIDs(t, createdDocument, decodeStoryboardDocument(t, current.Data.Document))
+	deleted := doJSON[map[string]any](t, http.MethodDelete, server.URL+"/api/v1/storyboards/"+id, first.Data.Token, nil)
+	if deleted.Code != 0 || objectServer.objectCount() != 0 {
+		t.Fatalf("delete storyboard after failed replacement = %#v objects=%d", deleted, objectServer.objectCount())
 	}
 }
 
@@ -389,4 +496,98 @@ func mustJSON(t *testing.T, value any) []byte {
 		t.Fatal(err)
 	}
 	return body
+}
+
+type storyboardDocumentView struct {
+	Scenes []struct {
+		ID       string `json:"id"`
+		SceneNo  int    `json:"sceneNo"`
+		Segments []struct {
+			ID        string `json:"id"`
+			SegmentNo int    `json:"segmentNo"`
+			Shots     []struct {
+				ID     string `json:"id"`
+				ShotNo int    `json:"shotNo"`
+			} `json:"shots"`
+		} `json:"segments"`
+	} `json:"scenes"`
+}
+
+func storyboardPayload(id string) map[string]any {
+	return map[string]any{
+		"id": id, "title": "第一集", "source": "场景一：雨夜。", "options": map[string]any{"aspectRatio": "9:16"}, "model": "test-model", "sourceHash": "source-hash-1",
+		"directorPlan": map[string]any{"schemaVersion": "1.0", "scenes": []any{map[string]any{"sceneNo": 1, "summary": "雨夜相遇"}}},
+		"document": map[string]any{
+			"schemaVersion": "1.0",
+			"scenes": []any{map[string]any{
+				"id": "model-id", "sceneNo": 1,
+				"segments": []any{map[string]any{
+					"id": "model-id", "segmentNo": 1,
+					"shots": []any{
+						map[string]any{"id": "model-id", "shotNo": 1, "visual": "远景"},
+						map[string]any{"id": "model-id", "shotNo": 2, "visual": "近景"},
+					},
+				}},
+			}},
+		},
+		"validation": map[string]any{"status": "warning", "errors": []any{}, "warnings": []any{}},
+	}
+}
+
+func decodeStoryboardDocument(t *testing.T, raw json.RawMessage) storyboardDocumentView {
+	t.Helper()
+	var document storyboardDocumentView
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatalf("decode storyboard document: %v: %s", err, raw)
+	}
+	return document
+}
+
+func assertGeneratedStoryboardIDs(t *testing.T, document storyboardDocumentView, untrusted string) {
+	t.Helper()
+	ids := []string{document.Scenes[0].ID, document.Scenes[0].Segments[0].ID, document.Scenes[0].Segments[0].Shots[0].ID, document.Scenes[0].Segments[0].Shots[1].ID}
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if id == "" || id == untrusted || seen[id] {
+			t.Fatalf("storyboard generated ids = %v", ids)
+		}
+		if _, err := uuid.Parse(id); err != nil {
+			t.Fatalf("storyboard id is not uuid: %q: %v", id, err)
+		}
+		seen[id] = true
+	}
+}
+
+func assertSameStoryboardIDs(t *testing.T, before, after storyboardDocumentView) {
+	t.Helper()
+	if before.Scenes[0].ID != after.Scenes[0].ID || before.Scenes[0].Segments[0].ID != after.Scenes[0].Segments[0].ID {
+		t.Fatalf("scene/segment ids changed: before=%#v after=%#v", before, after)
+	}
+	for i := range before.Scenes[0].Segments[0].Shots {
+		if before.Scenes[0].Segments[0].Shots[i].ID != after.Scenes[0].Segments[0].Shots[i].ID {
+			t.Fatalf("shot %d id changed: before=%#v after=%#v", i, before, after)
+		}
+	}
+}
+
+func rejectStoryboardProjectUpdates(t *testing.T) func() {
+	t.Helper()
+	db, err := repository.DB()
+	if err != nil {
+		t.Fatalf("get database: %v", err)
+	}
+	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")
+	functionName := "reject_storyboard_update_" + suffix
+	triggerName := "reject_storyboard_update_trigger_" + suffix
+	if err := db.Exec(fmt.Sprintf(`CREATE FUNCTION %s() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'reject storyboard update'; END; $$ LANGUAGE plpgsql`, functionName)).Error; err != nil {
+		t.Fatalf("create storyboard update rejection function: %v", err)
+	}
+	if err := db.Exec(fmt.Sprintf(`CREATE TRIGGER %s BEFORE UPDATE ON storyboard_projects FOR EACH ROW EXECUTE FUNCTION %s()`, triggerName, functionName)).Error; err != nil {
+		_ = db.Exec("DROP FUNCTION IF EXISTS " + functionName + "()").Error
+		t.Fatalf("create storyboard update rejection trigger: %v", err)
+	}
+	return func() {
+		_ = db.Exec("DROP TRIGGER IF EXISTS " + triggerName + " ON storyboard_projects").Error
+		_ = db.Exec("DROP FUNCTION IF EXISTS " + functionName + "()").Error
+	}
 }

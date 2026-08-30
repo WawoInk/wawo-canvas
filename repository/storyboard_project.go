@@ -38,6 +38,37 @@ func CreateStoryboardProject(project model.StoryboardProject, file model.UserFil
 	})
 }
 
+func UpdateStoryboardProjectWithLock(project model.StoryboardProject, expectedRevision uint64, newFile *model.UserFile, oldFileID string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		if newFile != nil {
+			if err := tx.Create(newFile).Error; err != nil {
+				return err
+			}
+		}
+		result := tx.Model(&model.StoryboardProject{}).
+			Where("id = ? AND user_id = ? AND revision = ?", project.ID, project.UserID, expectedRevision).
+			Updates(map[string]any{
+				"title": project.Title, "source": project.Source, "options_json": project.OptionsJSON, "model": project.Model, "source_hash": project.SourceHash,
+				"status": project.Status, "validation_status": project.ValidationStatus, "scene_count": project.SceneCount, "shot_count": project.ShotCount,
+				"artifact_file_id": project.ArtifactFileID, "artifact_hash": project.ArtifactHash, "revision": gorm.Expr("revision + 1"), "updated_at": project.UpdatedAt,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrConflict
+		}
+		if newFile != nil && oldFileID != "" && oldFileID != newFile.ID {
+			return tx.Where("id = ? AND user_id = ? AND enterprise_id IS NULL", oldFileID, project.UserID).Delete(&model.UserFile{}).Error
+		}
+		return nil
+	})
+}
+
 func DeleteStoryboardProject(id, userID string) (model.StoryboardProject, model.UserFile, error) {
 	db, err := DB()
 	if err != nil {
