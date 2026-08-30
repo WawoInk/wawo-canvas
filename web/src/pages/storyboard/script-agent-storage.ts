@@ -165,6 +165,8 @@ export async function loadScriptAgentProjects(userId = currentUserId()): Promise
     return records;
 }
 
+// ponytail: project-list writes are last-write-wins across tabs; move projects to per-project keys if concurrent editing becomes a requirement.
+
 export async function saveScriptAgentProjects(userId: string | undefined, projects: ScriptAgentWorkspaceRecord[]) {
     const store = workspaceStore(userId || currentUserId());
     const records = projects.map(persistedRecord);
