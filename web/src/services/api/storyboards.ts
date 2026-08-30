@@ -1,10 +1,10 @@
 import i18n from "@/i18n";
-import { apiDelete, apiGet, apiPost } from "@/services/api/request";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/services/api/request";
 import { useUserStore } from "@/stores/use-user-store";
-import type { StoryboardRecord } from "@/pages/storyboard/storyboard";
+import type { StoryboardRecord, StoryboardValidation } from "@/pages/storyboard/storyboard";
 
-export type StoryboardRecordSummary = Pick<StoryboardRecord, "id" | "title" | "source" | "options" | "model" | "sourceHash"> & {
-    validationStatus: StoryboardRecord["validation"]["status"];
+export type StoryboardRecordSummary = Pick<StoryboardRecord, "id" | "title" | "source" | "options" | "model" | "sourceHash" | "status" | "revision"> & {
+    validationStatus: StoryboardValidation["status"] | "";
     sceneCount: number;
     shotCount: number;
     createdAt: string;
@@ -17,7 +17,8 @@ export type StoryboardRecordDetail = Omit<StoryboardRecord, "createdAt" | "updat
         updatedAt: string;
     };
 
-export type CreateStoryboardRecord = Omit<StoryboardRecord, "createdAt" | "updatedAt">;
+export type StoryboardWorkspaceInput = Omit<StoryboardRecord, "createdAt" | "updatedAt" | "status" | "revision">;
+export type CreateStoryboardRecord = Omit<StoryboardWorkspaceInput, "directorPlan" | "document" | "validation"> & Partial<Pick<StoryboardWorkspaceInput, "directorPlan" | "document" | "validation">>;
 
 function authToken() {
     const token = useUserStore.getState().token;
@@ -35,6 +36,10 @@ export function fetchStoryboardRecord(id: string) {
 
 export function createStoryboardRecord(record: CreateStoryboardRecord) {
     return apiPost<StoryboardRecordDetail>("/api/v1/storyboards", record, authToken());
+}
+
+export function updateStoryboardRecord(id: string, record: StoryboardWorkspaceInput, expectedRevision: number) {
+    return apiPut<StoryboardRecordDetail>(`/api/v1/storyboards/${encodeURIComponent(id)}`, { ...record, expectedRevision }, authToken());
 }
 
 export function deleteStoryboardRecord(id: string) {
