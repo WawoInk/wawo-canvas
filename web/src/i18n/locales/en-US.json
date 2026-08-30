@@ -73,6 +73,7 @@
         "brandHome": "Canvan home",
         "canvas": "My canvases",
         "image": "Image studio",
+        "storyboard": "Storyboard studio",
         "video": "Video studio",
         "prompts": "Prompt library",
         "assets": "My assets",
@@ -771,6 +772,99 @@
             "refining": "Refining details"
         }
     },
+    "storyboardStudio": {
+        "title": "Storyboard Studio",
+        "description": "Turn scripts into validated, exportable structured storyboard documents",
+        "input": {
+            "title": "Title",
+            "titlePlaceholder": "For example: The Visitor in the Rain",
+            "source": "Script",
+            "upload": "Upload TXT / MD",
+            "placeholder": "Paste the complete script and preserve scene headings, characters, and dialogue…"
+        },
+        "options": {
+            "title": "Generation Settings",
+            "model": "Text Model",
+            "aspectRatio": "Aspect Ratio",
+            "targetDuration": "Target Duration (sec)",
+            "style": "Visual Style",
+            "maxSegmentDuration": "Maximum Segment Duration (sec)",
+            "maxShotDuration": "Maximum Shot Duration (sec)",
+            "dialogueExact": "Preserve Dialogue Verbatim",
+            "allowMusic": "Allow Music"
+        },
+        "actions": {
+            "delete": "Delete",
+            "cancel": "Cancel Generation",
+            "generate": "Generate Storyboard"
+        },
+        "progress": {
+            "planning": "Generating director plan",
+            "generating": "Generating shot-level storyboard",
+            "validating": "Validating storyboard document"
+        },
+        "history": {
+            "title": "History",
+            "new": "New",
+            "deleteTitle": "Delete this storyboard record?",
+            "empty": "No storyboard history yet"
+        },
+        "directorPlan": {
+            "title": "Director Plan"
+        },
+        "scenes": {
+            "title": "Scenes"
+        },
+        "shots": {
+            "title": "Shots"
+        },
+        "output": {
+            "title": "Storyboard Document",
+            "empty": "Enter a script and generate to view the director plan, scenes, and shots here"
+        },
+        "table": {
+            "scene": "Scene",
+            "locationTime": "Location / Time",
+            "characters": "Characters",
+            "emotion": "Emotion",
+            "segmentsDuration": "Segments / Duration",
+            "assets": "Asset IDs",
+            "segment": "Segment",
+            "shot": "Shot",
+            "visual": "Visual Description",
+            "duration": "Duration",
+            "framing": "Framing",
+            "camera": "Camera",
+            "dialogue": "Dialogue / Voice-over",
+            "sound": "Sound",
+            "sourceRefs": "Source References"
+        },
+        "units": {
+            "scenes": "scenes",
+            "shots": "shots"
+        },
+        "validation": {
+            "title": "Validation Report",
+            "empty": "Duration, numbering, source reference, and dialogue checks all passed",
+            "passed": "Passed",
+            "warning": "Warning",
+            "failed": "Failed"
+        },
+        "messages": {
+            "historyLoadFailed": "Failed to load storyboard history",
+            "unsupportedFile": "Only TXT or Markdown files are supported",
+            "fileLoaded": "Script file loaded",
+            "fileReadFailed": "Failed to read script file",
+            "titleRequired": "Enter a title",
+            "sourceRequired": "Paste or upload a script",
+            "configRequired": "Configure an available text model first",
+            "historySaveFailed": "Storyboard generated, but its history record could not be saved",
+            "generated": "Storyboard document generated",
+            "cancelled": "Generation cancelled",
+            "generateFailed": "Failed to generate storyboard",
+            "historyDeleteFailed": "Failed to delete storyboard history"
+        }
+    },
     "imageSettings": {
         "title": "Image Settings",
         "quality": {
@@ -1093,6 +1187,9 @@
     },
     "admin": {
         "menus": {
+            "memberManagement": "Member management",
+            "contentManagement": "Content management",
+            "operationsManagement": "Operations management",
             "enterprises": "Enterprises",
             "users": "Users",
             "creditLogs": "Credit logs",
@@ -2135,6 +2232,10 @@
             "image": {
                 "title": "Image Studio | Canvan",
                 "description": "Generate and edit images with AI."
+            },
+            "storyboard": {
+                "title": "Storyboard Studio | Canvan",
+                "description": "Turn scripts into validated, exportable structured storyboard documents."
             },
             "video": {
                 "title": "Video Studio | Canvan",

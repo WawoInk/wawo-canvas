@@ -1,4 +1,4 @@
-import { Building2, FileText, ImagePlus, Images, Maximize2, Video } from "lucide-react";
+import { Building2, Clapperboard, FileText, ImagePlus, Images, Maximize2, Video } from "lucide-react";
 
 import { enterpriseCapabilities, type EnterpriseIdentity } from "@/lib/account-access";
 
@@ -7,6 +7,11 @@ export const navigationTools = [
         slug: "canvas",
         labelKey: "navigation.canvas",
         icon: Maximize2,
+    },
+    {
+        slug: "storyboard",
+        labelKey: "navigation.storyboard",
+        icon: Clapperboard,
     },
     {
         slug: "image",
@@ -19,11 +24,6 @@ export const navigationTools = [
         icon: Video,
     },
     {
-        slug: "prompts",
-        labelKey: "navigation.prompts",
-        icon: FileText,
-    },
-    {
         slug: "assets",
         labelKey: "navigation.assets",
         icon: Images,
@@ -32,6 +32,11 @@ export const navigationTools = [
         slug: "volcengine-assets",
         labelKey: "navigation.volcengineAssets",
         icon: Images,
+    },
+    {
+        slug: "prompts",
+        labelKey: "navigation.prompts",
+        icon: FileText,
     },
 ] as const;
 

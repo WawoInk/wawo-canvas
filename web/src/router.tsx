@@ -11,6 +11,7 @@ import LoginPage from "@/pages/login";
 import CanvasListPage from "@/pages/canvas";
 import CanvasProjectPage from "@/pages/canvas/project";
 import ImagePage from "@/pages/image";
+import StoryboardPage from "@/pages/storyboard";
 import VideoPage from "@/pages/video";
 import PromptsPage from "@/pages/prompts";
 import AssetsPage from "@/pages/assets";
@@ -65,9 +66,12 @@ export const router = createBrowserRouter([
                 children: [
                     { index: true, element: <HomePage /> },
                     { path: "login", element: <LoginPage /> },
+                    { path: "image", element: <ImagePage /> },
+                    { path: "storyboard", element: <StoryboardPage /> },
+                    { path: "storyboard/script-agent", element: <StoryboardPage /> },
+                    { path: "storyboard/script-agent/:projectId", element: <StoryboardPage /> },
                     { path: "canvas", element: <CanvasListPage /> },
                     { path: "canvas/:id", element: <CanvasProjectPage /> },
-                    { path: "image", element: <ImagePage /> },
                     { path: "video", element: <VideoPage /> },
                     { path: "prompts", element: <PromptsPage /> },
                     { path: "assets", element: <AssetsPage /> },

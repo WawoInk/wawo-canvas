@@ -64,6 +64,10 @@ func DB() (*gorm.DB, error) {
 			&model.CanvasProject{},
 			&model.VideoTask{},
 			&model.UserFile{},
+			&model.StoryboardProject{},
+			&model.ScriptProject{},
+			&model.ScriptConversation{},
+			&model.ScriptMessage{},
 			&model.DeletedRecord{},
 		)
 		if dbErr == nil {

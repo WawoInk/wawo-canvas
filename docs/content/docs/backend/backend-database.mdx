@@ -51,6 +51,22 @@ description: 核心数据表和第一方生成任务事务约束
 
 企业素材复制不复用源 `assets.id` 或 `user_files.id`。文本复制直接创建 `enterprise_id IS NULL` 的个人素材；媒体复制先由对象存储服务端生成个人对象，再在一个 PostgreSQL 事务中写入个人 `user_files` 和 `assets`，两条记录的 `user_id` 都是当前认证账号。事务失败时回滚数据库记录并删除新对象；源企业素材或企业文件删除后，个人副本仍按个人文件和个人素材权限读取。
 
+## storyboard_projects 与分镜私有快照
+
+`storyboard_projects` 保存分镜项目所有权和列表所需元数据：`user_id`、标题、原始剧本、生成选项、模型、`source_hash`、列表摘要以及指向 `user_files` 的快照文件引用。分镜记录在当前界面中创建后不可编辑；列表只读取 PostgreSQL 摘要，详情再由服务端读取快照并还原完整结果。
+
+完整的 `directorPlan`、`document` 和 `validation` 保存为私有 JSON 对象，Key 固定为 `storyboards/{user_id}/{entity_id}/{file_id}.json`。项目行只关联对应的 `user_files` 记录；接口不向前端返回原始 S3 Key、公开 URL 或可长期复用的预签名地址。上传对象后若数据库写入失败，服务端补偿删除新对象；删除项目时先同步清理项目与文件记录，再 best-effort 删除对象；对象删除失败时业务记录仍保持不可访问，遗留对象交由后续生命周期或清理任务回收。
+
+所有列表、详情和删除查询都使用当前认证账号限定 `user_id`。同账号可通过服务端 API 在不同会话或设备恢复分镜历史，但这不代表 Canvas、我的素材或其他浏览器本地数据已经统一云同步。
+
+## script_projects、script_conversations 与 script_messages
+
+`script_projects` 保存剧本项目所有权、标题、创作配置、当前会话、乐观锁 `revision`、生成产物内容哈希，以及指向 `user_files` 的产物快照引用。`script_conversations` 保存项目下的独立会话及标题等会话元数据；`script_messages` 按会话保存角色、正文和顺序关系。顶层 `messages` 只是当前会话消息的兼容视图，不作为第二份消息源落库。
+
+项目详情从 PostgreSQL 的会话和消息重建当前对话，并从私有 S3 JSON 恢复 `storySkeleton`、`adaptationStrategy`、`reviews` 和 `scripts`。产物对象使用不可变 Key `scripts/{user_id}/{entity_id}/{file_id}.json`；只有生成产物内容变化时才写入新对象并更新文件引用，纯消息保存复用现有产物文件。项目整体保存和列表页重命名都携带 `expectedRevision`，旧 revision 不能覆盖较新的服务端状态。
+
+脚本项目、会话、消息和文件记录都通过当前认证账号与项目关系做所有权校验。接口只返回重建后的业务数据，不暴露原始 S3 Key；数据库提交失败时补偿删除尚未引用的新对象，项目删除时先清理关联会话、消息和文件记录，再 best-effort 删除对象；对象删除失败时可能留下不可访问的孤儿对象，交由后续生命周期或清理任务回收。
+
 ## volcengine_asset_group_bindings
 
 `volcengine_asset_group_bindings` 保存平台账号作用域与火山引擎 outbound 的上游素材分组绑定。`scope_type` 为 `personal` 或 `enterprise`；企业作用域额外记录 `enterprise_id`，所有记录都记录 `user_id` 与 `outbound_id`。四列联合唯一索引保证同一作用域、账号和 outbound 只有一条绑定。

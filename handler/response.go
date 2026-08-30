@@ -24,6 +24,12 @@ func Fail(w http.ResponseWriter, msg string) {
 	writeJSON(w, response{Code: 1, Data: nil, Msg: msg})
 }
 
+func NotFound(w http.ResponseWriter, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotFound)
+	writeJSON(w, response{Code: 1, Data: nil, Msg: msg})
+}
+
 func FailError(w http.ResponseWriter, err error) {
 	log.Printf("request failed: %v", err)
 	msg := "操作失败"
@@ -41,8 +47,9 @@ func FailError(w http.ResponseWriter, err error) {
 
 // Conflict 返回 HTTP 409，携带当前服务端版本供前端回滚。
 func Conflict(w http.ResponseWriter, msg string, current any) {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusConflict)
-	writeJSON(w, response{Code: -1, Data: map[string]any{"current": current, "msg": msg}, Msg: msg})
+	writeJSON(w, response{Code: -1, Data: map[string]any{"current": current}, Msg: msg})
 }
 
 func writeJSON(w http.ResponseWriter, value any) {

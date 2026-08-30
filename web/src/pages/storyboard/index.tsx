@@ -1,0 +1,44 @@
+import { Tabs } from "antd";
+import { useLocation, useNavigate } from "react-router-dom";
+
+import { ScriptAgentPage } from "./script-agent-page";
+import { StoryboardStudio } from "./storyboard-studio";
+
+export default function StoryboardPage() {
+    const { pathname } = useLocation();
+    const navigate = useNavigate();
+    const scriptMatch = pathname.match(/\/storyboard\/script-agent(?:\/([^/]+))?\/?$/);
+    const activeKey = scriptMatch ? "script-agent" : "storyboard";
+    const projectId = scriptMatch?.[1] ? decodeURIComponent(scriptMatch[1]) : undefined;
+
+    return (
+        <div className="thin-scrollbar h-full overflow-y-auto bg-background text-foreground">
+            <Tabs
+                className="mx-auto min-h-full w-full max-w-[2400px] [&_.ant-tabs-nav-wrap]:mx-auto [&_.ant-tabs-nav-wrap]:w-full [&_.ant-tabs-nav-wrap]:max-w-7xl [&_.ant-tabs-nav-wrap]:px-6 [&>.ant-tabs-content-holder]:px-4 sm:[&>.ant-tabs-content-holder]:px-6"
+                activeKey={activeKey}
+                onChange={(key) => navigate(key === "script-agent" ? "/storyboard/script-agent" : "/storyboard")}
+                destroyOnHidden={false}
+                items={[
+                    {
+                        key: "storyboard",
+                        label: "分镜创作室",
+                        children: (
+                            <main className="grid min-h-full grid-cols-1 gap-4 py-4 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]">
+                                <StoryboardStudio />
+                            </main>
+                        ),
+                    },
+                    {
+                        key: "script-agent",
+                        label: "剧本 Agent",
+                        children: (
+                            <div className="min-h-full py-4">
+                                <ScriptAgentPage projectId={projectId} />
+                            </div>
+                        ),
+                    },
+                ]}
+            />
+        </div>
+    );
+}
