@@ -6,6 +6,7 @@ if (typeof window === "undefined") GlobalRegistrator.register();
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 import type { StoryboardPipelineResult, StoryboardRecord } from "./storyboard";
+import type { StoryboardRecordSummary } from "./storyboard-storage";
 
 const options = { aspectRatio: "9:16" as const, targetDurationSec: 60, style: "电影叙事", maxSegmentDurationSec: 15, maxShotDurationSec: 8, dialogueMustBeExact: true, allowMusic: false };
 function record(id: string, title: string): StoryboardRecord & StoryboardPipelineResult {
@@ -50,9 +51,9 @@ function generatedResult(title: string) {
 }
 
 let accountId = "user-1";
-let listRecords = async () => [summary(record("storyboard-1", "账号一"))];
-let loadRecord = async (id: string) => record(id, "账号一详情");
-let saveRecord = async (value: ReturnType<typeof record>) => value;
+let listRecords: () => Promise<StoryboardRecordSummary[]> = async () => [summary(record("storyboard-1", "账号一"))];
+let loadRecord: (id: string) => Promise<StoryboardRecord> = async (id) => record(id, "账号一详情");
+let saveRecord: (value: StoryboardRecord) => Promise<StoryboardRecord> = async (value) => value;
 let deleteRecord = async (_id: string) => {};
 let generate = async (..._args: unknown[]) => generatedResult("生成结果");
 const calls: Array<[string, string?]> = [];
@@ -259,6 +260,46 @@ test("重新生成发生修订冲突时恢复服务端 current 工作区", async
     assert.equal(container.querySelector<HTMLInputElement>('input[maxlength="100"]')?.value, "服务端最新版本");
     assert.equal(container.querySelector("aside .ant-tag")?.textContent, "1");
 
+    await act(async () => root.unmount());
+    container.remove();
+});
+
+test("ready 工作区即使规划和校验为空也渲染文档", async () => {
+    calls.length = 0;
+    accountId = "user-1";
+    const current = { ...record("storyboard-1", "部分工作区"), directorPlan: null, validation: null };
+    listRecords = async () => [{ ...summary(record("storyboard-1", "部分工作区")), validationStatus: "" }];
+    loadRecord = async () => current;
+
+    const { container, root } = await mount();
+
+    assert.match(container.textContent || "", /0 场 · 0 镜头/);
+    assert.ok(Array.from(container.querySelectorAll("button")).some((item) => item.textContent?.includes("JSON")));
+    assert.doesNotMatch(container.textContent || "", /导演规划|校验报告/);
+
+    await act(async () => root.unmount());
+    container.remove();
+});
+
+test("生成期间禁止切换、新建或删除工作区", async () => {
+    calls.length = 0;
+    accountId = "user-1";
+    const current = record("storyboard-1", "已有分镜");
+    listRecords = async () => [summary(current)];
+    loadRecord = async () => current;
+    const pending = deferred<StoryboardPipelineResult>();
+    generate = async () => pending.promise;
+
+    const { container, root } = await mount();
+    await act(async () => button(container, "生成分镜").click());
+    await flush();
+
+    assert.equal(button(container, "新建").disabled, true);
+    assert.equal(container.querySelector<HTMLButtonElement>("aside button.min-w-0")?.disabled, true);
+    assert.equal(container.querySelector<HTMLButtonElement>('aside button[aria-label="删除"]')?.disabled, true);
+
+    pending.resolve(generatedResult("生成结果"));
+    await flush();
     await act(async () => root.unmount());
     container.remove();
 });

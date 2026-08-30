@@ -151,6 +151,20 @@ test("document normalization preserves structural IDs across regeneration and as
     assert.notEqual(next.scenes[0].segments[0].shots.find((shot) => shot.shotNo === 3).id, "untrusted-shot");
 });
 
+test("document normalization reuses each existing entity ID at most once", () => {
+    const current = normalizeStoryboardDocument(document);
+    const regenerated = structuredClone(document);
+    regenerated.scenes.push(structuredClone(regenerated.scenes[0]));
+    regenerated.scenes[0].segments.push(structuredClone(regenerated.scenes[0].segments[0]));
+    regenerated.scenes[0].segments[0].shots.push(structuredClone(regenerated.scenes[0].segments[0].shots[0]));
+
+    const next = normalizeStoryboardDocument(regenerated, current);
+
+    assert.equal(new Set(next.scenes.map((scene) => scene.id)).size, next.scenes.length);
+    assert.equal(new Set(next.scenes[0].segments.map((segment) => segment.id)).size, next.scenes[0].segments.length);
+    assert.equal(new Set(next.scenes[0].segments[0].shots.map((shot) => shot.id)).size, next.scenes[0].segments[0].shots.length);
+});
+
 test("structured completion accepts fenced JSON when a provider returns content instead of a tool call", () => {
     assert.deepEqual(parseStructuredCompletion({ content: `\n\`\`\`json\n${JSON.stringify(directorPlan)}\n\`\`\``, toolCalls: [] }, "submit_director_plan"), directorPlan);
 });

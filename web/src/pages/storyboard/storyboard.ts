@@ -334,6 +334,12 @@ export function storyboardToMarkdown(document: StoryboardDocument) {
 }
 
 export function normalizeStoryboardDocument(document: StoryboardDocument, current?: StoryboardDocument | null): StoryboardDocument {
+    const usedIds = new Set<string>();
+    const entityId = (currentId?: string) => {
+        const id = currentId && !usedIds.has(currentId) ? currentId : crypto.randomUUID();
+        usedIds.add(id);
+        return id;
+    };
     const currentScenes = new Map((current?.scenes || []).map((scene) => [scene.sceneNo, scene]));
     return {
         ...document,
@@ -342,14 +348,14 @@ export function normalizeStoryboardDocument(document: StoryboardDocument, curren
             const currentSegments = new Map((currentScene?.segments || []).map((segment) => [segment.segmentNo, segment]));
             return {
                 ...scene,
-                id: currentScene?.id || crypto.randomUUID(),
+                id: entityId(currentScene?.id),
                 segments: scene.segments.map((segment) => {
                     const currentSegment = currentSegments.get(segment.segmentNo);
                     const currentShots = new Map((currentSegment?.shots || []).map((shot) => [shot.shotNo, shot]));
                     return {
                         ...segment,
-                        id: currentSegment?.id || crypto.randomUUID(),
-                        shots: segment.shots.map((shot) => ({ ...shot, id: currentShots.get(shot.shotNo)?.id || crypto.randomUUID() })),
+                        id: entityId(currentSegment?.id),
+                        shots: segment.shots.map((shot) => ({ ...shot, id: entityId(currentShots.get(shot.shotNo)?.id) })),
                     };
                 }),
             };
