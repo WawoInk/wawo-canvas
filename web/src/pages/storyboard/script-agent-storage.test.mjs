@@ -99,6 +99,7 @@ test("保存整个工作区携带预期修订号并提交当前会话派生消�
 
     assert.equal(updateCall.id, "project-1");
     assert.equal(updateCall.expectedRevision, 4);
+    assert.equal(updateCall.workspace.source, "原作素材");
     assert.deepEqual(updateCall.workspace.messages, activeMessages);
     assert.deepEqual(updateCall.workspace.conversations[0].messages, activeMessages);
     assert.equal(saved.revision, 5);

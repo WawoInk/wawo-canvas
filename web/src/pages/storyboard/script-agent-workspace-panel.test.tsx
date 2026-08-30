@@ -89,6 +89,62 @@ test("用户可以编辑故事骨架并保存到工作区", async () => {
     container.remove();
 });
 
+test("用户可以在改编策略右侧预览并编辑素材", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    let saved: ScriptAgentWorkspaceRecord = initialWorkspace;
+
+    function Harness() {
+        const [workspace, setWorkspace] = useState<ScriptAgentWorkspaceRecord>(initialWorkspace);
+        return (
+            <App>
+                <ScriptAgentWorkspacePanel
+                    workspace={workspace}
+                    running={false}
+                    onChange={async (next) => {
+                        saved = next;
+                        setWorkspace(next);
+                    }}
+                    onAction={() => {}}
+                    onCopyScript={() => {}}
+                />
+            </App>
+        );
+    }
+
+    await act(async () => root.render(<Harness />));
+    const tabs = [...container.querySelectorAll('[role="tab"]')];
+    const labels = tabs.map((tab) => tab.textContent?.trim());
+    assert.equal(labels.indexOf("素材"), labels.indexOf("改编策略") + 1);
+
+    const materialTab = tabs.find((tab) => tab.textContent?.trim() === "素材");
+    assert.ok(materialTab);
+    await act(async () => click(materialTab));
+    assert.match(container.textContent || "", /原作素材/);
+
+    const materialPanelId = materialTab.getAttribute("aria-controls");
+    const materialPane = materialPanelId ? container.querySelector(`#${materialPanelId}`) : null;
+    assert.ok(materialPane);
+    const edit = [...materialPane.querySelectorAll("button")].find((button) => button.textContent?.trim() === "编辑");
+    assert.ok(edit);
+    await act(async () => click(edit));
+
+    const editor = materialPane.querySelector<HTMLTextAreaElement>('textarea[aria-label="素材内容"]');
+    assert.ok(editor);
+    await act(async () => input(editor, "最新完整素材"));
+
+    const save = [...container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "保存");
+    assert.ok(save);
+    await act(async () => click(save));
+
+    assert.equal(saved.source, "最新完整素材");
+    assert.match(container.textContent || "", /最新完整素材/);
+
+    await act(async () => root.unmount());
+    container.remove();
+});
+
 test("取消新建剧本不会写入工作区", async () => {
     const container = document.createElement("div");
     document.body.append(container);

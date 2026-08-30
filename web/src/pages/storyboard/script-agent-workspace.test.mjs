@@ -35,6 +35,14 @@ test("manual artifact edits preserve the agent stage and approval state", () => 
     assert.equal(next.version, workspace.version + 1);
 });
 
+test("manual material edits update the source used by later adaptation", () => {
+    const next = saveWorkspaceArtifact(workspace, "source", "  最新完整素材  ");
+
+    assert.equal(next.source, "最新完整素材");
+    assert.equal(next.currentStage, workspace.currentStage);
+    assert.equal(next.version, workspace.version + 1);
+});
+
 test("new scripts fill the first missing episode number", () => {
     assert.deepEqual(createWorkspaceScript(workspace.scripts), {
         episodeNumber: 2,

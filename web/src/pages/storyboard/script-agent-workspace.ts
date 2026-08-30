@@ -1,7 +1,7 @@
 import type { ScriptItem } from "./script-agent";
 import type { ScriptAgentWorkspaceRecord } from "./script-agent-storage";
 
-type EditableArtifact = "storySkeleton" | "adaptationStrategy";
+type EditableArtifact = "source" | "storySkeleton" | "adaptationStrategy";
 
 function touch(workspace: ScriptAgentWorkspaceRecord, changes: Partial<ScriptAgentWorkspaceRecord>): ScriptAgentWorkspaceRecord {
     return { ...workspace, ...changes, version: workspace.version + 1, updatedAt: new Date().toISOString() };

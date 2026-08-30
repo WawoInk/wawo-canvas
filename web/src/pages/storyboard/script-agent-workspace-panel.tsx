@@ -537,6 +537,24 @@ export function ScriptAgentWorkspacePanel({ workspace, running, onChange, onActi
                     ),
                 },
                 {
+                    key: "material",
+                    label: "素材",
+                    children: (
+                        <ArtifactPanel
+                            title="素材"
+                            description="预览和修改 Agent 当前使用的完整故事素材；保存后将用于后续改编。"
+                            content={workspace.source}
+                            status={workspace.source ? "generated" : "empty"}
+                            editorLabel="素材内容"
+                            awaitingDecision={false}
+                            running={running}
+                            stageNotice={stageNotice}
+                            onSave={(content) => onChange(saveWorkspaceArtifact(workspace, "source", content))}
+                            onAction={onAction}
+                        />
+                    ),
+                },
+                {
                     key: "scripts",
                     label: "剧本",
                     children: <ScriptPanel workspace={workspace} running={running} stageNotice={stageNotice} onChange={onChange} onAction={onAction} onCopyScript={onCopyScript} onBusyChange={onBusyChange} />,
