@@ -145,6 +145,46 @@ test("用户可以在改编策略右侧预览并编辑素材", async () => {
     container.remove();
 });
 
+
+test("素材保存失败时保留未保存内容", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () =>
+        root.render(
+            <App>
+                <ScriptAgentWorkspacePanel workspace={initialWorkspace} running={false} onChange={() => {}} onSaveArtifact={async () => false} onAction={() => {}} onCopyScript={() => {}} />
+            </App>,
+        ),
+    );
+
+    const materialTab = [...container.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent?.trim() === "素材");
+    assert.ok(materialTab);
+    await act(async () => click(materialTab));
+
+    const materialPanelId = materialTab.getAttribute("aria-controls");
+    const materialPane = materialPanelId ? container.querySelector(`#${materialPanelId}`) : null;
+    assert.ok(materialPane);
+    const edit = [...materialPane.querySelectorAll("button")].find((button) => button.textContent?.trim() === "编辑");
+    assert.ok(edit);
+    await act(async () => click(edit));
+
+    const editor = materialPane.querySelector<HTMLTextAreaElement>('textarea[aria-label="素材内容"]');
+    assert.ok(editor);
+    await act(async () => input(editor, "未保存的新素材"));
+
+    const save = [...materialPane.querySelectorAll("button")].find((button) => button.textContent?.trim() === "保存");
+    assert.ok(save);
+    await act(async () => click(save));
+
+    const preserved = materialPane.querySelector<HTMLTextAreaElement>('textarea[aria-label="素材内容"]');
+    assert.equal(preserved?.value, "未保存的新素材");
+
+    await act(async () => root.unmount());
+    container.remove();
+});
+
 test("取消新建剧本不会写入工作区", async () => {
     const container = document.createElement("div");
     document.body.append(container);

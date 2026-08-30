@@ -33,6 +33,7 @@ type ScriptAgentWorkspacePanelProps = {
     workspace: ScriptAgentWorkspaceRecord;
     running: boolean;
     onChange: (nextWorkspace: ScriptAgentWorkspaceRecord) => void | Promise<void>;
+    onSaveArtifact?: (nextWorkspace: ScriptAgentWorkspaceRecord) => boolean | Promise<boolean>;
     onAction: (action: ScriptAgentAction, instruction?: string) => void | Promise<void>;
     onCopyScript: (content: string) => void;
     onBusyChange?: (busy: boolean) => void;
@@ -48,7 +49,7 @@ type ArtifactPanelProps = {
     awaitingDecision: boolean;
     running: boolean;
     stageNotice: ReactNode;
-    onSave: (content: string) => void | Promise<void>;
+    onSave: (content: string) => boolean | void | Promise<boolean | void>;
     onAction: ScriptAgentWorkspacePanelProps["onAction"];
 };
 
@@ -101,6 +102,7 @@ function ArtifactPanel({ title, description, content, status, review, editorLabe
     const [draft, setDraft] = useState(content);
     const [instruction, setInstruction] = useState("");
     const [manualRevision, setManualRevision] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         if (!editing) setDraft(content);
@@ -112,12 +114,24 @@ function ArtifactPanel({ title, description, content, status, review, editorLabe
         setEditing(false);
     }, [content, running]);
 
-    function save() {
+    async function save() {
         const value = draft.trim();
         if (!value) return;
-        void onSave(value);
-        setManualRevision(value);
-        setEditing(false);
+        setSaving(true);
+        try {
+            if ((await onSave(value)) === false) {
+                setDraft(value);
+                setEditing(true);
+                return;
+            }
+            setManualRevision(value);
+            setEditing(false);
+        } catch {
+            setDraft(value);
+            setEditing(true);
+        } finally {
+            setSaving(false);
+        }
     }
 
     function cancel() {
@@ -144,10 +158,10 @@ function ArtifactPanel({ title, description, content, status, review, editorLabe
                 <div className="flex shrink-0 items-center gap-1">
                     {editing ? (
                         <>
-                            <Button size="small" icon={<Save className="size-4" />} disabled={running || !draft.trim()} onClick={save}>
+                            <Button size="small" icon={<Save className="size-4" />} disabled={running || saving || !draft.trim()} onClick={() => void save()}>
                                 保存
                             </Button>
-                            <Button size="small" type="text" icon={<X className="size-4" />} onClick={cancel}>
+                            <Button size="small" type="text" icon={<X className="size-4" />} disabled={saving} onClick={cancel}>
                                 取消
                             </Button>
                         </>
@@ -156,7 +170,7 @@ function ArtifactPanel({ title, description, content, status, review, editorLabe
                             size="small"
                             type="text"
                             icon={<Pencil className="size-4" />}
-                            disabled={running}
+                            disabled={running || saving}
                             onClick={() => {
                                 setDraft(content);
                                 setEditing(true);
@@ -169,7 +183,7 @@ function ArtifactPanel({ title, description, content, status, review, editorLabe
             </div>
 
             {editing ? (
-                <Input.TextArea aria-label={editorLabel} value={draft} onChange={(event) => setDraft(event.target.value)} autoSize={{ minRows: 16, maxRows: 36 }} disabled={running} />
+                <Input.TextArea aria-label={editorLabel} value={draft} onChange={(event) => setDraft(event.target.value)} autoSize={{ minRows: 16, maxRows: 36 }} disabled={running || saving} />
             ) : content ? (
                 <div className="min-h-64 whitespace-pre-wrap break-words rounded-md bg-muted/25 p-4 text-sm leading-7">{content}</div>
             ) : (
@@ -488,8 +502,14 @@ function ScriptPanel({ workspace, running, stageNotice, onChange, onCopyScript, 
     );
 }
 
-export function ScriptAgentWorkspacePanel({ workspace, running, onChange, onAction, onCopyScript, onBusyChange }: ScriptAgentWorkspacePanelProps) {
+export function ScriptAgentWorkspacePanel({ workspace, running, onChange, onSaveArtifact, onAction, onCopyScript, onBusyChange }: ScriptAgentWorkspacePanelProps) {
     const stageNotice = <StageNotice stage={workspace.currentStage} running={running} onAction={onAction} />;
+
+    async function saveArtifact(next: ScriptAgentWorkspaceRecord) {
+        if (onSaveArtifact) return onSaveArtifact(next);
+        await onChange(next);
+        return true;
+    }
 
     return (
         <Tabs
@@ -512,7 +532,7 @@ export function ScriptAgentWorkspacePanel({ workspace, running, onChange, onActi
                             awaitingDecision={workspace.currentStage === "awaiting_story_skeleton_decision"}
                             running={running}
                             stageNotice={stageNotice}
-                            onSave={(content) => onChange(saveWorkspaceArtifact(workspace, "storySkeleton", content))}
+                            onSave={(content) => saveArtifact(saveWorkspaceArtifact(workspace, "storySkeleton", content))}
                             onAction={onAction}
                         />
                     ),
@@ -531,7 +551,7 @@ export function ScriptAgentWorkspacePanel({ workspace, running, onChange, onActi
                             awaitingDecision={workspace.currentStage === "awaiting_adaptation_decision"}
                             running={running}
                             stageNotice={stageNotice}
-                            onSave={(content) => onChange(saveWorkspaceArtifact(workspace, "adaptationStrategy", content))}
+                            onSave={(content) => saveArtifact(saveWorkspaceArtifact(workspace, "adaptationStrategy", content))}
                             onAction={onAction}
                         />
                     ),
@@ -542,14 +562,14 @@ export function ScriptAgentWorkspacePanel({ workspace, running, onChange, onActi
                     children: (
                         <ArtifactPanel
                             title="素材"
-                            description="预览和修改 Agent 当前使用的完整故事素材；保存后将用于后续改编。"
+                            description="预览和修改 Agent 当前使用的完整故事素材；之后新发起的生成会使用最新内容，不会自动改写既有产物。"
                             content={workspace.source}
                             status={workspace.source ? "generated" : "empty"}
                             editorLabel="素材内容"
                             awaitingDecision={false}
                             running={running}
                             stageNotice={stageNotice}
-                            onSave={(content) => onChange(saveWorkspaceArtifact(workspace, "source", content))}
+                            onSave={(content) => saveArtifact(saveWorkspaceArtifact(workspace, "source", content))}
                             onAction={onAction}
                         />
                     ),

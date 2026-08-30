@@ -144,6 +144,11 @@ export function ScriptAgentStudio({ projectId, onBack, onWorkspaceChange }: { pr
         await saveWithFeedback(value);
     }
 
+
+    async function persistArtifact(value: ScriptAgentWorkspaceRecord): Promise<boolean> {
+        return Boolean(await saveWithFeedback(value));
+    }
+
     async function run(operation: (signal: AbortSignal, onEvent: (event: ScriptAgentEvent) => void) => Promise<ScriptAgentWorkspaceRecord>) {
         if (!persistedWorkspaceRef.current || busy) return;
         if (!model || !isAiConfigReady({ ...config, model, textModel: model }, model)) {
@@ -318,7 +323,7 @@ export function ScriptAgentStudio({ projectId, onBack, onWorkspaceChange }: { pr
                         </Button>
                     ) : null}
                 </div>
-                <ScriptAgentWorkspacePanel workspace={workspace} running={busy} onChange={persist} onAction={action} onCopyScript={copyScript} onBusyChange={setWorkspaceMutating} />
+                <ScriptAgentWorkspacePanel workspace={workspace} running={busy} onChange={persist} onSaveArtifact={persistArtifact} onAction={action} onCopyScript={copyScript} onBusyChange={setWorkspaceMutating} />
             </aside>
         </div>
     );
