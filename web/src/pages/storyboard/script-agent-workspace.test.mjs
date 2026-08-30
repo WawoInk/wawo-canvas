@@ -20,6 +20,8 @@ const workspace = {
         { episodeNumber: 3, name: "第三集", content: "第三集正文", sourceChapterIndexes: [3], version: 1 },
     ],
     messages: [],
+    conversations: [{ id: "conversation-1", title: "新对话", messages: [], createdAt: "2026-08-29T00:00:00.000Z", updatedAt: "2026-08-29T00:00:00.000Z" }],
+    activeConversationId: "conversation-1",
     version: 4,
     updatedAt: "2026-08-29T00:00:00.000Z",
 };

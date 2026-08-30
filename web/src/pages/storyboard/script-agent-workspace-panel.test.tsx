@@ -28,6 +28,8 @@ const initialWorkspace: ScriptAgentWorkspaceRecord = {
     adaptationReview: undefined,
     scripts: [],
     messages: [],
+    conversations: [{ id: "conversation-1", title: "新对话", messages: [], createdAt: "2026-08-29T00:00:00.000Z", updatedAt: "2026-08-29T00:00:00.000Z" }],
+    activeConversationId: "conversation-1",
     version: 1,
     updatedAt: "2026-08-29T00:00:00.000Z",
 };
