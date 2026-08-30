@@ -2237,6 +2237,10 @@
                 "title": "分镜创作室 | Canvan",
                 "description": "将剧本生成可校验、可导出的结构化分镜文档。"
             },
+            "scriptAgent": {
+                "title": "剧本 Agent | Canvan",
+                "description": "通过 AI 对话创作、修改和管理剧本。"
+            },
             "video": {
                 "title": "视频创作台 | Canvan",
                 "description": "使用 AI 创建和管理视频生成任务。"

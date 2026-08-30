@@ -20,6 +20,14 @@ description: 后端统一响应信封与结构化生成错误
 - `msg` 是可以展示给用户的安全消息；未声明为安全的内部错误统一显示“操作失败”。
 - 乐观锁冲突使用 HTTP 409 和 `code: -1`。
 
+## AI Compatibility 流式响应
+
+AI Compatibility Proxy 的成功响应保留上游响应格式。响应 `Content-Type` 为 `text/event-stream`、`application/x-ndjson` 或 `application/ndjson` 时，服务端逐块转发并及时 Flush，不发送 `Content-Length`；客户端取消或断开连接时，同一个请求的取消信号会传播到上游。
+
+上游在流开始前返回 4xx/5xx 时，继续返回可展示的 `{ code: 1, data: null, msg }` 业务失败响应，不以成功 SSE/NDJSON 的形式转发。流已经开始后发生客户端取消、上游读取错误或下游写入错误时，服务端直接结束流，不再向已经开始的流追加 JSON 错误，也不得把任务记录为完整成功。
+
+任务审计只保存脱敏副本，不保存 Authorization、真实 API Key 或 URL 查询参数值；审计脱敏不修改实际转发给客户端或用于后续业务处理的上游响应。普通 JSON、图片、音频和视频 Compatibility 响应继续沿用原有非流式行为。
+
 ## 结构化生成错误
 
 第一方生成接口的可定位错误在同一信封的 `data` 中返回：

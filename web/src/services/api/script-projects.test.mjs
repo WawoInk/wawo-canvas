@@ -13,14 +13,7 @@ mock.module("@/services/api/request", () => ({
 }));
 mock.module("@/stores/use-user-store", () => ({ useUserStore: { getState: () => ({ token }) } }));
 
-const {
-    createScriptProject,
-    deleteScriptProject,
-    fetchScriptProject,
-    fetchScriptProjects,
-    renameScriptProject,
-    updateScriptProject,
-} = await import("./script-projects.ts");
+const { createScriptProject, deleteScriptProject, fetchScriptProject, fetchScriptProjects, renameScriptProject, updateScriptProject } = await import("./script-projects.ts");
 
 const workspace = {
     id: "project-1",

@@ -55,7 +55,15 @@ test("空剧本空间可以通过表单创建剧本", async () => {
     await act(async () =>
         root.render(
             <App>
-                <ScriptAgentSpace projects={[]} onCreate={(title, source) => created.push([title, source])} onOpen={() => {}} onRename={() => {}} onDelete={() => {}} />
+                <ScriptAgentSpace
+                    projects={[]}
+                    onCreate={(title, source) => {
+                        created.push([title, source]);
+                    }}
+                    onOpen={() => {}}
+                    onRename={() => {}}
+                    onDelete={() => {}}
+                />
             </App>,
         ),
     );
@@ -97,8 +105,12 @@ test("剧本卡片支持进入、重命名和二次确认删除", async () => {
                     projects={[project]}
                     onCreate={() => {}}
                     onOpen={(projectId) => opened.push(projectId)}
-                    onRename={(projectId, title) => renamed.push([projectId, title])}
-                    onDelete={(projectId) => deleted.push(projectId)}
+                    onRename={(projectId, title) => {
+                        renamed.push([projectId, title]);
+                    }}
+                    onDelete={(projectId) => {
+                        deleted.push(projectId);
+                    }}
                 />
             </App>,
         ),
@@ -142,7 +154,15 @@ test("创建剧本时原作素材可以稍后补充", async () => {
     await act(async () =>
         root.render(
             <App>
-                <ScriptAgentSpace projects={[]} onCreate={(title, source) => created.push([title, source])} onOpen={() => {}} onRename={() => {}} onDelete={() => {}} />
+                <ScriptAgentSpace
+                    projects={[]}
+                    onCreate={(title, source) => {
+                        created.push([title, source]);
+                    }}
+                    onOpen={() => {}}
+                    onRename={() => {}}
+                    onDelete={() => {}}
+                />
             </App>,
         ),
     );

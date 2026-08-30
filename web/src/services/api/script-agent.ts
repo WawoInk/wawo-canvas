@@ -246,10 +246,7 @@ function projectConfigText(config: ScriptProjectConfig) {
     return JSON.stringify(config, null, 2);
 }
 
-export function buildScriptAgentConversationContext(
-    workspace: Pick<ScriptAgentWorkspaceRecord, "messages" | "conversations" | "activeConversationId">,
-    omitTrailingUserContent = "",
-) {
+export function buildScriptAgentConversationContext(workspace: Pick<ScriptAgentWorkspaceRecord, "messages" | "conversations" | "activeConversationId">, omitTrailingUserContent = "") {
     const active = workspace.conversations.find((conversation) => conversation.id === workspace.activeConversationId);
     const messages = active?.messages || workspace.messages;
     const history = omitTrailingUserContent.trim() && messages.at(-1)?.role === "user" && messages.at(-1)?.content.trim() === omitTrailingUserContent.trim() ? messages.slice(0, -1) : messages;

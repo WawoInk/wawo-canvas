@@ -5,7 +5,13 @@ import { test } from "node:test";
 if (typeof window === "undefined") GlobalRegistrator.register();
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const conversation = { id: "conversation-1", title: "人物设定", messages: [{ id: "message-1", role: "user", content: "只属于当前会话", createdAt: "2026-08-30T00:00:00.000Z" }], createdAt: "2026-08-30T00:00:00.000Z", updatedAt: "2026-08-30T00:00:00.000Z" };
+const conversation = {
+    id: "conversation-1",
+    title: "人物设定",
+    messages: [{ id: "message-1", role: "user", content: "只属于当前会话", createdAt: "2026-08-30T00:00:00.000Z" }],
+    createdAt: "2026-08-30T00:00:00.000Z",
+    updatedAt: "2026-08-30T00:00:00.000Z",
+};
 const workspace = {
     id: "project-1",
     projectId: "project-1",
@@ -38,6 +44,7 @@ let loadedProjectId = "";
 let savedRevision = 0;
 let loadMode: "success" | "missing" = "success";
 let saveMode: "success" | "failure" | "conflict" = "success";
+// @ts-expect-error Bun provides module mocking at test runtime.
 const { mock } = await import("bun:test");
 mock.module("react-i18next", () => ({ useTranslation: () => ({ t: (_key: string, options?: { defaultValue?: string }) => options?.defaultValue || _key }) }));
 mock.module("@/stores/use-user-store", () => ({ useUserStore: (selector: (state: unknown) => unknown) => selector({ user: { id: "user-1" } }) }));
@@ -63,7 +70,13 @@ mock.module("./script-agent-storage", () => ({
     scriptAgentConflictWorkspace: (error: { data?: { current?: typeof workspace } }) => error.data?.current || null,
 }));
 mock.module("./script-agent-workspace-panel", () => ({ ScriptAgentWorkspacePanel: () => <div data-testid="workspace-panel" /> }));
-mock.module("./script-agent-conversations", () => ({ ScriptAgentConversations: ({ onChange }: { onChange: (workspace: typeof changed) => void }) => <button data-testid="history" onClick={() => void onChange(changed)}>历史记录</button> }));
+mock.module("./script-agent-conversations", () => ({
+    ScriptAgentConversations: ({ onChange }: { onChange: (workspace: typeof changed) => void }) => (
+        <button data-testid="history" onClick={() => void onChange(changed)}>
+            历史记录
+        </button>
+    ),
+}));
 
 const { App } = await import("antd");
 const { act } = await import("react");
@@ -75,11 +88,17 @@ async function flush() {
     await Promise.resolve();
 }
 
-async function mount(onWorkspaceChange: (value: typeof workspace) => void = () => {}, onBack = () => {}) {
+async function mount(onWorkspaceChange: (value: { revision?: number }) => void = () => {}, onBack = () => {}) {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
-    await act(async () => root.render(<App><ScriptAgentStudio projectId="project-1" onBack={onBack} onWorkspaceChange={onWorkspaceChange} /></App>));
+    await act(async () =>
+        root.render(
+            <App>
+                <ScriptAgentStudio projectId="project-1" onBack={onBack} onWorkspaceChange={onWorkspaceChange} />
+            </App>,
+        ),
+    );
     await act(flush);
     return { container, root };
 }
@@ -87,7 +106,7 @@ async function mount(onWorkspaceChange: (value: typeof workspace) => void = () =
 test("具体剧本工作区按项目加载并在服务端保存成功后更新", async () => {
     loadMode = "success";
     saveMode = "success";
-    const saved: typeof workspace[] = [];
+    const saved: Array<{ revision?: number }> = [];
     const { container, root } = await mount((value) => saved.push(value));
 
     assert.equal(loadedProjectId, "project-1");
@@ -105,7 +124,7 @@ test("具体剧本工作区按项目加载并在服务端保存成功后更新",
 test("修订冲突会恢复已持久化工作区且不通知列表保存成功", async () => {
     loadMode = "success";
     saveMode = "conflict";
-    const saved: typeof workspace[] = [];
+    const saved: Array<{ revision?: number }> = [];
     const { container, root } = await mount((value) => saved.push(value));
 
     await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="history"]')?.click());
@@ -120,11 +139,15 @@ test("修订冲突会恢复已持久化工作区且不通知列表保存成功",
     container.remove();
 });
 
-
 test("服务端项目已删除时返回剧本空间", async () => {
     loadMode = "missing";
     let backCount = 0;
-    const { container, root } = await mount(() => {}, () => { backCount += 1; });
+    const { container, root } = await mount(
+        () => {},
+        () => {
+            backCount += 1;
+        },
+    );
 
     assert.equal(backCount, 1);
     assert.doesNotMatch(container.textContent || "", /工作区加载失败/);

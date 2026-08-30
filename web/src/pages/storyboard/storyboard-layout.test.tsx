@@ -20,7 +20,13 @@ test("分镜创作室保留内容边界并提供页面级纵向滚动", async ()
     document.body.append(container);
     const root = createRoot(container);
 
-    await act(async () => root.render(<MemoryRouter initialEntries={["/storyboard"]}><StoryboardPage /></MemoryRouter>));
+    await act(async () =>
+        root.render(
+            <MemoryRouter initialEntries={["/storyboard"]}>
+                <StoryboardPage />
+            </MemoryRouter>,
+        ),
+    );
 
     const page = container.firstElementChild;
     assert.ok(page);

@@ -104,7 +104,6 @@ test("新建对话会创建独立会话并切换为当前会话", async () => {
     container.remove();
 });
 
-
 test("切换历史对话会恢复该会话消息", async () => {
     const container = document.createElement("div");
     document.body.append(container);
@@ -136,7 +135,6 @@ test("切换历史对话会恢复该会话消息", async () => {
     await act(async () => root.unmount());
     container.remove();
 });
-
 
 test("清空当前对话需要确认且不会影响其他会话", async () => {
     const container = document.createElement("div");
@@ -176,7 +174,6 @@ test("清空当前对话需要确认且不会影响其他会话", async () => {
     await act(async () => root.unmount());
     container.remove();
 });
-
 
 test("可以重命名历史对话", async () => {
     const container = document.createElement("div");

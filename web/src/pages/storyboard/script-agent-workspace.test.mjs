@@ -69,7 +69,10 @@ test("script edits replace the episode, increment its version and keep scripts o
 test("scripts can be removed from the editable workspace", () => {
     const next = removeWorkspaceScript(workspace, 1);
 
-    assert.deepEqual(next.scripts.map((script) => script.episodeNumber), [3]);
+    assert.deepEqual(
+        next.scripts.map((script) => script.episodeNumber),
+        [3],
+    );
     assert.equal(next.version, workspace.version + 1);
 });
 
@@ -87,7 +90,10 @@ test("manual script changes keep the completed stage in sync", () => {
         wordsPerEpisode: 300,
     };
     const ready = { ...workspace, currentStage: "ready_for_script", projectConfig, scripts: [workspace.scripts[0], { ...workspace.scripts[1], episodeNumber: 2, name: "第二集" }] };
-    const completed = upsertWorkspaceScript(ready, workspace.scripts.find((script) => script.episodeNumber === 3));
+    const completed = upsertWorkspaceScript(
+        ready,
+        workspace.scripts.find((script) => script.episodeNumber === 3),
+    );
 
     assert.equal(completed.currentStage, "completed");
     assert.equal(removeWorkspaceScript(completed, 2).currentStage, "ready_for_script");
