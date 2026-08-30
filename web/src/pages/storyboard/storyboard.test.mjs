@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { parseStructuredCompletion, runStoryboardPipeline, storyboardToMarkdown, validateStoryboardDocument } from "./storyboard.ts";
+import { normalizeStoryboardDocument, parseStructuredCompletion, runStoryboardPipeline, storyboardToMarkdown, validateStoryboardDocument } from "./storyboard.ts";
 
 const source = `第一场 废弃医院大厅 夜\n女记者握紧录音笔。\n保安：那里刚才有人。`;
 
@@ -11,6 +11,7 @@ const directorPlan = {
     sourceType: "script",
     scenes: [
         {
+            id: "model-id",
             sceneNo: 1,
             sourceRefs: ["source:1"],
             location: "废弃医院大厅",
@@ -39,11 +40,13 @@ const document = {
             emotion: "紧张升级",
             segments: [
                 {
+                    id: "model-id",
                     segmentNo: 1,
                     durationSec: 7,
                     assetIds: [],
                     shots: [
                         {
+                            id: "model-id",
                             shotNo: 1,
                             visual: "女记者握紧录音笔，保安望向走廊。",
                             durationSec: 3,
@@ -54,6 +57,7 @@ const document = {
                             sourceRefs: ["source:2"],
                         },
                         {
+                            id: "model-id",
                             shotNo: 2,
                             visual: "保安抬手指向走廊尽头。",
                             durationSec: 4,
@@ -110,6 +114,41 @@ test("storyboard pipeline uses the selected text-model transport for two ordered
     assert.deepEqual(stages, ["planning", "generating", "validating"]);
     assert.equal(result.validation.status, "passed");
     assert.match(result.sourceHash, /^sha256:[a-f0-9]{64}$/);
+    const ids = [result.document.scenes[0].id, result.document.scenes[0].segments[0].id, ...result.document.scenes[0].segments[0].shots.map((shot) => shot.id)];
+    assert.equal(new Set(ids).size, ids.length);
+    ids.forEach((id) => {
+        assert.ok(id);
+        assert.notEqual(id, "model-id");
+    });
+});
+
+test("document normalization preserves structural IDs across regeneration and assigns new IDs to new entities", () => {
+    const current = normalizeStoryboardDocument(document);
+    const regenerated = structuredClone(document);
+    regenerated.scenes[0].id = "untrusted-scene";
+    regenerated.scenes[0].segments[0].id = "untrusted-segment";
+    regenerated.scenes[0].segments[0].shots.reverse();
+    regenerated.scenes[0].segments[0].shots.forEach((shot) => (shot.id = "untrusted-shot"));
+    regenerated.scenes[0].segments[0].shots.push({
+        id: "untrusted-shot",
+        shotNo: 3,
+        visual: "走廊灯光熄灭。",
+        durationSec: 1,
+        framing: "远景",
+        camera: "固定",
+        dialogue: "",
+        sound: "电流声",
+        sourceRefs: ["source:4"],
+    });
+
+    const next = normalizeStoryboardDocument(regenerated, current);
+    const currentShots = new Map(current.scenes[0].segments[0].shots.map((shot) => [shot.shotNo, shot.id]));
+
+    assert.equal(next.scenes[0].id, current.scenes[0].id);
+    assert.equal(next.scenes[0].segments[0].id, current.scenes[0].segments[0].id);
+    assert.equal(next.scenes[0].segments[0].shots.find((shot) => shot.shotNo === 1).id, currentShots.get(1));
+    assert.equal(next.scenes[0].segments[0].shots.find((shot) => shot.shotNo === 2).id, currentShots.get(2));
+    assert.notEqual(next.scenes[0].segments[0].shots.find((shot) => shot.shotNo === 3).id, "untrusted-shot");
 });
 
 test("structured completion accepts fenced JSON when a provider returns content instead of a tool call", () => {
