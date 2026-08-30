@@ -1,20 +1,65 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-const buckets = new Map();
-// Bun provides module mocking at test runtime.
+const activeMessages = [{ id: "message-1", role: "user", content: "人物设定", createdAt: "2026-08-30T00:00:00.000Z" }];
+const detail = {
+    id: "project-1",
+    projectId: "project-1",
+    title: "雾城追凶",
+    source: "原作素材",
+    currentStage: "collecting_config",
+    projectConfig: null,
+    configDraft: {},
+    storySkeleton: "",
+    storySkeletonStatus: "empty",
+    adaptationStrategy: "",
+    adaptationStatus: "empty",
+    scripts: [],
+    messages: [{ id: "stale", role: "assistant", content: "顶层旧副本", createdAt: "2026-08-30T00:00:00.000Z" }],
+    conversations: [
+        { id: "conversation-1", title: "人物设定", messages: activeMessages, createdAt: "2026-08-30T00:00:00.000Z", updatedAt: "2026-08-30T00:00:00.000Z" },
+        { id: "conversation-2", title: "结局优化", messages: [], createdAt: "2026-08-30T00:00:00.000Z", updatedAt: "2026-08-30T00:00:00.000Z" },
+    ],
+    activeConversationId: "conversation-1",
+    version: 3,
+    revision: 4,
+    createdAt: "2026-08-30T00:00:00.000Z",
+    updatedAt: "2026-08-30T00:00:00.000Z",
+};
+const summary = {
+    id: "project-1",
+    title: "雾城追凶",
+    source: "原作素材",
+    currentStage: "collecting_config",
+    projectId: "project-1",
+    version: 3,
+    revision: 4,
+    createdAt: detail.createdAt,
+    updatedAt: detail.updatedAt,
+};
+
+let createCall;
+let updateCall;
+let renameCall;
+let deletedId = "";
 const { mock } = await import("bun:test");
-mock.module("localforage", () => ({
-    default: {
-        createInstance: ({ storeName }) => {
-            const values = buckets.get(storeName) || new Map();
-            buckets.set(storeName, values);
-            return {
-                getItem: async (key) => values.get(key) ?? null,
-                setItem: async (key, value) => (values.set(key, value), value),
-                removeItem: async (key) => void values.delete(key),
-            };
-        },
+mock.module("@/services/api/script-projects", () => ({
+    fetchScriptProjects: async () => [summary],
+    fetchScriptProject: async () => detail,
+    createScriptProject: async (workspace) => {
+        createCall = workspace;
+        return { ...workspace, revision: 1, createdAt: detail.createdAt };
+    },
+    updateScriptProject: async (id, workspace, expectedRevision) => {
+        updateCall = { id, workspace, expectedRevision };
+        return { ...workspace, id, revision: expectedRevision + 1, createdAt: detail.createdAt, messages: detail.messages };
+    },
+    renameScriptProject: async (id, title, expectedRevision) => {
+        renameCall = { id, title, expectedRevision };
+        return { ...detail, id, projectId: id, title, revision: expectedRevision + 1 };
+    },
+    deleteScriptProject: async (id) => {
+        deletedId = id;
     },
 }));
 
@@ -23,31 +68,73 @@ const {
     clearScriptAgentConversation,
     createDefaultScriptAgentWorkspace,
     createScriptAgentConversation,
-    createScriptAgentProject,
-    deleteScriptAgentProject,
-    renameScriptAgentProject,
-    selectScriptAgentConversation,
-    clearScriptAgentWorkspace,
+    createScriptAgentWorkspace,
+    deleteScriptAgentWorkspace,
     loadScriptAgentProjects,
     loadScriptAgentWorkspace,
+    renameScriptAgentConversation,
+    scriptAgentConflictWorkspace,
+    renameScriptAgentWorkspace,
     saveScriptAgentWorkspace,
+    selectScriptAgentConversation,
 } = await import("./script-agent-storage.ts");
 
-function project(title = "雾城追凶") {
-    return createScriptAgentProject(title, "原作素材");
-}
+test("列表只返回服务端剧本摘要", async () => {
+    const projects = await loadScriptAgentProjects();
+    assert.deepEqual(projects, [summary]);
+    assert.equal("conversations" in projects[0], false);
+});
 
-test("剧本项目拥有独立的默认对话", () => {
-    const value = project();
+test("工作区详情从当前会话派生顶层消息", async () => {
+    const workspace = await loadScriptAgentWorkspace("project-1");
+    assert.equal(workspace.projectId, "project-1");
+    assert.deepEqual(workspace.messages, activeMessages);
+    assert.notEqual(workspace.messages[0].content, "顶层旧副本");
+});
 
-    assert.equal(value.title, "雾城追凶");
-    assert.equal(value.projectId, value.id);
-    assert.equal(value.conversations.length, 1);
-    assert.equal(value.activeConversationId, value.conversations[0].id);
+test("保存整个工作区携带预期修订号并提交当前会话派生消息", async () => {
+    updateCall = undefined;
+    const workspace = await loadScriptAgentWorkspace("project-1");
+    const saved = await saveScriptAgentWorkspace(workspace);
+
+    assert.equal(updateCall.id, "project-1");
+    assert.equal(updateCall.expectedRevision, 4);
+    assert.deepEqual(updateCall.workspace.messages, activeMessages);
+    assert.deepEqual(updateCall.workspace.conversations[0].messages, activeMessages);
+    assert.equal(saved.revision, 5);
+    assert.deepEqual(saved.messages, activeMessages);
+});
+
+test("创建、重命名和删除都委托给服务端 API", async () => {
+    createCall = undefined;
+    const created = await createScriptAgentWorkspace(" 新剧本 ", " 新素材 ");
+    assert.equal(created.projectId, created.id);
+    assert.equal(created.revision, 1);
+    assert.equal(createCall.projectId, createCall.id);
+    assert.equal(createCall.title, "新剧本");
+    assert.equal(createCall.source, "新素材");
+
+    const renamed = await renameScriptAgentWorkspace(summary, " 新标题 ");
+    assert.deepEqual(renameCall, { id: "project-1", title: "新标题", expectedRevision: 4 });
+    assert.equal(renamed.title, "新标题");
+    assert.equal(renamed.revision, 5);
+
+    await deleteScriptAgentWorkspace("project-1");
+    assert.equal(deletedId, "project-1");
+});
+
+test("修订冲突可以恢复服务端返回的当前工作区", () => {
+    const current = { ...detail, title: "服务端最新版本", revision: 8 };
+    const restored = scriptAgentConflictWorkspace({ status: 409, data: { current } });
+
+    assert.equal(restored.title, "服务端最新版本");
+    assert.equal(restored.revision, 8);
+    assert.deepEqual(restored.messages, activeMessages);
+    assert.equal(scriptAgentConflictWorkspace({ status: 500, data: { current } }), null);
 });
 
 test("新建和切换对话只恢复目标对话消息", () => {
-    const first = appendScriptAgentMessage(project(), "user", "人物设定");
+    const first = appendScriptAgentMessage(createDefaultScriptAgentWorkspace(), "user", "人物设定");
     const second = createScriptAgentConversation(first, "第一幕修改");
     const withMessage = appendScriptAgentMessage(second, "assistant", "请先确定人物目标");
     const restored = selectScriptAgentConversation(withMessage, first.activeConversationId);
@@ -55,89 +142,17 @@ test("新建和切换对话只恢复目标对话消息", () => {
     assert.equal(withMessage.conversations.length, 2);
     assert.equal(restored.messages.length, 1);
     assert.equal(restored.messages[0].content, "人物设定");
-    assert.equal(restored.activeConversationId, first.activeConversationId);
 });
 
-test("清空对话只删除当前会话消息并保留会话", () => {
-    const first = appendScriptAgentMessage(project(), "user", "人物设定");
-    const second = createScriptAgentConversation(first, "第一幕修改");
-    const withMessage = appendScriptAgentMessage(second, "assistant", "继续");
-    const cleared = clearScriptAgentConversation(withMessage);
+test("清空和重命名只修改目标会话", () => {
+    const first = appendScriptAgentMessage(createDefaultScriptAgentWorkspace(), "user", "人物设定");
+    const second = appendScriptAgentMessage(createScriptAgentConversation(first, "第一幕修改"), "assistant", "继续");
+    const cleared = clearScriptAgentConversation(second);
+    const renamed = renameScriptAgentConversation(cleared, first.activeConversationId, "人物小传");
 
-    assert.equal(cleared.messages.length, 0);
-    assert.equal(cleared.conversations.length, 2);
-    assert.equal(cleared.conversations[1].messages.length, 0);
-    assert.equal(cleared.conversations[0].messages.length, 1);
-});
-
-test("剧本管理操作只影响目标剧本集合", () => {
-    const first = project("第一个剧本");
-    const second = project("第二个剧本");
-    const renamed = renameScriptAgentProject([first, second], first.projectId, "重命名剧本");
-    const remaining = deleteScriptAgentProject(renamed, second.projectId);
-
-    assert.deepEqual(remaining.map((item) => item.title), ["重命名剧本"]);
-    assert.equal(remaining[0].projectId, first.projectId);
-});
-
-test("默认工作区仍能作为未持久化新剧本创建", () => {
-    const value = createDefaultScriptAgentWorkspace();
-    assert.equal(value.messages.length, 0);
-    assert.equal(value.conversations.length, 1);
-});
-
-
-test("保存时把顶层消息同步进当前会话并在重新加载后保留", async () => {
-    const userId = "script-agent-storage-sync";
-    await clearScriptAgentWorkspace(userId);
-    const value = project();
-    const assistantMessage = { id: "assistant-1", role: "assistant", content: "已完成当前会话回复", createdAt: "2026-08-30T00:00:00.000Z" };
-    await saveScriptAgentWorkspace(userId, { ...value, messages: [assistantMessage] });
-
-    const loaded = await loadScriptAgentWorkspace(userId, value.projectId);
-    assert.ok(loaded);
-    assert.equal(loaded.messages[0].content, "已完成当前会话回复");
-    assert.equal(loaded.conversations[0].messages[0].content, "已完成当前会话回复");
-    await clearScriptAgentWorkspace(userId);
-});
-
-test("指定不存在的剧本不会静默创建新项目", async () => {
-    const userId = "script-agent-storage-missing";
-    await clearScriptAgentWorkspace(userId);
-    assert.equal(await loadScriptAgentWorkspace(userId, "missing-project"), null);
-});
-
-
-test("旧单工作区首次读取后迁移为稳定的剧本和会话 ID", async () => {
-    const userId = "script-agent-storage-legacy";
-    const { accountStoreName } = await import("@/lib/account-storage");
-    const storeName = accountStoreName("script_agent_workspaces", userId);
-    const legacy = project("旧剧本");
-    const legacyMessage = { id: "legacy-message", role: "user", content: "旧对话", createdAt: "2026-08-30T00:00:00.000Z" };
-    delete legacy.conversations;
-    delete legacy.activeConversationId;
-    legacy.messages = [legacyMessage];
-    buckets.set(storeName, new Map([["default", legacy]]));
-
-    const first = await loadScriptAgentProjects(userId);
-    const second = await loadScriptAgentProjects(userId);
-    assert.equal(second[0].projectId, first[0].projectId);
-    assert.equal(second[0].activeConversationId, first[0].activeConversationId);
-    assert.equal(second[0].messages[0].content, "旧对话");
-    await clearScriptAgentWorkspace(userId);
-});
-
-test("不同剧本的会话和消息持久化相互隔离", async () => {
-    const userId = "script-agent-storage-project-isolation";
-    await clearScriptAgentWorkspace(userId);
-    const first = appendScriptAgentMessage(project("剧本一"), "user", "剧本一消息");
-    const second = appendScriptAgentMessage(project("剧本二"), "user", "剧本二消息");
-    await saveScriptAgentWorkspace(userId, first);
-    await saveScriptAgentWorkspace(userId, second);
-
-    const loadedFirst = await loadScriptAgentWorkspace(userId, first.projectId);
-    const loadedSecond = await loadScriptAgentWorkspace(userId, second.projectId);
-    assert.equal(loadedFirst.messages[0].content, "剧本一消息");
-    assert.equal(loadedSecond.messages[0].content, "剧本二消息");
-    await clearScriptAgentWorkspace(userId);
+    assert.equal(renamed.messages.length, 0);
+    assert.equal(renamed.conversations.length, 2);
+    assert.equal(renamed.conversations[0].messages.length, 1);
+    assert.equal(renamed.conversations[0].title, "人物小传");
+    assert.equal(renamed.conversations[1].messages.length, 0);
 });

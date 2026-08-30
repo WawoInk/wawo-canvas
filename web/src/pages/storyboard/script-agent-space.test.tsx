@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { test } from "node:test";
-import type { ScriptAgentWorkspaceRecord } from "./script-agent-storage";
+import type { ScriptAgentProjectSummary } from "./script-agent-storage";
 
 if (typeof window === "undefined") GlobalRegistrator.register();
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -11,23 +11,15 @@ const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { ScriptAgentSpace } = await import("./script-agent-space");
 
-const project: ScriptAgentWorkspaceRecord = {
-    id: "workspace-1",
+const project: ScriptAgentProjectSummary = {
+    id: "project-1",
     projectId: "project-1",
     title: "雾城追凶",
     source: "一名记者在雾城调查连环失踪案。",
     currentStage: "collecting_config",
-    projectConfig: null,
-    configDraft: {},
-    storySkeleton: "",
-    storySkeletonStatus: "empty",
-    adaptationStrategy: "",
-    adaptationStatus: "empty",
-    scripts: [],
-    messages: [],
-    conversations: [],
-    activeConversationId: "",
-    version: 1,
+    version: 3,
+    revision: 4,
+    createdAt: "2026-08-30T07:00:00.000Z",
     updatedAt: "2026-08-30T08:00:00.000Z",
 };
 
@@ -113,6 +105,7 @@ test("剧本卡片支持进入、重命名和二次确认删除", async () => {
     );
 
     assert.match(container.textContent || "", /雾城追凶/);
+    assert.match(container.textContent || "", /版本 3/);
     await act(async () => click(button("进入剧本")));
     assert.deepEqual(opened, ["project-1"]);
 
