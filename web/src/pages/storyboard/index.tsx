@@ -1,14 +1,22 @@
 import { Tabs } from "antd";
+import { useLocation, useNavigate } from "react-router-dom";
 
-import { ScriptAgentStudio } from "./script-agent-studio";
+import { ScriptAgentPage } from "./script-agent-page";
 import { StoryboardStudio } from "./storyboard-studio";
 
 export default function StoryboardPage() {
+    const { pathname } = useLocation();
+    const navigate = useNavigate();
+    const scriptMatch = pathname.match(/\/storyboard\/script-agent(?:\/([^/]+))?\/?$/);
+    const activeKey = scriptMatch ? "script-agent" : "storyboard";
+    const projectId = scriptMatch?.[1] ? decodeURIComponent(scriptMatch[1]) : undefined;
+
     return (
         <div className="thin-scrollbar h-full overflow-y-auto bg-background text-foreground">
             <Tabs
                 className="mx-auto min-h-full w-full max-w-[2400px] px-4 sm:px-6"
-                defaultActiveKey="storyboard"
+                activeKey={activeKey}
+                onChange={(key) => navigate(key === "script-agent" ? "/storyboard/script-agent" : "/storyboard")}
                 destroyOnHidden={false}
                 items={[
                     {
@@ -23,10 +31,9 @@ export default function StoryboardPage() {
                     {
                         key: "script-agent",
                         label: "剧本 Agent",
-                        forceRender: true,
                         children: (
                             <div className="min-h-full py-4">
-                                <ScriptAgentStudio />
+                                <ScriptAgentPage projectId={projectId} />
                             </div>
                         ),
                     },

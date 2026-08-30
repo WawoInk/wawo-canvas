@@ -8,10 +8,11 @@ if (typeof window === "undefined") GlobalRegistrator.register();
 // @ts-expect-error Bun provides module mocking at test runtime.
 const { mock } = await import("bun:test");
 mock.module("./storyboard-studio", () => ({ StoryboardStudio: () => <div data-testid="storyboard-studio" /> }));
-mock.module("./script-agent-studio", () => ({ ScriptAgentStudio: () => <div data-testid="script-agent-studio" /> }));
+mock.module("./script-agent-page", () => ({ ScriptAgentPage: () => <div data-testid="script-agent-page" /> }));
 
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
+const { MemoryRouter } = await import("react-router-dom");
 const { default: StoryboardPage } = await import("./index");
 
 test("分镜创作室保留内容边界并提供页面级纵向滚动", async () => {
@@ -19,7 +20,7 @@ test("分镜创作室保留内容边界并提供页面级纵向滚动", async ()
     document.body.append(container);
     const root = createRoot(container);
 
-    await act(async () => root.render(<StoryboardPage />));
+    await act(async () => root.render(<MemoryRouter initialEntries={["/storyboard"]}><StoryboardPage /></MemoryRouter>));
 
     const page = container.firstElementChild;
     assert.ok(page);

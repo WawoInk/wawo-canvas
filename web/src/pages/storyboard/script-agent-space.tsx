@@ -36,7 +36,7 @@ export function ScriptAgentSpace({ projects, loading = false, onCreate, onOpen, 
     const create = async () => {
         const title = createTitle.trim();
         const source = createSource.trim();
-        if (!title || !source) return;
+        if (!title) return;
         setPending("create");
         try {
             await onCreate(title, source);
@@ -145,7 +145,7 @@ export function ScriptAgentSpace({ projects, loading = false, onCreate, onOpen, 
                 footer={
                     <>
                         <Button onClick={() => setCreateOpen(false)}>取消</Button>
-                        <Button type="primary" loading={pending === "create"} disabled={!createTitle.trim() || !createSource.trim()} onClick={() => void create()}>
+                        <Button type="primary" loading={pending === "create"} disabled={!createTitle.trim()} onClick={() => void create()}>
                             创建
                         </Button>
                     </>
@@ -157,7 +157,7 @@ export function ScriptAgentSpace({ projects, loading = false, onCreate, onOpen, 
                         <Input className="mt-2" value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} placeholder="例如：雾城追凶" aria-label="剧本名称" autoFocus />
                     </label>
                     <label className="block text-sm font-medium">
-                        原作素材
+                        原作素材（可选）
                         <Input.TextArea className="mt-2" value={createSource} onChange={(event) => setCreateSource(event.target.value)} placeholder="粘贴小说、故事梗概或创作素材" aria-label="原作素材" autoSize={{ minRows: 6, maxRows: 12 }} />
                     </label>
                 </div>

@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import copyToClipboard from "copy-to-clipboard";
-import { Alert, App, Button, Input, InputNumber, Select, Tag } from "antd";
-import { Check, LoaderCircle, Send, Sparkles, Square } from "lucide-react";
+import { Alert, App, Button, Input, Tag } from "antd";
+import { ArrowLeft, Check, LoaderCircle, Send, Sparkles, Square } from "lucide-react";
 
 import { ModelPicker } from "@/components/model-picker";
 import { useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 import { appendScriptAgentMessage, loadScriptAgentWorkspace, saveScriptAgentWorkspace, type ScriptAgentWorkspaceRecord } from "./script-agent-storage";
 import { sendScriptAgentTurn, submitScriptAgentAction, type ScriptAgentAction, type ScriptAgentEvent } from "@/services/api/script-agent";
-import type { ScriptAgentStage, ScriptAspectRatio } from "./script-agent";
+import type { ScriptAgentStage } from "./script-agent";
+import { ScriptAgentConversations } from "./script-agent-conversations";
 import { ScriptAgentWorkspacePanel } from "./script-agent-workspace-panel";
 
-const aspectRatios: ScriptAspectRatio[] = ["16:9", "9:16", "1:1", "4:3", "3:4"];
 
 const stageLabels: Record<ScriptAgentStage, string> = {
     collecting_config: "收集项目配置",
@@ -36,7 +36,7 @@ function formatDate(value: string) {
     return new Date(value).toLocaleString("zh-CN", { dateStyle: "short", timeStyle: "short" });
 }
 
-export function ScriptAgentStudio() {
+export function ScriptAgentStudio({ projectId, onBack, onWorkspaceChange }: { projectId: string; onBack: () => void; onWorkspaceChange?: (workspace: ScriptAgentWorkspaceRecord) => void }) {
     const { t } = useTranslation();
     const { message } = App.useApp();
     const config = useEffectiveConfig();
@@ -52,21 +52,29 @@ export function ScriptAgentStudio() {
     const [error, setError] = useState("");
     const controllerRef = useRef<AbortController | null>(null);
     const activeAccountRef = useRef(accountId);
+    const activeProjectRef = useRef(projectId);
     const text = (key: string, fallback: string) => t(`scriptAgent.${key}`, { defaultValue: fallback });
     const model = config.textModel || config.model;
     const busy = running || saving || workspaceMutating;
 
     useEffect(() => {
         activeAccountRef.current = accountId;
+        activeProjectRef.current = projectId;
         let active = true;
         controllerRef.current?.abort();
         setWorkspace(null);
         setSaving(false);
         setWorkspaceMutating(false);
         setError("");
-        void loadScriptAgentWorkspace(accountId)
+        void loadScriptAgentWorkspace(accountId, projectId)
             .then((value) => {
-                if (active && activeAccountRef.current === accountId) setWorkspace(value);
+                if (!active || activeAccountRef.current !== accountId || activeProjectRef.current !== projectId) return;
+                if (!value) {
+                    message.warning("剧本不存在或已被删除");
+                    onBack();
+                    return;
+                }
+                setWorkspace(value);
             })
             .catch(() => {
                 if (active) setError(text("messages.loadFailed", "剧本 Agent 工作区加载失败"));
@@ -75,19 +83,22 @@ export function ScriptAgentStudio() {
             active = false;
             controllerRef.current?.abort();
         };
-    }, [accountId]);
+    }, [accountId, projectId]);
 
     async function persist(value: ScriptAgentWorkspaceRecord) {
-        if (activeAccountRef.current !== accountId) return;
+        if (activeAccountRef.current !== accountId || activeProjectRef.current !== projectId) return;
         setSaving(true);
         setWorkspace(value);
         try {
             const saved = await saveScriptAgentWorkspace(accountId, value);
-            if (activeAccountRef.current === accountId) setWorkspace(saved);
+            if (activeAccountRef.current === accountId && activeProjectRef.current === projectId) {
+                setWorkspace(saved);
+                onWorkspaceChange?.(saved);
+            }
         } catch {
             message.warning(text("messages.saveFailed", "工作区已更新，但保存失败"));
         } finally {
-            if (activeAccountRef.current === accountId) setSaving(false);
+            if (activeAccountRef.current === accountId && activeProjectRef.current === projectId) setSaving(false);
         }
     }
 
@@ -106,7 +117,7 @@ export function ScriptAgentStudio() {
             const next = await operation(controller.signal, (event) => {
                 if (event.type === "phase") setWorkspace((current) => (current ? { ...current, currentStage: event.phase } : current));
             });
-            if (!controller.signal.aborted && activeAccountRef.current === accountId) await persist(next);
+            if (!controller.signal.aborted && activeAccountRef.current === accountId && activeProjectRef.current === projectId) await persist(next);
         } catch (runError) {
             if (!controller.signal.aborted) {
                 const reason = runError instanceof Error ? runError.message : text("messages.failed", "剧本 Agent 处理失败");
@@ -169,15 +180,20 @@ export function ScriptAgentStudio() {
         );
 
     return (
-        <div className="grid min-h-0 flex-1 gap-3 overflow-hidden lg:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)]">
-            <section className="flex min-h-0 flex-col rounded-lg border bg-card p-4 shadow-sm">
+        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)] lg:overflow-hidden">
+            <section className="flex min-h-[640px] flex-col overflow-hidden rounded-lg border bg-card shadow-sm md:flex-row lg:min-h-0">
+                <ScriptAgentConversations workspace={workspace} busy={busy} onChange={persist} />
+                <div className="flex min-w-0 flex-1 flex-col p-4">
                 <div className="mb-4 flex items-start justify-between gap-3">
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <Sparkles className="size-5 text-primary" />
-                            <h2 className="text-xl font-semibold">{text("title", "剧本 Agent")}</h2>
+                    <div className="flex min-w-0 items-start gap-2">
+                        <Button type="text" size="small" aria-label="返回剧本空间" icon={<ArrowLeft className="size-4" />} disabled={busy} onClick={onBack} />
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                                <Sparkles className="size-5 text-primary" />
+                                <h2 className="truncate text-xl font-semibold">{workspace.title || text("title", "剧本 Agent")}</h2>
+                            </div>
+                            <p className="mt-1 text-sm text-muted-foreground">{text("subtitle", "用自然语言完成配置、审核与逐集剧本创作")}</p>
                         </div>
-                        <p className="mt-1 text-sm text-muted-foreground">{text("subtitle", "用自然语言完成配置、审核与逐集剧本创作")}</p>
                     </div>
                     <Tag color={workspace.currentStage === "failed" ? "error" : "blue"}>{stageLabels[workspace.currentStage]}</Tag>
                 </div>
@@ -223,6 +239,7 @@ export function ScriptAgentStudio() {
                             {running ? "停止" : "发送"}
                         </Button>
                     </div>
+                </div>
                 </div>
             </section>
 

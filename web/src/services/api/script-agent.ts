@@ -17,7 +17,7 @@ import {
     type ScriptReviewGrade,
     type ScriptReviewIssue,
 } from "@/pages/storyboard/script-agent";
-import type { ScriptAgentWorkspaceRecord } from "@/pages/storyboard/script-agent-storage";
+import { appendScriptAgentMessage, type ScriptAgentWorkspaceRecord } from "@/pages/storyboard/script-agent-storage";
 
 export type ScriptAgentEvent = { type: "phase"; phase: ScriptAgentStage } | { type: "delta"; text: string };
 
@@ -40,10 +40,6 @@ type WorkflowDecision = { action: "approve" | "fix" | "redo" | "continue" | "non
 
 const aspectRatios = ["16:9", "9:16", "1:1", "4:3", "3:4"] as const;
 const configKeys: (keyof ScriptProjectConfigInput)[] = ["totalEpisodes", "episodeMinutes", "startChapter", "endChapter", "chapterIndexes", "platform", "aspectRatio", "style", "paywall"];
-
-function id(prefix: string) {
-    return globalThis.crypto?.randomUUID?.() || `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
 
 function requestConfig(config: AiConfig) {
     const model = config.textModel.trim() || config.model.trim();
@@ -132,8 +128,7 @@ function patch(workspace: ScriptAgentWorkspaceRecord, changes: Partial<ScriptAge
 }
 
 function assistant(workspace: ScriptAgentWorkspaceRecord, content: string) {
-    const message = content.trim();
-    return message ? patch(workspace, { messages: [...workspace.messages, { id: id("message"), role: "assistant", content: message, createdAt: new Date().toISOString() }] }) : workspace;
+    return appendScriptAgentMessage(workspace, "assistant", content);
 }
 
 function errorMessage(error: unknown) {
@@ -246,8 +241,25 @@ function projectConfigText(config: ScriptProjectConfig) {
     return JSON.stringify(config, null, 2);
 }
 
+export function buildScriptAgentConversationContext(
+    workspace: Pick<ScriptAgentWorkspaceRecord, "messages" | "conversations" | "activeConversationId">,
+    omitTrailingUserContent = "",
+) {
+    const active = workspace.conversations.find((conversation) => conversation.id === workspace.activeConversationId);
+    const messages = active?.messages || workspace.messages;
+    const history = omitTrailingUserContent.trim() && messages.at(-1)?.role === "user" && messages.at(-1)?.content.trim() === omitTrailingUserContent.trim() ? messages.slice(0, -1) : messages;
+    if (!history.length) return "无历史对话";
+    return history
+        .slice(-12)
+        .map((message) => `${message.role === "user" ? "用户" : "助手"}：${message.content.slice(0, 2000)}`)
+        .join("\n")
+        .slice(-12000);
+}
+
 function configPrompt(workspace: ScriptAgentWorkspaceRecord, message: string) {
     return `你是中文剧本项目配置助手。只处理配置收集，不生成故事骨架。
+当前会话历史：
+${buildScriptAgentConversationContext(workspace, message)}
 用户消息：${message}
 已有作品标题：${workspace.title || "未填写"}
 已有剧本/故事素材：${workspace.source ? `${workspace.source.slice(0, 5000)}${workspace.source.length > 5000 ? "…" : ""}` : "未填写"}
@@ -258,6 +270,8 @@ function configPrompt(workspace: ScriptAgentWorkspaceRecord, message: string) {
 
 function skeletonPrompt(workspace: ScriptAgentWorkspaceRecord, instruction = "") {
     return `请根据以下项目资料生成故事骨架。必须只通过结构化结果提交 Markdown，不要输出 XML，不要输出解释。
+当前会话历史：
+${buildScriptAgentConversationContext(workspace)}
 作品标题：${workspace.title}
 项目配置：${projectConfigText(workspace.projectConfig as ScriptProjectConfig)}
 故事/剧本素材：
@@ -269,6 +283,8 @@ Markdown 必须包含标题“故事骨架”，并包含：故事核、隐线�
 
 function adaptationPrompt(workspace: ScriptAgentWorkspaceRecord, instruction = "") {
     return `请根据项目资料和已批准的故事骨架生成改编策略。必须只通过结构化结果提交 Markdown，不要输出 XML，不要输出解释。
+当前会话历史：
+${buildScriptAgentConversationContext(workspace)}
 作品标题：${workspace.title}
 项目配置：${projectConfigText(workspace.projectConfig as ScriptProjectConfig)}
 故事/剧本素材：\n${workspace.source}
@@ -285,6 +301,8 @@ function reviewPrompt(type: "story_skeleton" | "adaptation_strategy", content: s
 
 function scriptPrompt(workspace: ScriptAgentWorkspaceRecord, episodeNumber: number) {
     return `请只生成第 ${episodeNumber} 集剧本，并通过结构化结果返回一个 script 对象，禁止返回 scripts 数组或多集内容，不要输出 XML。
+当前会话历史：
+${buildScriptAgentConversationContext(workspace)}
 作品标题：${workspace.title}
 项目配置：${projectConfigText(workspace.projectConfig as ScriptProjectConfig)}
 故事骨架：\n${workspace.storySkeleton}
@@ -477,7 +495,7 @@ async function applyAction(config: AiConfig, workspace: ScriptAgentWorkspaceReco
 async function decide(config: AiConfig, workspace: ScriptAgentWorkspaceRecord, message: string, options?: ScriptAgentRequestOptions) {
     const result = await complete(
         config,
-        `当前阶段需要用户确认。当前审核结果：${JSON.stringify(workspace.storySkeletonReview || workspace.adaptationReview || {})}\n用户消息：${message}\n请识别为批准、修复、重做、继续或 none。只有明确表达意图才使用 approve/fix/redo/continue。`,
+        `当前阶段需要用户确认。当前会话历史：\n${buildScriptAgentConversationContext(workspace, message)}\n当前审核结果：${JSON.stringify(workspace.storySkeletonReview || workspace.adaptationReview || {})}\n用户消息：${message}\n请识别为批准、修复、重做、继续或 none。只有明确表达意图才使用 approve/fix/redo/continue。`,
         decisionTool,
         options,
     );

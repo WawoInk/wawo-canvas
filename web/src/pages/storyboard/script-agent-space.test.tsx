@@ -139,3 +139,28 @@ test("剧本卡片支持进入、重命名和二次确认删除", async () => {
     await act(async () => root.unmount());
     container.remove();
 });
+
+test("创建剧本时原作素材可以稍后补充", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const created: Array<[string, string]> = [];
+
+    await act(async () =>
+        root.render(
+            <App>
+                <ScriptAgentSpace projects={[]} onCreate={(title, source) => created.push([title, source])} onOpen={() => {}} onRename={() => {}} onDelete={() => {}} />
+            </App>,
+        ),
+    );
+    await act(async () => click(button("创建剧本")));
+    const title = document.querySelector<HTMLInputElement>('input[aria-label="剧本名称"]');
+    assert.ok(title);
+    await act(async () => input(title, "空白项目"));
+    await act(async () => click(button("创建")));
+    await flush();
+    assert.deepEqual(created, [["空白项目", ""]]);
+
+    await act(async () => root.unmount());
+    container.remove();
+});

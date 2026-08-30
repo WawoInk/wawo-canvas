@@ -106,25 +106,31 @@ function safeRecord(value: unknown): ScriptAgentWorkspaceRecord | null {
     const record = value as Partial<ScriptAgentWorkspaceRecord>;
     if (typeof record.id !== "string" || typeof record.projectId !== "string" || !record.currentStage) return null;
     const fallback = createDefaultScriptAgentWorkspace();
-    const legacyMessages = Array.isArray(record.messages) ? normalizeMessages(record.messages) : [];
+    const topMessages = Array.isArray(record.messages) ? normalizeMessages(record.messages) : undefined;
     const conversations = Array.isArray(record.conversations) ? record.conversations.map(normalizeConversation).filter((item): item is ScriptAgentConversation => Boolean(item)) : [];
-    const normalizedConversations = conversations.length ? conversations : [{ ...fallback.conversations[0], messages: legacyMessages, updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : fallback.updatedAt }];
+    const normalizedConversations = conversations.length
+        ? conversations
+        : [{ ...fallback.conversations[0], messages: topMessages || [], updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : fallback.updatedAt }];
     const activeConversationId = normalizedConversations.some((item) => item.id === record.activeConversationId) ? record.activeConversationId! : normalizedConversations[0].id;
     const active = normalizedConversations.find((item) => item.id === activeConversationId) || normalizedConversations[0];
+    const messages = topMessages || active.messages;
     return {
         ...fallback,
         ...record,
         title: typeof record.title === "string" ? record.title : "",
         source: typeof record.source === "string" ? record.source : "",
-        conversations: normalizedConversations,
+        conversations: normalizedConversations.map((conversation) => (conversation.id === activeConversationId ? { ...conversation, messages } : conversation)),
         activeConversationId,
-        messages: active.messages,
+        messages,
     };
 }
 
 function persistedRecord(workspace: ScriptAgentWorkspaceRecord): ScriptAgentWorkspaceRecord {
     const allowedConfigKeys: (keyof ScriptProjectConfigInput)[] = ["totalEpisodes", "episodeMinutes", "startChapter", "endChapter", "chapterIndexes", "platform", "aspectRatio", "style", "paywall"];
     const configDraft = workspace.configDraft ? Object.fromEntries(allowedConfigKeys.flatMap((key) => (workspace.configDraft?.[key] === undefined ? [] : [[key, workspace.configDraft[key]]]))) : undefined;
+    const conversations = workspace.conversations.map((conversation) =>
+        conversation.id === workspace.activeConversationId ? { ...conversation, messages: workspace.messages, updatedAt: workspace.updatedAt } : conversation,
+    );
     return {
         id: workspace.id,
         projectId: workspace.projectId,
@@ -141,7 +147,7 @@ function persistedRecord(workspace: ScriptAgentWorkspaceRecord): ScriptAgentWork
         adaptationReview: workspace.adaptationReview,
         scripts: workspace.scripts,
         messages: workspace.messages,
-        conversations: workspace.conversations,
+        conversations,
         activeConversationId: workspace.activeConversationId,
         version: workspace.version,
         updatedAt: workspace.updatedAt,
@@ -153,7 +159,10 @@ export async function loadScriptAgentProjects(userId = currentUserId()): Promise
     const stored = await store.getItem<unknown>(PROJECTS_KEY);
     if (Array.isArray(stored)) return stored.map(safeRecord).filter((item): item is ScriptAgentWorkspaceRecord => Boolean(item));
     const legacy = safeRecord(await store.getItem<unknown>(WORKSPACE_KEY));
-    return legacy ? [legacy] : [];
+    if (!legacy) return [];
+    const records = [persistedRecord(legacy)];
+    await store.setItem(PROJECTS_KEY, records);
+    return records;
 }
 
 export async function saveScriptAgentProjects(userId: string | undefined, projects: ScriptAgentWorkspaceRecord[]) {
@@ -163,17 +172,18 @@ export async function saveScriptAgentProjects(userId: string | undefined, projec
     return records;
 }
 
-export async function loadScriptAgentWorkspace(userId = currentUserId(), projectId?: string): Promise<ScriptAgentWorkspaceRecord> {
+export async function loadScriptAgentWorkspace(userId = currentUserId(), projectId?: string): Promise<ScriptAgentWorkspaceRecord | null> {
     const projects = await loadScriptAgentProjects(userId);
-    if (projectId) return projects.find((item) => item.projectId === projectId) || createScriptAgentProject();
-    return projects[0] || safeRecord(await workspaceStore(userId).getItem<unknown>(WORKSPACE_KEY)) || createDefaultScriptAgentWorkspace();
+    if (projectId) return projects.find((item) => item.projectId === projectId) || null;
+    return projects[0] || createDefaultScriptAgentWorkspace();
 }
 
 export async function saveScriptAgentWorkspace(userId: string | undefined, workspace: ScriptAgentWorkspaceRecord) {
     const accountId = userId || currentUserId();
     const record = persistedRecord(workspace);
     const projects = await loadScriptAgentProjects(accountId);
-    const next = [...projects.filter((item) => item.projectId !== record.projectId), record];
+    const index = projects.findIndex((item) => item.projectId === record.projectId);
+    const next = index < 0 ? [...projects, record] : projects.map((item, itemIndex) => (itemIndex === index ? record : item));
     await workspaceStore(accountId).setItem(PROJECTS_KEY, next);
     await workspaceStore(accountId).setItem(WORKSPACE_KEY, record);
     return record;
