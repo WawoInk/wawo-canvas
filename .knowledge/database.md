@@ -2,7 +2,7 @@
 
 ## 边界
 
-- **职责**：保存账号、企业、积分、设置、提示词、素材、平台文件、Canvas 项目、生成任务和删除事实。
+- **职责**：保存账号、企业、积分、设置、提示词、素材、平台文件、Storyboard Workspace、Canvas 项目、生成任务和删除事实。
 - **输入**：service 层的业务模型、事务命令、查询和 CAS 条件。
 - **输出**：持久化实体、分页列表、锁/冲突结果、同步 delta。
 - **核心文件**：`repository/db.go`、`model/*.go`、`repository/*.go`、`docs/content/docs/backend/backend-database.mdx`。
@@ -18,7 +18,7 @@
 2. 若目标数据库不存在，连接 `postgres` 或 `template1` 并执行 `CREATE DATABASE`。
 3. 创建 `canvas_revision_seq`。
 4. 显式把已有计费列转换为 PostgreSQL `numeric`；仅在列存在且类型不是 `numeric` 时执行。
-5. 对 13 个模型执行 `AutoMigrate`。
+5. 对已注册模型执行 `AutoMigrate`。
 6. 清理会破坏新唯一索引的历史重复数据。
 7. 创建部分唯一索引。
 8. 创建企业/用户延迟外键和 enterprise owner 一致性触发器。
@@ -46,6 +46,8 @@ erDiagram
     ENTERPRISES ||--o{ ASSETS : "shared assets"
     USERS ||--o{ USER_FILES : "personal or uploader"
     ENTERPRISES ||--o{ USER_FILES : "enterprise media"
+    USERS ||--o{ STORYBOARD_PROJECTS : "owns"
+    USER_FILES ||--o| STORYBOARD_PROJECTS : "artifact snapshot"
     USERS ||--o{ CANVAS_PROJECTS : "owns"
     USERS ||--o{ GENERATION_TASKS : "owns"
     GENERATION_TASKS ||--o| GENERATION_PAYLOADS : "logical 1:1"
@@ -230,6 +232,25 @@ queued, pending, running, succeeded, success, failed, cancelled
 
 它不是 event source。当前 task 状态永远以 `generation_tasks` 为准。
 
+### `storyboard_projects`
+
+**职责**：Storyboard Workspace 聚合根、列表摘要、整体 revision CAS 和私有 JSON artifact 引用。
+
+| 字段 | 语义 |
+| --- | --- |
+| `id` | Project ID，主键；更新和重新生成时保持不变 |
+| `user_id` | owner；所有列表、详情、更新和删除都以当前认证账号限定 |
+| `title/source/options_json/model/source_hash` | 工作区输入与生成配置摘要 |
+| `status` | `draft/ready`；无 Storyboard Document 为 `draft`，存在 Document 为 `ready` |
+| `validation_status/scene_count/shot_count` | 列表投影摘要，不替代 workspace status |
+| `revision` | 项目级乐观锁；创建为 1，每次成功更新递增 1 |
+| `artifact_file_id` | 唯一引用私有 `user_files` JSON artifact |
+| `created_at/updated_at` | 字符串时间；更新不改变 `created_at` |
+
+`directorPlan`、`document` 和 `validation` 不拆表，统一保存在 `storyboards/{user_id}/{entity_id}/{file_id}.json`。省略值规范化为 JSON `null`。Scene、Segment、Shot 的稳定 UUID 也保存在 Document artifact 中；创建时由应用替换模型给出的缺失、重复或不可信 ID，更新时按父级内 `sceneNo/segmentNo/shotNo` 结构键复用已有 ID。
+
+更新使用 `id + user_id + expectedRevision` 整体 CAS，不做字段级 merge。artifact 变化时先上传新对象，再在同一数据库事务中创建新 `user_files`、CAS 更新 Project 引用/摘要/revision 并删除旧文件行；事务或 CAS 失败时删除新对象，旧可用 artifact 仍保持引用。事务成功后再 best-effort 删除旧对象。规范化后的 artifact 内容未变化时可以复用旧文件，仅更新元数据和 revision。
+
 ### `canvas_projects`
 
 **职责**：服务端 Canvas 项目副本和全局 revision。
@@ -338,12 +359,15 @@ queued, pending, running, succeeded, success, failed, cancelled
 | per-credit 结算 | 实际 task credits/upstream credits + 扣费 + consume log |
 | 生成终态 | task CAS + refund + terminal event |
 | 复制企业媒体 | 新个人 user_file + asset；对象失败/事务失败要补偿 |
+| Storyboard 创建 | 上传私有 JSON 后，同事务写 `user_files` + project；事务失败补偿删除新对象 |
+| Storyboard 更新 | 新 artifact 文件行 + Project CAS/摘要/revision + 删除旧文件行；切换失败保留旧引用 |
 | Canvas 删除 | 删除 project + 写 revision tombstone |
 
 ## 浏览器和数据库边界
 
 PostgreSQL 保存结构化事实，但不是浏览器所有数据的完整镜像：
 
+- Storyboard Workspace 的已保存状态以服务端 Project + 私有 artifact 为准；浏览器未保存的模型输出不属于持久事实。
 - Canvas IndexedDB 可能有尚未提交的 `Offline Dirty`。
 - `image_files/media_files` 保存本地 Blob，数据库没有正文。
 - 工作台本地历史和 WebDAV manifest 不完全等同于 `generation_tasks`。

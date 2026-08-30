@@ -149,6 +149,22 @@
   - 企业素材不进入个人 Zustand store、个人 REST delta sync 或 WebDAV。
   - 复制后个人副本拥有新的 asset/file ID，源删除不能破坏副本。
 
+## Storyboard Workspace
+
+- **职责**：持久化可变 Storyboard Project 聚合根、列表摘要、私有 JSON artifact、整体 revision CAS 和删除。
+- **输入**：当前用户、Project ID、workspace 字段、可选 `directorPlan/document/validation`、更新必填的 `expectedRevision`。
+- **输出**：带 `status/revision` 的摘要或完整详情；旧 revision 返回 HTTP 409 + 最新 `data.current`。
+- **核心文件**：`handler/storyboard_projects.go`、`service/storyboard_project.go`、`repository/storyboard_project.go`、`model/storyboard_project.go`。
+- **数据流**：
+  - create 规范化复杂 JSON 和 Scene/Segment/Shot ID，上传私有 artifact，再事务写 `user_files` + Project，初始 revision 为 1。
+  - update 先读取当前详情并按 `sceneNo/segmentNo/shotNo` 复用稳定 ID；artifact 变化时上传新对象，再事务创建新文件行、CAS 切换引用/摘要/revision、删除旧文件行。
+  - 事务或 CAS 失败补偿删除新对象；切换成功后 best-effort 删除旧对象。规范化 artifact 未变化时复用旧文件。
+- **依赖关系**：依赖 auth、S3 和个人 `user_files`；Storyboard Studio 的 API/storage facade 消费它。
+- **关键不变量**：
+  - status 只使用 `draft/ready`，validation outcome 继续保存在 `validationStatus`。
+  - Project ID、`createdAt` 和已匹配实体 ID 在保存/重新生成后保持稳定；更新是整个 workspace CAS，不做字段级 merge。
+  - Brainstorm Conversation、Project Memory、Canvas link 和 Agent worker 不属于本模块当前实现。
+
 ## Canvas 项目与增量同步
 
 - **职责**：持久化完整 `project_json`、revision CAS、项目删除 tombstone、assets/canvas/tasks delta sync。

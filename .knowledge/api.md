@@ -209,6 +209,20 @@ enterprise ID 永远由当前用户推导。跨企业 ID、个人用户 ID 或 o
 | `PUT /api/v1/enterprise/files/:id` | U | multipart `fileType,file` | 替换文件；owner only |
 | `DELETE /api/v1/enterprise/files/:id` | U | file ID | `true`；owner only |
 
+## Storyboard Workspace
+
+| Method / Path | Auth | 输入 | 输出/行为 |
+| --- | --- | --- | --- |
+| `GET /api/v1/storyboards` | U | 无 | 当前用户的分镜项目摘要；包含 `status`、`revision`、验证状态和场景/镜头计数 |
+| `POST /api/v1/storyboards` | U | workspace 字段；`directorPlan/document/validation` 可省略 | 创建完整项目详情；省略的复杂字段规范化为 JSON `null`，初始 `revision=1` |
+| `GET /api/v1/storyboards/:id` | U | project ID | 当前用户的完整项目详情 |
+| `PUT /api/v1/storyboards/:id` | U | workspace 字段 + 必填 `expectedRevision` | 整体 CAS 更新；成功返回完整详情和递增后的 revision |
+| `DELETE /api/v1/storyboards/:id` | U | project ID | `{id,deletedAt}` |
+
+Storyboard Workspace 的项目状态只使用 `draft | ready`：没有 Storyboard Document 时为 `draft`，存在 Document 时为 `ready`；文档校验结果继续放在 `validationStatus`，不能复用项目状态。缺少 `expectedRevision` 是请求错误；旧 revision 更新返回 HTTP 409、`code=-1`，并在 `data.current` 返回服务端最新完整详情，不做字段级自动合并。
+
+Scene、Segment、Shot 的 `id` 是非空稳定字符串。创建时服务端不信任模型提供的 ID，会为缺失、重复或不可信 ID 生成 UUID；更新或重新生成时按父级内的 `sceneNo -> segmentNo -> shotNo` 结构键复用已持久化 ID，新实体再生成新 UUID。保存后的服务端详情是最终权威结果。
+
 ## Canvas 与增量同步
 
 | Method / Path | Auth | 输入 | 输出 |
