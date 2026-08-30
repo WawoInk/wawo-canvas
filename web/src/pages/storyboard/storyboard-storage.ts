@@ -1,24 +1,33 @@
-import localforage from "localforage";
-
-import { accountStoreName } from "@/lib/account-storage";
-import { useUserStore } from "@/stores/use-user-store";
+import { createStoryboardRecord, deleteStoryboardRecord as deleteStoryboard, fetchStoryboardRecord, fetchStoryboardRecords, type StoryboardRecordSummary as ServerStoryboardRecordSummary } from "@/services/api/storyboards";
 import type { StoryboardRecord } from "./storyboard";
 
-function storyboardStore(userId = useUserStore.getState().user?.id || "anonymous") {
-    return localforage.createInstance({ name: "infinite-canvas", storeName: accountStoreName("storyboard_documents", userId) });
+export type StoryboardRecordSummary = Omit<ServerStoryboardRecordSummary, "createdAt" | "updatedAt"> & {
+    createdAt: number;
+    updatedAt: number;
+};
+
+function timestamp(value: string) {
+    return Date.parse(value);
 }
 
-export async function listStoryboardRecords(userId?: string) {
-    const records: StoryboardRecord[] = [];
-    await storyboardStore(userId).iterate<StoryboardRecord, void>((record) => records.push(record));
-    return records.sort((a, b) => b.updatedAt - a.updatedAt);
+function toStoryboardRecord(record: Awaited<ReturnType<typeof fetchStoryboardRecord>>): StoryboardRecord {
+    const { validationStatus: _validationStatus, sceneCount: _sceneCount, shotCount: _shotCount, createdAt, updatedAt, ...detail } = record;
+    return { ...detail, createdAt: timestamp(createdAt), updatedAt: timestamp(updatedAt) };
 }
 
-export async function saveStoryboardRecord(record: StoryboardRecord, userId?: string) {
-    await storyboardStore(userId).setItem(record.id, record);
-    return record;
+export async function listStoryboardRecords(): Promise<StoryboardRecordSummary[]> {
+    return (await fetchStoryboardRecords()).map((record) => ({ ...record, createdAt: timestamp(record.createdAt), updatedAt: timestamp(record.updatedAt) }));
 }
 
-export async function deleteStoryboardRecord(id: string, userId?: string) {
-    await storyboardStore(userId).removeItem(id);
+export async function loadStoryboardRecord(id: string): Promise<StoryboardRecord> {
+    return toStoryboardRecord(await fetchStoryboardRecord(id));
+}
+
+export async function saveStoryboardRecord(record: StoryboardRecord): Promise<StoryboardRecord> {
+    const { createdAt: _createdAt, updatedAt: _updatedAt, ...input } = record;
+    return toStoryboardRecord(await createStoryboardRecord(input));
+}
+
+export function deleteStoryboardRecord(id: string) {
+    return deleteStoryboard(id);
 }
