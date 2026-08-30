@@ -75,7 +75,7 @@ func LogTaskCreated(taskID string, upstreamTaskID string, latencyMs int64, _ mod
 	}
 }
 
-// LogTaskSuccess 更新任务为成功状态，同时保存响应数据到 Payload。
+// LogTaskSuccess 更新任务为成功状态，同时保存脱敏后的响应审计到 Payload。
 func LogTaskSuccess(taskID string, respBody []byte, respHeaders string, latencyMs int64, _ model.Decimal, upstreamTaskID string) {
 	now := time.Now().Format(time.RFC3339)
 	updates := map[string]any{
@@ -90,9 +90,9 @@ func LogTaskSuccess(taskID string, respBody []byte, respHeaders string, latencyM
 		log.Printf("generation task: update success failed: task=%s err=%v", taskID, err)
 	}
 
-	if respBody != nil {
-		if err := repository.UpdateGenerationPayloadResponseBody(taskID, string(respBody)); err != nil {
-			log.Printf("generation task: update payload response body failed: task=%s err=%v", taskID, err)
+	if respBody != nil || respHeaders != "" {
+		if err := repository.UpdateGenerationPayload(taskID, string(respBody), respHeaders); err != nil {
+			log.Printf("generation task: update payload response failed: task=%s err=%v", taskID, err)
 		}
 	}
 }

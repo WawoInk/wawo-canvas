@@ -8,6 +8,7 @@ import (
 	"log"
 	"mime"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -18,6 +19,15 @@ import (
 )
 
 var asyncImageTaskTimeout = generationTaskTimeout
+var aiProxyHTTPClient = func() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext
+	transport.TLSHandshakeTimeout = 10 * time.Second
+	transport.ResponseHeaderTimeout = 60 * time.Second
+	transport.IdleConnTimeout = 90 * time.Second
+	transport.ExpectContinueTimeout = time.Second
+	return &http.Client{Transport: transport}
+}()
 
 // ProxyAIRequest 处理 POST 类 AI 代理请求：选渠道、扣算力点、转发上游、失败返还。
 func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
@@ -57,9 +67,9 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		proxyFail(w, "AI 接口请求失败")
 		return
 	}
-	request, err := http.NewRequest(http.MethodPost, resolved.URL, bytes.NewReader(resolved.Body))
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, resolved.URL, bytes.NewReader(resolved.Body))
 	if err != nil {
-		proxyAILogf("AI proxy build request failed: url=%s err=%v", resolved.URL, err)
+		proxyAILogf("AI proxy build request failed: url=%s err=%v", redactGenerationAuditString(resolved.URL), err)
 		proxyFail(w, "AI 接口请求失败")
 		return
 	}
@@ -72,7 +82,9 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 	// ── 生成任务日志：开始 ──
 	provider := DetermineProvider(channel)
 	source := DetermineSource(r)
-	genTaskID, err := LogTaskStart(user, taskType, provider, modelName, requestAuditBody(body, contentType), SerializeHeaders(resolved.Headers), source, "")
+	auditRequestBody := []byte(sanitizeGenerationAuditJSON(string(requestAuditBody(body, contentType))))
+	auditRequestHeaders := sanitizeGenerationAuditJSON(sanitizeGenerationAuditHeaders(resolved.Headers))
+	genTaskID, err := LogTaskStart(user, taskType, provider, modelName, auditRequestBody, auditRequestHeaders, source, "")
 	if err != nil {
 		proxyAILogf("AI proxy task log creation failed: user=%s model=%s err=%v", user.ID, modelName, err)
 		proxyFail(w, "AI 接口请求失败")
@@ -97,27 +109,28 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		func(respBody []byte, respHeaders string) {
 			latencyMs := time.Since(startTime).Milliseconds()
 			upstreamTaskID := ExtractUpstreamTaskID(respBody)
+			auditResponseBody := []byte(sanitizeGenerationAuditJSON(string(respBody)))
 			if strings.HasPrefix(path, "/async/images/") {
 				task, err := repository.GetGenerationTaskByID(genTaskID)
 				if err == nil {
 					if ref, terminal := asyncImageTaskRef(respBody, upstreamTaskID); terminal {
-						finalizeAsyncImageTask(task, ref, "compatibility-submit", respBody, respHeaders)
+						finalizeAsyncImageTask(task, ref, "compatibility-submit", auditResponseBody, respHeaders)
 						return
 					}
 					if upstreamTaskID == "" {
 						ref := ProviderTaskRef{Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: "UPSTREAM_INVALID_RESPONSE", Message: "上游未返回图片任务 ID", Retryable: false}}
-						finalizeAsyncImageTask(task, ref, "compatibility-submit", respBody, respHeaders)
+						finalizeAsyncImageTask(task, ref, "compatibility-submit", auditResponseBody, respHeaders)
 						return
 					}
 				}
 				LogTaskCreated(genTaskID, upstreamTaskID, latencyMs, credits)
-				if err := repository.UpdateGenerationPayload(genTaskID, string(respBody), respHeaders); err != nil {
+				if err := repository.UpdateGenerationPayload(genTaskID, string(auditResponseBody), respHeaders); err != nil {
 					proxyAILogf("AI proxy update async image submit payload failed: task=%s err=%v", genTaskID, err)
 				}
 				scheduleAsyncImageTaskTimeout(genTaskID, asyncImageTaskTimeout)
 				return
 			}
-			LogTaskSuccess(genTaskID, respBody, respHeaders, latencyMs, credits, upstreamTaskID)
+			LogTaskSuccess(genTaskID, auditResponseBody, respHeaders, latencyMs, credits, upstreamTaskID)
 		},
 		func(errCode string, errMsg string, rawError string) {
 			latencyMs := time.Since(startTime).Milliseconds()
@@ -146,7 +159,7 @@ func ProxyAIGetRequest(w http.ResponseWriter, r *http.Request, path string) {
 		proxyFail(w, "AI 接口请求失败")
 		return
 	}
-	request, err := http.NewRequest(http.MethodGet, resolved.URL, nil)
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, resolved.URL, nil)
 	if err != nil {
 		proxyFail(w, "AI 接口请求失败")
 		return
@@ -248,11 +261,18 @@ func asyncImageTaskRef(body []byte, upstreamTaskID string) (ProviderTaskRef, boo
 }
 
 func finalizeAsyncImageTask(task model.GenerationTask, ref ProviderTaskRef, source string, body []byte, headers string) {
-	if err := repository.UpdateGenerationPayload(task.ID, string(body), headers); err != nil {
+	auditBody := sanitizeGenerationAuditJSON(string(body))
+	auditHeaders := sanitizeGenerationAuditJSON(headers)
+	if ref.Error != nil {
+		safeError := *ref.Error
+		safeError.Message = sanitizeGenerationAuditJSON(safeError.Message)
+		ref.Error = &safeError
+	}
+	if err := repository.UpdateGenerationPayload(task.ID, auditBody, auditHeaders); err != nil {
 		proxyAILogf("AI proxy update async image payload failed: task=%s err=%v", task.ID, err)
 	}
 	if ref.Status == model.TaskStatusFailed || ref.Status == model.TaskStatusCancelled {
-		if err := repository.UpdateGenerationPayloadRawError(task.ID, string(body)); err != nil {
+		if err := repository.UpdateGenerationPayloadRawError(task.ID, auditBody); err != nil {
 			proxyAILogf("AI proxy update async image error failed: task=%s err=%v", task.ID, err)
 		}
 	}
@@ -440,14 +460,20 @@ func redactUpstreamURL(rawURL string) string {
 
 // proxyCopyAIResponse 执行上游请求并回写响应，同时通过回调通知结果。
 // onFailure — 上游返回错误或网络异常时调用（退款回调）。
-// onSuccess — 上游成功时调用，传入完整响应体与序列化响应头。
-// onFailureDetail — 上游返回 >=400 时调用，传入错误码与消息。
+// onSuccess — 上游成功时调用，流式响应不传入响应体。
+// onFailureDetail — 上游失败时调用，传入错误码与脱敏错误信息。
 func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func(), onSuccess func(respBody []byte, respHeaders string), onFailureDetail func(errCode string, errMsg string, rawError string)) {
-	response, err := http.DefaultClient.Do(request)
+	response, err := aiProxyHTTPClient.Do(request)
 	if err != nil {
-		log.Printf("AI proxy request failed: url=%s err=%v", redactUpstreamURL(request.URL.String()), err)
+		safeURL := redactGenerationAuditString(request.URL.String())
+		safeError := redactGenerationAuditString(err.Error())
+		log.Printf("AI proxy request failed: url=%s err=%s", safeURL, safeError)
+		code, message := "NETWORK_ERROR", safeError
+		if request.Context().Err() != nil {
+			code, message = "CLIENT_CANCELLED", "客户端已取消请求"
+		}
 		if onFailureDetail != nil {
-			onFailureDetail("NETWORK_ERROR", err.Error(), err.Error())
+			onFailureDetail(code, message, safeError)
 		}
 		if onFailure != nil {
 			onFailure()
@@ -457,21 +483,47 @@ func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure
 	}
 	defer response.Body.Close()
 
-	respBody, _ := io.ReadAll(response.Body)
-	respHeaders := headerToJSON(response.Header)
+	respHeaders := sanitizeGenerationAuditJSON(sanitizeGenerationAuditHeaders(response.Header))
 
 	if response.StatusCode >= http.StatusBadRequest {
-		log.Printf("AI upstream error: url=%s status=%d", redactUpstreamURL(request.URL.String()), response.StatusCode)
+		respBody, _ := io.ReadAll(response.Body)
+		auditBody := sanitizeGenerationAuditJSON(string(respBody))
+		log.Printf("AI upstream error: url=%s status=%d", redactGenerationAuditString(request.URL.String()), response.StatusCode)
 		code := fmt.Sprintf("UPSTREAM_%d", response.StatusCode)
-		errMsg := proxyAIUpstreamStatusMessage(response.StatusCode, respBody)
+		errMsg := redactGenerationAuditString(proxyAIUpstreamStatusMessage(response.StatusCode, []byte(auditBody)))
 		if onFailureDetail != nil {
-			onFailureDetail(code, errMsg, string(respBody))
+			onFailureDetail(code, errMsg, auditBody)
 		}
 		if onFailure != nil {
 			onFailure()
 		}
 		proxyFail(w, errMsg)
 		return
+	}
+
+	mediaType, _, _ := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	streaming := mediaType == "text/event-stream" || mediaType == "application/x-ndjson" || mediaType == "application/ndjson"
+	flusher, canFlush := w.(http.Flusher)
+	var failStream func(error)
+	if streaming {
+		failStream = func(streamErr error) {
+			code, message := "STREAM_INTERRUPTED", "流式响应中断"
+			if request.Context().Err() != nil {
+				code, message, streamErr = "CLIENT_CANCELLED", "客户端已取消请求", request.Context().Err()
+			}
+			rawError := redactGenerationAuditString(streamErr.Error())
+			if onFailureDetail != nil {
+				onFailureDetail(code, message, rawError)
+			}
+			if onFailure != nil {
+				onFailure()
+			}
+		}
+		if !canFlush {
+			failStream(fmt.Errorf("streaming response writer does not support http.Flusher"))
+			proxyFail(w, "AI 接口请求失败")
+			return
+		}
 	}
 
 	for key, values := range response.Header {
@@ -482,25 +534,61 @@ func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure
 			w.Header().Add(key, value)
 		}
 	}
+	if streaming {
+		w.Header().Del("Content-Length")
+		w.WriteHeader(response.StatusCode)
+		buffer := make([]byte, 32*1024)
+		for {
+			n, readErr := response.Body.Read(buffer)
+			if n > 0 {
+				chunk := buffer[:n]
+				if _, writeErr := w.Write(chunk); writeErr != nil {
+					failStream(writeErr)
+					return
+				}
+				flusher.Flush()
+			}
+			if readErr == io.EOF {
+				if contextErr := request.Context().Err(); contextErr != nil {
+					failStream(contextErr)
+					return
+				}
+				if onSuccess != nil {
+					onSuccess(nil, respHeaders)
+				}
+				return
+			}
+			if readErr != nil {
+				failStream(readErr)
+				return
+			}
+		}
+	}
+
+	respBody, readErr := io.ReadAll(response.Body)
+	if readErr != nil {
+		safeURL := redactGenerationAuditString(request.URL.String())
+		safeError := redactGenerationAuditString(readErr.Error())
+		log.Printf("AI proxy response read failed: url=%s err=%s", safeURL, safeError)
+		code, message := "NETWORK_ERROR", safeError
+		if request.Context().Err() != nil {
+			code, message = "CLIENT_CANCELLED", "客户端已取消请求"
+		}
+		if onFailureDetail != nil {
+			onFailureDetail(code, message, safeError)
+		}
+		if onFailure != nil {
+			onFailure()
+		}
+		proxyFail(w, "AI 接口请求失败")
+		return
+	}
 	w.WriteHeader(response.StatusCode)
 	_, _ = w.Write(respBody)
 
 	if onSuccess != nil {
 		onSuccess(respBody, respHeaders)
 	}
-}
-
-// headerToJSON 将 http.Header 转为简单 JSON 字符串。
-func headerToJSON(headers http.Header) string {
-	m := make(map[string]string, len(headers))
-	for key := range headers {
-		m[key] = headers.Get(key)
-	}
-	data, err := json.Marshal(m)
-	if err != nil {
-		return "{}"
-	}
-	return string(data)
 }
 
 func readAIRequest(r *http.Request) ([]byte, string, string, error) {
@@ -757,9 +845,9 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 		proxyFail(w, "AI 接口请求失败")
 		return
 	}
-	request, err := http.NewRequest(http.MethodPost, resolved.URL, bytes.NewReader(resolved.Body))
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, resolved.URL, bytes.NewReader(resolved.Body))
 	if err != nil {
-		proxyAILogf("video task build request failed: url=%s err=%v", resolved.URL, err)
+		proxyAILogf("video task build request failed: url=%s err=%v", redactGenerationAuditString(resolved.URL), err)
 		proxyFail(w, "AI 接口请求失败")
 		return
 	}
@@ -772,7 +860,9 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 	// ── 兼容任务：记录与预扣必须同一事务 ──
 	taskType := DetermineTaskType(path)
 	provider := DetermineProvider(channel)
-	genTaskID, err := StartCompatibilityTask(user, taskType, provider, modelName, body, SerializeHeaders(resolved.Headers), DetermineSource(r), billing, path)
+	auditRequestBody := []byte(sanitizeGenerationAuditJSON(string(requestAuditBody(body, contentType))))
+	auditRequestHeaders := sanitizeGenerationAuditJSON(sanitizeGenerationAuditHeaders(resolved.Headers))
+	genTaskID, err := StartCompatibilityTask(user, taskType, provider, modelName, auditRequestBody, auditRequestHeaders, DetermineSource(r), billing, path)
 	if err != nil {
 		proxyFailError(w, err)
 		return
@@ -788,6 +878,7 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 		func(respBody []byte, respHeaders string) {
 			latencyMs := time.Since(startTime).Milliseconds()
 			upstreamTaskID := ExtractUpstreamTaskID(respBody)
+			auditResponseBody := sanitizeGenerationAuditJSON(string(respBody))
 			proxyAILogf("video task created: genTaskID=%s upstreamTaskID=%s latency=%dms", genTaskID, upstreamTaskID, latencyMs)
 			if upstreamTaskID == "" {
 				if err := RefundUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); err != nil {
@@ -797,12 +888,13 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 				return
 			}
 			if durable {
-				if err := repository.QueueAcceptedCompatibilityTask(genTaskID, upstreamTaskID, channel.Name, profile.AdapterKey, profile.ID, profile.Version, upstreamModel, string(respBody), respHeaders, latencyMs, time.Now().UTC()); err != nil {
+				if err := repository.QueueAcceptedCompatibilityTask(genTaskID, upstreamTaskID, channel.Name, profile.AdapterKey, profile.ID, profile.Version, upstreamModel, auditResponseBody, respHeaders, latencyMs, time.Now().UTC()); err != nil {
 					proxyAILogf("video task queue durable observation failed: task=%s err=%v", genTaskID, err)
 					if refundErr := RefundUserCreditsWithTask(user.ID, modelName, credits, path, genTaskID); refundErr != nil {
 						proxyAILogf("video task queue refund failed: task=%s err=%v", genTaskID, refundErr)
 					}
-					LogTaskFailure(genTaskID, "TASK_QUEUE_FAILED", err.Error(), err.Error(), latencyMs, credits)
+					safeError := redactGenerationAuditString(err.Error())
+					LogTaskFailure(genTaskID, "TASK_QUEUE_FAILED", safeError, safeError, latencyMs, credits)
 				}
 				return
 			}
@@ -866,7 +958,7 @@ func ProxyVideoTaskDelete(w http.ResponseWriter, r *http.Request, path string) {
 		proxyFail(w, "AI 接口请求失败")
 		return
 	}
-	request, err := http.NewRequest(http.MethodDelete, resolved.URL, nil)
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodDelete, resolved.URL, nil)
 	if err != nil {
 		proxyFail(w, "AI 接口请求失败")
 		return
