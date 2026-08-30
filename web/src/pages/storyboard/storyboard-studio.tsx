@@ -24,7 +24,7 @@ import { ModelPicker } from "@/components/model-picker";
 import { generateStoryboard } from "@/services/api/storyboard";
 import { useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
-import { deleteStoryboardRecord, listStoryboardRecords, saveStoryboardRecord } from "./storyboard-storage";
+import { deleteStoryboardRecord, listStoryboardRecords, loadStoryboardRecord, saveStoryboardRecord, type StoryboardRecordSummary } from "./storyboard-storage";
 import {
     defaultStoryboardOptions,
     storyboardToMarkdown,
@@ -57,12 +57,15 @@ export function StoryboardStudio() {
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const accountId = useUserStore((state) => state.user?.id || "anonymous");
+    const accountIdRef = useRef(accountId);
     const controllerRef = useRef<AbortController | null>(null);
+    const detailRequestRef = useRef(0);
+    accountIdRef.current = accountId;
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const [title, setTitle] = useState("");
     const [source, setSource] = useState("");
     const [options, setOptions] = useState({ ...defaultStoryboardOptions });
-    const [records, setRecords] = useState<StoryboardRecord[]>([]);
+    const [records, setRecords] = useState<StoryboardRecordSummary[]>([]);
     const [record, setRecord] = useState<StoryboardRecord | null>(null);
     const [stage, setStage] = useState<StoryboardStage | null>(null);
     const [running, setRunning] = useState(false);
@@ -76,15 +79,22 @@ export function StoryboardStudio() {
         let active = true;
         setRecords([]);
         resetStudio();
-        void listStoryboardRecords(accountId)
-            .then((items) => {
+        const requestId = ++detailRequestRef.current;
+        void listStoryboardRecords()
+            .then(async (items) => {
                 if (!active) return;
                 setRecords(items);
-                if (items[0]) selectRecord(items[0]);
+                if (!items[0]) return;
+                const next = await loadStoryboardRecord(items[0].id);
+                if (!active || detailRequestRef.current !== requestId) return;
+                applyRecord(next);
             })
-            .catch(() => message.error(text("messages.historyLoadFailed", "历史记录加载失败")));
+            .catch(() => {
+                if (active) message.error(text("messages.historyLoadFailed", "历史记录加载失败"));
+            });
         return () => {
             active = false;
+            detailRequestRef.current += 1;
             controllerRef.current?.abort();
         };
     }, [accountId]);
@@ -105,7 +115,7 @@ export function StoryboardStudio() {
         [record],
     );
 
-    function selectRecord(next: StoryboardRecord) {
+    function applyRecord(next: StoryboardRecord) {
         setRecord(next);
         setTitle(next.title);
         setSource(next.source);
@@ -115,7 +125,20 @@ export function StoryboardStudio() {
         setHistoryOpen(false);
     }
 
+    async function selectRecord(next: StoryboardRecordSummary) {
+        const account = accountId;
+        const requestId = ++detailRequestRef.current;
+        try {
+            const detail = await loadStoryboardRecord(next.id);
+            if (accountIdRef.current !== account || detailRequestRef.current !== requestId) return;
+            applyRecord(detail);
+        } catch {
+            if (accountIdRef.current === account && detailRequestRef.current === requestId) message.error(text("messages.historyLoadFailed", "历史记录加载失败"));
+        }
+    }
+
     function resetStudio() {
+        detailRequestRef.current += 1;
         setRecord(null);
         setTitle("");
         setSource("");
@@ -157,6 +180,7 @@ export function StoryboardStudio() {
             return;
         }
 
+        const generationAccountId = accountId;
         const controller = new AbortController();
         controllerRef.current = controller;
         setRunning(true);
@@ -168,6 +192,7 @@ export function StoryboardStudio() {
                 signal: controller.signal,
                 onStage: setStage,
             });
+            if (controller.signal.aborted || accountIdRef.current !== generationAccountId) return;
             const now = Date.now();
             const nextRecord: StoryboardRecord = {
                 ...input,
@@ -178,14 +203,18 @@ export function StoryboardStudio() {
                 updatedAt: now,
             };
             setRecord(nextRecord);
-            setRecords((items) => [nextRecord, ...items]);
             try {
-                await saveStoryboardRecord(nextRecord, accountId);
+                const saved = await saveStoryboardRecord(nextRecord);
+                if (accountIdRef.current !== generationAccountId) return;
+                setRecord(saved);
+                setRecords((items) => [storyboardSummary(saved), ...items.filter((item) => item.id !== saved.id)]);
             } catch {
+                if (accountIdRef.current !== generationAccountId) return;
                 message.warning(text("messages.historySaveFailed", "分镜已生成，但保存历史记录失败"));
             }
             message.success(text("messages.generated", "分镜文档生成完成"));
         } catch (generationError) {
+            if (accountIdRef.current !== generationAccountId) return;
             if (controller.signal.aborted) {
                 message.info(text("messages.cancelled", "已取消生成"));
             } else {
@@ -205,16 +234,18 @@ export function StoryboardStudio() {
     }
 
     async function removeRecord(id: string) {
+        const account = accountId;
         try {
-            await deleteStoryboardRecord(id, accountId);
+            await deleteStoryboardRecord(id);
+            if (accountIdRef.current !== account) return;
             const remaining = records.filter((item) => item.id !== id);
             setRecords(remaining);
             if (record?.id === id) {
-                if (remaining[0]) selectRecord(remaining[0]);
+                if (remaining[0]) await selectRecord(remaining[0]);
                 else resetStudio();
             }
         } catch {
-            message.error(text("messages.historyDeleteFailed", "历史记录删除失败"));
+            if (accountIdRef.current === account) message.error(text("messages.historyDeleteFailed", "历史记录删除失败"));
         }
     }
 
@@ -245,10 +276,10 @@ export function StoryboardStudio() {
                             key={item.id}
                             className={`group flex w-full items-start gap-1 rounded-lg border p-1 transition-colors ${record?.id === item.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
                         >
-                            <button type="button" className="min-w-0 flex-1 p-2 text-left" onClick={() => selectRecord(item)}>
+                            <button type="button" className="min-w-0 flex-1 p-2 text-left" onClick={() => void selectRecord(item)}>
                                 <div className="truncate text-sm font-medium">{item.title}</div>
                                 <div className="mt-1 text-xs text-muted-foreground">
-                                    {formatTimestamp(item.updatedAt, i18n.language)} · {item.document.scenes.length} {text("units.scenes", "场")}
+                                    {formatTimestamp(item.updatedAt, i18n.language)} · {item.sceneCount} {text("units.scenes", "场")}
                                 </div>
                             </button>
                             <Popconfirm
@@ -589,6 +620,22 @@ function ValidationPanel({ record, text }: { record: StoryboardRecord; text: (ke
             )}
         </section>
     );
+}
+
+function storyboardSummary(record: StoryboardRecord): StoryboardRecordSummary {
+    return {
+        id: record.id,
+        title: record.title,
+        source: record.source,
+        options: record.options,
+        model: record.model,
+        sourceHash: record.sourceHash,
+        validationStatus: record.validation.status,
+        sceneCount: record.document.scenes.length,
+        shotCount: record.document.scenes.reduce((total, scene) => total + scene.segments.reduce((count, segment) => count + segment.shots.length, 0), 0),
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+    };
 }
 
 function stageLabel(stage: StoryboardStage, text: (key: string, fallback: string) => string) {
