@@ -7,7 +7,7 @@ import { ArrowLeft, Check, LoaderCircle, Send, Sparkles, Square } from "lucide-r
 import { ModelPicker } from "@/components/model-picker";
 import { useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
-import { appendScriptAgentMessage, loadScriptAgentWorkspace, saveScriptAgentWorkspace, type ScriptAgentWorkspaceRecord } from "./script-agent-storage";
+import { appendScriptAgentMessage, loadScriptAgentWorkspace, saveScriptAgentWorkspace, scriptAgentConflictWorkspace, type ScriptAgentWorkspaceRecord } from "./script-agent-storage";
 import { sendScriptAgentTurn, submitScriptAgentAction, type ScriptAgentAction, type ScriptAgentEvent } from "@/services/api/script-agent";
 import type { ScriptAgentStage } from "./script-agent";
 import { ScriptAgentConversations } from "./script-agent-conversations";
@@ -36,6 +36,14 @@ function formatDate(value: string) {
     return new Date(value).toLocaleString("zh-CN", { dateStyle: "short", timeStyle: "short" });
 }
 
+function errorStatus(error: unknown) {
+    return error && typeof error === "object" && "status" in error ? Number((error as { status?: number }).status) : 0;
+}
+
+function saveFailureMessage(error: unknown) {
+    return errorStatus(error) === 409 ? "工作区版本冲突，已恢复服务端最新版本" : "工作区保存失败，修改未持久化";
+}
+
 export function ScriptAgentStudio({ projectId, onBack, onWorkspaceChange }: { projectId: string; onBack: () => void; onWorkspaceChange?: (workspace: ScriptAgentWorkspaceRecord) => void }) {
     const { t } = useTranslation();
     const { message } = App.useApp();
@@ -43,7 +51,7 @@ export function ScriptAgentStudio({ projectId, onBack, onWorkspaceChange }: { pr
     const updateConfig = useConfigStore((state) => state.updateConfig);
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
-    const accountId = useUserStore((state) => state.user?.id || "anonymous");
+    const accountId = useUserStore((state) => state.user?.id || "");
     const [workspace, setWorkspace] = useState<ScriptAgentWorkspaceRecord | null>(null);
     const [draft, setDraft] = useState("");
     const [running, setRunning] = useState(false);
@@ -51,6 +59,7 @@ export function ScriptAgentStudio({ projectId, onBack, onWorkspaceChange }: { pr
     const [workspaceMutating, setWorkspaceMutating] = useState(false);
     const [error, setError] = useState("");
     const controllerRef = useRef<AbortController | null>(null);
+    const persistedWorkspaceRef = useRef<ScriptAgentWorkspaceRecord | null>(null);
     const activeAccountRef = useRef(accountId);
     const activeProjectRef = useRef(projectId);
     const text = (key: string, fallback: string) => t(`scriptAgent.${key}`, { defaultValue: fallback });
@@ -62,22 +71,26 @@ export function ScriptAgentStudio({ projectId, onBack, onWorkspaceChange }: { pr
         activeProjectRef.current = projectId;
         let active = true;
         controllerRef.current?.abort();
+        persistedWorkspaceRef.current = null;
         setWorkspace(null);
+        setRunning(false);
         setSaving(false);
         setWorkspaceMutating(false);
         setError("");
-        void loadScriptAgentWorkspace(accountId, projectId)
+        void loadScriptAgentWorkspace(projectId)
             .then((value) => {
                 if (!active || activeAccountRef.current !== accountId || activeProjectRef.current !== projectId) return;
-                if (!value) {
-                    message.warning("剧本不存在或已被删除");
-                    onBack();
-                    return;
-                }
+                persistedWorkspaceRef.current = value;
                 setWorkspace(value);
             })
-            .catch(() => {
-                if (active) setError(text("messages.loadFailed", "剧本 Agent 工作区加载失败"));
+            .catch((loadError) => {
+                if (!active || activeAccountRef.current !== accountId || activeProjectRef.current !== projectId) return;
+                if (errorStatus(loadError) === 404) {
+                    message.warning("剧本不存在或已被删除");
+                    onBack();
+                } else {
+                    setError(text("messages.loadFailed", "剧本 Agent 工作区加载失败"));
+                }
             });
         return () => {
             active = false;
@@ -85,25 +98,48 @@ export function ScriptAgentStudio({ projectId, onBack, onWorkspaceChange }: { pr
         };
     }, [accountId, projectId]);
 
-    async function persist(value: ScriptAgentWorkspaceRecord) {
-        if (activeAccountRef.current !== accountId || activeProjectRef.current !== projectId) return;
+    async function save(value: ScriptAgentWorkspaceRecord) {
+        if (activeAccountRef.current !== accountId || activeProjectRef.current !== projectId) return null;
+        const previous = persistedWorkspaceRef.current;
         setSaving(true);
-        setWorkspace(value);
         try {
-            const saved = await saveScriptAgentWorkspace(accountId, value);
+            const saved = await saveScriptAgentWorkspace(value);
             if (activeAccountRef.current === accountId && activeProjectRef.current === projectId) {
+                persistedWorkspaceRef.current = saved;
                 setWorkspace(saved);
+                setError("");
                 onWorkspaceChange?.(saved);
             }
-        } catch {
-            message.warning(text("messages.saveFailed", "工作区已更新，但保存失败"));
+            return saved;
+        } catch (saveError) {
+            if (activeAccountRef.current === accountId && activeProjectRef.current === projectId) {
+                const conflict = scriptAgentConflictWorkspace(saveError);
+                if (conflict) persistedWorkspaceRef.current = conflict;
+                setWorkspace(conflict || previous);
+            }
+            throw saveError;
         } finally {
             if (activeAccountRef.current === accountId && activeProjectRef.current === projectId) setSaving(false);
         }
     }
 
+    async function saveWithFeedback(value: ScriptAgentWorkspaceRecord) {
+        try {
+            return await save(value);
+        } catch (saveError) {
+            const reason = saveFailureMessage(saveError);
+            setError(reason);
+            message.error(reason);
+            return null;
+        }
+    }
+
+    async function persist(value: ScriptAgentWorkspaceRecord): Promise<void> {
+        await saveWithFeedback(value);
+    }
+
     async function run(operation: (signal: AbortSignal, onEvent: (event: ScriptAgentEvent) => void) => Promise<ScriptAgentWorkspaceRecord>) {
-        if (!workspace || busy) return;
+        if (!persistedWorkspaceRef.current || busy) return;
         if (!model || !isAiConfigReady({ ...config, model, textModel: model }, model)) {
             message.warning(text("messages.configRequired", "请先配置可用的文本模型"));
             openConfigDialog(false);
@@ -117,16 +153,17 @@ export function ScriptAgentStudio({ projectId, onBack, onWorkspaceChange }: { pr
             const next = await operation(controller.signal, (event) => {
                 if (event.type === "phase") setWorkspace((current) => (current ? { ...current, currentStage: event.phase } : current));
             });
-            if (!controller.signal.aborted && activeAccountRef.current === accountId && activeProjectRef.current === projectId) await persist(next);
+            if (!controller.signal.aborted && activeAccountRef.current === accountId && activeProjectRef.current === projectId) await save(next);
         } catch (runError) {
+            if (activeAccountRef.current === accountId && activeProjectRef.current === projectId) setWorkspace(persistedWorkspaceRef.current);
             if (!controller.signal.aborted) {
-                const reason = runError instanceof Error ? runError.message : text("messages.failed", "剧本 Agent 处理失败");
+                const reason = errorStatus(runError) === 409 ? saveFailureMessage(runError) : runError instanceof Error ? runError.message : text("messages.failed", "剧本 Agent 处理失败");
                 setError(reason);
                 message.error(reason);
             }
         } finally {
             if (controllerRef.current === controller) controllerRef.current = null;
-            setRunning(false);
+            if (activeAccountRef.current === accountId && activeProjectRef.current === projectId) setRunning(false);
         }
     }
 
@@ -134,17 +171,16 @@ export function ScriptAgentStudio({ projectId, onBack, onWorkspaceChange }: { pr
         const value = draft.trim();
         if (!value || !workspace || saving || workspaceMutating) return;
         setDraft("");
-        const next = appendScriptAgentMessage(workspace, "user", value);
-        await persist(next);
-        await run((signal, onEvent) => sendScriptAgentTurn({ ...config, model, textModel: model }, next, value, { signal, onEvent }));
+        const saved = await saveWithFeedback(appendScriptAgentMessage(workspace, "user", value));
+        if (saved) await run((signal, onEvent) => sendScriptAgentTurn({ ...config, model, textModel: model }, saved, value, { signal, onEvent }));
     }
 
     async function action(actionName: ScriptAgentAction, instruction = "") {
         if (!workspace || saving || workspaceMutating) return;
         const labels: Record<ScriptAgentAction, string> = { confirm: "确认配置", approve: "批准继续", fix: "要求修复", redo: "要求重做", continue: "继续生成", retry: "重试" };
         const next = appendScriptAgentMessage(workspace, "user", instruction ? `${labels[actionName]}：${instruction}` : labels[actionName]);
-        await persist(next);
-        await run((signal, onEvent) => submitScriptAgentAction({ ...config, model, textModel: model }, next, { action: actionName, instruction }, { signal, onEvent }));
+        const saved = await saveWithFeedback(next);
+        if (saved) await run((signal, onEvent) => submitScriptAgentAction({ ...config, model, textModel: model }, saved, { action: actionName, instruction }, { signal, onEvent }));
     }
 
     function stop() {

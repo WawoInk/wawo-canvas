@@ -1,24 +1,21 @@
-import localforage from "localforage";
-
-import { accountStoreName } from "@/lib/account-storage";
-import { useUserStore } from "@/stores/use-user-store";
+import {
+    createScriptProject,
+    deleteScriptProject,
+    fetchScriptProject,
+    fetchScriptProjects,
+    renameScriptProject,
+    updateScriptProject,
+    type ScriptProjectConversation,
+    type ScriptProjectDetail,
+    type ScriptProjectMessage,
+    type ScriptProjectSummary,
+    type ScriptProjectWorkspace,
+} from "@/services/api/script-projects";
 import type { ScriptAgentWorkspace, ScriptProjectConfigInput } from "./script-agent";
 
-export type ScriptAgentMessage = {
-    id: string;
-    role: "user" | "assistant";
-    content: string;
-    createdAt: string;
-};
-
-export type ScriptAgentConversation = {
-    id: string;
-    title: string;
-    messages: ScriptAgentMessage[];
-    createdAt: string;
-    updatedAt: string;
-};
-
+export type ScriptAgentMessage = ScriptProjectMessage;
+export type ScriptAgentConversation = ScriptProjectConversation;
+export type ScriptAgentProjectSummary = ScriptProjectSummary;
 export type ScriptAgentWorkspaceRecord = ScriptAgentWorkspace & {
     title: string;
     source: string;
@@ -26,18 +23,9 @@ export type ScriptAgentWorkspaceRecord = ScriptAgentWorkspace & {
     messages: ScriptAgentMessage[];
     conversations: ScriptAgentConversation[];
     activeConversationId: string;
+    revision?: number;
+    createdAt?: string;
 };
-
-const WORKSPACE_KEY = "default";
-const PROJECTS_KEY = "projects";
-
-function currentUserId() {
-    return useUserStore.getState().user?.id || "anonymous";
-}
-
-function workspaceStore(userId = currentUserId()) {
-    return localforage.createInstance({ name: "infinite-canvas", storeName: accountStoreName("script_agent_workspaces", userId) });
-}
 
 function id(prefix: string) {
     return globalThis.crypto?.randomUUID?.() || `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -53,6 +41,7 @@ function createConversation(title = "新对话"): ScriptAgentConversation {
 }
 
 export function createDefaultScriptAgentWorkspace(): ScriptAgentWorkspaceRecord {
+    const createdAt = now();
     const conversation = createConversation();
     return {
         id: id("workspace"),
@@ -71,139 +60,75 @@ export function createDefaultScriptAgentWorkspace(): ScriptAgentWorkspaceRecord 
         conversations: [conversation],
         activeConversationId: conversation.id,
         version: 0,
-        updatedAt: now(),
+        revision: 0,
+        createdAt,
+        updatedAt: createdAt,
     };
 }
 
-export function createScriptAgentProject(title = "", source = ""): ScriptAgentWorkspaceRecord {
+function projectSummary(project: ScriptProjectSummary): ScriptAgentProjectSummary {
+    return {
+        id: project.id,
+        projectId: project.projectId || project.id,
+        title: project.title,
+        source: project.source,
+        currentStage: project.currentStage,
+        version: project.version,
+        revision: project.revision,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+    };
+}
+
+function workspaceRecord(project: ScriptProjectDetail): ScriptAgentWorkspaceRecord {
+    const conversations = project.conversations.length ? project.conversations : [createConversation()];
+    const activeConversationId = conversations.some((item) => item.id === project.activeConversationId) ? project.activeConversationId : conversations[0].id;
+    const active = conversations.find((item) => item.id === activeConversationId) || conversations[0];
+    return {
+        ...project,
+        projectId: project.projectId || project.id,
+        conversations,
+        activeConversationId,
+        messages: active.messages,
+    };
+}
+
+function workspacePayload(workspace: ScriptAgentWorkspaceRecord): ScriptProjectWorkspace {
+    const active = workspace.conversations.find((item) => item.id === workspace.activeConversationId) || workspace.conversations[0];
+    return { ...workspace, messages: active?.messages || [] };
+}
+
+export async function loadScriptAgentProjects(): Promise<ScriptAgentProjectSummary[]> {
+    return (await fetchScriptProjects()).map(projectSummary);
+}
+
+export async function loadScriptAgentWorkspace(projectId: string): Promise<ScriptAgentWorkspaceRecord> {
+    return workspaceRecord(await fetchScriptProject(projectId));
+}
+
+export async function createScriptAgentWorkspace(title: string, source: string): Promise<ScriptAgentWorkspaceRecord> {
     const workspace = createDefaultScriptAgentWorkspace();
     const projectId = id("project");
-    return { ...workspace, id: projectId, projectId, title: title.trim() || "未命名剧本", source: source.trim() };
+    return workspaceRecord(await createScriptProject({ ...workspace, id: projectId, projectId, title: title.trim() || "未命名剧本", source: source.trim() }));
 }
 
-function normalizeConversation(value: unknown): ScriptAgentConversation | null {
-    if (!value || typeof value !== "object") return null;
-    const item = value as Partial<ScriptAgentConversation>;
-    if (typeof item.id !== "string") return null;
-    const createdAt = typeof item.createdAt === "string" ? item.createdAt : now();
-    const messages = Array.isArray(item.messages) ? normalizeMessages(item.messages) : [];
-    return { id: item.id, title: typeof item.title === "string" && item.title.trim() ? item.title.trim() : "新对话", messages, createdAt, updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : createdAt };
+export async function saveScriptAgentWorkspace(workspace: ScriptAgentWorkspaceRecord): Promise<ScriptAgentWorkspaceRecord> {
+    return workspaceRecord(await updateScriptProject(workspace.projectId, workspacePayload(workspace), workspace.revision ?? 0));
 }
 
-function normalizeMessages(value: unknown[]): ScriptAgentMessage[] {
-    return value
-        .filter((message): message is ScriptAgentMessage => Boolean(message && typeof message === "object" && (message as ScriptAgentMessage).role && typeof (message as ScriptAgentMessage).content === "string"))
-        .map((message) => ({
-            id: typeof message.id === "string" ? message.id : id("message"),
-            role: message.role === "user" ? "user" : "assistant",
-            content: message.content,
-            createdAt: typeof message.createdAt === "string" ? message.createdAt : now(),
-        }));
+export async function renameScriptAgentWorkspace(project: ScriptAgentProjectSummary, title: string): Promise<ScriptAgentProjectSummary> {
+    return projectSummary(await renameScriptProject(project.projectId, title.trim(), project.revision));
 }
 
-function safeRecord(value: unknown): ScriptAgentWorkspaceRecord | null {
-    if (!value || typeof value !== "object") return null;
-    const record = value as Partial<ScriptAgentWorkspaceRecord>;
-    if (typeof record.id !== "string" || typeof record.projectId !== "string" || !record.currentStage) return null;
-    const fallback = createDefaultScriptAgentWorkspace();
-    const topMessages = Array.isArray(record.messages) ? normalizeMessages(record.messages) : undefined;
-    const conversations = Array.isArray(record.conversations) ? record.conversations.map(normalizeConversation).filter((item): item is ScriptAgentConversation => Boolean(item)) : [];
-    const normalizedConversations = conversations.length
-        ? conversations
-        : [{ ...fallback.conversations[0], messages: topMessages || [], updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : fallback.updatedAt }];
-    const activeConversationId = normalizedConversations.some((item) => item.id === record.activeConversationId) ? record.activeConversationId! : normalizedConversations[0].id;
-    const active = normalizedConversations.find((item) => item.id === activeConversationId) || normalizedConversations[0];
-    const messages = topMessages || active.messages;
-    return {
-        ...fallback,
-        ...record,
-        title: typeof record.title === "string" ? record.title : "",
-        source: typeof record.source === "string" ? record.source : "",
-        conversations: normalizedConversations.map((conversation) => (conversation.id === activeConversationId ? { ...conversation, messages } : conversation)),
-        activeConversationId,
-        messages,
-    };
+export async function deleteScriptAgentWorkspace(projectId: string): Promise<void> {
+    await deleteScriptProject(projectId);
 }
 
-function persistedRecord(workspace: ScriptAgentWorkspaceRecord): ScriptAgentWorkspaceRecord {
-    const allowedConfigKeys: (keyof ScriptProjectConfigInput)[] = ["totalEpisodes", "episodeMinutes", "startChapter", "endChapter", "chapterIndexes", "platform", "aspectRatio", "style", "paywall"];
-    const configDraft = workspace.configDraft ? Object.fromEntries(allowedConfigKeys.flatMap((key) => (workspace.configDraft?.[key] === undefined ? [] : [[key, workspace.configDraft[key]]]))) : undefined;
-    const conversations = workspace.conversations.map((conversation) =>
-        conversation.id === workspace.activeConversationId ? { ...conversation, messages: workspace.messages, updatedAt: workspace.updatedAt } : conversation,
-    );
-    return {
-        id: workspace.id,
-        projectId: workspace.projectId,
-        title: workspace.title,
-        source: workspace.source,
-        currentStage: workspace.currentStage,
-        projectConfig: workspace.projectConfig,
-        configDraft,
-        storySkeleton: workspace.storySkeleton,
-        storySkeletonStatus: workspace.storySkeletonStatus,
-        storySkeletonReview: workspace.storySkeletonReview,
-        adaptationStrategy: workspace.adaptationStrategy,
-        adaptationStatus: workspace.adaptationStatus,
-        adaptationReview: workspace.adaptationReview,
-        scripts: workspace.scripts,
-        messages: workspace.messages,
-        conversations,
-        activeConversationId: workspace.activeConversationId,
-        version: workspace.version,
-        updatedAt: workspace.updatedAt,
-    };
-}
-
-export async function loadScriptAgentProjects(userId = currentUserId()): Promise<ScriptAgentWorkspaceRecord[]> {
-    const store = workspaceStore(userId);
-    const stored = await store.getItem<unknown>(PROJECTS_KEY);
-    if (Array.isArray(stored)) return stored.map(safeRecord).filter((item): item is ScriptAgentWorkspaceRecord => Boolean(item));
-    const legacy = safeRecord(await store.getItem<unknown>(WORKSPACE_KEY));
-    if (!legacy) return [];
-    const records = [persistedRecord(legacy)];
-    await store.setItem(PROJECTS_KEY, records);
-    return records;
-}
-
-// ponytail: project-list writes are last-write-wins across tabs; move projects to per-project keys if concurrent editing becomes a requirement.
-
-export async function saveScriptAgentProjects(userId: string | undefined, projects: ScriptAgentWorkspaceRecord[]) {
-    const store = workspaceStore(userId || currentUserId());
-    const records = projects.map(persistedRecord);
-    await store.setItem(PROJECTS_KEY, records);
-    return records;
-}
-
-export async function loadScriptAgentWorkspace(userId = currentUserId(), projectId?: string): Promise<ScriptAgentWorkspaceRecord | null> {
-    const projects = await loadScriptAgentProjects(userId);
-    if (projectId) return projects.find((item) => item.projectId === projectId) || null;
-    return projects[0] || createDefaultScriptAgentWorkspace();
-}
-
-export async function saveScriptAgentWorkspace(userId: string | undefined, workspace: ScriptAgentWorkspaceRecord) {
-    const accountId = userId || currentUserId();
-    const record = persistedRecord(workspace);
-    const projects = await loadScriptAgentProjects(accountId);
-    const index = projects.findIndex((item) => item.projectId === record.projectId);
-    const next = index < 0 ? [...projects, record] : projects.map((item, itemIndex) => (itemIndex === index ? record : item));
-    await workspaceStore(accountId).setItem(PROJECTS_KEY, next);
-    await workspaceStore(accountId).setItem(WORKSPACE_KEY, record);
-    return record;
-}
-
-export async function deleteScriptAgentWorkspace(userId: string | undefined, projectId: string) {
-    const accountId = userId || currentUserId();
-    const projects = await loadScriptAgentProjects(accountId);
-    const next = projects.filter((item) => item.projectId !== projectId);
-    await workspaceStore(accountId).setItem(PROJECTS_KEY, next.map(persistedRecord));
-    const current = await workspaceStore(accountId).getItem<unknown>(WORKSPACE_KEY);
-    if (safeRecord(current)?.projectId === projectId) await workspaceStore(accountId).removeItem(WORKSPACE_KEY);
-    return next;
-}
-
-export async function clearScriptAgentWorkspace(userId = currentUserId()) {
-    await workspaceStore(userId).removeItem(WORKSPACE_KEY);
-    await workspaceStore(userId).removeItem(PROJECTS_KEY);
+export function scriptAgentConflictWorkspace(error: unknown): ScriptAgentWorkspaceRecord | null {
+    if (!error || typeof error !== "object" || Number((error as { status?: number }).status) !== 409) return null;
+    const current = (error as { data?: { current?: unknown } }).data?.current;
+    if (!current || typeof current !== "object" || !Array.isArray((current as ScriptProjectDetail).conversations)) return null;
+    return workspaceRecord(current as ScriptProjectDetail);
 }
 
 function withWorkspaceMessage(workspace: ScriptAgentWorkspaceRecord, conversation: ScriptAgentConversation, changes: Partial<ScriptAgentWorkspaceRecord> = {}): ScriptAgentWorkspaceRecord {
@@ -230,7 +155,7 @@ export function selectScriptAgentConversation(workspace: ScriptAgentWorkspaceRec
 
 export function clearScriptAgentConversation(workspace: ScriptAgentWorkspaceRecord): ScriptAgentWorkspaceRecord {
     const active = workspace.conversations.find((item) => item.id === workspace.activeConversationId);
-    if (!active || !active.messages.length) return { ...workspace, messages: [] };
+    if (!active || !active.messages.length) return { ...workspace, messages: active?.messages || [] };
     return withWorkspaceMessage(workspace, { ...active, messages: [], updatedAt: now() });
 }
 
@@ -239,13 +164,4 @@ export function renameScriptAgentConversation(workspace: ScriptAgentWorkspaceRec
     if (!nextTitle) return workspace;
     const conversations = workspace.conversations.map((item) => (item.id === conversationId ? { ...item, title: nextTitle, updatedAt: now() } : item));
     return { ...workspace, conversations, version: workspace.version + 1, updatedAt: now() };
-}
-
-export function renameScriptAgentProject(projects: ScriptAgentWorkspaceRecord[], projectId: string, title: string): ScriptAgentWorkspaceRecord[] {
-    const nextTitle = title.trim();
-    return nextTitle ? projects.map((item) => (item.projectId === projectId ? { ...item, title: nextTitle, updatedAt: now() } : item)) : projects;
-}
-
-export function deleteScriptAgentProject(projects: ScriptAgentWorkspaceRecord[], projectId: string): ScriptAgentWorkspaceRecord[] {
-    return projects.filter((item) => item.projectId !== projectId);
 }

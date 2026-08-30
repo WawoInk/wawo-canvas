@@ -2,10 +2,10 @@ import { useState } from "react";
 import { Button, Input, Modal, Spin } from "antd";
 import { ArrowRight, FilePenLine, FilePlus2, Pencil, Trash2 } from "lucide-react";
 
-import type { ScriptAgentWorkspaceRecord } from "./script-agent-storage";
+import type { ScriptAgentProjectSummary } from "./script-agent-storage";
 
 type ScriptAgentSpaceProps = {
-    projects: ScriptAgentWorkspaceRecord[];
+    projects: ScriptAgentProjectSummary[];
     loading?: boolean;
     onCreate: (title: string, source: string) => void | Promise<void>;
     onOpen: (projectId: string) => void;
@@ -23,9 +23,9 @@ export function ScriptAgentSpace({ projects, loading = false, onCreate, onOpen, 
     const [createOpen, setCreateOpen] = useState(false);
     const [createTitle, setCreateTitle] = useState("");
     const [createSource, setCreateSource] = useState("");
-    const [renameProject, setRenameProject] = useState<ScriptAgentWorkspaceRecord | null>(null);
+    const [renameProject, setRenameProject] = useState<ScriptAgentProjectSummary | null>(null);
     const [renameTitle, setRenameTitle] = useState("");
-    const [deleteProject, setDeleteProject] = useState<ScriptAgentWorkspaceRecord | null>(null);
+    const [deleteProject, setDeleteProject] = useState<ScriptAgentProjectSummary | null>(null);
     const [pending, setPending] = useState<PendingAction>("");
 
     const openCreate = () => {
@@ -122,7 +122,7 @@ export function ScriptAgentSpace({ projects, loading = false, onCreate, onOpen, 
                                             <Button type="text" danger size="small" shape="circle" icon={<Trash2 className="size-4" />} aria-label={`删除《${project.title}》`} onClick={() => setDeleteProject(project)} />
                                         </div>
                                     </div>
-                                    <p className="mt-5 text-xs text-muted-foreground">{project.conversations.length} 个对话 · {project.scripts.length} 集剧本</p>
+                                    <p className="mt-5 text-xs text-muted-foreground">版本 {project.version}</p>
                                 </div>
                                 <div className="mt-8 flex items-center justify-between gap-4 border-t pt-4">
                                     <p className="text-xs text-muted-foreground">更新于 {formatUpdatedAt(project.updatedAt)}</p>
