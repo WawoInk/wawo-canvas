@@ -216,16 +216,28 @@ curl -fsS -H "Authorization: Bearer $token" "$base_url/api/auth/me" | grep -Fq "
 )
 
 assert_public_a() {
-    [[ "$(curl -fsS "$base_url/build-version.txt")" == a ]]
-    [[ "$(curl -fsS "$base_url/api/health")" == ok ]]
-    curl -fsS -H "Authorization: Bearer $token" "$base_url/api/auth/me" | grep -Fq "\"id\":\"$user_id\""
-    (
-        cd "$workspace"
-        source state/deployment.env
-        [[ "$ACTIVE_SLOT" == blue && "$CURRENT_SHA" == a ]]
-        [[ -z "$(docker compose --profile green --env-file .env --env-file state/deployment.env -f docker-compose.prod.yml ps -q api-green)" ]]
-        [[ -z "$(docker compose --profile green --env-file .env --env-file state/deployment.env -f docker-compose.prod.yml ps -q web-green)" ]]
-    )
+    local version= health= user= auth=failed active= current= green_api= green_web=
+    for _ in $(seq 1 20); do
+        version=$(curl -fsS "$base_url/build-version.txt" 2>/dev/null || true)
+        health=$(curl -fsS "$base_url/api/health" 2>/dev/null || true)
+        user=$(curl -fsS -H "Authorization: Bearer $token" "$base_url/api/auth/me" 2>/dev/null || true)
+        active=$(sed -n 's/^ACTIVE_SLOT=//p' "$workspace/state/deployment.env")
+        current=$(sed -n 's/^CURRENT_SHA=//p' "$workspace/state/deployment.env")
+        green_api=$(cd "$workspace" && docker compose --profile green --env-file .env --env-file state/deployment.env -f docker-compose.prod.yml ps -q api-green 2>/dev/null || true)
+        green_web=$(cd "$workspace" && docker compose --profile green --env-file .env --env-file state/deployment.env -f docker-compose.prod.yml ps -q web-green 2>/dev/null || true)
+        auth=failed
+        if grep -Fq "\"id\":\"$user_id\"" <<< "$user"; then
+            auth=ok
+        fi
+        if [[ "$version" == a && "$health" == ok && "$auth" == ok && "$active" == blue && "$current" == a && -z "$green_api" && -z "$green_web" ]]; then
+            return 0
+        fi
+        sleep 0.2
+    done
+    printf 'stable blue assertion failed: version=%q health=%q auth=%s active=%q current=%q green_api=%s green_web=%s\n' \
+        "$version" "$health" "$auth" "$active" "$current" "${green_api:+running}" "${green_web:+running}" >&2
+    (cd "$workspace" && docker compose --profile blue --profile green --env-file .env --env-file state/deployment.env -f docker-compose.prod.yml ps -a) >&2 || true
+    return 1
 }
 
 sed 's/^JWT_SECRET=.*/JWT_SECRET=deploy-test-rotated-secret/' "$workspace/.env" > "$workspace/.env.tmp"
