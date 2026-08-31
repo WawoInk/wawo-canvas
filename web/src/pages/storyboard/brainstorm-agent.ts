@@ -54,19 +54,49 @@ export type BrainstormStoryboardSnapshot = Pick<StoryboardRecord, "id" | "revisi
 
 export type BrainstormFocus = { kind: "project" } | { kind: "scene"; sceneId: string } | { kind: "segment"; sceneId: string; segmentId: string } | { kind: "shot"; sceneId: string; segmentId: string; shotId: string };
 
+export type BrainstormMemoryScope = { kind: "project" } | { kind: "scene"; sceneId: string } | { kind: "shot"; shotId: string };
+
 export type BrainstormMemoryCandidate = {
     id: string;
+    kind?: string;
     content: string;
     confirmed: boolean;
     tags?: string[];
-    scope: { kind: "project" } | { kind: "scene"; sceneId: string } | { kind: "shot"; shotId: string };
+    sourceMessageId?: string;
+    operationId?: string;
+    updatedAt?: string;
+    scope: BrainstormMemoryScope;
+};
+
+export type BrainstormProjectMemory = {
+    id: string;
+    kind: string;
+    scope: BrainstormMemoryScope["kind"];
+    path: string;
+    content: string;
+    tags: string[];
+    sourceMessageId: string;
+    operationId: string;
+    createdAt?: string;
+    updatedAt?: string;
+};
+
+export type BrainstormMemoryWriteInput = Pick<BrainstormProjectMemory, "id" | "kind" | "scope" | "path" | "content" | "tags" | "sourceMessageId" | "operationId">;
+
+export type BrainstormMemoryState = {
+    candidates: BrainstormMemoryCandidate[];
+    memories: BrainstormProjectMemory[];
 };
 
 export type BrainstormSummaryCheckpoint = {
     id: string;
+    fromMessageId?: string;
     throughMessageId: string;
     content: string;
     tokenCount?: number;
+    sourceTokenCount?: number;
+    coveredMessageCount?: number;
+    model?: string;
 };
 
 export type BrainstormSkillId = "divergent_ideation" | "character_conflict" | "visual_storytelling" | "shot_rhythm" | "continuity_check";
@@ -112,6 +142,20 @@ export type BrainstormContextDiagnostics = {
     toolSchemaTokens: number;
     estimated: boolean;
     summary: "included" | "trimmed" | "missing";
+    summaryCheckpoint?: {
+        id: string;
+        fromMessageId?: string;
+        throughMessageId: string;
+        coveredMessageCount?: number;
+        sourceTokenCount?: number;
+        model?: string;
+        action: "included" | "trimmed";
+    };
+    branchTail?: {
+        retainedFromMessageId?: string;
+        retainedMessageCount: number;
+        trimmedMessageCount: number;
+    };
     items: BrainstormContextDiagnosticItem[];
 };
 
@@ -122,6 +166,7 @@ export type BrainstormContextInput = {
     priorMessages: BrainstormMessage[];
     currentUserMessage: BrainstormUserMessage;
     memories: BrainstormMemoryCandidate[];
+    memoryLimits?: { maxItems: number; maxContentBytes: number; maxTotalBytes: number };
     summary?: BrainstormSummaryCheckpoint;
     tools: BrainstormToolDefinition[];
     budget: BrainstormTokenBudget;

@@ -323,3 +323,121 @@ test("trims tool schemas instead of sacrificing fixed system and current user co
     assert.equal(result.messages.at(-1).content, "CURRENT_USER_MARKER");
     assert.ok(result.diagnostics.usedTokens <= result.diagnostics.limitTokens);
 });
+
+test("orders, deduplicates, and bounds scoped Memory before applying the final token budget", () => {
+    const memories = [
+        { id: "project-duplicate", content: "  SAME   MEMORY  ", confirmed: true, updatedAt: "2026-08-31T03:00:00Z", scope: { kind: "project" } },
+        { id: "scene-b", content: "SCENE_B", confirmed: true, updatedAt: "2026-08-31T02:00:00Z", scope: { kind: "scene", sceneId: "scene-a" } },
+        { id: "shot-duplicate", content: "same memory", confirmed: true, updatedAt: "2026-08-31T01:00:00Z", scope: { kind: "shot", shotId: "shot-b" } },
+        { id: "scene-a", content: "SCENE_A", confirmed: true, updatedAt: "2026-08-31T02:00:00Z", scope: { kind: "scene", sceneId: "scene-a" } },
+        { id: "too-long", content: "X".repeat(40), confirmed: true, scope: { kind: "project" } },
+        { id: "project-extra", content: "PROJECT_EXTRA", confirmed: true, scope: { kind: "project" } },
+    ];
+    const result = buildBrainstormContext(input({ memories, memoryLimits: { maxItems: 3, maxContentBytes: 32, maxTotalBytes: 64 } }));
+    const allContent = content(result);
+
+    assert.match(allContent, /shot-duplicate/);
+    assert.match(allContent, /scene-a/);
+    assert.match(allContent, /scene-b/);
+    assert.doesNotMatch(allContent, /project-duplicate|too-long|project-extra/);
+    const injectedMemory = result.messages.filter((message) => message.type === "message" && message.content.startsWith("Memory 参考")).map((message) => message.content);
+    assert.deepEqual(
+        injectedMemory.map((message) => JSON.parse(message.slice(message.indexOf("\n") + 1)).id),
+        ["shot-duplicate", "scene-a", "scene-b"],
+    );
+    assert.match(diagnostic(result, "memory", "project-duplicate").reason, /重复内容/);
+    assert.match(diagnostic(result, "memory", "too-long").reason, /长度/);
+    assert.match(diagnostic(result, "memory", "project-extra").reason, /数量上限/);
+});
+
+test("accepts only User-boundary Summary checkpoints and exposes their coverage metadata", () => {
+    const priorMessages = [user("u1", null, "旧问题"), assistant("a1", "u1", [{ type: "text", text: "旧回答" }])];
+    const invalid = buildBrainstormContext(
+        input({
+            priorMessages,
+            currentUserMessage: user("current", "a1", "继续"),
+            summary: { id: "summary-invalid", throughMessageId: "a1", content: "INVALID_SUMMARY" },
+        }),
+    );
+    assert.doesNotMatch(content(invalid), /INVALID_SUMMARY/);
+    assert.match(diagnostic(invalid, "summary", "summary-invalid").reason, /User Message/);
+
+    const valid = buildBrainstormContext(
+        input({
+            priorMessages,
+            currentUserMessage: user("current", "a1", "继续"),
+            summary: {
+                id: "summary-valid",
+                fromMessageId: "u0",
+                throughMessageId: "u1",
+                content: "VALID_SUMMARY",
+                tokenCount: 9,
+                sourceTokenCount: 80,
+                coveredMessageCount: 5,
+                model: "summary-model",
+            },
+        }),
+    );
+    assert.match(content(valid), /VALID_SUMMARY/);
+    assert.deepEqual(valid.diagnostics.summaryCheckpoint, {
+        id: "summary-valid",
+        fromMessageId: "u0",
+        throughMessageId: "u1",
+        coveredMessageCount: 5,
+        sourceTokenCount: 80,
+        model: "summary-model",
+        action: "included",
+    });
+});
+
+test("retains one contiguous recent branch tail and diagnoses older history after the first budget cut", () => {
+    const result = buildBrainstormContext(
+        input({
+            priorMessages: [
+                user("u1", null, "OLDER_USER_MARKER"),
+                assistant("a1", "u1", [{ type: "text", text: "OLDER_ASSISTANT_MARKER" }]),
+                user("u2", "a1", "SMALL_BEFORE_OVERSIZED"),
+                assistant("a2", "u2", [{ type: "text", text: `OVERSIZED_MIDDLE_${"中段".repeat(2_000)}` }]),
+                user("u3", "a2", "RECENT_BRANCH_TAIL"),
+            ],
+            currentUserMessage: user("current", "u3", "继续"),
+            budget: { contextWindowTokens: 1_800, outputReserveTokens: 200 },
+        }),
+    );
+    const allContent = content(result);
+
+    assert.match(allContent, /RECENT_BRANCH_TAIL/);
+    assert.doesNotMatch(allContent, /OVERSIZED_MIDDLE|SMALL_BEFORE_OVERSIZED|OLDER_USER_MARKER|OLDER_ASSISTANT_MARKER/);
+    assert.match(diagnostic(result, "history", "u2").reason, /连续的最近分支尾部/);
+    assert.deepEqual(result.diagnostics.branchTail, {
+        retainedFromMessageId: "u3",
+        retainedMessageCount: 1,
+        trimmedMessageCount: 4,
+    });
+});
+
+test("keeps Tool Call and Tool Result across assistant messages atomic at the branch-tail budget cut", () => {
+    const result = buildBrainstormContext(
+        input({
+            priorMessages: [
+                user("u1", null, "旧问题"),
+                assistant("a-call", "u1", [{ type: "tool_call", callId: "cross-message", name: "read_scene", arguments: JSON.stringify({ query: "参数".repeat(700) }) }]),
+                assistant("a-result", "a-call", [{ type: "tool_result", callId: "cross-message", name: "read_scene", status: "succeeded", content: "结果".repeat(700) }]),
+                user("u2", "a-result", "RECENT_AFTER_TOOL_PAIR"),
+            ],
+            currentUserMessage: user("current", "u2", "继续"),
+            budget: { contextWindowTokens: 1_800, outputReserveTokens: 200 },
+        }),
+    );
+
+    assert.match(content(result), /RECENT_AFTER_TOOL_PAIR/);
+    assert.equal(
+        result.messages.some((message) => message.type === "tool_call" && message.callId === "cross-message"),
+        false,
+    );
+    assert.equal(
+        result.messages.some((message) => message.type === "tool_result" && message.callId === "cross-message"),
+        false,
+    );
+    assert.doesNotMatch(content(result), /旧问题/);
+});
