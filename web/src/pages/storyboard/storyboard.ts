@@ -340,22 +340,49 @@ export function normalizeStoryboardDocument(document: StoryboardDocument, curren
         usedIds.add(id);
         return id;
     };
-    const currentScenes = new Map((current?.scenes || []).map((scene) => [scene.sceneNo, scene]));
+    const reservedIds = <T extends { id: string }>(incoming: T[], currentById: Map<string, T>) =>
+        new Set(incoming.flatMap((entity) => (currentById.has(entity.id) ? [entity.id] : [])));
+    const previousEntity = <T extends { id: string }>(
+        incomingId: string,
+        number: number,
+        currentById: Map<string, T>,
+        currentByNumber: Map<number, T>,
+        reserved: Set<string>,
+    ) => {
+        const byId = currentById.get(incomingId);
+        if (byId && !usedIds.has(byId.id)) return byId;
+        const byNumber = currentByNumber.get(number);
+        return byNumber && !reserved.has(byNumber.id) && !usedIds.has(byNumber.id) ? byNumber : undefined;
+    };
+
+    const currentSceneList = current?.scenes || [];
+    const currentScenesById = new Map(currentSceneList.map((scene) => [scene.id, scene]));
+    const currentScenesByNumber = new Map(currentSceneList.map((scene) => [scene.sceneNo, scene]));
+    const reservedScenes = reservedIds(document.scenes, currentScenesById);
     return {
         ...document,
         scenes: document.scenes.map((scene) => {
-            const currentScene = currentScenes.get(scene.sceneNo);
-            const currentSegments = new Map((currentScene?.segments || []).map((segment) => [segment.segmentNo, segment]));
+            const currentScene = previousEntity(scene.id, scene.sceneNo, currentScenesById, currentScenesByNumber, reservedScenes);
+            const currentSegmentList = currentScene?.segments || [];
+            const currentSegmentsById = new Map(currentSegmentList.map((segment) => [segment.id, segment]));
+            const currentSegmentsByNumber = new Map(currentSegmentList.map((segment) => [segment.segmentNo, segment]));
+            const reservedSegments = reservedIds(scene.segments, currentSegmentsById);
             return {
                 ...scene,
                 id: entityId(currentScene?.id),
                 segments: scene.segments.map((segment) => {
-                    const currentSegment = currentSegments.get(segment.segmentNo);
-                    const currentShots = new Map((currentSegment?.shots || []).map((shot) => [shot.shotNo, shot]));
+                    const currentSegment = previousEntity(segment.id, segment.segmentNo, currentSegmentsById, currentSegmentsByNumber, reservedSegments);
+                    const currentShotList = currentSegment?.shots || [];
+                    const currentShotsById = new Map(currentShotList.map((shot) => [shot.id, shot]));
+                    const currentShotsByNumber = new Map(currentShotList.map((shot) => [shot.shotNo, shot]));
+                    const reservedShots = reservedIds(segment.shots, currentShotsById);
                     return {
                         ...segment,
                         id: entityId(currentSegment?.id),
-                        shots: segment.shots.map((shot) => ({ ...shot, id: entityId(currentShots.get(shot.shotNo)?.id) })),
+                        shots: segment.shots.map((shot) => ({
+                            ...shot,
+                            id: entityId(previousEntity(shot.id, shot.shotNo, currentShotsById, currentShotsByNumber, reservedShots)?.id),
+                        })),
                     };
                 }),
             };

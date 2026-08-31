@@ -245,9 +245,10 @@ queued, pending, running, succeeded, success, failed, cancelled
 | `validation_status/scene_count/shot_count` | 列表投影摘要，不替代 workspace status |
 | `revision` | 项目级乐观锁；创建为 1，每次成功更新递增 1 |
 | `artifact_file_id` | 唯一引用私有 `user_files` JSON artifact |
+| `artifact_hash` | 规范化 artifact 的 SHA-256；内容未变化时复用已有文件 |
 | `created_at/updated_at` | 字符串时间；更新不改变 `created_at` |
 
-`directorPlan`、`document` 和 `validation` 不拆表，统一保存在 `storyboards/{user_id}/{entity_id}/{file_id}.json`。省略值规范化为 JSON `null`。Scene、Segment、Shot 的稳定 UUID 也保存在 Document artifact 中；创建时由应用替换模型给出的缺失、重复或不可信 ID，更新时按父级内 `sceneNo/segmentNo/shotNo` 结构键复用已有 ID。
+`directorPlan`、`document` 和 `validation` 不拆表，统一保存在 `storyboards/{user_id}/{entity_id}/{file_id}.json`。省略值规范化为 JSON `null`。Scene、Segment、Shot 的稳定 UUID 也保存在 Document artifact 中；创建时由应用替换模型给出的缺失、重复或不可信 ID，更新时优先复用请求中已属于当前 artifact 的稳定 ID；缺失或不可信 ID 再按父级内 `sceneNo/segmentNo/shotNo` 结构键匹配未被其他实体保留的旧 ID。
 
 更新使用 `id + user_id + expectedRevision` 整体 CAS，不做字段级 merge。artifact 变化时先上传新对象，再在同一数据库事务中创建新 `user_files`、CAS 更新 Project 引用/摘要/revision 并删除旧文件行；事务或 CAS 失败时删除新对象，旧可用 artifact 仍保持引用。事务成功后再 best-effort 删除旧对象。规范化后的 artifact 内容未变化时可以复用旧文件，仅更新元数据和 revision。
 

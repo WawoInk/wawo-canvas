@@ -18,7 +18,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type CreateStoryboardProjectInput struct {
+type StoryboardProjectInput struct {
 	ID           string          `json:"id"`
 	Title        string          `json:"title"`
 	Source       string          `json:"source"`
@@ -48,7 +48,7 @@ func ListStoryboardProjects(userID string) ([]model.StoryboardProjectSummary, er
 	return items, nil
 }
 
-func CreateStoryboardProject(ctx context.Context, userID string, input CreateStoryboardProjectInput) (model.StoryboardProjectDetail, error) {
+func CreateStoryboardProject(ctx context.Context, userID string, input StoryboardProjectInput) (model.StoryboardProjectDetail, error) {
 	id := strings.TrimSpace(input.ID)
 	if id == "" {
 		return model.StoryboardProjectDetail{}, safeMessageError{message: "项目 ID 无效"}
@@ -119,7 +119,7 @@ func GetStoryboardProject(ctx context.Context, id, userID string) (model.Storybo
 	return model.StoryboardProjectDetail{}, lastErr
 }
 
-func UpdateStoryboardProject(ctx context.Context, id, userID string, input CreateStoryboardProjectInput, expectedRevision uint64) (model.StoryboardProjectDetail, error) {
+func UpdateStoryboardProject(ctx context.Context, id, userID string, input StoryboardProjectInput, expectedRevision uint64) (model.StoryboardProjectDetail, error) {
 	if strings.TrimSpace(input.ID) != id {
 		return model.StoryboardProjectDetail{}, safeMessageError{message: "项目 ID 无效"}
 	}
@@ -183,7 +183,7 @@ func UpdateStoryboardProject(ctx context.Context, id, userID string, input Creat
 		project.ArtifactFileID = uploaded.ID
 		newFile = &uploaded
 	}
-	if err := repository.UpdateStoryboardProjectWithLock(project, expectedRevision, newFile, existing.ArtifactFileID); err != nil {
+	if err := repository.UpdateStoryboardProjectCAS(project, expectedRevision, newFile, existing.ArtifactFileID); err != nil {
 		if newFile != nil {
 			referenced, referenceErr := repository.StoryboardProjectReferencesFile(newFile.ID)
 			if referenceErr == nil && referenced {
@@ -319,29 +319,41 @@ func normalizeStoryboardDocument(raw, existing json.RawMessage) (json.RawMessage
 		}
 	}
 	used := map[string]bool{}
-	previousScenes := storyboardEntitiesByNumber(previous, "scenes", "sceneNo")
-	for _, sceneValue := range storyboardEntities(document, "scenes") {
+	sceneValues := storyboardEntities(document, "scenes")
+	previousScenesByID := storyboardEntitiesByID(previous, "scenes")
+	previousScenesByNumber := storyboardEntitiesByNumber(previous, "scenes", "sceneNo")
+	reservedScenes := storyboardReservedEntityIDs(sceneValues, previousScenesByID)
+	for _, sceneValue := range sceneValues {
 		scene, ok := sceneValue.(map[string]any)
 		if !ok {
 			continue
 		}
-		previousScene := previousScenes[storyboardEntityNumber(scene, "sceneNo")]
+		previousScene := storyboardPreviousEntity(scene, previousScenesByID, previousScenesByNumber, "sceneNo", reservedScenes, used)
 		scene["id"] = storyboardEntityID(previousScene, used)
-		previousSegments := storyboardEntitiesByNumber(previousScene, "segments", "segmentNo")
-		for _, segmentValue := range storyboardEntities(scene, "segments") {
+
+		segmentValues := storyboardEntities(scene, "segments")
+		previousSegmentsByID := storyboardEntitiesByID(previousScene, "segments")
+		previousSegmentsByNumber := storyboardEntitiesByNumber(previousScene, "segments", "segmentNo")
+		reservedSegments := storyboardReservedEntityIDs(segmentValues, previousSegmentsByID)
+		for _, segmentValue := range segmentValues {
 			segment, ok := segmentValue.(map[string]any)
 			if !ok {
 				continue
 			}
-			previousSegment := previousSegments[storyboardEntityNumber(segment, "segmentNo")]
+			previousSegment := storyboardPreviousEntity(segment, previousSegmentsByID, previousSegmentsByNumber, "segmentNo", reservedSegments, used)
 			segment["id"] = storyboardEntityID(previousSegment, used)
-			previousShots := storyboardEntitiesByNumber(previousSegment, "shots", "shotNo")
-			for _, shotValue := range storyboardEntities(segment, "shots") {
+
+			shotValues := storyboardEntities(segment, "shots")
+			previousShotsByID := storyboardEntitiesByID(previousSegment, "shots")
+			previousShotsByNumber := storyboardEntitiesByNumber(previousSegment, "shots", "shotNo")
+			reservedShots := storyboardReservedEntityIDs(shotValues, previousShotsByID)
+			for _, shotValue := range shotValues {
 				shot, ok := shotValue.(map[string]any)
 				if !ok {
 					continue
 				}
-				shot["id"] = storyboardEntityID(previousShots[storyboardEntityNumber(shot, "shotNo")], used)
+				previousShot := storyboardPreviousEntity(shot, previousShotsByID, previousShotsByNumber, "shotNo", reservedShots, used)
+				shot["id"] = storyboardEntityID(previousShot, used)
 			}
 		}
 	}
@@ -353,6 +365,20 @@ func storyboardEntities(parent map[string]any, field string) []any {
 		return nil
 	}
 	items, _ := parent[field].([]any)
+	return items
+}
+
+func storyboardEntitiesByID(parent map[string]any, field string) map[string]map[string]any {
+	items := map[string]map[string]any{}
+	for _, value := range storyboardEntities(parent, field) {
+		entity, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		if id := storyboardEntityStringID(entity); id != "" {
+			items[id] = entity
+		}
+	}
 	return items
 }
 
@@ -371,6 +397,34 @@ func storyboardEntitiesByNumber(parent map[string]any, field, numberField string
 	return items
 }
 
+func storyboardReservedEntityIDs(values []any, previousByID map[string]map[string]any) map[string]bool {
+	reserved := map[string]bool{}
+	for _, value := range values {
+		entity, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		if id := storyboardEntityStringID(entity); previousByID[id] != nil {
+			reserved[id] = true
+		}
+	}
+	return reserved
+}
+
+func storyboardPreviousEntity(entity map[string]any, previousByID, previousByNumber map[string]map[string]any, numberField string, reserved, used map[string]bool) map[string]any {
+	if id := storyboardEntityStringID(entity); id != "" {
+		if previous := previousByID[id]; previous != nil && !used[id] {
+			return previous
+		}
+	}
+	previous := previousByNumber[storyboardEntityNumber(entity, numberField)]
+	previousID := storyboardEntityStringID(previous)
+	if previous == nil || reserved[previousID] || used[previousID] {
+		return nil
+	}
+	return previous
+}
+
 func storyboardEntityNumber(entity map[string]any, field string) string {
 	number, ok := entity[field].(float64)
 	if !ok {
@@ -379,12 +433,18 @@ func storyboardEntityNumber(entity map[string]any, field string) string {
 	return strconv.FormatFloat(number, 'f', -1, 64)
 }
 
+func storyboardEntityStringID(entity map[string]any) string {
+	if entity == nil {
+		return ""
+	}
+	id, _ := entity["id"].(string)
+	return strings.TrimSpace(id)
+}
+
 func storyboardEntityID(previous map[string]any, used map[string]bool) string {
-	if previous != nil {
-		if id, ok := previous["id"].(string); ok && strings.TrimSpace(id) != "" && !used[id] {
-			used[id] = true
-			return id
-		}
+	if id := storyboardEntityStringID(previous); id != "" && !used[id] {
+		used[id] = true
+		return id
 	}
 	for {
 		id := uuid.NewString()

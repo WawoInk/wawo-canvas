@@ -53,9 +53,9 @@ description: 核心数据表和第一方生成任务事务约束
 
 ## storyboard_projects 与可变 Storyboard Workspace
 
-`storyboard_projects` 是可变 Storyboard Workspace 的聚合根，保存当前账号所有权、标题、原始剧本、生成选项、模型、`source_hash`、`draft/ready` 状态、验证摘要、场景/镜头计数、项目级 `revision`，以及指向 `user_files` 的私有 JSON artifact 引用。项目创建时 `revision=1`；更新必须提交当前 `expectedRevision`，成功后 revision 加 1，旧 revision 返回 HTTP 409 和最新完整项目，不做字段级自动合并。更新和重新生成保留 Project ID 与原始 `created_at`。
+`storyboard_projects` 是可变 Storyboard Workspace 的聚合根，保存当前账号所有权、标题、原始剧本、生成选项、模型、`source_hash`、`draft/ready` 状态、验证摘要、场景/镜头计数、项目级 `revision`，以及由 `artifact_file_id` 指向 `user_files` 的私有 JSON artifact 引用；`artifact_hash` 保存规范化 artifact 的 SHA-256，用于内容未变化时复用已有文件。项目创建时 `revision=1`；更新必须提交当前 `expectedRevision`，成功后 revision 加 1，旧 revision 返回 HTTP 409 和最新完整项目，不做字段级自动合并。更新和重新生成保留 Project ID 与原始 `created_at`。
 
-`status` 只表达 Workspace 是否已有 Storyboard Document：没有 Document 为 `draft`，存在 Document 为 `ready`。校验通过或失败继续由 `validation_status` 表达，不能混入 Workspace status。`directorPlan`、`document` 和 `validation` 不拆成数据库表，而是统一保存为 `storyboards/{user_id}/{entity_id}/{file_id}.json`；创建时省略的复杂字段规范化为 JSON `null`。Scene、Segment、Shot 的非空稳定 UUID 保存在 Document 内：首次保存会替换模型给出的缺失、重复或不可信 ID，更新或重新生成时按父级内的 `sceneNo`、`segmentNo`、`shotNo` 复用已有 ID，新实体再生成新 UUID。
+`status` 只表达 Workspace 是否已有 Storyboard Document：没有 Document 为 `draft`，存在 Document 为 `ready`。校验通过或失败继续由 `validation_status` 表达，不能混入 Workspace status。`directorPlan`、`document` 和 `validation` 不拆成数据库表，而是统一保存为 `storyboards/{user_id}/{entity_id}/{file_id}.json`；创建时省略的复杂字段规范化为 JSON `null`。Scene、Segment、Shot 的非空稳定 UUID 保存在 Document 内：首次保存会替换模型给出的缺失、重复或不可信 ID，更新或重新生成时优先复用请求中已经属于当前 artifact 的稳定 ID；缺失或不可信 ID 再按父级内的 `sceneNo`、`segmentNo`、`shotNo` 匹配未被其他实体保留的旧 ID，新实体生成新 UUID。
 
 artifact 变化时，服务端先上传新对象，再在同一 PostgreSQL 事务中创建新的 `user_files`、按 `id + user_id + expectedRevision` CAS 更新项目引用/摘要/revision，并删除旧文件记录。事务或 CAS 失败时补偿删除新对象，旧可用 artifact 始终保持引用；事务成功后再 best-effort 删除旧对象。规范化后的 artifact 未变化时可复用旧文件，只更新元数据和 revision。删除项目时同步清理项目与文件记录，再 best-effort 删除对象。
 
