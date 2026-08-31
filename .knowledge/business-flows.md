@@ -119,11 +119,13 @@ sequenceDiagram
 - **依赖**：users、credit_logs。
 - **常见修改位置**：任何原子性或幂等变化都应在 repository transaction，不要在 handler 做读后写。
 
-## Storyboard Brainstorm 持久化
+## Brainstorm Workspace 持久化
 
 ```text
 Create/list/rename Conversation
--> scope Storyboard Project by current user
+-> scope independent Brainstorm Workspace by current user
+-> reuse `__brainstorm__` scope and legacy `project_id` query dimension as isolation keys
+-> do not create or require a real Storyboard Project
 -> persist Conversation metadata
 
 Append Turn
@@ -140,14 +142,14 @@ Assistant progress/terminal update
 -> increment Message revision
 ```
 
-- **输入**：稳定 Conversation/Message ID、`clientRequestId`、append/regenerate/continue 模式、完整 Assistant output、Project Memory。
-- **输出**：分页 Conversation/Project Memory、平铺分页 Message 图和当前 Assistant revision。
+- **输入**：稳定 Conversation/Message ID、`clientRequestId`、append/regenerate/continue 模式、完整 Assistant output、Brainstorm Memory。
+- **输出**：分页 Conversation/Brainstorm Memory、平铺分页 Message 图和当前 Assistant revision。
 - **并发**：同一 Conversation 由行锁与 active Assistant 部分唯一索引限制为一个 active Turn；不同 Conversation 可同时推进。late completion 或旧 revision 不能覆盖 cancelled/interrupted/较新状态。
 - **分支语义**：append 创建 User + Assistant；regenerate 在同一 User 下创建新 Assistant sibling 并保留旧响应；continue 复用原 terminal Assistant 的 ID/output，不创建 sibling。
 - **幂等**：相同 `clientRequestId` 或相同 Message ID 与相同规范语义输入返回已有 Turn；复用 key/ID 但输入不同返回 409。Memory `operationId` 也保持 scoped 幂等。
-- **所有权**：Project、Conversation、Message、Memory 查询逐层限定当前 `user_id` 和父级 ID；不存在与越权都返回 404。
-- **删除**：删除 Conversation 使用与 Turn 相同的 Conversation 行锁后清理 Messages；删除 Storyboard Project 锁定 Project 和全部 Conversation 后清理 Brainstorm Conversations、Messages、Memories，再执行既有 artifact/file 删除流程。Conversation/Memory 创建先锁 Project，避免删除并发留下孤儿记录。
-- **前端编排**：`storyboard-brainstorm.ts` 提供认证 API Client；独立 Brainstorm Tab 的 `BrainstormAgentStudio` 按当前账号加载和选择已保存的 Storyboard Project，不依赖 `StoryboardStudio` 的编辑、生成或历史状态；页面私有 `useBrainstormAgent` 完整分页恢复 Conversation/Message，以账号和 Project generation 忽略迟到响应，服务端确认 User/Assistant Placeholder 后才启动注入 Runtime。Runtime 每轮读取最新 Storyboard/Memory，复用统一文本模型流、Context Builder、Core Runner 和 Storyboard Tool Executor；流式 delta 只留内存，Tool 边界和终态按 Assistant revision 串行保存。最终 UI 显式选择 Skill 与稳定 Scene/Segment/Shot 焦点，展示 Tool 影响并要求写操作审批，Memory 只通过批准后的 Tool 或管理界面显式编辑/删除；刷新遗留 pending/streaming 转为 interrupted，审批先以 CAS 转为 streaming 再执行，Stop 只有终态持久化成功才 confirmed。
+- **所有权**：独立 Brainstorm Workspace、Conversation、Message、Memory 查询逐层限定当前 `user_id`、`__brainstorm__` scope 和旧 `project_id` 查询维度；这些内部键不对应真实 Storyboard Project，不存在与越权都返回 404。旧 project 模式继续按真实项目 scope 兼容。
+- **删除**：删除 Conversation 使用与 Turn 相同的 Conversation 行锁后清理 Messages；独立 Brainstorm Workspace 不参与真实 Storyboard Project 的删除级联。旧 project 模式仍保留删除 Storyboard Project 时清理其 Brainstorm Conversations、Messages、Memories 的兼容流程；Conversation/Memory 创建按既有 scope 锁定，避免并发删除留下孤儿记录。
+- **前端编排**：`storyboard-brainstorm.ts` 提供认证 API Client；独立 Brainstorm Tab 的 `BrainstormAgentStudio` 默认直接进入独立 Brainstorm Workspace，不自动选择或加载已保存的 Storyboard Project；用户可按需选择项目上下文以兼容旧 project 模式，无项目时也可新建或恢复 Conversation；页面私有 `useBrainstormAgent` 完整分页恢复 Conversation/Message，以账号和 Brainstorm scope 忽略迟到响应，服务端确认 User/Assistant Placeholder 后才启动注入 Runtime。Runtime 每轮读取最新 Brainstorm Workspace/Memory，复用统一文本模型流、Context Builder 和 Core Runner；独立入口只保留 Brainstorm Memory 工具，不暴露 Storyboard 读取/修改工具，成果不自动写回分镜或剧本，用户按需复制；流式 delta 只留内存，Tool 边界和终态按 Assistant revision 串行保存。刷新遗留 pending/streaming 转为 interrupted，审批先以 CAS 转为 streaming 再执行，Stop 只有终态持久化成功才 confirmed。
 - **边界**：数据库事务不跨模型或浏览器 streaming；页面 Runtime 当前没有持久化/恢复 Summary Checkpoint，长对话主要依赖 Context budget 裁剪；Canvas 集成和真实浏览器验证仍未完成。
 - **核心文件**：`model/storyboard_brainstorm.go`、`repository/storyboard_brainstorm.go`、`service/storyboard_brainstorm.go`、`handler/storyboard_brainstorm.go`、`router/router.go`、`web/src/services/api/storyboard-brainstorm.ts`、`web/src/pages/storyboard/index.tsx`、`web/src/pages/storyboard/brainstorm-agent-studio.tsx`、`web/src/pages/storyboard/use-brainstorm-agent.ts`、`web/src/pages/storyboard/brainstorm-agent-runtime.ts`、`web/src/pages/storyboard/brainstorm-agent-panel.tsx`。
 

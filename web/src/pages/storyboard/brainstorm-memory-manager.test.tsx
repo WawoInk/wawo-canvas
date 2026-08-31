@@ -51,6 +51,7 @@ const { App } = await import("antd");
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { BrainstormMemoryManager } = await import("./brainstorm-memory-manager");
+mock.restore();
 
 function deferred<T>() {
     let resolve!: (value: T) => void;
@@ -86,14 +87,14 @@ async function flush() {
     });
 }
 
-async function mount(projectId = "project-1", refreshKey?: number) {
+async function mount(projectId = "project-1", refreshKey?: number, standalone = false) {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
     await act(async () =>
         root.render(
             <App>
-                <BrainstormMemoryManager projectId={projectId} refreshKey={refreshKey} />
+                <BrainstormMemoryManager projectId={projectId} refreshKey={refreshKey} standalone={standalone} />
             </App>,
         ),
     );
@@ -123,6 +124,51 @@ test("加载全部已确认 Memory，并明确候选只能经 Tool 审批保存"
     assert.match(container.textContent || "", /主角害怕深水/);
     assert.match(container.textContent || "", /更新于/);
     assert.doesNotMatch(container.textContent || "", /新建 Memory/);
+
+    await act(async () => root.unmount());
+    container.remove();
+});
+
+test("standalone 模式固定脑暴工作区范围并以 project 提交", async () => {
+    fetchCalls.length = 0;
+    updateCalls.length = 0;
+    fetchMemories = async () => ({ items: [memory("memory-standalone", { projectId: "__brainstorm__", scope: "project", path: "", content: "独立创意" })], total: 1 });
+    updateMemory = async (_projectId, memoryId, value) => memory(memoryId, { projectId: "__brainstorm__", ...value });
+
+    const { container, root } = await mount("__brainstorm__", undefined, true);
+    await flush();
+
+    assert.deepEqual(fetchCalls, [["__brainstorm__", { page: 1, pageSize: 500 }]]);
+    assert.match(container.textContent || "", /脑暴工作区/);
+    assert.doesNotMatch(container.textContent || "", /场景|镜头|scene-1|shot-8/);
+
+    const edit = container.querySelector('button[aria-label="编辑 Memory memory-standalone"]');
+    assert.ok(edit);
+    await act(async () => click(edit));
+    assert.equal(document.querySelector('input[type="radio"]'), null);
+    assert.equal(document.querySelector('input[aria-label="Memory 路径"]'), null);
+
+    const content = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Memory 内容"]');
+    assert.ok(content);
+    await act(async () => input(content, "独立创意更新"));
+    await act(async () => click(button("保存")));
+    await flush();
+
+    assert.deepEqual(updateCalls, [
+        [
+            "__brainstorm__",
+            "memory-standalone",
+            {
+                kind: "constraint",
+                scope: "project",
+                path: "",
+                content: "独立创意更新",
+                tags: ["悬疑", "雨夜"],
+                sourceMessageId: "message-1",
+                operationId: "operation-1",
+            },
+        ],
+    ]);
 
     await act(async () => root.unmount());
     container.remove();

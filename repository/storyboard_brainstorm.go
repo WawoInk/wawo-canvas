@@ -93,7 +93,7 @@ func CreateStoryboardBrainstormConversation(conversation model.StoryboardBrainst
 		return model.StoryboardBrainstormConversation{}, err
 	}
 	err = db.Transaction(func(tx *gorm.DB) error {
-		if _, err := lockStoryboardProject(tx, conversation.ProjectID, conversation.UserID); err != nil {
+		if err := lockStoryboardScope(tx, conversation.ProjectID, conversation.UserID); err != nil {
 			return err
 		}
 		return tx.Create(&conversation).Error
@@ -437,7 +437,7 @@ func CreateStoryboardMemory(memory model.StoryboardMemory) (model.StoryboardMemo
 	}
 	var result model.StoryboardMemory
 	err = db.Transaction(func(tx *gorm.DB) error {
-		if _, err := lockStoryboardProject(tx, memory.ProjectID, memory.UserID); err != nil {
+		if err := lockStoryboardScope(tx, memory.ProjectID, memory.UserID); err != nil {
 			return err
 		}
 		var existing model.StoryboardMemory
@@ -474,7 +474,7 @@ func UpdateStoryboardMemory(memory model.StoryboardMemory) (model.StoryboardMemo
 	}
 	var result model.StoryboardMemory
 	err = db.Transaction(func(tx *gorm.DB) error {
-		if _, err := lockStoryboardProject(tx, memory.ProjectID, memory.UserID); err != nil {
+		if err := lockStoryboardScope(tx, memory.ProjectID, memory.UserID); err != nil {
 			return err
 		}
 		var current model.StoryboardMemory
@@ -513,7 +513,7 @@ func DeleteStoryboardMemory(projectID, memoryID, userID string) (model.Storyboar
 	}
 	var memory model.StoryboardMemory
 	err = db.Transaction(func(tx *gorm.DB) error {
-		if _, err := lockStoryboardProject(tx, projectID, userID); err != nil {
+		if err := lockStoryboardScope(tx, projectID, userID); err != nil {
 			return err
 		}
 		if err := tx.Where("id = ? AND project_id = ? AND user_id = ?", memoryID, projectID, userID).First(&memory).Error; err != nil {
@@ -528,6 +528,14 @@ func lockStoryboardProject(tx *gorm.DB, projectID, userID string) (model.Storybo
 	var project model.StoryboardProject
 	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND user_id = ?", projectID, userID).First(&project).Error
 	return project, err
+}
+
+func lockStoryboardScope(tx *gorm.DB, projectID, userID string) error {
+	if projectID == model.StoryboardBrainstormStandaloneScopeID {
+		return tx.Exec("SELECT pg_advisory_xact_lock(hashtext(?), hashtext(?))", userID, projectID).Error
+	}
+	_, err := lockStoryboardProject(tx, projectID, userID)
+	return err
 }
 
 func findTurnByMessageIDs(tx *gorm.DB, command StoryboardBrainstormTurnCommand, conversation model.StoryboardBrainstormConversation) (model.StoryboardBrainstormTurn, bool, error) {

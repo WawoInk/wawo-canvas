@@ -257,26 +257,26 @@ queued, pending, running, succeeded, success, failed, cancelled
 
 ### `storyboard_brainstorm_conversations`
 
-**职责**：Storyboard Project 下的独立 Brainstorm 会话和当前 Message 指针。
+**职责**：独立 Brainstorm Workspace 下的会话和当前 Message 指针。表名和旧 `project_id` 维度为兼容保留，不表示 standalone 会话属于真实 Storyboard Project。
 
 | 字段 | 语义 |
 | --- | --- |
 | `id` | 客户端提供的稳定 Conversation ID |
-| `user_id/project_id` | owner 与父 Project scope；所有操作必须同时限定 |
+| `user_id/project_id` | owner 与隔离键；standalone 使用保留的 `__brainstorm__` scope 和旧 `project_id` 查询维度，均不对应真实 Storyboard Project；旧 project 模式可使用真实项目 scope |
 | `title` | 会话标题；空值默认“新对话” |
 | `current_message_id` | 当前选中的 Message；append、regenerate、continue 成功后更新 |
 | `created_at/updated_at` | 稳定排序和更新时间 |
 
-Conversation 不使用独立 revision，也不在 Project 上保存 `activeConversationId`。Message/Turn 写入会先以 `user_id + project_id + id` 锁定 Conversation 行；同项目的其他 Conversation 不被该行锁串行化。
+Conversation 不使用独立 revision，也不在 Project 上保存 `activeConversationId`。Message/Turn 写入会先以当前用户、Brainstorm scope、旧 `project_id` 维度和 `id` 锁定 Conversation 行；同一 Brainstorm Workspace 的其他 Conversation 不被该行锁串行化。
 
 ### `storyboard_brainstorm_messages`
 
-**职责**：保存 Conversation 的平铺 Message 图、Assistant 生命周期、完整有序 output 和 Turn 幂等事实。
+**职责**：保存 Brainstorm Workspace 中 Conversation 的平铺 Message 图、Assistant 生命周期、完整有序 output 和 Turn 幂等事实。
 
 | 字段 | 语义 |
 | --- | --- |
 | `id` | 客户端提供的稳定 Message ID |
-| `user_id/project_id/conversation_id` | 完整 owner/父级 scope |
+| `user_id/project_id/conversation_id` | 完整 owner/Brainstorm 隔离 scope；standalone 的 `project_id` 只是内部隔离键，不是 Storyboard Project ID |
 | `parent_id` | 图中的父 Message；首个 User root 可为空 |
 | `role` | `user/assistant` |
 | `content` | User Message 的唯一正文事实；Assistant 不在此保存第二份正文 |
@@ -298,23 +298,23 @@ append Turn 在一个事务中锁定 Conversation、先判定幂等重放与 act
 
 ### `storyboard_memories`
 
-**职责**：保存用户已确认的 Project Memory；未确认候选、Summary 和运行时 Context 不落入此表。
+**职责**：保存用户已确认的 Brainstorm Memory；未确认候选、Summary 和运行时 Context 不落入此表。独立 Brainstorm Memory 不自动写入分镜或剧本。
 
 | 字段 | 语义 |
 | --- | --- |
 | `id` | 客户端提供的稳定 Memory ID |
-| `user_id/project_id` | owner 与父 Project scope |
+| `user_id/project_id` | owner 与 Brainstorm 隔离键；standalone 沿用 `__brainstorm__` scope 和旧 `project_id` 查询维度，不对应真实 Storyboard Project |
 | `kind` | 必填的有界 Memory 类型字符串 |
-| `scope/path` | `project/scene/shot`；project 的 path 为空，scene/shot 使用稳定实体 ID |
+| `scope/path` | 兼容旧 project 模式的 scope/path 约束；standalone 固定为 Brainstorm Workspace 范围，不指向真实 Storyboard/Scene/Shot 实体 |
 | `content` | 已确认的 Memory 正文 |
 | `tags` | 有界字符串数组 |
 | `source_message_id` | 可选来源 Message ID |
 | `operation_id` | 当前 `user_id + project_id` 内的必填唯一操作 ID |
 | `created_at/updated_at` | 创建和更新时间 |
 
-本表不创建 GIN/vector 索引，也不引入 Summary、Tool 或 Turn ledger 表。Memory CRUD 总是以当前用户和 Project 限定；`source_message_id` 存在时只能引用同一 scoped Project 的 Message。
+本表不创建 GIN/vector 索引，也不引入 Summary、Tool 或 Turn ledger 表。Memory CRUD 总是以当前用户和 Brainstorm 隔离键限定；`source_message_id` 存在时只能引用同一 Brainstorm 隔离 scope 下的 Message。独立入口只通过 Brainstorm Memory 工具使用本表，旧 project 模式的兼容查询仍保留。
 
-Brainstorm 子表不依赖数据库外键级联：删除 Conversation 时先获取与 Turn 相同的 Conversation 行锁再清理 Messages；删除 Storyboard Project 时先锁 Project 和全部 scoped Conversation，再清理 Conversations、Messages、Memories并执行既有 Project/file 删除流程。Conversation/Memory 创建先锁 Project，避免并发删除留下孤儿记录。不存在和越权均投影为 404，不能靠裸 ID 扩大查询范围。
+Brainstorm 子表不依赖数据库外键级联：删除 Conversation 时先获取与 Turn 相同的 Conversation 行锁再清理 Messages；独立 Brainstorm 不参与真实 Storyboard Project 的删除级联，旧 project 模式仍在删除 Storyboard Project 时清理其 Conversations、Messages、Memories 并执行既有 Project/file 删除流程。Conversation/Memory 创建按既有 Brainstorm 隔离键锁定，避免并发删除留下孤儿记录。不存在和越权均投影为 404，不能靠裸 ID 扩大查询范围。
 
 ### `canvas_projects`
 
@@ -430,14 +430,14 @@ Brainstorm 子表不依赖数据库外键级联：删除 Conversation 时先获�
 | Brainstorm regenerate | 锁 Conversation + 幂等/active 检查 + Assistant sibling + current 指针 |
 | Brainstorm continue | terminal Assistant revision CAS + pending 状态 + 新幂等键 + current 指针 |
 | 删除 Brainstorm Conversation | 删除 scoped Messages + Conversation |
-| 删除 Storyboard Project | 删除 scoped Brainstorm Messages/Conversations/Memories + 既有 Project/file 记录 |
+| 删除旧 project 模式 Storyboard Project | 删除 scoped Brainstorm Messages/Conversations/Memories + 既有 Project/file 记录；standalone 不依赖真实 Project |
 | Canvas 删除 | 删除 project + 写 revision tombstone |
 
 ## 浏览器和数据库边界
 
 PostgreSQL 保存结构化事实，但不是浏览器所有数据的完整镜像：
 
-- Storyboard Workspace 的已保存状态以服务端 Project + 私有 artifact 为准；Brainstorm 已确认的 Conversation/Message/Memory 以三张子表为准。浏览器未提交的输出、Memory candidate、Summary 和运行时 Context 不属于持久事实。
+- Storyboard Workspace 的已保存状态以服务端 Project + 私有 artifact 为准；独立 Brainstorm 已确认的 Conversation/Message/Brainstorm Memory 以三张子表为准，内部 `__brainstorm__` scope 与旧 `project_id` 只是隔离键。浏览器未提交的输出、Memory candidate、Summary 和运行时 Context 不属于持久事实。
 - Canvas IndexedDB 可能有尚未提交的 `Offline Dirty`。
 - `image_files/media_files` 保存本地 Blob，数据库没有正文。
 - 工作台本地历史和 WebDAV manifest 不完全等同于 `generation_tasks`。

@@ -7,7 +7,7 @@ import { deleteStoryboardMemory, fetchStoryboardMemories, updateStoryboardMemory
 const PAGE_SIZE = 500;
 const scopeLabels = { project: "项目", scene: "场景", shot: "镜头" } as const;
 
-type BrainstormMemoryManagerProps = { projectId: string; refreshKey?: number; disabled?: boolean };
+type BrainstormMemoryManagerProps = { projectId: string; standalone?: boolean; refreshKey?: number; disabled?: boolean };
 type Draft = { kind: string; scope: StoryboardMemoryScope; path: string; tags: string; content: string };
 
 function formatUpdatedAt(value: string) {
@@ -34,11 +34,11 @@ function tagsFrom(value: string) {
     ];
 }
 
-export function BrainstormMemoryManager({ projectId, refreshKey, disabled = false }: BrainstormMemoryManagerProps) {
+export function BrainstormMemoryManager({ projectId, standalone = false, refreshKey, disabled = false }: BrainstormMemoryManagerProps) {
     const { message } = App.useApp();
     const requestRef = useRef(0);
     const contextRef = useRef("");
-    const context = `${projectId}\0${refreshKey ?? ""}`;
+    const context = `${projectId}\0${standalone ? "standalone" : "project"}\0${refreshKey ?? ""}`;
     contextRef.current = context;
     const [memories, setMemories] = useState<StoryboardMemory[]>([]);
     const [loading, setLoading] = useState(true);
@@ -81,7 +81,7 @@ export function BrainstormMemoryManager({ projectId, refreshKey, disabled = fals
             if (requestRef.current === request) requestRef.current += 1;
             if (contextRef.current === context) contextRef.current = "";
         };
-    }, [context, projectId]);
+    }, [context, projectId, standalone]);
 
     function openEditor(memory: StoryboardMemory) {
         setEditing(memory);
@@ -89,14 +89,16 @@ export function BrainstormMemoryManager({ projectId, refreshKey, disabled = fals
     }
 
     async function save() {
-        if (!editing || !draft || !draft.kind.trim() || !draft.content.trim() || (draft.scope !== "project" && !draft.path.trim())) return;
+        if (!editing || !draft) return;
+        const scope = standalone ? "project" : draft.scope;
+        if (!draft.kind.trim() || !draft.content.trim() || (scope !== "project" && !draft.path.trim())) return;
         const mutationContext = contextRef.current;
         setSaving(true);
         try {
             const updated = await updateStoryboardMemory(projectId, editing.id, {
                 kind: draft.kind.trim(),
-                scope: draft.scope,
-                path: draft.scope === "project" ? "" : draft.path.trim(),
+                scope,
+                path: scope === "project" ? "" : draft.path.trim(),
                 content: draft.content,
                 tags: tagsFrom(draft.tags),
                 sourceMessageId: editing.sourceMessageId,
@@ -146,8 +148,8 @@ export function BrainstormMemoryManager({ projectId, refreshKey, disabled = fals
                                 <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-2">
                                         <Tag>{item.kind}</Tag>
-                                        <Tag>{scopeLabels[item.scope]}</Tag>
-                                        <span className="text-xs text-muted-foreground">路径：{item.path || "—"}</span>
+                                        <Tag>{standalone ? "脑暴工作区" : scopeLabels[item.scope]}</Tag>
+                                        {!standalone ? <span className="text-xs text-muted-foreground">路径：{item.path || "—"}</span> : null}
                                     </div>
                                     <div className="mt-3 flex flex-wrap gap-1">{item.tags.length ? item.tags.map((tag) => <Tag key={tag}>{tag}</Tag>) : <span className="text-xs text-muted-foreground">无标签</span>}</div>
                                 </div>
@@ -201,29 +203,38 @@ export function BrainstormMemoryManager({ projectId, refreshKey, disabled = fals
                             类型
                             <Input className="mt-2" aria-label="Memory 类型" value={draft.kind} disabled={disabled || saving} onChange={(event) => setDraft({ ...draft, kind: event.target.value })} />
                         </label>
-                        <div>
-                            <div className="mb-2 text-sm font-medium">范围</div>
-                            <Radio.Group
-                                aria-label="Memory 范围"
-                                value={draft.scope}
-                                disabled={disabled || saving}
-                                onChange={(event) => {
-                                    const scope = event.target.value as StoryboardMemoryScope;
-                                    setDraft({ ...draft, scope, path: scope === editing?.scope ? editing.path : "" });
-                                }}
-                                options={[
-                                    { label: "项目", value: "project" },
-                                    { label: "场景", value: "scene" },
-                                    { label: "镜头", value: "shot" },
-                                ]}
-                            />
-                        </div>
-                        {draft.scope !== "project" ? (
-                            <label className="block text-sm font-medium">
-                                路径
-                                <Input className="mt-2" aria-label="Memory 路径" value={draft.path} disabled={disabled || saving} onChange={(event) => setDraft({ ...draft, path: event.target.value })} />
-                            </label>
-                        ) : null}
+                        {standalone ? (
+                            <div>
+                                <div className="mb-2 text-sm font-medium">范围</div>
+                                <Tag>脑暴工作区</Tag>
+                            </div>
+                        ) : (
+                            <>
+                                <div>
+                                    <div className="mb-2 text-sm font-medium">范围</div>
+                                    <Radio.Group
+                                        aria-label="Memory 范围"
+                                        value={draft.scope}
+                                        disabled={disabled || saving}
+                                        onChange={(event) => {
+                                            const scope = event.target.value as StoryboardMemoryScope;
+                                            setDraft({ ...draft, scope, path: scope === editing?.scope ? editing.path : "" });
+                                        }}
+                                        options={[
+                                            { label: "项目", value: "project" },
+                                            { label: "场景", value: "scene" },
+                                            { label: "镜头", value: "shot" },
+                                        ]}
+                                    />
+                                </div>
+                                {draft.scope !== "project" ? (
+                                    <label className="block text-sm font-medium">
+                                        路径
+                                        <Input className="mt-2" aria-label="Memory 路径" value={draft.path} disabled={disabled || saving} onChange={(event) => setDraft({ ...draft, path: event.target.value })} />
+                                    </label>
+                                ) : null}
+                            </>
+                        )}
                         <label className="block text-sm font-medium">
                             标签
                             <Input className="mt-2" aria-label="Memory 标签" value={draft.tags} disabled={disabled || saving} placeholder="用逗号分隔" onChange={(event) => setDraft({ ...draft, tags: event.target.value })} />

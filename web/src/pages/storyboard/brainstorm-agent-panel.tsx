@@ -9,15 +9,16 @@ import { useUserStore } from "@/stores/use-user-store";
 
 import { listBrainstormSkills } from "./brainstorm-agent-skills";
 import { createBrainstormAgentRuntime } from "./brainstorm-agent-runtime";
+import { STANDALONE_BRAINSTORM_SCOPE_ID } from "./brainstorm-agent-scope";
 import { previewStoryboardToolCall } from "./brainstorm-agent-tools";
 import type { BrainstormAssistantStatus, BrainstormFocus, BrainstormOutputItem, BrainstormToolCall, BrainstormToolResult } from "./brainstorm-agent";
 import { BrainstormAgentConversations } from "./brainstorm-agent-conversations";
 import { BrainstormMemoryManager } from "./brainstorm-memory-manager";
 import type { StoryboardRecord } from "./storyboard";
-import { useBrainstormAgent, type BrainstormAgentAssistantMessage, type BrainstormAgentMessage, type BrainstormAgentRuntime } from "./use-brainstorm-agent";
+import { useBrainstormAgent, type BrainstormAgentAssistantMessage, type BrainstormAgentMessage } from "./use-brainstorm-agent";
 
 const skills = listBrainstormSkills();
-const idleRuntime: BrainstormAgentRuntime = { run: async () => Promise.reject(new Error("请先选择分镜项目")) };
+const standaloneFocus = { kind: "project" } as const;
 const statusLabels: Record<BrainstormAssistantStatus, string> = {
     pending: "等待生成",
     streaming: "生成中",
@@ -70,8 +71,8 @@ function toolLabel(name: string) {
         storyboard_list_memories: "读取 Memory",
         storyboard_propose_patch: "生成修改提案",
         storyboard_apply_patch: "应用分镜修改",
-        storyboard_remember: "保存项目 Memory",
-        storyboard_forget_memory: "删除项目 Memory",
+        storyboard_remember: "保存 Memory",
+        storyboard_forget_memory: "删除 Memory",
     };
     return labels[name] || name;
 }
@@ -238,26 +239,25 @@ export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const model = effectiveConfig.textModel || effectiveConfig.model;
     const requestConfig = useMemo(() => (model ? { ...effectiveConfig, model, textModel: model } : effectiveConfig), [effectiveConfig, model]);
+    const projectId = project?.id || STANDALONE_BRAINSTORM_SCOPE_ID;
     const options = useMemo(() => (project ? focusOptions(project) : []), [project]);
-    const selectedFocus = options.find((option) => option.value === focusKey)?.focus || ({ kind: "project" } as const);
+    const selectedFocus = project ? options.find((option) => option.value === focusKey)?.focus || standaloneFocus : standaloneFocus;
 
     useEffect(() => setFocusKey("project"), [project?.id]);
 
-    const runtime = useMemo(
-        () =>
-            project
-                ? createBrainstormAgentRuntime({
-                      projectId: project.id,
-                      config: requestConfig,
-                      skillId,
-                      focus: selectedFocus,
-                      onProjectChanged: onProjectUpdated,
-                      onMemoryChanged: () => setMemoryRefreshKey((value) => value + 1),
-                  })
-                : idleRuntime,
-        [onProjectUpdated, project?.id, requestConfig, selectedFocus, skillId],
-    );
-    const agent = useBrainstormAgent(project?.id || "", runtime);
+    const runtime = useMemo(() => {
+        const runtimeOptions = {
+            projectId,
+            config: requestConfig,
+            skillId,
+            focus: selectedFocus,
+            onProjectChanged: project ? onProjectUpdated : undefined,
+            onMemoryChanged: () => setMemoryRefreshKey((value) => value + 1),
+            ...(project ? {} : { scope: "standalone" as const }),
+        };
+        return createBrainstormAgentRuntime(runtimeOptions);
+    }, [onProjectUpdated, project, projectId, requestConfig, selectedFocus, skillId]);
+    const agent = useBrainstormAgent(projectId, runtime);
     const currentConversation = agent.conversations.find((item) => item.id === agent.currentConversationId);
     const branch = useMemo(() => currentBranch(agent.messages, currentConversation?.currentMessageId || ""), [agent.messages, currentConversation?.currentMessageId]);
     const currentRun = agent.runs[agent.currentConversationId];
@@ -306,14 +306,6 @@ export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange
         }
     }
 
-    if (!project) {
-        return (
-            <div className="flex h-full min-h-80 items-center justify-center rounded-lg border bg-card p-6">
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请先选择分镜项目，再开始脑暴" />
-            </div>
-        );
-    }
-
     const conversationPanel = (
         <BrainstormAgentConversations
             conversations={agent.conversations}
@@ -343,7 +335,7 @@ export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange
                             <h2 className="truncate font-semibold">Brainstorm Agent</h2>
                         </div>
                         <p className="mt-1 truncate text-xs text-muted-foreground">
-                            {project.title} · 基于已保存 revision {project.revision}
+                            {project ? `${project.title} · 基于已保存 revision ${project.revision}` : "独立脑暴工作区 · 不依赖已保存分镜项目"}
                         </p>
                     </div>
                     <Button type="text" size="small" icon={<History className="size-4" />} onClick={() => setConversationOpen(true)}>
@@ -352,7 +344,7 @@ export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     <Select aria-label="脑暴技能" value={skillId} disabled={busy} onChange={setSkillId} options={skills.map((skill) => ({ value: skill.id, label: skill.label, title: skill.description }))} />
-                    <Select aria-label="当前焦点" value={focusKey} disabled={busy} onChange={setFocusKey} options={options.map(({ value, label }) => ({ value, label }))} />
+                    {project ? <Select aria-label="当前焦点" value={focusKey} disabled={busy} onChange={setFocusKey} options={options.map(({ value, label }) => ({ value, label }))} /> : null}
                 </div>
             </header>
 
@@ -373,7 +365,7 @@ export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange
 
             {tab === "memory" ? (
                 <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
-                    <BrainstormMemoryManager projectId={project.id} refreshKey={memoryRefreshKey} disabled={busy} />
+                    <BrainstormMemoryManager projectId={projectId} standalone={!project} refreshKey={memoryRefreshKey} disabled={busy} />
                 </div>
             ) : !modelReady ? (
                 <div className="flex min-h-0 flex-1 items-center justify-center p-4">

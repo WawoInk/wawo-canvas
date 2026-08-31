@@ -76,10 +76,14 @@ _Avoid_: Browser cache namespace
 An enterprise-owned asset read on demand from the enterprise API. It records its creator but does not enter personal asset persistence, incremental synchronization, or WebDAV.
 _Avoid_: Shared personal asset, synchronized enterprise asset
 
-## Storyboard Brainstorm
+## Brainstorm Workspace
+
+**Brainstorm Workspace**:
+An independent workspace for developing ideas without a Storyboard Project. Brainstorm outputs remain in the workspace; they are not automatically written into a storyboard or script, and the user copies them when needed.
+_Avoid_: Storyboard Project, automatic write-back
 
 **Brainstorm Conversation**:
-An independent ideation thread within one Storyboard Project. It owns a navigable Message graph and identifies the Message currently selected for continuation.
+An ideation thread within one Brainstorm Workspace. It owns a navigable Message graph and identifies the Message currently selected for continuation.
 _Avoid_: Active project, chat snapshot
 
 **Brainstorm Message**:
@@ -98,9 +102,9 @@ _Avoid_: Retry in place, overwrite
 The same terminal Assistant Message reopened to extend its ordered output without creating a sibling response.
 _Avoid_: Regeneration, new branch
 
-**Project Memory**:
-A confirmed, durable Brainstorm fact or constraint attached to a Storyboard Project, Scene, or Shot. Unconfirmed memory candidates are not Project Memory.
-_Avoid_: Summary, prompt context, candidate memory
+**Brainstorm Memory**:
+A confirmed, durable fact or constraint belonging to a Brainstorm Workspace. It is independent from Storyboard, Scene, and Shot data; unconfirmed memory candidates are not Brainstorm Memory.
+_Avoid_: Project Memory, Summary, prompt context, candidate memory
 
 ## Compatibility
 

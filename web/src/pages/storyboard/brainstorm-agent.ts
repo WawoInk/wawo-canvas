@@ -163,8 +163,9 @@ export type BrainstormContextDiagnostics = {
 };
 
 export type BrainstormContextInput = {
+    scope?: "storyboard" | "standalone";
     skillId: BrainstormSkillId;
-    storyboard: BrainstormStoryboardSnapshot;
+    storyboard?: BrainstormStoryboardSnapshot;
     focus: BrainstormFocus;
     priorMessages: BrainstormMessage[];
     currentUserMessage: BrainstormUserMessage;

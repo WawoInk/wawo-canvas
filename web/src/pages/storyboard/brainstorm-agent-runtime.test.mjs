@@ -146,7 +146,58 @@ mock.module("@/services/api/storyboard-brainstorm", () => ({
     deleteStoryboardMemory: (...args) => deleteMemory(...args),
 }));
 
+import { STANDALONE_BRAINSTORM_SCOPE_ID } from "./brainstorm-agent-scope.ts";
+
 const { createBrainstormAgentRuntime } = await import("./brainstorm-agent-runtime.ts");
+
+test("standalone Runtime 在构造时拒绝非固定 scope ID", () => {
+    assert.throws(
+        () => createBrainstormAgentRuntime({ scope: "standalone", projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } }),
+        new RegExp(`standalone.*${STANDALONE_BRAINSTORM_SCOPE_ID}`),
+    );
+});
+
+test("standalone Runtime 跳过 Storyboard 快照并只暴露脑暴工作区 Memory 工具", async () => {
+    projectReads = 0;
+    memoryReads.length = 0;
+    let request;
+    completion = async (...args) => {
+        request = args;
+        return { content: "独立脑暴回答", toolCalls: [], finishReason: "stop" };
+    };
+    const standaloneProjectId = "__brainstorm__";
+    const standaloneConversationId = "conversation-standalone";
+    const standaloneUser = { ...user("standalone-user", "", "独立创意问题"), projectId: standaloneProjectId, conversationId: standaloneConversationId };
+    const standaloneAssistant = { ...assistant("standalone-assistant", standaloneUser.id, [], "pending"), projectId: standaloneProjectId, conversationId: standaloneConversationId };
+    const result = await createBrainstormAgentRuntime({
+        scope: "standalone",
+        projectId: standaloneProjectId,
+        config,
+        skillId: "divergent_ideation",
+        focus: { kind: "project" },
+    }).run(
+        {
+            mode: "append",
+            projectId: standaloneProjectId,
+            conversation: { id: standaloneConversationId, projectId: standaloneProjectId, title: "独立脑暴", currentMessageId: standaloneAssistant.id, createdAt: "", updatedAt: "" },
+            messages: [standaloneUser, standaloneAssistant],
+            assistantMessage: standaloneAssistant,
+        },
+        { signal: new AbortController().signal, onEvent: () => undefined },
+    );
+
+    assert.equal(result.status, "completed");
+    assert.equal(projectReads, 0);
+    assert.equal(memoryReads[0].pageSize, 500);
+    assert.deepEqual(request[2].map((tool) => tool.function.name), ["storyboard_list_memories", "storyboard_remember", "storyboard_forget_memory"]);
+    const rememberTool = request[2].find((tool) => tool.function.name === "storyboard_remember");
+    assert.deepEqual(rememberTool.function.parameters.properties.scope, { type: "string", enum: ["project"] });
+    assert.match(rememberTool.function.description, /脑暴工作区 Memory/);
+    const prompt = request[1].map((item) => item.content || "").join("\n");
+    assert.match(prompt, /独立创意脑暴/);
+    assert.doesNotMatch(prompt, /Storyboard 项目概览|Storyboard 当前焦点/);
+    assert.equal(result.diagnostics.items.some((item) => item.kind === "storyboard"), false);
+});
 
 test("append 每次读取最新 Storyboard/全部 Memory，并把当前分支 Context 与增量事件接到文本模型流", async () => {
     projectReads = 0;

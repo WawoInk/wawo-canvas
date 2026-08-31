@@ -53,6 +53,9 @@ func CreateStoryboardProject(ctx context.Context, userID string, input Storyboar
 	if id == "" {
 		return model.StoryboardProjectDetail{}, safeMessageError{message: "项目 ID 无效"}
 	}
+	if id == model.StoryboardBrainstormStandaloneScopeID {
+		return model.StoryboardProjectDetail{}, safeMessageError{message: "项目 ID 已保留"}
+	}
 	title := strings.TrimSpace(input.Title)
 	if title == "" {
 		title = "未命名分镜"
