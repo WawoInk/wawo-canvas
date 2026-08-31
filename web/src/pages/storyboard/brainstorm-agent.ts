@@ -26,6 +26,7 @@ export type BrainstormToolResult = {
     status: BrainstormToolResultStatus;
     content: string;
     sideEffect?: "none" | "write";
+    continuation?: { pendingCalls: BrainstormToolCall[]; toolRounds: number };
 };
 
 export type BrainstormOutputItem = { type: "text"; text: string } | BrainstormToolCall | BrainstormToolResult;

@@ -83,7 +83,7 @@
   - Brainstorm Core 已提供纯 `Context Builder -> Turn Runner` 合同：最终预算同时计算固定 System、代码内 Skill、分镜焦点、Memory、Summary、历史和 Tool Schema；Tool Pair 按 `callId` 原子清理，Runner 通过可注入 Completion/Executor 测试四轮 Tool Loop、审批续跑与首输出前单次重试。
   - Brainstorm Storyboard Tools 已提供十项白名单 Registry、审批前影响预览和注入式 Executor：只读查询自动执行，Apply/Remember/Forget 由 Core Runner 审批，Project/Scene/Segment/Shot 使用固定作用域、稳定 ID 和 revision CAS；结果按字节限长并作为不可信 Tool Result 回注。
   - Brainstorm 前端已提供认证 API Client 和页面私有 `useBrainstormAgent`：完整分页恢复 Conversation/Message，服务端确认 User/Assistant Placeholder 后才启动浏览器 Runtime；不同 Conversation 可独立运行，Tool 边界与终态使用 revision CAS 持久化，刷新遗留 active Message 转为 interrupted，审批先 CAS 占用后续跑。
-  - Brainstorm 已接入 Project Memory/Summary 选择与 Storyboard Tool Executor，仍未接入真实模型 Transport、最终页面 UI 或 Canvas 关联；不要把 Core、Tool Executor 与状态 Hook 视为完整 Brainstorm 功能。
+  - Brainstorm 页面 Runtime 复用统一文本模型流和 Storyboard Tool Executor，最终 UI 提供 Conversation、流式消息、Skill、稳定 Scene/Segment/Shot 焦点、Tool 审批、Stop/Retry/Continue 与显式 Memory 管理，并通过响应式右侧 Drawer 融入 StoryboardStudio，关闭面板不销毁活动 Turn；Canvas 关联仍未实现。
 
 ## 个人素材 Store
 

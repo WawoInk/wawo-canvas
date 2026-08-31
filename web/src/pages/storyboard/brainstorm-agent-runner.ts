@@ -74,7 +74,19 @@ function continuation(state: TurnState, pendingCalls: BrainstormToolCall[]): Bra
 }
 
 function pauseForApproval(state: TurnState, call: BrainstormToolCall, pendingCalls: BrainstormToolCall[], content: string, options: BrainstormTurnOptions): BrainstormTurnResult {
-    append(state, { type: "tool_result", callId: call.callId, name: call.name, status: "awaiting_approval", content, sideEffect: "none" }, options);
+    append(
+        state,
+        {
+            type: "tool_result",
+            callId: call.callId,
+            name: call.name,
+            status: "awaiting_approval",
+            content,
+            sideEffect: "none",
+            continuation: { pendingCalls: [...pendingCalls], toolRounds: state.toolRounds },
+        },
+        options,
+    );
     options.onEvent?.({ type: "status", status: "awaiting_approval" });
     return { status: "awaiting_approval", call, continuation: continuation(state, pendingCalls), ...base(state) };
 }

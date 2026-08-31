@@ -369,7 +369,18 @@ test("suspends when an executor reports that approval is required", async () => 
 
     assert.equal(result.status, "awaiting_approval");
     assert.deepEqual(result.call, call);
-    assert.deepEqual(result.output, [call, { type: "tool_result", callId: "call-1", name: "conditional_write", status: "awaiting_approval", content: "Dynamic approval required.", sideEffect: "none" }]);
+    assert.deepEqual(result.output, [
+        call,
+        {
+            type: "tool_result",
+            callId: "call-1",
+            name: "conditional_write",
+            status: "awaiting_approval",
+            content: "Dynamic approval required.",
+            sideEffect: "none",
+            continuation: { pendingCalls: [call], toolRounds: 1 },
+        },
+    ]);
 });
 
 test("preserves streamed text when completion is cancelled", async () => {
