@@ -188,7 +188,15 @@ async function createSummaryCheckpoint(plan: BrainstormSummaryPlan, conversation
 }
 
 function outputMessages(output: BrainstormOutputItem[]): BrainstormModelMessage[] {
-    return output.flatMap<BrainstormModelMessage>((item) => (item.type === "text" ? [{ type: "message", role: "assistant", content: item.text }] : item.type === "tool_result" && item.status === "awaiting_approval" ? [] : [item]));
+    const messages: BrainstormModelMessage[] = [];
+    for (const item of output) {
+        if (item.type === "text") {
+            messages.push({ type: "message", role: "assistant", content: item.text });
+        } else if (item.type !== "tool_result" || item.status !== "awaiting_approval") {
+            messages.push(item);
+        }
+    }
+    return messages;
 }
 
 function persistedContinuation(context: BrainstormContextResult, output: BrainstormOutputItem[]): BrainstormTurnContinuation {
