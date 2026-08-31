@@ -68,6 +68,14 @@ mock.module("@/stores/use-config-store", () => ({
     useConfigStore: (selector: (state: unknown) => unknown) => selector({ updateConfig: () => {}, isAiConfigReady: () => true, openConfigDialog: () => {} }),
 }));
 mock.module("@/components/model-picker", () => ({ ModelPicker: () => <div /> }));
+mock.module("./brainstorm-agent-panel", () => ({
+    BrainstormAgentPanel: ({ project, onActiveChange }: { project: StoryboardRecord | null; onActiveChange?: (active: boolean) => void }) => (
+        <div data-testid="brainstorm-agent-panel">
+            脑暴 Agent · {project?.id || "未选择项目"}
+            <button onClick={() => onActiveChange?.(true)}>模拟脑暴运行</button>
+        </div>
+    ),
+}));
 mock.module("@/services/api/storyboard", () => ({ generateStoryboard: (...args: unknown[]) => generate(...args) }));
 mock.module("./storyboard-storage", () => ({
     listStoryboardRecords: async () => {
@@ -295,6 +303,7 @@ test("生成期间禁止切换、新建或删除工作区", async () => {
     await flush();
 
     assert.equal(button(container, "新建").disabled, true);
+    assert.equal(button(container, "脑暴 Agent").disabled, true);
     assert.equal(container.querySelector<HTMLButtonElement>("aside button.min-w-0")?.disabled, true);
     assert.equal(container.querySelector<HTMLButtonElement>('aside button[aria-label="删除"]')?.disabled, true);
 
@@ -355,6 +364,7 @@ test("服务端保存失败时保留生成结果但不伪造历史记录", async
 
     assert.equal(container.querySelector("aside .ant-tag")?.textContent, "0");
     assert.match(container.textContent || "", /0 场 · 0 镜头/);
+    assert.equal(button(container, "脑暴 Agent").disabled, true);
 
     await act(async () => root.unmount());
     container.remove();
@@ -394,6 +404,45 @@ test("账号切换后忽略旧账号迟到的保存响应", async () => {
 
     assert.equal(container.querySelector<HTMLInputElement>('input[maxlength="100"]')?.value, "账号二详情");
     assert.equal(container.querySelector("aside .ant-tag")?.textContent, "1");
+
+    await act(async () => root.unmount());
+    container.remove();
+});
+
+test("为已保存的分镜项目提供脑暴 Agent 工作区入口", async () => {
+    calls.length = 0;
+    accountId = "user-1";
+    listRecords = async () => [summary(record("storyboard-1", "脑暴项目"))];
+    loadRecord = async (id) => record(id, "脑暴项目");
+
+    const { container, root } = await mount();
+
+    assert.match(container.textContent || "", /脑暴 Agent/);
+    await act(async () => button(container, "脑暴 Agent").click());
+    await flush();
+    assert.match(container.querySelector('[data-testid="brainstorm-agent-panel"]')?.textContent || "", /脑暴 Agent · storyboard-1/);
+    await act(async () => container.querySelector<HTMLButtonElement>(".ant-drawer-close")?.click());
+    await flush();
+    assert.match(container.querySelector('[data-testid="brainstorm-agent-panel"]')?.textContent || "", /脑暴 Agent · storyboard-1/);
+
+    await act(async () => root.unmount());
+    container.remove();
+});
+
+test("Brainstorm Turn 活动期间禁止重新生成分镜", async () => {
+    calls.length = 0;
+    accountId = "user-1";
+    listRecords = async () => [summary(record("storyboard-1", "并发保护"))];
+    loadRecord = async (id) => record(id, "并发保护");
+
+    const { container, root } = await mount();
+    await act(async () => button(container, "脑暴 Agent").click());
+    await flush();
+    await act(async () => button(container, "模拟脑暴运行").click());
+    await flush();
+
+    assert.equal(button(container, "生成分镜").disabled, true);
+    assert.equal(button(container, "新建").disabled, true);
 
     await act(async () => root.unmount());
     container.remove();

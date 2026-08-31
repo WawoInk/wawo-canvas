@@ -2,6 +2,7 @@
 
 ## Unreleased
 
++ [新增] 分镜创作室集成可用的 Brainstorm Agent 工作区，支持多 Conversation、真实模型增量回复、Skill 与稳定 Scene/Shot Context、Tool 状态和审批、Stop/Retry/Continue、显式 Memory 管理及响应式侧栏。
 + [新增] Storyboard Brainstorm 新增认证 API Client 与页面私有状态 Hook，支持多 Conversation、完整分页恢复、服务端确认后启动 Turn、流式/Tool checkpoint、Stop/Regenerate/Continue/Retry、审批 CAS 和账号/项目竞态隔离。
 + [新增] Storyboard Brainstorm 新增 Conversation、Message 与 Project Memory 后端持久化 API，支持原子 Turn、Assistant revision CAS、幂等和账号/项目隔离。
 + [新增] 分镜创作室新增 Brainstorm Agent Core：提供最终上下文预算、稳定分镜焦点优先、Tool Pair 清理、四轮工具循环、审批续跑、受控重试和五个代码内版本化 Skill，并可通过 Fake Completion/Fake Tool 独立测试。
