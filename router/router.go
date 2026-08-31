@@ -189,6 +189,43 @@ func New() *gin.Engine {
 	v1.DELETE("/storyboards/:id", func(c *gin.Context) {
 		handler.DeleteStoryboardProject(c.Writer, c.Request, c.Param("id"))
 	})
+	// Storyboard Brainstorm persistence
+	v1.GET("/storyboards/:projectId/conversations", func(c *gin.Context) {
+		handler.ListStoryboardBrainstormConversations(c.Writer, c.Request, c.Param("projectId"))
+	})
+	v1.POST("/storyboards/:projectId/conversations", func(c *gin.Context) {
+		handler.CreateStoryboardBrainstormConversation(c.Writer, c.Request, c.Param("projectId"))
+	})
+	v1.PUT("/storyboards/:projectId/conversations/:conversationId/title", func(c *gin.Context) {
+		handler.RenameStoryboardBrainstormConversation(c.Writer, c.Request, c.Param("projectId"), c.Param("conversationId"))
+	})
+	v1.DELETE("/storyboards/:projectId/conversations/:conversationId", func(c *gin.Context) {
+		handler.DeleteStoryboardBrainstormConversation(c.Writer, c.Request, c.Param("projectId"), c.Param("conversationId"))
+	})
+	v1.GET("/storyboards/:projectId/conversations/:conversationId/messages", func(c *gin.Context) {
+		handler.ListStoryboardBrainstormMessages(c.Writer, c.Request, c.Param("projectId"), c.Param("conversationId"))
+	})
+	v1.POST("/storyboards/:projectId/conversations/:conversationId/turns", func(c *gin.Context) {
+		handler.CreateStoryboardBrainstormTurn(c.Writer, c.Request, c.Param("projectId"), c.Param("conversationId"))
+	})
+	v1.PUT("/storyboards/:projectId/conversations/:conversationId/messages/:messageId/assistant", func(c *gin.Context) {
+		handler.UpdateStoryboardBrainstormAssistant(c.Writer, c.Request, c.Param("projectId"), c.Param("conversationId"), c.Param("messageId"))
+	})
+	v1.POST("/storyboards/:projectId/conversations/:conversationId/messages/:messageId/continue", func(c *gin.Context) {
+		handler.ContinueStoryboardBrainstormAssistant(c.Writer, c.Request, c.Param("projectId"), c.Param("conversationId"), c.Param("messageId"))
+	})
+	v1.GET("/storyboards/:projectId/memories", func(c *gin.Context) {
+		handler.ListStoryboardMemories(c.Writer, c.Request, c.Param("projectId"))
+	})
+	v1.POST("/storyboards/:projectId/memories", func(c *gin.Context) {
+		handler.CreateStoryboardMemory(c.Writer, c.Request, c.Param("projectId"))
+	})
+	v1.PUT("/storyboards/:projectId/memories/:memoryId", func(c *gin.Context) {
+		handler.UpdateStoryboardMemory(c.Writer, c.Request, c.Param("projectId"), c.Param("memoryId"))
+	})
+	v1.DELETE("/storyboards/:projectId/memories/:memoryId", func(c *gin.Context) {
+		handler.DeleteStoryboardMemory(c.Writer, c.Request, c.Param("projectId"), c.Param("memoryId"))
+	})
 	// Script Agent persistence
 	v1.GET("/scripts", gin.WrapF(handler.ListScriptProjects))
 	v1.POST("/scripts", gin.WrapF(handler.CreateScriptProject))

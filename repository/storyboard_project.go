@@ -93,6 +93,15 @@ func DeleteStoryboardProject(id, userID string) (model.StoryboardProject, model.
 		if err := tx.Where("id = ? AND user_id = ? AND enterprise_id IS NULL", project.ArtifactFileID, userID).First(&file).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("project_id = ? AND user_id = ?", id, userID).Delete(&model.StoryboardBrainstormMessage{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("project_id = ? AND user_id = ?", id, userID).Delete(&model.StoryboardBrainstormConversation{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("project_id = ? AND user_id = ?", id, userID).Delete(&model.StoryboardMemory{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("id = ? AND user_id = ?", id, userID).Delete(&model.StoryboardProject{}).Error; err != nil {
 			return err
 		}
