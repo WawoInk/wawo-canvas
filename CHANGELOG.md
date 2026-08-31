@@ -5,6 +5,8 @@
 + [新增] Storyboard Brainstorm 新增认证 API Client 与页面私有状态 Hook，支持多 Conversation、完整分页恢复、服务端确认后启动 Turn、流式/Tool checkpoint、Stop/Regenerate/Continue/Retry、审批 CAS 和账号/项目竞态隔离。
 + [新增] Storyboard Brainstorm 新增 Conversation、Message 与 Project Memory 后端持久化 API，支持原子 Turn、Assistant revision CAS、幂等和账号/项目隔离。
 + [新增] 分镜创作室新增 Brainstorm Agent Core：提供最终上下文预算、稳定分镜焦点优先、Tool Pair 清理、四轮工具循环、审批续跑、受控重试和五个代码内版本化 Skill，并可通过 Fake Completion/Fake Tool 独立测试。
++ [新增] Storyboard Brainstorm 增加 Project/Scene/Shot Memory 选择、分支级 Summary Checkpoint 与长对话 Context 压缩，支持作用域优先级、候选确认幂等、Tool Pair 原子保留和最终超限诊断。
++ [新增] Storyboard Brainstorm 新增十项白名单 Tool Registry、审批前影响预览与注入式 Executor，支持受控场次/镜头查询、原文搜索、校验读取、Project Memory 和 revision CAS 白名单修改。
 + [新增] 前端文本模型请求新增 OpenAI-compatible / Gemini 统一流事件协议，支持文本与 Tool Arguments 增量、Usage、Done、Error 和 Abort，并保持 Storyboard、剧本 Agent 与 Canvas 现有累计文本调用兼容。
 + [修复] 远程 AI Compatibility Proxy 支持 SSE/NDJSON 实时分块透传和客户端取消传播，流式中断不再误记为完整成功并按既有规则退款；任务审计统一脱敏 Authorization、API Key 和敏感查询参数，普通非流式请求保持原有行为。
 + [新增] Storyboard Project 支持无文档 Draft、`expectedRevision` CAS 更新和安全 artifact 切换；Scene、Segment、Shot 使用稳定 ID，插入或重编号时不会把旧 ID 串给新实体。

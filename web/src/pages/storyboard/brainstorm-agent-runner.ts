@@ -109,7 +109,38 @@ async function executeCalls(
             return { status: "cancelled", error: { code: "ABORTED", message: "Brainstorm turn was cancelled." }, ...base(state) };
         }
         if (!stopped && definition?.approval === "required" && !(resume && index === 0)) {
-            return pauseForApproval(state, call, calls.slice(index), "Tool requires approval before execution.", options);
+            let content = "Tool requires approval before execution.";
+            if (dependencies.preflightTool) {
+                let preflight: ToolOutcome;
+                let cancelled = false;
+                try {
+                    preflight = await dependencies.preflightTool(call, { signal: options.signal, definition });
+                } catch (error) {
+                    cancelled = isAborted(error, options.signal);
+                    preflight = { status: "failed", content: cancelled ? "Brainstorm turn was cancelled." : errorMessage(error, "Tool preflight failed."), sideEffect: "none" };
+                }
+                if (preflight.status !== "succeeded" || preflight.sideEffect === "write") {
+                    const result: BrainstormToolResult = {
+                        type: "tool_result",
+                        callId: call.callId,
+                        name: call.name,
+                        status: preflight.status === "rejected" ? "rejected" : "failed",
+                        content: preflight.content,
+                        sideEffect: "none",
+                    };
+                    append(state, result, options);
+                    state.messages.push(call, result);
+                    if (cancelled) {
+                        appendCancelledRemainder(state, calls.slice(index + 1), options);
+                        options.onEvent?.({ type: "status", status: "cancelled" });
+                        return { status: "cancelled", error: { code: "ABORTED", message: "Brainstorm turn was cancelled." }, ...base(state) };
+                    }
+                    stopped = true;
+                    continue;
+                }
+                content = preflight.content;
+            }
+            return pauseForApproval(state, call, calls.slice(index), content, options);
         }
 
         let execution: ToolOutcome;
@@ -122,7 +153,11 @@ async function executeCalls(
             execution = { status: "rejected", content: "Tool execution was rejected by the user.", sideEffect: "none" };
         } else {
             try {
-                execution = await dependencies.executeTool(call, { signal: options.signal, definition });
+                execution = await dependencies.executeTool(call, {
+                    signal: options.signal,
+                    definition,
+                    authorization: resume?.decision === "approved" && index === 0 ? "approved" : "auto",
+                });
             } catch (error) {
                 cancelled = isAborted(error, options.signal);
                 execution = { status: "failed", content: cancelled ? "Brainstorm turn was cancelled." : errorMessage(error, "Tool execution failed.") };

@@ -324,6 +324,100 @@ func TestStoryboardBrainstormMemoryCRUDFieldsAndOwnership(t *testing.T) {
 	}
 }
 
+func TestStoryboardBrainstormMemoryValidationAndConfirmationBoundary(t *testing.T) {
+	server, ownerToken, _ := newStoryboardBrainstormServer(t)
+	defer server.Close()
+
+	suffix := uuid.NewString()
+	projectID := "storyboard-brainstorm-memory-validation-" + suffix
+	conversationID := "conversation-" + suffix
+	userMessageID := "memory-user-" + suffix
+	assistantMessageID := "memory-assistant-" + suffix
+	createStoryboardBrainstormProject(t, server.URL, ownerToken, projectID)
+	brainstormOK[json.RawMessage](t, http.MethodPost, brainstormConversationsURL(server.URL, projectID), ownerToken, map[string]any{"id": conversationID})
+	appendStoryboardBrainstormTurn(t, server.URL, ownerToken, projectID, conversationID, "memory-turn-"+suffix, userMessageID, assistantMessageID, "", "提出一条候选记忆")
+	updateStoryboardBrainstormAssistant(t, brainstormMessagesURL(server.URL, projectID, conversationID)+"/"+assistantMessageID+"/assistant", ownerToken, 1, "completed", []any{
+		map[string]any{"type": "memory_candidate", "content": "雨夜保持冷蓝色调"},
+	})
+
+	memoriesURL := brainstormMemoriesURL(server.URL, projectID)
+	if memories := listStoryboardBrainstormMemories(t, server.URL, ownerToken, projectID); memories.Total != 0 || len(memories.Items) != 0 {
+		t.Fatalf("unconfirmed candidate persisted = %#v", memories)
+	}
+
+	valid := map[string]any{
+		"id":              "memory-" + suffix,
+		"kind":            "constraint",
+		"scope":           "scene",
+		"path":            "scene-1",
+		"content":         "雨夜保持冷蓝色调",
+		"tags":            []string{"tone"},
+		"sourceMessageId": userMessageID,
+		"operationId":     "operation-" + suffix,
+	}
+	for _, test := range []struct {
+		name      string
+		status    int
+		overrides map[string]any
+	}{
+		{name: "kind", status: http.StatusOK, overrides: map[string]any{"kind": ""}},
+		{name: "scope", status: http.StatusOK, overrides: map[string]any{"scope": "conversation"}},
+		{name: "project path", status: http.StatusOK, overrides: map[string]any{"scope": "project", "path": "scene-1"}},
+		{name: "scoped path", status: http.StatusOK, overrides: map[string]any{"scope": "shot", "path": ""}},
+		{name: "source", status: http.StatusNotFound, overrides: map[string]any{"sourceMessageId": "missing-" + suffix}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			payload := make(map[string]any, len(valid))
+			for key, value := range valid {
+				payload[key] = value
+			}
+			for key, value := range test.overrides {
+				payload[key] = value
+			}
+			assertBrainstormStatus(t, test.status, http.MethodPost, memoriesURL, ownerToken, payload)
+		})
+	}
+	if memories := listStoryboardBrainstormMemories(t, server.URL, ownerToken, projectID); memories.Total != 0 || len(memories.Items) != 0 {
+		t.Fatalf("invalid memory persisted = %#v", memories)
+	}
+
+	brainstormOK[brainstormMemoryView](t, http.MethodPost, memoriesURL, ownerToken, valid)
+	if memories := listStoryboardBrainstormMemories(t, server.URL, ownerToken, projectID); memories.Total != 1 || len(memories.Items) != 1 || memories.Items[0].ID != valid["id"] {
+		t.Fatalf("confirmed memory missing = %#v", memories)
+	}
+}
+
+func TestStoryboardBrainstormMemoryOperationIdReplayAndConflict(t *testing.T) {
+	server, ownerToken, _ := newStoryboardBrainstormServer(t)
+	defer server.Close()
+
+	suffix := uuid.NewString()
+	projectID := "storyboard-brainstorm-memory-idempotency-" + suffix
+	memoryID := "memory-" + suffix
+	operationID := "operation-" + suffix
+	createStoryboardBrainstormProject(t, server.URL, ownerToken, projectID)
+	memoriesURL := brainstormMemoriesURL(server.URL, projectID)
+	payload := map[string]any{
+		"id": memoryID, "kind": "fact", "scope": "project", "path": "", "content": "主角害怕封闭空间", "tags": []string{"character"}, "operationId": operationID,
+	}
+
+	created := brainstormOK[brainstormMemoryView](t, http.MethodPost, memoriesURL, ownerToken, payload).Data
+	replayed := brainstormOK[brainstormMemoryView](t, http.MethodPost, memoriesURL, ownerToken, payload).Data
+	if !reflect.DeepEqual(replayed, created) {
+		t.Fatalf("operation replay = %#v, want %#v", replayed, created)
+	}
+	if memories := listStoryboardBrainstormMemories(t, server.URL, ownerToken, projectID); memories.Total != 1 || len(memories.Items) != 1 {
+		t.Fatalf("operation replay duplicated memory = %#v", memories)
+	}
+
+	status, conflict := brainstormRequest[brainstormConflictView[brainstormMemoryView]](t, http.MethodPost, memoriesURL, ownerToken, map[string]any{
+		"id": "conflicting-" + suffix, "kind": "fact", "scope": "project", "path": "", "content": "主角喜欢封闭空间", "tags": []string{"character"}, "operationId": operationID,
+	})
+	if status != http.StatusConflict || conflict.Code == 0 || !reflect.DeepEqual(conflict.Data.Current, created) {
+		t.Fatalf("conflicting operation status=%d response=%#v", status, conflict)
+	}
+}
+
 func TestStoryboardBrainstormStoryboardDeletionCleansAllChildren(t *testing.T) {
 	server, ownerToken, _ := newStoryboardBrainstormServer(t)
 	defer server.Close()
