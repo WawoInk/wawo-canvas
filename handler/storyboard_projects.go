@@ -9,7 +9,7 @@ import (
 )
 
 type updateStoryboardProjectRequest struct {
-	service.CreateStoryboardProjectInput
+	service.StoryboardProjectInput
 	ExpectedRevision *uint64 `json:"expectedRevision"`
 }
 
@@ -33,7 +33,7 @@ func CreateStoryboardProject(w http.ResponseWriter, r *http.Request) {
 		Fail(w, "未登录或权限不足")
 		return
 	}
-	var input service.CreateStoryboardProjectInput
+	var input service.StoryboardProjectInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		Fail(w, "请求格式无效")
 		return
@@ -61,7 +61,7 @@ func UpdateStoryboardProject(w http.ResponseWriter, r *http.Request, id string) 
 		Fail(w, "expectedRevision 不能为空")
 		return
 	}
-	project, err := service.UpdateStoryboardProject(r.Context(), id, user.ID, request.CreateStoryboardProjectInput, *request.ExpectedRevision)
+	project, err := service.UpdateStoryboardProject(r.Context(), id, user.ID, request.StoryboardProjectInput, *request.ExpectedRevision)
 	if err != nil {
 		if service.IsStudioProjectConflict(err) {
 			Conflict(w, "分镜项目已被其他会话修改", project)

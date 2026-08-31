@@ -77,7 +77,7 @@
 - **数据流**：模型输出 -> pipeline 规范化 -> storage facade；新工作区使用 POST，已加载工作区保存或重新生成使用当前 revision 的 PUT -> 服务端完整详情覆盖本地保存态。
 - **依赖关系**：依赖 user store、JSON API request 层和 Storyboard 后端；不进入 Canvas store、REST delta sync 或 WebDAV manifest。
 - **关键不变量**：
-  - 未保存输出也会生成非空 ID；重新生成时按 `sceneNo/segmentNo/shotNo` 复用当前 Document 的 ID，新实体生成新 UUID。
+  - 未保存输出也会生成非空 ID；编辑或重新生成时优先保留当前 Document 已有 ID，缺失或不可信 ID 再按 `sceneNo/segmentNo/shotNo` 匹配未被其他实体保留的旧 ID，新实体生成新 UUID。
   - 服务端保存详情是权威结果；成功保存保留 Project ID 和原 `createdAt`，并采用返回的新 revision。
   - stale revision 由 `ApiError.data.current` 暴露，不在客户端静默覆盖或自动字段合并。
   - 当前只实现 Storyboard Workspace 基础，不表示 Brainstorm、Project Memory 或 Canvas 关联已经存在。

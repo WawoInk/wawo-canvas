@@ -221,7 +221,7 @@ enterprise ID 永远由当前用户推导。跨企业 ID、个人用户 ID 或 o
 
 Storyboard Workspace 的项目状态只使用 `draft | ready`：没有 Storyboard Document 时为 `draft`，存在 Document 时为 `ready`；文档校验结果继续放在 `validationStatus`，不能复用项目状态。缺少 `expectedRevision` 是请求错误；旧 revision 更新返回 HTTP 409、`code=-1`，并在 `data.current` 返回服务端最新完整详情，不做字段级自动合并。
 
-Scene、Segment、Shot 的 `id` 是非空稳定字符串。创建时服务端不信任模型提供的 ID，会为缺失、重复或不可信 ID 生成 UUID；更新或重新生成时按父级内的 `sceneNo -> segmentNo -> shotNo` 结构键复用已持久化 ID，新实体再生成新 UUID。保存后的服务端详情是最终权威结果。
+Scene、Segment、Shot 的 `id` 是非空稳定字符串。创建时服务端不信任模型提供的 ID，会为缺失、重复或不可信 ID 生成 UUID；更新或重新生成时优先复用请求中已属于当前 artifact 的稳定 ID；缺失或不可信 ID 再按父级内的 `sceneNo -> segmentNo -> shotNo` 结构键匹配未被其他实体保留的旧 ID，新实体生成新 UUID。保存后的服务端详情是最终权威结果。
 
 ## Canvas 与增量同步
 

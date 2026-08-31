@@ -157,7 +157,7 @@
 - **核心文件**：`handler/storyboard_projects.go`、`service/storyboard_project.go`、`repository/storyboard_project.go`、`model/storyboard_project.go`。
 - **数据流**：
   - create 规范化复杂 JSON 和 Scene/Segment/Shot ID，上传私有 artifact，再事务写 `user_files` + Project，初始 revision 为 1。
-  - update 先读取当前详情并按 `sceneNo/segmentNo/shotNo` 复用稳定 ID；artifact 变化时上传新对象，再事务创建新文件行、CAS 切换引用/摘要/revision、删除旧文件行。
+  - update 先读取当前详情，优先按已持久化 ID 保留实体身份，缺失或不可信 ID 再按 `sceneNo/segmentNo/shotNo` 匹配未被占用的旧 ID；artifact 变化时上传新对象，再事务创建新文件行、CAS 切换引用/摘要/revision、删除旧文件行。
   - 事务或 CAS 失败补偿删除新对象；切换成功后 best-effort 删除旧对象。规范化 artifact 未变化时复用旧文件。
 - **依赖关系**：依赖 auth、S3 和个人 `user_files`；Storyboard Studio 的 API/storage facade 消费它。
 - **关键不变量**：

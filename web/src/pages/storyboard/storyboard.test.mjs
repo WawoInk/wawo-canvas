@@ -151,6 +151,46 @@ test("document normalization preserves structural IDs across regeneration and as
     assert.notEqual(next.scenes[0].segments[0].shots.find((shot) => shot.shotNo === 3).id, "untrusted-shot");
 });
 
+test("document normalization keeps existing IDs when insertions renumber siblings", () => {
+    const current = normalizeStoryboardDocument(document);
+    const edited = structuredClone(current);
+    const existingScene = edited.scenes[0];
+    const existingSegment = existingScene.segments[0];
+    const [firstShot, secondShot] = existingSegment.shots;
+
+    edited.scenes = [
+        { ...structuredClone(existingScene), id: "", sceneNo: 1, segments: [] },
+        {
+            ...existingScene,
+            sceneNo: 2,
+            segments: [
+                { ...structuredClone(existingSegment), id: "", segmentNo: 1, shots: [] },
+                {
+                    ...existingSegment,
+                    segmentNo: 2,
+                    shots: [
+                        { ...structuredClone(firstShot), id: "", shotNo: 1 },
+                        { ...firstShot, shotNo: 2 },
+                        { ...secondShot, shotNo: 3 },
+                    ],
+                },
+            ],
+        },
+    ];
+
+    const next = normalizeStoryboardDocument(edited, current);
+    const movedScene = next.scenes[1];
+    const movedSegment = movedScene.segments[1];
+
+    assert.equal(movedScene.id, current.scenes[0].id);
+    assert.equal(movedSegment.id, current.scenes[0].segments[0].id);
+    assert.equal(movedSegment.shots[1].id, firstShot.id);
+    assert.equal(movedSegment.shots[2].id, secondShot.id);
+    assert.notEqual(next.scenes[0].id, current.scenes[0].id);
+    assert.notEqual(movedScene.segments[0].id, current.scenes[0].segments[0].id);
+    assert.notEqual(movedSegment.shots[0].id, firstShot.id);
+});
+
 test("document normalization reuses each existing entity ID at most once", () => {
     const current = normalizeStoryboardDocument(document);
     const regenerated = structuredClone(document);

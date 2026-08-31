@@ -38,7 +38,7 @@ func CreateStoryboardProject(project model.StoryboardProject, file model.UserFil
 	})
 }
 
-func UpdateStoryboardProjectWithLock(project model.StoryboardProject, expectedRevision uint64, newFile *model.UserFile, oldFileID string) error {
+func UpdateStoryboardProjectCAS(project model.StoryboardProject, expectedRevision uint64, newFile *model.UserFile, oldFileID string) error {
 	db, err := DB()
 	if err != nil {
 		return err
