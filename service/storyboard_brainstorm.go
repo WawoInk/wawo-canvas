@@ -212,8 +212,8 @@ func CreateStoryboardBrainstormTurn(projectID, conversationID, userID string, in
 	}
 	command.RequestHash = brainstormRequestHash(semantic)
 	now := time.Now().UTC()
-	command.UserCreatedAt = now.Format(time.RFC3339Nano)
-	command.AssistantCreatedAt = now.Add(time.Nanosecond).Format(time.RFC3339Nano)
+	command.UserCreatedAt = brainstormTimestamp(now)
+	command.AssistantCreatedAt = brainstormTimestamp(now.Add(time.Nanosecond))
 	turn, err := repository.CreateStoryboardBrainstormTurn(command)
 	return turn, brainstormError(err)
 }
@@ -447,6 +447,10 @@ func validateBrainstormID(value, name string) (string, error) {
 func ensureStoryboardProject(projectID, userID string) error {
 	_, err := repository.GetStoryboardProject(projectID, userID)
 	return brainstormError(err)
+}
+
+func brainstormTimestamp(value time.Time) string {
+	return value.UTC().Format("2006-01-02T15:04:05.000000000Z07:00")
 }
 
 func brainstormRequestHash(value any) string {
