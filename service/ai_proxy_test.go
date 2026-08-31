@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +17,523 @@ import (
 	"github.com/basketikun/infinite-canvas/repository"
 	"github.com/google/uuid"
 )
+
+const aiProxyTestAPIKey = "compatibility-channel-api-key-secret"
+
+func setupAIProxyHTTPTest(t *testing.T, upstreamURL string) (string, string) {
+	t.Helper()
+	previousSettings, err := repository.GetSettings()
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = repository.SaveSettings(previousSettings, time.Now().UTC().Format(time.RFC3339Nano))
+	})
+
+	key := uuid.NewString()
+	modelName := "stream-test-model-" + key
+	settings := previousSettings
+	settings.Private.Channels = append(settings.Private.Channels, model.ModelChannel{
+		Name: "stream-test-channel-" + key, Protocol: "openai", BaseURL: upstreamURL, APIKey: aiProxyTestAPIKey,
+		Enabled: true, Weight: 1, Models: []string{modelName},
+	})
+	settings.Public.ModelChannel.TextModels = append(settings.Public.ModelChannel.TextModels, modelName)
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: modelName, Credits: credit(2)})
+	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatalf("save settings: %v", err)
+	}
+
+	userID := "stream-test-user-" + key
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := repository.SaveUser(model.User{ID: userID, Username: "stream-test-" + key, AffCode: "aff-" + key, Role: model.UserRoleUser, Credits: credit(10), CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatalf("save user: %v", err)
+	}
+	return modelName, userID
+}
+
+func newAIProxyHTTPServer(t *testing.T, userID string) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(WithUser(r.Context(), model.AuthUser{ID: userID}))
+		ProxyAIRequest(w, r, "/chat/completions")
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func TestProxyAIRequestPreservesNonStreamingJSONResponse(t *testing.T) {
+	wantBody := `{"id":"chatcmpl-test","choices":[{"message":{"content":"done"}}]}`
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Upstream-Request-Id", "request-123")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(wantBody))
+	}))
+	t.Cleanup(upstream.Close)
+
+	modelName, userID := setupAIProxyHTTPTest(t, upstream.URL)
+	proxy := newAIProxyHTTPServer(t, userID)
+	request, err := http.NewRequest(http.MethodPost, proxy.URL, strings.NewReader(`{"model":"`+modelName+`","messages":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := proxy.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if response.StatusCode != http.StatusAccepted || response.Header.Get("Content-Type") != "application/json" || response.Header.Get("X-Upstream-Request-Id") != "request-123" || string(body) != wantBody {
+		t.Fatalf("response = status %d content-type %q request-id %q body %q", response.StatusCode, response.Header.Get("Content-Type"), response.Header.Get("X-Upstream-Request-Id"), body)
+	}
+}
+
+func TestProxyAIRequestPreservesNonStreamingBinaryResponses(t *testing.T) {
+	for _, testCase := range []struct {
+		name        string
+		contentType string
+		body        []byte
+	}{
+		{name: "image", contentType: "image/png", body: []byte{'P', 'N', 'G', 0, 0xff}},
+		{name: "audio", contentType: "audio/mpeg", body: []byte{'I', 'D', '3', 0, 0xfe}},
+		{name: "video", contentType: "video/mp4", body: []byte{0, 0, 0, 4, 'm', 'd', 'a', 't', 0xfd}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", testCase.contentType)
+				w.Header().Set("X-Upstream-Request-Id", "request-"+testCase.name)
+				w.WriteHeader(http.StatusPartialContent)
+				_, _ = w.Write(testCase.body)
+			}))
+			t.Cleanup(upstream.Close)
+
+			modelName, userID := setupAIProxyHTTPTest(t, upstream.URL)
+			proxy := newAIProxyHTTPServer(t, userID)
+			request, err := http.NewRequest(http.MethodPost, proxy.URL, strings.NewReader(`{"model":"`+modelName+`","messages":[]}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Content-Type", "application/json")
+			response, err := proxy.Client().Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if response.StatusCode != http.StatusPartialContent || response.Header.Get("Content-Type") != testCase.contentType || response.Header.Get("X-Upstream-Request-Id") != "request-"+testCase.name || !bytes.Equal(body, testCase.body) {
+				t.Fatalf("response = status %d content-type %q request-id %q body %v", response.StatusCode, response.Header.Get("Content-Type"), response.Header.Get("X-Upstream-Request-Id"), body)
+			}
+		})
+	}
+}
+
+func TestProxyAIRequestStreamsFirstChunkBeforeUpstreamCompletes(t *testing.T) {
+	for _, testCase := range []struct {
+		name        string
+		contentType string
+		firstChunk  string
+		secondChunk string
+	}{
+		{name: "sse", contentType: "text/event-stream", firstChunk: "data: {\"delta\":\"first\"}\n\n", secondChunk: "data: {\"delta\":\"second\"}\n\n"},
+		{name: "ndjson", contentType: "application/x-ndjson", firstChunk: "{\"delta\":\"first\"}\n", secondChunk: "{\"delta\":\"second\"}\n"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			firstWritten := make(chan struct{})
+			releaseSecond := make(chan struct{})
+			released := false
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", testCase.contentType)
+				_, _ = w.Write([]byte(testCase.firstChunk))
+				w.(http.Flusher).Flush()
+				close(firstWritten)
+				<-releaseSecond
+				_, _ = w.Write([]byte(testCase.secondChunk))
+			}))
+			defer upstream.Close()
+			defer func() {
+				if !released {
+					close(releaseSecond)
+				}
+			}()
+
+			modelName, userID := setupAIProxyHTTPTest(t, upstream.URL)
+			proxy := newAIProxyHTTPServer(t, userID)
+			request, err := http.NewRequest(http.MethodPost, proxy.URL, strings.NewReader(`{"model":"`+modelName+`","stream":true,"messages":[]}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Content-Type", "application/json")
+			ctx, cancel := context.WithCancel(request.Context())
+			defer cancel()
+			request = request.WithContext(ctx)
+
+			type firstChunkResult struct {
+				response *http.Response
+				chunk    []byte
+				err      error
+			}
+			result := make(chan firstChunkResult, 1)
+			go func() {
+				response, err := proxy.Client().Do(request)
+				if err != nil {
+					result <- firstChunkResult{err: err}
+					return
+				}
+				chunk := make([]byte, len(testCase.firstChunk))
+				_, err = io.ReadFull(response.Body, chunk)
+				result <- firstChunkResult{response: response, chunk: chunk, err: err}
+			}()
+
+			<-firstWritten
+			select {
+			case got := <-result:
+				if got.response != nil {
+					defer got.response.Body.Close()
+				}
+				if got.err != nil {
+					t.Fatal(got.err)
+				}
+				if string(got.chunk) != testCase.firstChunk || got.response.Header.Get("Content-Type") != testCase.contentType || got.response.Header.Get("Content-Length") != "" {
+					t.Fatalf("first response = chunk %q content-type %q content-length %q", got.chunk, got.response.Header.Get("Content-Type"), got.response.Header.Get("Content-Length"))
+				}
+				close(releaseSecond)
+				released = true
+				rest, err := io.ReadAll(got.response.Body)
+				if err != nil || string(rest) != testCase.secondChunk {
+					t.Fatalf("remaining response = %q, err = %v", rest, err)
+				}
+			case <-time.After(time.Second):
+				cancel()
+				t.Fatal("first chunk did not reach the client before upstream completion")
+			}
+		})
+	}
+}
+
+func TestProxyAIRequestCancellationPropagatesAndRefundsInterruptedStream(t *testing.T) {
+	firstChunk := "data: {\"delta\":\"first\"}\n\n"
+	upstreamCancelled := make(chan struct{})
+	releaseUpstream := make(chan struct{})
+	released := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(firstChunk))
+		w.(http.Flusher).Flush()
+		select {
+		case <-r.Context().Done():
+			close(upstreamCancelled)
+		case <-releaseUpstream:
+		}
+	}))
+	defer upstream.Close()
+	defer func() {
+		if !released {
+			close(releaseUpstream)
+		}
+	}()
+
+	modelName, userID := setupAIProxyHTTPTest(t, upstream.URL)
+	handlerDone := make(chan struct{})
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(handlerDone)
+		r = r.WithContext(WithUser(r.Context(), model.AuthUser{ID: userID}))
+		ProxyAIRequest(w, r, "/chat/completions")
+	}))
+	defer proxy.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, proxy.URL, strings.NewReader(`{"model":"`+modelName+`","stream":true,"messages":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := proxy.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := response.Header.Get("X-Generation-Task-Id")
+	if taskID == "" {
+		t.Fatal("missing X-Generation-Task-Id")
+	}
+	chunk := make([]byte, len(firstChunk))
+	if _, err := io.ReadFull(response.Body, chunk); err != nil || string(chunk) != firstChunk {
+		t.Fatalf("first chunk = %q, err = %v", chunk, err)
+	}
+	cancel()
+	_ = response.Body.Close()
+
+	cancelled, returned := false, false
+	cancelledCh, returnedCh := upstreamCancelled, handlerDone
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	for !cancelled || !returned {
+		select {
+		case <-cancelledCh:
+			cancelled = true
+			cancelledCh = nil
+		case <-returnedCh:
+			returned = true
+			returnedCh = nil
+		case <-timer.C:
+			if !cancelled {
+				t.Error("upstream request context was not cancelled")
+			}
+			if !returned {
+				t.Error("proxy handler did not return after client cancellation")
+			}
+			close(releaseUpstream)
+			released = true
+			if !returned {
+				select {
+				case <-handlerDone:
+				case <-time.After(time.Second):
+					t.Fatal("proxy handler did not return during test cleanup")
+				}
+			}
+			cancelled, returned = true, true
+		}
+	}
+
+	task, err := repository.GetGenerationTaskByID(taskID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if task.Status != model.TaskStatusFailed || task.ErrorCode == "" {
+		t.Errorf("task status = %q, error code = %q; want failed with an error code", task.Status, task.ErrorCode)
+	}
+	user, ok, err := repository.GetUserByID(userID)
+	if err != nil || !ok || !user.Credits.Equal(credit(10)) {
+		t.Errorf("user = %#v, ok = %v, err = %v; want initial credits restored", user, ok, err)
+	}
+	logs, _, err := repository.ListCreditLogsByUserID(userID, model.Query{PageSize: 20})
+	consumeCount, refundCount := 0, 0
+	for _, log := range logs {
+		if log.TaskID != taskID {
+			continue
+		}
+		switch log.Type {
+		case model.CreditLogTypeAIConsume:
+			consumeCount++
+		case model.CreditLogTypeAIRefund:
+			refundCount++
+		}
+	}
+	if err != nil || consumeCount != 1 || refundCount != 1 {
+		t.Errorf("credit logs = consume %d refund %d, err = %v; want one each", consumeCount, refundCount, err)
+	}
+}
+
+func TestProxyAIRequestMarksStreamSuccessOnlyAfterEOF(t *testing.T) {
+	firstChunk := "data: {\"delta\":\"first\"}\n\n"
+	secondChunk := "data: {\"delta\":\"second\"}\n\n"
+	releaseSecond := make(chan struct{})
+	released := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(firstChunk))
+		w.(http.Flusher).Flush()
+		<-releaseSecond
+		_, _ = w.Write([]byte(secondChunk))
+	}))
+	defer upstream.Close()
+	defer func() {
+		if !released {
+			close(releaseSecond)
+		}
+	}()
+
+	modelName, userID := setupAIProxyHTTPTest(t, upstream.URL)
+	handlerDone := make(chan struct{})
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(handlerDone)
+		r = r.WithContext(WithUser(r.Context(), model.AuthUser{ID: userID}))
+		ProxyAIRequest(w, r, "/chat/completions")
+	}))
+	defer proxy.Close()
+
+	request, err := http.NewRequest(http.MethodPost, proxy.URL, strings.NewReader(`{"model":"`+modelName+`","stream":true,"messages":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := proxy.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	taskID := response.Header.Get("X-Generation-Task-Id")
+	if taskID == "" {
+		t.Fatal("missing X-Generation-Task-Id")
+	}
+	chunk := make([]byte, len(firstChunk))
+	if _, err := io.ReadFull(response.Body, chunk); err != nil || string(chunk) != firstChunk {
+		t.Fatalf("first chunk = %q, err = %v", chunk, err)
+	}
+
+	task, err := repository.GetGenerationTaskByID(taskID)
+	if err != nil || task.Status != model.TaskStatusRunning {
+		t.Fatalf("task before EOF = %#v, err = %v; want running", task, err)
+	}
+	user, ok, err := repository.GetUserByID(userID)
+	if err != nil || !ok || !user.Credits.Equal(credit(8)) {
+		t.Fatalf("user before EOF = %#v, ok = %v, err = %v; want 8 credits", user, ok, err)
+	}
+
+	close(releaseSecond)
+	released = true
+	rest, err := io.ReadAll(response.Body)
+	if err != nil || string(rest) != secondChunk {
+		t.Fatalf("remaining response = %q, err = %v", rest, err)
+	}
+	select {
+	case <-handlerDone:
+	case <-time.After(time.Second):
+		t.Fatal("proxy handler did not return after stream EOF")
+	}
+
+	task, err = repository.GetGenerationTaskByID(taskID)
+	if err != nil || task.Status != model.TaskStatusSuccess || task.ErrorCode != "" {
+		t.Fatalf("task after EOF = %#v, err = %v; want success", task, err)
+	}
+	logs, _, err := repository.ListCreditLogsByUserID(userID, model.Query{PageSize: 20})
+	consumeCount, refundCount := 0, 0
+	for _, log := range logs {
+		if log.TaskID != taskID {
+			continue
+		}
+		switch log.Type {
+		case model.CreditLogTypeAIConsume:
+			consumeCount++
+		case model.CreditLogTypeAIRefund:
+			refundCount++
+		}
+	}
+	if err != nil || consumeCount != 1 || refundCount != 0 {
+		t.Fatalf("credit logs = consume %d refund %d, err = %v; want one consume and no refund", consumeCount, refundCount, err)
+	}
+}
+
+func TestProxyAIRequestReturnsReadableJSONForStreamingUpstreamErrors(t *testing.T) {
+	for _, status := range []int{http.StatusBadRequest, http.StatusInternalServerError} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.WriteHeader(status)
+				_, _ = w.Write([]byte(`{"error":{"code":"provider_error","message":"provider detail"}}`))
+			}))
+			t.Cleanup(upstream.Close)
+
+			modelName, userID := setupAIProxyHTTPTest(t, upstream.URL)
+			proxy := newAIProxyHTTPServer(t, userID)
+			request, err := http.NewRequest(http.MethodPost, proxy.URL, strings.NewReader(`{"model":"`+modelName+`","stream":true,"messages":[]}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Content-Type", "application/json")
+			response, err := proxy.Client().Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var envelope struct {
+				Code int    `json:"code"`
+				Data any    `json:"data"`
+				Msg  string `json:"msg"`
+			}
+			if err := json.Unmarshal(body, &envelope); err != nil {
+				t.Fatalf("decode response %q: %v", body, err)
+			}
+			if response.StatusCode != http.StatusOK || !strings.HasPrefix(response.Header.Get("Content-Type"), "application/json") || envelope.Code != 1 || envelope.Data != nil || !strings.Contains(envelope.Msg, "provider detail") || strings.HasPrefix(string(body), "data:") {
+				t.Fatalf("response = status %d content-type %q body %s", response.StatusCode, response.Header.Get("Content-Type"), body)
+			}
+
+			taskID := response.Header.Get("X-Generation-Task-Id")
+			task, err := repository.GetGenerationTaskByID(taskID)
+			if taskID == "" || err != nil || task.Status != model.TaskStatusFailed || task.ErrorCode != "UPSTREAM_"+fmt.Sprint(status) {
+				t.Fatalf("taskID = %q task = %#v, err = %v", taskID, task, err)
+			}
+			user, ok, err := repository.GetUserByID(userID)
+			if err != nil || !ok || !user.Credits.Equal(credit(10)) {
+				t.Fatalf("user = %#v, ok = %v, err = %v; want refunded balance", user, ok, err)
+			}
+		})
+	}
+}
+
+func TestProxyAIRequestPersistsRedactedCompatibilityAudit(t *testing.T) {
+	wantBody := `{"api_key":"response-json-secret","url":"https://cdn.example/output.png?X-Amz-Signature=response-url-secret"}`
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-API-Key", "response-header-secret")
+		w.Header().Set("X-Result-URL", "https://cdn.example/output.png?token=response-header-url-secret")
+		_, _ = w.Write([]byte(wantBody))
+	}))
+	t.Cleanup(upstream.Close)
+
+	modelName, userID := setupAIProxyHTTPTest(t, upstream.URL)
+	handlerDone := make(chan struct{})
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(handlerDone)
+		r = r.WithContext(WithUser(r.Context(), model.AuthUser{ID: userID}))
+		ProxyAIRequest(w, r, "/chat/completions")
+	}))
+	t.Cleanup(proxy.Close)
+
+	requestBody := `{"model":"` + modelName + `","api_key":"request-json-secret","url":"https://cdn.example/input.png?token=request-url-secret","messages":[]}`
+	request, err := http.NewRequest(http.MethodPost, proxy.URL, strings.NewReader(requestBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := proxy.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != wantBody || response.Header.Get("X-API-Key") != "response-header-secret" || response.Header.Get("X-Result-URL") != "https://cdn.example/output.png?token=response-header-url-secret" {
+		t.Fatalf("client response = api-key %q result-url %q body %q; want original upstream values", response.Header.Get("X-API-Key"), response.Header.Get("X-Result-URL"), body)
+	}
+	select {
+	case <-handlerDone:
+	case <-time.After(time.Second):
+		t.Fatal("proxy handler did not return")
+	}
+
+	taskID := response.Header.Get("X-Generation-Task-Id")
+	payload, err := repository.GetGenerationPayloadByTaskID(taskID)
+	if taskID == "" || err != nil {
+		t.Fatalf("taskID = %q, get payload: %v", taskID, err)
+	}
+	audit := strings.Join([]string{payload.RequestHeaders, payload.RequestBody, payload.ResponseHeaders, payload.ResponseBody, payload.RawError}, "\n")
+	for _, secret := range []string{aiProxyTestAPIKey, "request-json-secret", "request-url-secret", "response-header-secret", "response-header-url-secret", "response-json-secret", "response-url-secret"} {
+		if strings.Contains(audit, secret) {
+			t.Errorf("audit leaked %q: %s", secret, audit)
+		}
+	}
+	lowerAudit := strings.ToLower(audit)
+	for _, marker := range []string{"authorization", "api_key", "token", "x-amz-signature", "x-api-key", "x-result-url", "[redacted]"} {
+		if !strings.Contains(lowerAudit, marker) {
+			t.Errorf("audit missing %q: %s", marker, audit)
+		}
+	}
+}
 
 func TestReadAIRequestMultipart(t *testing.T) {
 	var body bytes.Buffer
@@ -43,14 +562,17 @@ func TestReadAIRequestMultipart(t *testing.T) {
 }
 
 func TestProxyAsyncImageFailureRefundsAndFinalizesTask(t *testing.T) {
-	const upstreamTaskID = "async-image-failed"
+	const (
+		upstreamTaskID = "async-image-failed"
+		upstreamSecret = "async-image-upstream-secret"
+	)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodPost {
 			_, _ = w.Write([]byte(`{"id":"` + upstreamTaskID + `","status":"queued"}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"id":"` + upstreamTaskID + `","status":"failed","error":{"code":"INVALID_IMAGE_SIZE","message":"image size must be at least 2K"}}`))
+		_, _ = w.Write([]byte(`{"id":"` + upstreamTaskID + `","status":"failed","error":{"code":"INVALID_IMAGE_SIZE","message":"image size must be at least 2K: https://cdn.example/image.png?token=async-image-upstream-secret"}}`))
 	}))
 	defer upstream.Close()
 
@@ -107,7 +629,7 @@ func TestProxyAsyncImageFailureRefundsAndFinalizesTask(t *testing.T) {
 	task, err := repository.GetGenerationTaskByID(taskID)
 	if err != nil || task.TaskType != model.TaskTypeImage || task.Source != string(model.SourceCanvas) || task.Provider != "openai" ||
 		task.Model != modelName || !task.Credits.Equal(credit(2)) || task.Status != model.TaskStatusFailed || task.UpstreamTaskID != upstreamTaskID ||
-		task.ErrorCode != "INVALID_IMAGE_SIZE" || !strings.Contains(task.ErrorMessage, "at least 2K") {
+		task.ErrorCode != "INVALID_IMAGE_SIZE" || !strings.Contains(task.ErrorMessage, "at least 2K") || strings.Contains(task.ErrorMessage, upstreamSecret) {
 		t.Fatalf("task = %#v, err = %v", task, err)
 	}
 	user, ok, err := repository.GetUserByID(userID)
@@ -132,7 +654,7 @@ func TestProxyAsyncImageFailureRefundsAndFinalizesTask(t *testing.T) {
 	}
 	payload, err := repository.GetGenerationPayloadByTaskID(taskID)
 	if err != nil || !strings.Contains(payload.RequestBody, "1024x1024") || !strings.Contains(payload.ResponseBody, `"status":"failed"`) ||
-		!strings.Contains(payload.ResponseHeaders, "Content-Type") || !strings.Contains(payload.RawError, "at least 2K") {
+		!strings.Contains(payload.ResponseHeaders, "Content-Type") || !strings.Contains(payload.RawError, "at least 2K") || strings.Contains(payload.RawError, upstreamSecret) {
 		t.Fatalf("payload = %#v, err = %v", payload, err)
 	}
 }
