@@ -144,11 +144,7 @@ export function createStoryboardBrainstormConversation(projectId: string, input:
 }
 
 export function renameStoryboardBrainstormConversation(projectId: string, conversationId: string, title: string) {
-    return apiPut<StoryboardBrainstormConversation>(
-        `/api/v1/storyboards/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/title`,
-        { title },
-        authToken(),
-    );
+    return apiPut<StoryboardBrainstormConversation>(`/api/v1/storyboards/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/title`, { title }, authToken());
 }
 
 export function deleteStoryboardBrainstormConversation(projectId: string, conversationId: string) {
@@ -156,11 +152,7 @@ export function deleteStoryboardBrainstormConversation(projectId: string, conver
 }
 
 export function fetchStoryboardBrainstormMessages(projectId: string, conversationId: string, query: StoryboardBrainstormPageQuery = {}) {
-    return apiGet<StoryboardBrainstormMessagePage>(
-        `/api/v1/storyboards/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
-        query,
-        authToken(),
-    );
+    return apiGet<StoryboardBrainstormMessagePage>(`/api/v1/storyboards/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`, query, authToken());
 }
 
 export function createStoryboardBrainstormTurn(projectId: string, conversationId: string, input: CreateStoryboardBrainstormTurnInput) {
@@ -168,19 +160,11 @@ export function createStoryboardBrainstormTurn(projectId: string, conversationId
 }
 
 export function updateStoryboardBrainstormAssistant(projectId: string, conversationId: string, messageId: string, input: UpdateStoryboardBrainstormAssistantInput) {
-    return apiPut<StoryboardBrainstormAssistantMessage>(
-        `/api/v1/storyboards/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/assistant`,
-        input,
-        authToken(),
-    );
+    return apiPut<StoryboardBrainstormAssistantMessage>(`/api/v1/storyboards/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/assistant`, input, authToken());
 }
 
 export function continueStoryboardBrainstormAssistant(projectId: string, conversationId: string, messageId: string, input: ContinueStoryboardBrainstormAssistantInput) {
-    return apiPost<StoryboardBrainstormTurn>(
-        `/api/v1/storyboards/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/continue`,
-        input,
-        authToken(),
-    );
+    return apiPost<StoryboardBrainstormTurn>(`/api/v1/storyboards/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/continue`, input, authToken());
 }
 
 export function fetchStoryboardMemories(projectId: string, query: StoryboardBrainstormPageQuery = {}) {

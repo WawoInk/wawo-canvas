@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
     continueStoryboardBrainstormAssistant,
+    createStoryboardBrainstormConversation,
     createStoryboardBrainstormTurn,
+    deleteStoryboardBrainstormConversation,
     fetchStoryboardBrainstormConversations,
     fetchStoryboardBrainstormMessages,
+    renameStoryboardBrainstormConversation,
     updateStoryboardBrainstormAssistant,
     type StoryboardBrainstormAssistantMessage,
     type StoryboardBrainstormConversation,
@@ -13,7 +16,7 @@ import {
 } from "@/services/api/storyboard-brainstorm";
 import { useUserStore } from "@/stores/use-user-store";
 
-import type { BrainstormAssistantStatus, BrainstormOutputItem, BrainstormToolApprovalDecision, BrainstormTurnEvent, BrainstormTurnResult } from "./brainstorm-agent";
+import type { BrainstormAssistantStatus, BrainstormOutputItem, BrainstormToolApprovalDecision, BrainstormTurnContinuation, BrainstormTurnEvent, BrainstormTurnResult } from "./brainstorm-agent";
 
 export type BrainstormConversation = StoryboardBrainstormConversation;
 export type BrainstormAgentUserMessage = StoryboardBrainstormUserMessage;
@@ -27,6 +30,8 @@ export type BrainstormAgentRuntimeInput = {
     messages: BrainstormAgentMessage[];
     assistantMessage: BrainstormAgentAssistantMessage;
     decision?: BrainstormToolApprovalDecision;
+    /** Same-page Runner state; after reload the injected Runtime rebuilds from persisted messages/output. */
+    continuation?: BrainstormTurnContinuation;
 };
 
 export type BrainstormAgentRuntime = {
@@ -47,7 +52,6 @@ export type BrainstormAgentRunState = {
 export type BrainstormStopState = BrainstormAgentRunState["stopState"];
 
 type BrainstormRunControl = {
-    id: string;
     controller: AbortController;
     stopRequested: boolean;
     finished: Promise<BrainstormStopState>;
@@ -64,6 +68,9 @@ export type BrainstormAgentState = {
     isLoading: boolean;
     error: string;
     selectConversation: (conversationId: string) => Promise<void>;
+    createConversation: (title?: string) => Promise<BrainstormConversation>;
+    renameConversation: (conversationId: string, title: string) => Promise<BrainstormConversation>;
+    deleteConversation: (conversationId: string) => Promise<void>;
     send: (content: string, parentMessageId?: string) => Promise<BrainstormAgentAssistantMessage>;
     regenerate: (assistantMessageId: string) => Promise<BrainstormAgentAssistantMessage>;
     continueAssistant: (assistantMessageId: string) => Promise<BrainstormAgentAssistantMessage>;
@@ -90,11 +97,46 @@ function mergeMessages(current: BrainstormAgentMessage[], additions: BrainstormA
     return next;
 }
 
+function appendStreamedText(output: BrainstormOutputItem[], streamedText: string) {
+    if (!streamedText) return output;
+    const next = [...output];
+    const last = next.at(-1);
+    if (last?.type === "text") next[next.length - 1] = { ...last, text: last.text + streamedText };
+    else next.push({ type: "text", text: streamedText });
+    return next;
+}
+
+const BRAINSTORM_PAGE_SIZE = 500;
+
+async function fetchAllConversations(projectId: string) {
+    const first = await fetchStoryboardBrainstormConversations(projectId, { page: 1, pageSize: BRAINSTORM_PAGE_SIZE });
+    const items = [...first.items];
+    for (let page = 2; items.length < first.total; page += 1) {
+        const next = await fetchStoryboardBrainstormConversations(projectId, { page, pageSize: BRAINSTORM_PAGE_SIZE });
+        if (!next.items.length) break;
+        items.push(...next.items);
+    }
+    return items;
+}
+
+async function fetchAllMessages(projectId: string, conversationId: string) {
+    const first = await fetchStoryboardBrainstormMessages(projectId, conversationId, { page: 1, pageSize: BRAINSTORM_PAGE_SIZE });
+    const items = [...first.items];
+    for (let page = 2; items.length < first.total; page += 1) {
+        const next = await fetchStoryboardBrainstormMessages(projectId, conversationId, { page, pageSize: BRAINSTORM_PAGE_SIZE });
+        if (!next.items.length) break;
+        items.push(...next.items);
+    }
+    return { ...first, items };
+}
+
 export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRuntime): BrainstormAgentState {
     const accountId = useUserStore((state) => state.user?.id || "");
     const generationRef = useRef(0);
+    const selectionRef = useRef(0);
     const controlsRef = useRef(new Map<string, BrainstormRunControl>());
-    const submittingRef = useRef(new Set<string>());
+    const continuationsRef = useRef(new Map<string, BrainstormTurnContinuation>());
+    const submittingRef = useRef(new Map<string, symbol>());
     const [conversations, setConversations] = useState<BrainstormConversation[]>([]);
     const [currentConversationId, setCurrentConversationId] = useState("");
     const [messagesByConversation, setMessagesByConversation] = useState<Record<string, BrainstormAgentMessage[]>>({});
@@ -107,12 +149,12 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
     messagesRef.current = messagesByConversation;
 
     const loadConversation = useCallback(
-        async (conversationId: string, generation: number) => {
-            const messagePage = await fetchStoryboardBrainstormMessages(projectId, conversationId);
-            if (generationRef.current !== generation) return;
+        async (conversationId: string, generation: number, selection: number) => {
+            const messagePage = await fetchAllMessages(projectId, conversationId);
+            if (generationRef.current !== generation || selectionRef.current !== selection) return;
             const recovered = await Promise.all(
                 (messagePage.items as BrainstormAgentMessage[]).map(async (message) => {
-                    if (message.role !== "assistant" || (message.status !== "pending" && message.status !== "streaming") || controlsRef.current.has(conversationId)) return message;
+                    if (message.role !== "assistant" || (message.status !== "pending" && message.status !== "streaming") || controlsRef.current.has(conversationId) || submittingRef.current.has(conversationId)) return message;
                     return (await updateStoryboardBrainstormAssistant(projectId, conversationId, message.id, {
                         expectedRevision: message.revision,
                         status: "interrupted",
@@ -120,7 +162,7 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
                     })) as BrainstormAgentAssistantMessage;
                 }),
             );
-            if (generationRef.current !== generation) return;
+            if (generationRef.current !== generation || selectionRef.current !== selection) return;
             setMessagesByConversation((current) => ({ ...current, [conversationId]: recovered }));
             setConversations((current) => current.map((item) => (item.id === conversationId ? (messagePage.conversation as BrainstormConversation) : item)));
         },
@@ -129,8 +171,10 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
 
     useEffect(() => {
         const generation = ++generationRef.current;
+        const selection = ++selectionRef.current;
         for (const control of controlsRef.current.values()) control.controller.abort();
         controlsRef.current.clear();
+        continuationsRef.current.clear();
         submittingRef.current.clear();
         setConversations([]);
         setCurrentConversationId("");
@@ -144,21 +188,21 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
         setIsLoading(true);
         void (async () => {
             try {
-                const page = await fetchStoryboardBrainstormConversations(projectId);
+                const items = (await fetchAllConversations(projectId)) as BrainstormConversation[];
                 if (generationRef.current !== generation) return;
-                const items = page.items as BrainstormConversation[];
                 setConversations(items);
                 const selected = items[0]?.id || "";
                 setCurrentConversationId(selected);
-                if (selected) await loadConversation(selected, generation);
+                if (selected) await loadConversation(selected, generation, selection);
             } catch (cause) {
-                if (generationRef.current === generation) setError(errorMessage(cause));
+                if (generationRef.current === generation && selectionRef.current === selection) setError(errorMessage(cause));
             } finally {
-                if (generationRef.current === generation) setIsLoading(false);
+                if (generationRef.current === generation && selectionRef.current === selection) setIsLoading(false);
             }
         })();
         return () => {
             generationRef.current += 1;
+            selectionRef.current += 1;
             for (const control of controlsRef.current.values()) control.controller.abort();
         };
     }, [accountId, loadConversation, projectId]);
@@ -166,15 +210,16 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
     const selectConversation = useCallback(
         async (conversationId: string) => {
             const generation = generationRef.current;
+            const selection = ++selectionRef.current;
             setCurrentConversationId(conversationId);
             setError("");
             setIsLoading(true);
             try {
-                await loadConversation(conversationId, generation);
+                await loadConversation(conversationId, generation, selection);
             } catch (cause) {
-                if (generationRef.current === generation) setError(errorMessage(cause));
+                if (generationRef.current === generation && selectionRef.current === selection) setError(errorMessage(cause));
             } finally {
-                if (generationRef.current === generation) setIsLoading(false);
+                if (generationRef.current === generation && selectionRef.current === selection) setIsLoading(false);
             }
         },
         [loadConversation],
@@ -187,17 +232,17 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
             confirmedMessages: BrainstormAgentMessage[],
             assistantMessage: BrainstormAgentAssistantMessage,
             decision?: BrainstormToolApprovalDecision,
+            continuation?: BrainstormTurnContinuation,
         ) => {
             const generation = generationRef.current;
-            const id = createId("run");
             const controller = new AbortController();
             let finishPromise!: (state: BrainstormStopState) => void;
             const finished = new Promise<BrainstormStopState>((resolve) => {
                 finishPromise = resolve;
             });
-            const control: BrainstormRunControl = { id, controller, stopRequested: false, finished, finish: finishPromise };
+            const control: BrainstormRunControl = { controller, stopRequested: false, finished, finish: finishPromise };
             controlsRef.current.set(conversation.id, control);
-            let output = [...assistantMessage.output];
+            let output = mode === "approval" ? assistantMessage.output.filter((item) => !(item.type === "tool_result" && item.status === "awaiting_approval")) : [...assistantMessage.output];
             let receivedOutputEvent = false;
             let streamedText = "";
             let status = assistantMessage.status;
@@ -228,7 +273,7 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
             void (async () => {
                 try {
                     const result = await runtime.run(
-                        { mode, projectId, conversation, messages: confirmedMessages, assistantMessage, ...(decision ? { decision } : {}) },
+                        { mode, projectId, conversation, messages: confirmedMessages, assistantMessage, ...(decision ? { decision } : {}), ...(continuation ? { continuation } : {}) },
                         {
                             signal: controller.signal,
                             onEvent: (event) => {
@@ -239,7 +284,10 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
                                     receivedOutputEvent = true;
                                     output = [...output, event.item];
                                     if (event.item.type === "text") streamedText = "";
-                                    else checkpoint([...output], status);
+                                    else {
+                                        if (event.item.type === "tool_result" && event.item.status === "awaiting_approval") status = "awaiting_approval";
+                                        checkpoint([...output], status);
+                                    }
                                 }
                                 setRuns((current) => ({
                                     ...current,
@@ -255,11 +303,14 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
                         },
                     );
                     if (generationRef.current !== generation || controlsRef.current.get(conversation.id) !== control) return;
+                    if (result.status === "awaiting_approval") continuationsRef.current.set(assistantMessage.id, result.continuation);
+                    else continuationsRef.current.delete(assistantMessage.id);
                     if (result.output.length && (mode === "approval" || !receivedOutputEvent)) {
                         const includesPrevious = assistantMessage.output.every((item: BrainstormOutputItem, index: number) => JSON.stringify(result.output[index]) === JSON.stringify(item));
                         output = mode === "approval" || includesPrevious ? result.output : [...assistantMessage.output, ...result.output];
                     }
                     await persistence;
+                    if (generationRef.current !== generation || controlsRef.current.get(conversation.id) !== control) return;
                     if (persistenceError) throw persistenceError;
                     const finalMessage = (await updateStoryboardBrainstormAssistant(projectId, conversation.id, assistantMessage.id, {
                         expectedRevision: persisted.revision,
@@ -276,18 +327,37 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
                     control.finish(stopState);
                 } catch (cause) {
                     if (generationRef.current !== generation || controlsRef.current.get(conversation.id) !== control) return;
-                    const stopState: BrainstormStopState = control.stopRequested ? "failed" : "idle";
-                    setError(errorMessage(cause));
+                    const stopRequestedAtFailure = control.stopRequested;
+                    await persistence;
+                    if (generationRef.current !== generation || controlsRef.current.get(conversation.id) !== control) return;
+                    continuationsRef.current.delete(assistantMessage.id);
+                    let finalMessage = persisted;
+                    let finalError = persistenceError || cause;
+                    try {
+                        if (persisted.status === "pending" || persisted.status === "streaming" || persisted.status === "awaiting_approval") {
+                            finalMessage = (await updateStoryboardBrainstormAssistant(projectId, conversation.id, assistantMessage.id, {
+                                expectedRevision: persisted.revision,
+                                status: stopRequestedAtFailure ? "cancelled" : "failed",
+                                output: appendStreamedText(output, streamedText),
+                            })) as BrainstormAgentAssistantMessage;
+                            if (generationRef.current !== generation || controlsRef.current.get(conversation.id) !== control) return;
+                            setMessagesByConversation((current) => ({ ...current, [conversation.id]: mergeMessages(current[conversation.id] || [], [finalMessage]) }));
+                        }
+                    } catch (saveError) {
+                        finalError = saveError;
+                    }
+                    const stopState: BrainstormStopState = control.stopRequested ? (stopRequestedAtFailure && finalMessage.status === "cancelled" ? "confirmed" : "failed") : "idle";
+                    setError(errorMessage(finalError));
                     setRuns((current) => ({
                         ...current,
                         [conversation.id]: {
                             ...current[conversation.id],
-                            status: persisted.status,
-                            output: persisted.output,
+                            status: finalMessage.status,
+                            output: finalMessage.output,
                             streamedText: "",
                             active: false,
                             stopState,
-                            error: errorMessage(cause),
+                            error: errorMessage(finalError),
                         },
                     }));
                     control.finish(stopState);
@@ -300,13 +370,72 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
         [projectId, runtime],
     );
 
+    const createConversation = useCallback(
+        async (title = "") => {
+            const generation = generationRef.current;
+            const normalizedTitle = title.trim();
+            const created = (await createStoryboardBrainstormConversation(projectId, {
+                id: createId("conversation"),
+                ...(normalizedTitle ? { title: normalizedTitle } : {}),
+            })) as BrainstormConversation;
+            if (generationRef.current !== generation) throw new Error("脑暴项目或账号已切换");
+            selectionRef.current += 1;
+            setConversations((current) => [created, ...current.filter((item) => item.id !== created.id)]);
+            setCurrentConversationId(created.id);
+            setMessagesByConversation((current) => ({ ...current, [created.id]: current[created.id] || [] }));
+            return created;
+        },
+        [projectId],
+    );
+
+    const renameConversation = useCallback(
+        async (conversationId: string, title: string) => {
+            const generation = generationRef.current;
+            const renamed = (await renameStoryboardBrainstormConversation(projectId, conversationId, title)) as BrainstormConversation;
+            if (generationRef.current !== generation) throw new Error("脑暴项目或账号已切换");
+            setConversations((current) => current.map((item) => (item.id === conversationId ? renamed : item)));
+            return renamed;
+        },
+        [projectId],
+    );
+
+    const deleteConversation = useCallback(
+        async (conversationId: string) => {
+            if (controlsRef.current.has(conversationId) || submittingRef.current.has(conversationId)) throw new Error("当前对话已有正在执行的任务");
+            const generation = generationRef.current;
+            await deleteStoryboardBrainstormConversation(projectId, conversationId);
+            if (generationRef.current !== generation) throw new Error("脑暴项目或账号已切换");
+            const remaining = conversationsRef.current.filter((item) => item.id !== conversationId);
+            for (const message of messagesRef.current[conversationId] || []) continuationsRef.current.delete(message.id);
+            setConversations(remaining);
+            setMessagesByConversation((current) => {
+                const next = { ...current };
+                delete next[conversationId];
+                return next;
+            });
+            setRuns((current) => {
+                const next = { ...current };
+                delete next[conversationId];
+                return next;
+            });
+            if (currentConversationId === conversationId) {
+                const selection = ++selectionRef.current;
+                const nextId = remaining[0]?.id || "";
+                setCurrentConversationId(nextId);
+                if (nextId && !messagesRef.current[nextId]) await loadConversation(nextId, generation, selection);
+            }
+        },
+        [currentConversationId, loadConversation, projectId],
+    );
+
     const send = useCallback(
         async (content: string, parentMessageId?: string) => {
             const conversationId = currentConversationId;
             const conversation = conversationsRef.current.find((item) => item.id === conversationId);
-            if (!conversation) throw new Error("Brainstorm conversation is not selected.");
-            if (controlsRef.current.has(conversationId) || submittingRef.current.has(conversationId)) throw new Error("Conversation already has an active Turn.");
-            submittingRef.current.add(conversationId);
+            if (!conversation) throw new Error("请选择脑暴对话");
+            if (controlsRef.current.has(conversationId) || submittingRef.current.has(conversationId)) throw new Error("当前对话已有正在执行的任务");
+            const submission = Symbol();
+            submittingRef.current.set(conversationId, submission);
             const generation = generationRef.current;
             try {
                 const turn = await createStoryboardBrainstormTurn(projectId, conversationId, {
@@ -316,7 +445,7 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
                     userMessage: { id: createId("message"), content },
                     assistantMessageId: createId("message"),
                 });
-                if (generationRef.current !== generation) throw new Error("Brainstorm scope changed before the Turn was confirmed.");
+                if (generationRef.current !== generation) throw new Error("脑暴项目或账号已切换");
                 const confirmedConversation = turn.conversation as BrainstormConversation;
                 const assistant = turn.assistantMessage as BrainstormAgentAssistantMessage;
                 const additions = [...(turn.userMessage ? [turn.userMessage as BrainstormAgentUserMessage] : []), assistant];
@@ -326,21 +455,21 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
                 launchRun("append", confirmedConversation, confirmedMessages, assistant);
                 return assistant;
             } finally {
-                submittingRef.current.delete(conversationId);
+                if (submittingRef.current.get(conversationId) === submission) submittingRef.current.delete(conversationId);
             }
         },
         [currentConversationId, launchRun, projectId],
     );
-
 
     const regenerate = useCallback(
         async (assistantMessageId: string) => {
             const conversationId = currentConversationId;
             const conversation = conversationsRef.current.find((item) => item.id === conversationId);
             const target = messagesRef.current[conversationId]?.find((message): message is BrainstormAgentAssistantMessage => message.id === assistantMessageId && message.role === "assistant");
-            if (!conversation || !target) throw new Error("Brainstorm Assistant Message was not found.");
-            if (controlsRef.current.has(conversationId) || submittingRef.current.has(conversationId)) throw new Error("Conversation already has an active Turn.");
-            submittingRef.current.add(conversationId);
+            if (!conversation || !target) throw new Error("未找到脑暴回复");
+            if (controlsRef.current.has(conversationId) || submittingRef.current.has(conversationId)) throw new Error("当前对话已有正在执行的任务");
+            const submission = Symbol();
+            submittingRef.current.set(conversationId, submission);
             const generation = generationRef.current;
             try {
                 const turn = await createStoryboardBrainstormTurn(projectId, conversationId, {
@@ -349,7 +478,7 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
                     targetMessageId: assistantMessageId,
                     assistantMessageId: createId("message"),
                 });
-                if (generationRef.current !== generation) throw new Error("Brainstorm scope changed before the Turn was confirmed.");
+                if (generationRef.current !== generation) throw new Error("脑暴项目或账号已切换");
                 const confirmedConversation = turn.conversation as BrainstormConversation;
                 const assistant = turn.assistantMessage as BrainstormAgentAssistantMessage;
                 const confirmedMessages = mergeMessages(messagesRef.current[conversationId] || [], [assistant]);
@@ -358,7 +487,7 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
                 launchRun("regenerate", confirmedConversation, confirmedMessages, assistant);
                 return assistant;
             } finally {
-                submittingRef.current.delete(conversationId);
+                if (submittingRef.current.get(conversationId) === submission) submittingRef.current.delete(conversationId);
             }
         },
         [currentConversationId, launchRun, projectId],
@@ -369,16 +498,17 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
             const conversationId = currentConversationId;
             const conversation = conversationsRef.current.find((item) => item.id === conversationId);
             const target = messagesRef.current[conversationId]?.find((message): message is BrainstormAgentAssistantMessage => message.id === assistantMessageId && message.role === "assistant");
-            if (!conversation || !target) throw new Error("Brainstorm Assistant Message was not found.");
-            if (controlsRef.current.has(conversationId) || submittingRef.current.has(conversationId)) throw new Error("Conversation already has an active Turn.");
-            submittingRef.current.add(conversationId);
+            if (!conversation || !target) throw new Error("未找到脑暴回复");
+            if (controlsRef.current.has(conversationId) || submittingRef.current.has(conversationId)) throw new Error("当前对话已有正在执行的任务");
+            const submission = Symbol();
+            submittingRef.current.set(conversationId, submission);
             const generation = generationRef.current;
             try {
                 const turn = await continueStoryboardBrainstormAssistant(projectId, conversationId, assistantMessageId, {
                     clientRequestId: createId("request"),
                     expectedRevision: target.revision,
                 });
-                if (generationRef.current !== generation) throw new Error("Brainstorm scope changed before the Turn was confirmed.");
+                if (generationRef.current !== generation) throw new Error("脑暴项目或账号已切换");
                 const confirmedConversation = turn.conversation as BrainstormConversation;
                 const assistant = turn.assistantMessage as BrainstormAgentAssistantMessage;
                 const confirmedMessages = mergeMessages(messagesRef.current[conversationId] || [], [assistant]);
@@ -387,7 +517,7 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
                 launchRun("continue", confirmedConversation, confirmedMessages, assistant);
                 return assistant;
             } finally {
-                submittingRef.current.delete(conversationId);
+                if (submittingRef.current.get(conversationId) === submission) submittingRef.current.delete(conversationId);
             }
         },
         [currentConversationId, launchRun, projectId],
@@ -398,11 +528,26 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
             const conversationId = currentConversationId;
             const conversation = conversationsRef.current.find((item) => item.id === conversationId);
             const assistant = messagesRef.current[conversationId]?.find((message): message is BrainstormAgentAssistantMessage => message.id === assistantMessageId && message.role === "assistant");
-            if (!conversation || !assistant || assistant.status !== "awaiting_approval") throw new Error("Awaiting approval Assistant Message was not found.");
-            if (controlsRef.current.has(conversationId) || submittingRef.current.has(conversationId)) throw new Error("Conversation already has an active Turn.");
-            launchRun("approval", conversation, messagesRef.current[conversationId] || [], assistant, decision);
+            if (!conversation || !assistant || assistant.status !== "awaiting_approval") throw new Error("未找到待审批的脑暴回复");
+            if (controlsRef.current.has(conversationId) || submittingRef.current.has(conversationId)) throw new Error("当前对话已有正在执行的任务");
+            const submission = Symbol();
+            submittingRef.current.set(conversationId, submission);
+            const generation = generationRef.current;
+            try {
+                const claimed = (await updateStoryboardBrainstormAssistant(projectId, conversationId, assistantMessageId, {
+                    expectedRevision: assistant.revision,
+                    status: "streaming",
+                    output: assistant.output,
+                })) as BrainstormAgentAssistantMessage;
+                if (generationRef.current !== generation) throw new Error("脑暴项目或账号已切换");
+                const confirmedMessages = mergeMessages(messagesRef.current[conversationId] || [], [claimed]);
+                setMessagesByConversation((current) => ({ ...current, [conversationId]: mergeMessages(current[conversationId] || [], [claimed]) }));
+                launchRun("approval", conversation, confirmedMessages, claimed, decision, continuationsRef.current.get(assistantMessageId));
+            } finally {
+                if (submittingRef.current.get(conversationId) === submission) submittingRef.current.delete(conversationId);
+            }
         },
-        [currentConversationId, launchRun],
+        [currentConversationId, launchRun, projectId],
     );
 
     const retry = regenerate;
@@ -423,10 +568,7 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
     );
 
     const messages = messagesByConversation[currentConversationId] || [];
-    const awaitingApproval = useMemo(
-        () => messages.filter((message): message is BrainstormAgentAssistantMessage => message.role === "assistant" && message.status === "awaiting_approval"),
-        [messages],
-    );
+    const awaitingApproval = useMemo(() => messages.filter((message): message is BrainstormAgentAssistantMessage => message.role === "assistant" && message.status === "awaiting_approval"), [messages]);
 
     return {
         conversations,
@@ -438,6 +580,9 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
         isLoading,
         error,
         selectConversation,
+        createConversation,
+        renameConversation,
+        deleteConversation,
         send,
         regenerate,
         continueAssistant,

@@ -147,8 +147,9 @@ Assistant progress/terminal update
 - **幂等**：相同 `clientRequestId` 或相同 Message ID 与相同规范语义输入返回已有 Turn；复用 key/ID 但输入不同返回 409。Memory `operationId` 也保持 scoped 幂等。
 - **所有权**：Project、Conversation、Message、Memory 查询逐层限定当前 `user_id` 和父级 ID；不存在与越权都返回 404。
 - **删除**：删除 Conversation 使用与 Turn 相同的 Conversation 行锁后清理 Messages；删除 Storyboard Project 锁定 Project 和全部 Conversation 后清理 Brainstorm Conversations、Messages、Memories，再执行既有 artifact/file 删除流程。Conversation/Memory 创建先锁 Project，避免删除并发留下孤儿记录。
-- **边界**：数据库事务不跨模型或浏览器 streaming；当前流程只覆盖后端持久化 API，不包含模型调用、Summary、Context Builder、Tool Executor、前端 UI、Canvas 集成或真实浏览器验证。
-- **核心文件**：`model/storyboard_brainstorm.go`、`repository/storyboard_brainstorm.go`、`service/storyboard_brainstorm.go`、`handler/storyboard_brainstorm.go`、`router/router.go`。
+- **前端编排**：`storyboard-brainstorm.ts` 提供认证 API Client；页面私有 `useBrainstormAgent` 完整分页恢复 Conversation/Message，以账号和 Project generation 忽略迟到响应，服务端确认 User/Assistant Placeholder 后才启动注入 Runtime。流式 delta 只留内存，Tool 边界和终态按 Assistant revision 串行保存；刷新遗留 pending/streaming 转为 interrupted，审批先以 CAS 转为 streaming 再执行，Stop 只有终态持久化成功才 confirmed。
+- **边界**：数据库事务不跨模型或浏览器 streaming；当前尚不包含 Summary/Memory 选择、真实模型 Transport、Storyboard Tool Executor、最终页面 UI、Canvas 集成或真实浏览器验证。
+- **核心文件**：`model/storyboard_brainstorm.go`、`repository/storyboard_brainstorm.go`、`service/storyboard_brainstorm.go`、`handler/storyboard_brainstorm.go`、`router/router.go`、`web/src/services/api/storyboard-brainstorm.ts`、`web/src/pages/storyboard/use-brainstorm-agent.ts`。
 
 ## Canvas 项目创建、保存和同步
 
