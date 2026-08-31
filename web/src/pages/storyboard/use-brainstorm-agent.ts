@@ -2,56 +2,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
     continueStoryboardBrainstormAssistant,
-    createStoryboardBrainstormConversation,
     createStoryboardBrainstormTurn,
-    deleteStoryboardBrainstormConversation,
     fetchStoryboardBrainstormConversations,
     fetchStoryboardBrainstormMessages,
-    renameStoryboardBrainstormConversation,
     updateStoryboardBrainstormAssistant,
+    type StoryboardBrainstormAssistantMessage,
+    type StoryboardBrainstormConversation,
+    type StoryboardBrainstormMessage,
+    type StoryboardBrainstormUserMessage,
 } from "@/services/api/storyboard-brainstorm";
 import { useUserStore } from "@/stores/use-user-store";
 
-import type { BrainstormAssistantStatus, BrainstormOutputItem, BrainstormTurnEvent, BrainstormTurnResult } from "./brainstorm-agent";
+import type { BrainstormAssistantStatus, BrainstormOutputItem, BrainstormToolApprovalDecision, BrainstormTurnEvent, BrainstormTurnResult } from "./brainstorm-agent";
 
-export type BrainstormConversation = {
-    id: string;
-    projectId: string;
-    title: string;
-    currentMessageId: string;
-    createdAt: string;
-    updatedAt: string;
-};
-
-export type BrainstormAgentUserMessage = {
-    id: string;
-    projectId: string;
-    conversationId: string;
-    parentId: string;
-    role: "user";
-    content: string;
-    status?: never;
-    output?: never;
-    revision: number;
-    createdAt: string;
-    updatedAt: string;
-};
-
-export type BrainstormAgentAssistantMessage = {
-    id: string;
-    projectId: string;
-    conversationId: string;
-    parentId: string;
-    role: "assistant";
-    content?: never;
-    status: BrainstormAssistantStatus;
-    output: BrainstormOutputItem[];
-    revision: number;
-    createdAt: string;
-    updatedAt: string;
-};
-
-export type BrainstormAgentMessage = BrainstormAgentUserMessage | BrainstormAgentAssistantMessage;
+export type BrainstormConversation = StoryboardBrainstormConversation;
+export type BrainstormAgentUserMessage = StoryboardBrainstormUserMessage;
+export type BrainstormAgentAssistantMessage = StoryboardBrainstormAssistantMessage;
+export type BrainstormAgentMessage = StoryboardBrainstormMessage;
 
 export type BrainstormAgentRuntimeInput = {
     mode: "append" | "regenerate" | "continue" | "approval";
@@ -59,6 +26,7 @@ export type BrainstormAgentRuntimeInput = {
     conversation: BrainstormConversation;
     messages: BrainstormAgentMessage[];
     assistantMessage: BrainstormAgentAssistantMessage;
+    decision?: BrainstormToolApprovalDecision;
 };
 
 export type BrainstormAgentRuntime = {
@@ -97,6 +65,10 @@ export type BrainstormAgentState = {
     error: string;
     selectConversation: (conversationId: string) => Promise<void>;
     send: (content: string, parentMessageId?: string) => Promise<BrainstormAgentAssistantMessage>;
+    regenerate: (assistantMessageId: string) => Promise<BrainstormAgentAssistantMessage>;
+    continueAssistant: (assistantMessageId: string) => Promise<BrainstormAgentAssistantMessage>;
+    retry: (assistantMessageId: string) => Promise<BrainstormAgentAssistantMessage>;
+    resolveApproval: (assistantMessageId: string, decision: BrainstormToolApprovalDecision) => Promise<void>;
     stop: (conversationId?: string) => Promise<BrainstormStopState>;
 };
 
@@ -209,7 +181,13 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
     );
 
     const launchRun = useCallback(
-        (mode: BrainstormAgentRuntimeInput["mode"], conversation: BrainstormConversation, confirmedMessages: BrainstormAgentMessage[], assistantMessage: BrainstormAgentAssistantMessage) => {
+        (
+            mode: BrainstormAgentRuntimeInput["mode"],
+            conversation: BrainstormConversation,
+            confirmedMessages: BrainstormAgentMessage[],
+            assistantMessage: BrainstormAgentAssistantMessage,
+            decision?: BrainstormToolApprovalDecision,
+        ) => {
             const generation = generationRef.current;
             const id = createId("run");
             const controller = new AbortController();
@@ -220,6 +198,7 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
             const control: BrainstormRunControl = { id, controller, stopRequested: false, finished, finish: finishPromise };
             controlsRef.current.set(conversation.id, control);
             let output = [...assistantMessage.output];
+            let receivedOutputEvent = false;
             let streamedText = "";
             let status = assistantMessage.status;
             let persisted = assistantMessage;
@@ -249,7 +228,7 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
             void (async () => {
                 try {
                     const result = await runtime.run(
-                        { mode, projectId, conversation, messages: confirmedMessages, assistantMessage },
+                        { mode, projectId, conversation, messages: confirmedMessages, assistantMessage, ...(decision ? { decision } : {}) },
                         {
                             signal: controller.signal,
                             onEvent: (event) => {
@@ -257,6 +236,7 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
                                 if (event.type === "status") status = event.status;
                                 else if (event.type === "text_delta") streamedText += event.delta;
                                 else if (event.type === "output_item") {
+                                    receivedOutputEvent = true;
                                     output = [...output, event.item];
                                     if (event.item.type === "text") streamedText = "";
                                     else checkpoint([...output], status);
@@ -275,7 +255,10 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
                         },
                     );
                     if (generationRef.current !== generation || controlsRef.current.get(conversation.id) !== control) return;
-                    if (result.output.length) output = result.output;
+                    if (result.output.length && (mode === "approval" || !receivedOutputEvent)) {
+                        const includesPrevious = assistantMessage.output.every((item: BrainstormOutputItem, index: number) => JSON.stringify(result.output[index]) === JSON.stringify(item));
+                        output = mode === "approval" || includesPrevious ? result.output : [...assistantMessage.output, ...result.output];
+                    }
                     await persistence;
                     if (persistenceError) throw persistenceError;
                     const finalMessage = (await updateStoryboardBrainstormAssistant(projectId, conversation.id, assistantMessage.id, {
@@ -349,6 +332,81 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
         [currentConversationId, launchRun, projectId],
     );
 
+
+    const regenerate = useCallback(
+        async (assistantMessageId: string) => {
+            const conversationId = currentConversationId;
+            const conversation = conversationsRef.current.find((item) => item.id === conversationId);
+            const target = messagesRef.current[conversationId]?.find((message): message is BrainstormAgentAssistantMessage => message.id === assistantMessageId && message.role === "assistant");
+            if (!conversation || !target) throw new Error("Brainstorm Assistant Message was not found.");
+            if (controlsRef.current.has(conversationId) || submittingRef.current.has(conversationId)) throw new Error("Conversation already has an active Turn.");
+            submittingRef.current.add(conversationId);
+            const generation = generationRef.current;
+            try {
+                const turn = await createStoryboardBrainstormTurn(projectId, conversationId, {
+                    mode: "regenerate",
+                    clientRequestId: createId("request"),
+                    targetMessageId: assistantMessageId,
+                    assistantMessageId: createId("message"),
+                });
+                if (generationRef.current !== generation) throw new Error("Brainstorm scope changed before the Turn was confirmed.");
+                const confirmedConversation = turn.conversation as BrainstormConversation;
+                const assistant = turn.assistantMessage as BrainstormAgentAssistantMessage;
+                const confirmedMessages = mergeMessages(messagesRef.current[conversationId] || [], [assistant]);
+                setConversations((current) => current.map((item) => (item.id === conversationId ? confirmedConversation : item)));
+                setMessagesByConversation((current) => ({ ...current, [conversationId]: mergeMessages(current[conversationId] || [], [assistant]) }));
+                launchRun("regenerate", confirmedConversation, confirmedMessages, assistant);
+                return assistant;
+            } finally {
+                submittingRef.current.delete(conversationId);
+            }
+        },
+        [currentConversationId, launchRun, projectId],
+    );
+
+    const continueAssistant = useCallback(
+        async (assistantMessageId: string) => {
+            const conversationId = currentConversationId;
+            const conversation = conversationsRef.current.find((item) => item.id === conversationId);
+            const target = messagesRef.current[conversationId]?.find((message): message is BrainstormAgentAssistantMessage => message.id === assistantMessageId && message.role === "assistant");
+            if (!conversation || !target) throw new Error("Brainstorm Assistant Message was not found.");
+            if (controlsRef.current.has(conversationId) || submittingRef.current.has(conversationId)) throw new Error("Conversation already has an active Turn.");
+            submittingRef.current.add(conversationId);
+            const generation = generationRef.current;
+            try {
+                const turn = await continueStoryboardBrainstormAssistant(projectId, conversationId, assistantMessageId, {
+                    clientRequestId: createId("request"),
+                    expectedRevision: target.revision,
+                });
+                if (generationRef.current !== generation) throw new Error("Brainstorm scope changed before the Turn was confirmed.");
+                const confirmedConversation = turn.conversation as BrainstormConversation;
+                const assistant = turn.assistantMessage as BrainstormAgentAssistantMessage;
+                const confirmedMessages = mergeMessages(messagesRef.current[conversationId] || [], [assistant]);
+                setConversations((current) => current.map((item) => (item.id === conversationId ? confirmedConversation : item)));
+                setMessagesByConversation((current) => ({ ...current, [conversationId]: mergeMessages(current[conversationId] || [], [assistant]) }));
+                launchRun("continue", confirmedConversation, confirmedMessages, assistant);
+                return assistant;
+            } finally {
+                submittingRef.current.delete(conversationId);
+            }
+        },
+        [currentConversationId, launchRun, projectId],
+    );
+
+    const resolveApproval = useCallback(
+        async (assistantMessageId: string, decision: BrainstormToolApprovalDecision) => {
+            const conversationId = currentConversationId;
+            const conversation = conversationsRef.current.find((item) => item.id === conversationId);
+            const assistant = messagesRef.current[conversationId]?.find((message): message is BrainstormAgentAssistantMessage => message.id === assistantMessageId && message.role === "assistant");
+            if (!conversation || !assistant || assistant.status !== "awaiting_approval") throw new Error("Awaiting approval Assistant Message was not found.");
+            if (controlsRef.current.has(conversationId) || submittingRef.current.has(conversationId)) throw new Error("Conversation already has an active Turn.");
+            launchRun("approval", conversation, messagesRef.current[conversationId] || [], assistant, decision);
+        },
+        [currentConversationId, launchRun],
+    );
+
+    const retry = regenerate;
+
     const stop = useCallback(
         async (conversationId = currentConversationId) => {
             const control = controlsRef.current.get(conversationId);
@@ -370,11 +428,21 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
         [messages],
     );
 
-    return { conversations, currentConversationId, messages, messagesByConversation, awaitingApproval, runs, isLoading, error, selectConversation, send, stop };
+    return {
+        conversations,
+        currentConversationId,
+        messages,
+        messagesByConversation,
+        awaitingApproval,
+        runs,
+        isLoading,
+        error,
+        selectConversation,
+        send,
+        regenerate,
+        continueAssistant,
+        retry,
+        resolveApproval,
+        stop,
+    };
 }
-
-void createStoryboardBrainstormConversation;
-void renameStoryboardBrainstormConversation;
-void deleteStoryboardBrainstormConversation;
-void createStoryboardBrainstormTurn;
-void continueStoryboardBrainstormAssistant;

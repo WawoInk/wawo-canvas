@@ -6,27 +6,40 @@ if (typeof window === "undefined") GlobalRegistrator.register();
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 import type { BrainstormTurnResult } from "./brainstorm-agent";
-import type { BrainstormAgentRuntime, BrainstormAgentState } from "./use-brainstorm-agent";
+import type {
+    BrainstormAgentAssistantMessage,
+    BrainstormAgentRuntime,
+    BrainstormAgentState,
+    BrainstormAgentUserMessage,
+    BrainstormConversation,
+} from "./use-brainstorm-agent";
 
-const conversation = (id: string, currentMessageId = "") => ({ id, projectId: "project-1", title: id, currentMessageId, createdAt: "created", updatedAt: "updated" });
-const userMessage = (id: string, conversationId: string, parentId = "") => ({
+const conversation = (id: string, currentMessageId = ""): BrainstormConversation => ({ id, projectId: "project-1", title: id, currentMessageId, createdAt: "created", updatedAt: "updated" });
+const userMessage = (id: string, conversationId: string, parentId = ""): BrainstormAgentUserMessage => ({
     id,
     projectId: "project-1",
     conversationId,
     parentId,
     role: "user" as const,
     content: id,
+    output: [],
     revision: 1,
     createdAt: "created",
     updatedAt: "updated",
 });
-const assistantMessage = (id: string, conversationId: string, status: "pending" | "streaming" | "awaiting_approval" | "completed" | "failed" | "cancelled" | "interrupted", revision = 1) => ({
+const assistantMessage = (
+    id: string,
+    conversationId: string,
+    status: BrainstormAgentAssistantMessage["status"],
+    revision = 1,
+): BrainstormAgentAssistantMessage => ({
     id,
     projectId: "project-1",
     conversationId,
     parentId: "user-1",
     role: "assistant" as const,
     status,
+    clientRequestId: "request-1",
     output: status === "awaiting_approval" ? [{ type: "tool_result" as const, callId: "call-1", name: "save_memory", status: "awaiting_approval" as const, content: "请批准" }] : [],
     revision,
     createdAt: "created",
@@ -35,7 +48,14 @@ const assistantMessage = (id: string, conversationId: string, status: "pending" 
 
 let accountId = "user-1";
 let listConversations = async (_projectId: string) => ({ items: [conversation("conversation-1")], total: 1 });
-let listMessages = async (_projectId: string, conversationId: string) => ({ conversation: conversation(conversationId), items: [], total: 0 });
+let listMessages: (
+    projectId: string,
+    conversationId: string,
+) => Promise<{ conversation: BrainstormConversation; items: Array<BrainstormAgentUserMessage | BrainstormAgentAssistantMessage>; total: number }> = async (_projectId, conversationId) => ({
+    conversation: conversation(conversationId),
+    items: [],
+    total: 0,
+});
 let createConversation = async (_projectId: string, input: { id: string; title: string }) => conversation(input.id);
 let renameConversation = async (_projectId: string, id: string, title: string) => ({ ...conversation(id), title });
 let deleteConversation = async (_projectId: string, id: string) => ({ id, deletedAt: "now" });
@@ -71,7 +91,10 @@ mock.module("@/services/api/storyboard-brainstorm", () => ({
         apiCalls.push(["update", ...args]);
         return updateAssistant(...args);
     },
-    continueStoryboardBrainstormAssistant: (...args: Parameters<typeof continueAssistant>) => continueAssistant(...args),
+    continueStoryboardBrainstormAssistant: (...args: Parameters<typeof continueAssistant>) => {
+        apiCalls.push(["continue", ...args]);
+        return continueAssistant(...args);
+    },
 }));
 
 const { act } = await import("react");
@@ -160,7 +183,7 @@ test("项目和会话切换后忽略迟到的加载结果", async () => {
     await flush();
 
     assert.equal(current.currentConversationId, "conversation-2");
-    assert.deepEqual(current.messages.map((message) => message.id), ["user-project-2"]);
+    assert.deepEqual((current.messages as Array<{ id: string }>).map((message) => message.id), ["user-project-2"]);
     await unmount(mounted);
 
     const conversationOne = deferred<Awaited<ReturnType<typeof listMessages>>>();
@@ -177,7 +200,7 @@ test("项目和会话切换后忽略迟到的加载结果", async () => {
     await flush();
 
     assert.equal(current.currentConversationId, "conversation-2");
-    assert.deepEqual(current.messages.map((message) => message.id), ["user-2"]);
+    assert.deepEqual((current.messages as Array<{ id: string }>).map((message) => message.id), ["user-2"]);
     await unmount(switched);
 });
 
@@ -213,7 +236,7 @@ test("只在服务端确认 Turn 后插入消息并启动 runtime", async () => 
     await act(async () => void (await sending));
     await flush();
 
-    assert.deepEqual(current.messages.map((message) => message.id), [payload.userMessage.id, payload.assistantMessageId]);
+    assert.deepEqual((current.messages as Array<{ id: string }>).map((message) => message.id), [payload.userMessage.id, payload.assistantMessageId]);
     assert.equal(runtimeInputs.length, 1);
     assert.equal(current.runs["conversation-1"]?.active, true);
     running.resolve(completed);
@@ -395,5 +418,152 @@ test("取消持久化失败时报告 failed，不能把 Assistant 伪装成 stop
     assert.equal(run.stopState, "failed");
     assert.notEqual(run.status, "cancelled");
     assert.notEqual(current.messages.find((message) => message.id === run.assistantMessageId)?.status, "cancelled");
+    await unmount(mounted);
+});
+
+test("regenerate 创建 sibling，continue 复用 Assistant，retry 等同 regenerate", async () => {
+    apiCalls.length = 0;
+    accountId = "user-1";
+    const original = { ...assistantMessage("assistant-old", "conversation-1", "completed", 3), output: [{ type: "text" as const, text: "原回答" }] };
+    listConversations = async () => ({ items: [conversation("conversation-1", original.id)], total: 1 });
+    listMessages = async () => ({ conversation: conversation("conversation-1", original.id), items: [userMessage("user-1", "conversation-1"), original], total: 2 });
+    createTurn = async (_projectId, conversationId, input) => ({
+        conversation: conversation(conversationId, input.assistantMessageId),
+        assistantMessage: { ...assistantMessage(input.assistantMessageId, conversationId, "pending"), parentId: "user-1" },
+    });
+    continueAssistant = async (_projectId, conversationId, id, input) => ({
+        conversation: conversation(conversationId, id),
+        assistantMessage: { ...assistantMessage(id, conversationId, "pending", input.expectedRevision + 1), output: original.output },
+    });
+    updateAssistant = async (_projectId, conversationId, id, input) => ({
+        ...assistantMessage(id, conversationId, input.status, input.expectedRevision + 1),
+        output: input.output,
+    });
+    const runtimeInputs: Array<{ mode: string; assistantMessage: { id: string; output: unknown[] } }> = [];
+    runTurn = async (input) => {
+        runtimeInputs.push(input);
+        return { ...completed, content: "续写", output: [...input.assistantMessage.output, { type: "text", text: `-${input.mode}` }] };
+    };
+
+    const mounted = await mount();
+    let siblingId = "";
+    await act(async () => {
+        siblingId = (await current.regenerate("assistant-old")).id;
+    });
+    await flush();
+    assert.notEqual(siblingId, "assistant-old");
+    assert.ok(current.messages.some((message) => message.id === "assistant-old"));
+    assert.ok(current.messages.some((message) => message.id === siblingId));
+
+    await act(async () => void (await current.continueAssistant("assistant-old")));
+    await flush();
+    await act(async () => void (await current.retry("assistant-old")));
+    await flush();
+
+    const turnCalls = apiCalls.filter((call) => call[0] === "turn");
+    assert.deepEqual(
+        turnCalls.map((call) => ({ mode: (call[3] as { mode: string }).mode, target: (call[3] as { targetMessageId: string }).targetMessageId })),
+        [
+            { mode: "regenerate", target: "assistant-old" },
+            { mode: "regenerate", target: "assistant-old" },
+        ],
+    );
+    const continuation = apiCalls.find((call) => call[0] === "continue");
+    assert.equal(continuation?.[3], "assistant-old");
+    assert.equal((continuation?.[4] as { expectedRevision: number }).expectedRevision, 3);
+    assert.deepEqual(runtimeInputs.map((input) => input.mode), ["regenerate", "continue", "regenerate"]);
+    assert.equal(runtimeInputs[1].assistantMessage.id, "assistant-old");
+    assert.deepEqual(
+        (current.messages.find((message) => message.id === "assistant-old") as { output: unknown[] }).output,
+        [{ type: "text", text: "原回答" }, { type: "text", text: "-continue" }],
+    );
+    await unmount(mounted);
+});
+
+test("持久化的 awaiting approval 可由注入 runtime 在原 Assistant 上恢复", async () => {
+    apiCalls.length = 0;
+    accountId = "user-1";
+    const awaiting = {
+        ...assistantMessage("assistant-awaiting", "conversation-1", "awaiting_approval", 4),
+        output: [
+            { type: "tool_call" as const, callId: "call-1", name: "save_memory", arguments: "{}" },
+            { type: "tool_result" as const, callId: "call-1", name: "save_memory", status: "awaiting_approval" as const, content: "请批准" },
+        ],
+    };
+    listConversations = async () => ({ items: [conversation("conversation-1", awaiting.id)], total: 1 });
+    listMessages = async () => ({ conversation: conversation("conversation-1", awaiting.id), items: [userMessage("user-1", "conversation-1"), awaiting], total: 2 });
+    updateAssistant = async (_projectId, conversationId, id, input) => ({
+        ...assistantMessage(id, conversationId, input.status, input.expectedRevision + 1),
+        output: input.output,
+    });
+    const resumed = [
+        awaiting.output[0],
+        { type: "tool_result" as const, callId: "call-1", name: "save_memory", status: "succeeded" as const, content: "已批准" },
+        { type: "text" as const, text: "已继续" },
+    ];
+    const runtimeInputs: unknown[] = [];
+    runTurn = async (input) => {
+        runtimeInputs.push(input);
+        return { ...completed, content: "已继续", output: resumed };
+    };
+
+    const mounted = await mount();
+    await act(async () => current.resolveApproval("assistant-awaiting", "approved"));
+    await flush();
+
+    assert.deepEqual(runtimeInputs[0], {
+        mode: "approval",
+        decision: "approved",
+        projectId: "project-1",
+        conversation: conversation("conversation-1", awaiting.id),
+        messages: [userMessage("user-1", "conversation-1"), awaiting],
+        assistantMessage: awaiting,
+    });
+    const finalUpdate = apiCalls.filter((call) => call[0] === "update").at(-1);
+    assert.equal(finalUpdate?.[3], "assistant-awaiting");
+    assert.deepEqual(finalUpdate?.[4], { expectedRevision: 4, status: "completed", output: resumed });
+    assert.deepEqual((current.messages.at(-1) as { output: unknown }).output, resumed);
+    await unmount(mounted);
+});
+
+test("账号切换会中止本地 run 并忽略迟到的 runtime 结果", async () => {
+    apiCalls.length = 0;
+    accountId = "user-1";
+    listConversations = async () => ({ items: [conversation(accountId === "user-1" ? "conversation-1" : "conversation-2")], total: 1 });
+    listMessages = async (_projectId, conversationId) => ({
+        conversation: conversation(conversationId),
+        items: conversationId === "conversation-2" ? [userMessage("account-2-message", conversationId)] : [],
+        total: conversationId === "conversation-2" ? 1 : 0,
+    });
+    createTurn = async (_projectId, conversationId, input) => ({
+        conversation: conversation(conversationId, input.assistantMessageId),
+        userMessage: userMessage(input.userMessage!.id, conversationId),
+        assistantMessage: assistantMessage(input.assistantMessageId, conversationId, "pending"),
+    });
+    updateAssistant = async (_projectId, conversationId, id, input) => ({
+        ...assistantMessage(id, conversationId, input.status, input.expectedRevision + 1),
+        output: input.output,
+    });
+    const late = deferred<BrainstormTurnResult>();
+    let aborted = false;
+    runTurn = async (_input, { signal }) => {
+        signal.addEventListener("abort", () => {
+            aborted = true;
+        });
+        return late.promise;
+    };
+
+    const mounted = await mount();
+    await act(async () => void (await current.send("账号一运行")));
+    accountId = "user-2";
+    await act(async () => mounted.root.render(<Harness projectId="project-1" />));
+    await flush();
+    late.resolve(completed);
+    await flush();
+
+    assert.equal(aborted, true);
+    assert.equal(apiCalls.filter((call) => call[0] === "update").length, 0);
+    assert.equal(current.currentConversationId, "conversation-2");
+    assert.deepEqual((current.messages as Array<{ id: string }>).map((message) => message.id), ["account-2-message"]);
     await unmount(mounted);
 });
