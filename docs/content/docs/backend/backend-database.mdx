@@ -1,6 +1,6 @@
 ---
 title: 数据库结构
-description: 核心数据表和第一方生成任务事务约束
+description: 核心数据表、Storyboard Brainstorm 和第一方生成事务约束
 ---
 
 # 数据库结构
@@ -59,7 +59,69 @@ description: 核心数据表和第一方生成任务事务约束
 
 artifact 变化时，服务端先上传新对象，再在同一 PostgreSQL 事务中创建新的 `user_files`、按 `id + user_id + expectedRevision` CAS 更新项目引用/摘要/revision，并删除旧文件记录。事务或 CAS 失败时补偿删除新对象，旧可用 artifact 始终保持引用；事务成功后再 best-effort 删除旧对象。规范化后的 artifact 未变化时可复用旧文件，只更新元数据和 revision。删除项目时同步清理项目与文件记录，再 best-effort 删除对象。
 
-所有列表、详情、更新和删除查询都使用当前认证账号限定 `user_id`，API 不返回原始 S3 Key、公开 URL 或可长期复用的预签名地址。同账号可通过服务端 API 在不同会话或设备恢复并继续编辑分镜项目，但这不代表 Brainstorm Conversation、Project Memory、Canvas 关联、我的素材或其他浏览器本地数据已经实现或统一云同步。
+所有列表、详情、更新和删除查询都使用当前认证账号限定 `user_id`，API 不返回原始 S3 Key、公开 URL 或可长期复用的预签名地址。同账号可通过服务端 API 在不同会话或设备恢复并继续编辑分镜项目；Brainstorm Conversation、Message 和 Project Memory 使用下述独立表与 API 持久化，但 Canvas 关联、我的素材或其他浏览器本地数据不因此统一云同步。
+
+## Storyboard Brainstorm 持久化表
+
+Storyboard Brainstorm 使用且只使用三张子表，不新增 Conversation revision、Project `activeConversationId`、Summary 字段、Turn ledger、Tool 表、GIN/vector 索引或外键框架。当前范围是后端持久化与并发边界，不代表模型调用、Summary、Context Builder、Tool Executor、前端 UI、Canvas 关联或真实浏览器验证已经完成。
+
+### storyboard_brainstorm_conversations
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 客户端提供的稳定非空 Conversation ID |
+| `user_id`、`project_id` | 当前账号与父 Storyboard Project；所有读写同时限定 |
+| `title` | 会话标题；空标题默认“新对话” |
+| `current_message_id` | append、regenerate 或 continue 最近选中的 Message |
+| `created_at`、`updated_at` | 创建与更新时间 |
+
+Conversation 不保存独立 revision。Turn 写入通过 PostgreSQL `FOR UPDATE` 锁定当前账号、Project 和 Conversation 的这一行，因此只串行同一 Conversation；同一 Project 下的其他 Conversation 可以独立推进。
+
+### storyboard_brainstorm_messages
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 客户端提供的稳定非空 Message ID |
+| `user_id`、`project_id`、`conversation_id` | 完整 owner 与父级 scope |
+| `parent_id` | 平铺图的父 Message；第一个 User root 可为空 |
+| `role` | `user` 或 `assistant` |
+| `content` | User Message 的唯一正文事实 |
+| `output` | Assistant 的完整有序 JSON 数组；不按 chunk 落库 |
+| `status` | `pending/streaming/awaiting_approval/completed/failed/cancelled/interrupted` |
+| `revision` | Message CAS 版本；初始为 1，每次成功 Assistant 更新或 continue 递增 |
+| `client_request_id`、`request_hash` | 不可变的 append/regenerate 幂等键与规范语义输入 SHA-256 |
+| `continue_request_id`、`continue_request_hash` | 最近一次 continue 的独立幂等键与规范语义输入 SHA-256 |
+| `created_at`、`updated_at` | 消息创建与更新时间 |
+
+User Message 正文只使用 `content`；Assistant 正文只使用 `output`，避免双重事实。output 只要求是有界 JSON 数组，按原顺序保留 text、tool call、tool result、status、error 等未知 item；具体 item 联合类型由后续任务定义。Conversation 和 Project Memory 列表使用 `page/pageSize` 返回 `{items,total}`；Message 列表按 `created_at ASC, id ASC` 分页返回平铺图，单页可能不包含祖先，客户端需要继续请求其他页。
+
+数据库为 active Assistant 建立 `(user_id, project_id, conversation_id)` 部分唯一索引，只覆盖 `role='assistant' AND status IN ('pending','streaming','awaiting_approval')`，保证同一 Conversation 最多一个 active Turn。非空 `client_request_id` 与 `continue_request_id` 分别建立 Conversation scope 的部分唯一索引，查询同时检查两个命名空间。原始 Turn key/hash 保持不可变，continue 只更新独立字段；相同 key 会比较对应 hash，语义相同返回已有结果，语义不同返回 HTTP 409。相同 Message ID 与相同规范语义输入也返回原 Turn；复用 ID 但输入不同返回 409。
+
+Assistant 更新必须提交 `expectedRevision`，并以 `id + user_id + project_id + conversation_id + revision` compare-and-set：成功时替换完整 output、校验生命周期转换并将 revision 加 1；旧 revision、迟到 completion 或非法转换不能覆盖已经 cancelled、interrupted 或更高 revision 的 Message。冲突返回 HTTP 409，并在可用时通过 `data.current` 返回当前 Message。
+
+append Turn 在一个数据库事务内依次锁定 Conversation、先判断幂等重放和 active 冲突、创建 User Message、创建 pending Assistant Placeholder、更新 `current_message_id`。任何 Message 插入或指针更新失败都会整体回滚。regenerate 不创建新 User Message，而是在同一 User Message 下创建新的 pending Assistant sibling，旧 Assistant 保留。continue 只接受 terminal Assistant，通过 `expectedRevision` 复用原 ID/output，保留不可变的原始 Turn 幂等字段，只写入独立的最新 continue 幂等字段，转回 pending、revision 加 1 并更新当前指针；它不创建 sibling。事务在模型调用或浏览器流式处理开始前提交，不跨网络等待。
+
+### storyboard_memories
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 客户端提供的稳定 Memory ID |
+| `user_id`、`project_id` | owner 与父 Storyboard Project scope |
+| `kind` | 必填的有界类型字符串 |
+| `scope`、`path` | `project/scene/shot`；project 要求空 path，scene/shot 使用稳定实体 ID |
+| `content` | 用户已确认的 Memory 正文 |
+| `tags` | 有界字符串数组 |
+| `source_message_id` | 可选的同 Project 来源 Message |
+| `operation_id` | 当前 `user_id + project_id` 内必填且唯一的操作 ID |
+| `created_at`、`updated_at` | 创建与更新时间 |
+
+Memory 表只保存已确认记录；候选 Memory、Summary 和运行时 Context 仍不属于持久事实。`source_message_id` 存在时必须属于同一账号和 Project，不能借引用读取其他账号或项目的 Message。
+
+### 所有权与删除
+
+每个 Conversation、Message 和 Memory 读写都先限定当前 `user_id + project_id`，Message 再限定 `conversation_id`。子资源不存在和越权统一返回 404，不能通过猜测子资源 ID 扩大范围。
+
+这些逻辑关系不依赖数据库外键级联。删除 Conversation 时先获取与 Turn 相同的 Conversation 行锁，再删除其 Messages；删除 Storyboard Project 时先锁 Project 与全部 scoped Conversation，再按 owner scope 清理 Brainstorm Messages、Conversations 和 Memories，最后执行既有 Project 与 `user_files` 删除流程。Conversation/Memory 创建先锁 Project，避免并发删除时留下孤儿记录。Project artifact 的对象存储补偿和 best-effort 旧对象清理语义保持不变。
 
 ## script_projects、script_conversations 与 script_messages
 
