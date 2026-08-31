@@ -142,6 +142,20 @@ export type BrainstormContextDiagnostics = {
     toolSchemaTokens: number;
     estimated: boolean;
     summary: "included" | "trimmed" | "missing";
+    summaryCheckpoint?: {
+        id: string;
+        fromMessageId?: string;
+        throughMessageId: string;
+        coveredMessageCount?: number;
+        sourceTokenCount?: number;
+        model?: string;
+        action: "included" | "trimmed";
+    };
+    branchTail?: {
+        retainedFromMessageId?: string;
+        retainedMessageCount: number;
+        trimmedMessageCount: number;
+    };
     items: BrainstormContextDiagnosticItem[];
 };
 
@@ -152,6 +166,7 @@ export type BrainstormContextInput = {
     priorMessages: BrainstormMessage[];
     currentUserMessage: BrainstormUserMessage;
     memories: BrainstormMemoryCandidate[];
+    memoryLimits?: { maxItems: number; maxContentBytes: number; maxTotalBytes: number };
     summary?: BrainstormSummaryCheckpoint;
     tools: BrainstormToolDefinition[];
     budget: BrainstormTokenBudget;

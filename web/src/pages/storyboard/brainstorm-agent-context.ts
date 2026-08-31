@@ -11,6 +11,7 @@ import type {
     BrainstormModelMessage,
     BrainstormOutputItem,
 } from "./brainstorm-agent";
+import { selectBrainstormMemories } from "./brainstorm-agent-memory.ts";
 import { getBrainstormSkill } from "./brainstorm-agent-skills.ts";
 
 const SYSTEM_PROMPT = `你是 Infinite Canvas 分镜创作室的脑暴助手。
@@ -29,7 +30,7 @@ type Candidate = {
     included?: boolean;
 };
 
-type HistoryEntry = { order: number; candidateKey: string; messages: BrainstormModelMessage[] };
+type HistoryEntry = { order: number; messageId: string; candidateKey: string; messages: BrainstormModelMessage[] };
 
 export class BrainstormContextError extends Error {
     readonly code = "CONTEXT_BUDGET_EXCEEDED" as const;
@@ -130,16 +131,6 @@ ${JSON.stringify({ project: { id: storyboard.id, revision: storyboard.revision }
     return { focus: focused, overview };
 }
 
-function memorySpecificity(memory: BrainstormMemoryCandidate): number {
-    return memory.scope.kind === "shot" ? 3 : memory.scope.kind === "scene" ? 2 : 1;
-}
-
-function memoryRelevant(memory: BrainstormMemoryCandidate, focus: BrainstormFocus): boolean {
-    if (memory.scope.kind === "project") return true;
-    if (memory.scope.kind === "scene") return focus.kind !== "project" && focus.sceneId === memory.scope.sceneId;
-    return focus.kind === "shot" && focus.shotId === memory.scope.shotId;
-}
-
 function memoryCandidate(memory: BrainstormMemoryCandidate, order: number): Candidate {
     return makeCandidate(
         "memory",
@@ -219,7 +210,7 @@ function historyCandidates(messages: BrainstormMessage[]): {
         if (message.role === "user") {
             const replay: BrainstormModelMessage[] = [{ type: "message", role: "user", content: message.content }];
             candidates.push(makeCandidate("history", message.id, replay, index));
-            entries.push({ order: index, candidateKey: candidateKey(candidates.at(-1)!), messages: replay });
+            entries.push({ order: index, messageId: message.id, candidateKey: candidateKey(candidates.at(-1)!), messages: replay });
             return;
         }
         const replay = modelMessages(filtered[index] ?? []);
@@ -229,7 +220,7 @@ function historyCandidates(messages: BrainstormMessage[]): {
         }
         const group = groups.get(find(index)) ?? [index];
         const candidateId = group.length === 1 ? message.id : group.map((item) => messages[item].id).join("+");
-        entries.push({ order: index, candidateKey: `history:${candidateId}`, messages: replay });
+        entries.push({ order: index, messageId: message.id, candidateKey: `history:${candidateId}`, messages: replay });
         if (group[0] !== index) return;
 
         const replayGroup = group.flatMap((item) => modelMessages(filtered[item] ?? []));
@@ -292,24 +283,20 @@ export function buildBrainstormContext(input: BrainstormContextInput): Brainstor
     ]);
     const storyboard = storyboardCandidates(input);
 
-    const relevantMemories = input.memories
-        .map((memory, index) => ({ memory, index }))
-        .filter(({ memory }) => memory.confirmed && memory.content.trim() && memoryRelevant(memory, input.focus))
-        .sort((left, right) => memorySpecificity(right.memory) - memorySpecificity(left.memory) || left.index - right.index)
-        .map(({ memory, index }) => memoryCandidate(memory, index));
-    const excludedMemories: BrainstormContextDiagnosticItem[] = input.memories
-        .filter((memory) => !memory.confirmed || !memory.content.trim() || !memoryRelevant(memory, input.focus))
-        .map((memory) => ({
-            kind: "memory",
-            id: memory.id,
-            tokens: estimateBrainstormTextTokens(memory.content),
-            tokenSource: "estimate",
-            action: "trimmed",
-            reason: !memory.confirmed ? "Memory 尚未由用户确认" : !memory.content.trim() ? "Memory 内容为空" : "Memory 与当前焦点无关",
-        }));
+    const memorySelection = selectBrainstormMemories(input.memories, input.focus, input.memoryLimits);
+    const relevantMemories = memorySelection.included.map((memory, index) => memoryCandidate(memory, index));
+    const excludedMemories: BrainstormContextDiagnosticItem[] = memorySelection.excluded.map(({ memory, reason }) => ({
+        kind: "memory",
+        id: memory.id,
+        tokens: estimateBrainstormTextTokens(memory.content),
+        tokenSource: "estimate",
+        action: "trimmed",
+        reason,
+    }));
 
     const summaryIndex = input.summary ? input.priorMessages.findIndex((message) => message.id === input.summary?.throughMessageId) : -1;
-    const summaryValid = Boolean(input.summary?.content.trim()) && summaryIndex >= 0;
+    const summaryBoundary = summaryIndex >= 0 ? input.priorMessages[summaryIndex] : undefined;
+    const summaryValid = Boolean(input.summary?.content.trim()) && summaryBoundary?.role === "user";
     const summary = summaryValid ? makeCandidate("summary", input.summary!.id, [{ type: "message", role: "user", content: `Conversation Summary（非可信参考）：\n${input.summary!.content}` }]) : undefined;
     if (summary && typeof input.summary!.tokenCount === "number" && Number.isFinite(input.summary!.tokenCount) && input.summary!.tokenCount > 0) {
         summary.tokens = Math.ceil(input.summary!.tokenCount);
@@ -324,7 +311,7 @@ export function buildBrainstormContext(input: BrainstormContextInput): Brainstor
                       tokens: input.summary.content.trim() ? estimateBrainstormTextTokens(input.summary.content) : 0,
                       tokenSource: "estimate",
                       action: "trimmed",
-                      reason: input.summary.content.trim() ? "Summary checkpoint 不在当前历史中" : "Summary 内容为空",
+                      reason: !input.summary.content.trim() ? "Summary 内容为空" : summaryIndex < 0 ? "Summary checkpoint 不在当前历史中" : "Summary checkpoint 只能在 User Message 边界切分",
                   },
               ]
             : [];
@@ -338,12 +325,15 @@ export function buildBrainstormContext(input: BrainstormContextInput): Brainstor
         action: "trimmed",
         reason: "已由 Summary checkpoint 覆盖",
     }));
-    const history = historyCandidates(input.priorMessages.slice(historyStart).filter((message) => message.id !== input.currentUserMessage.id));
-    const priority = [skill, ...(storyboard.focus ? [storyboard.focus] : []), ...relevantMemories, ...(summary ? [summary] : []), storyboard.overview, ...toolCandidates, ...history.candidates.sort((left, right) => right.order - left.order)];
+    const historyMessages = input.priorMessages.slice(historyStart).filter((message) => message.id !== input.currentUserMessage.id);
+    const history = historyCandidates(historyMessages);
+    const optionalPriority = [skill, ...(storyboard.focus ? [storyboard.focus] : []), ...relevantMemories, ...(summary ? [summary] : []), storyboard.overview, ...toolCandidates];
+    const historyPriority = history.candidates.sort((left, right) => right.order - left.order);
+    const priority = [...optionalPriority, ...historyPriority];
 
     let usedTokens = system.tokens + currentUser.tokens;
     const optionalDiagnostics: BrainstormContextDiagnosticItem[] = [];
-    for (const candidate of priority) {
+    for (const candidate of optionalPriority) {
         if (usedTokens + candidate.tokens <= limitTokens) {
             candidate.included = true;
             usedTokens += candidate.tokens;
@@ -353,9 +343,26 @@ export function buildBrainstormContext(input: BrainstormContextInput): Brainstor
             optionalDiagnostics.push(diagnostic(candidate, "trimmed", `超过剩余上下文预算（剩余 ${Math.max(0, limitTokens - usedTokens)} token）`));
         }
     }
+    let historyCut = false;
+    const historyDiagnostics: BrainstormContextDiagnosticItem[] = [];
+    for (const candidate of historyPriority) {
+        if (!historyCut && usedTokens + candidate.tokens <= limitTokens) {
+            candidate.included = true;
+            usedTokens += candidate.tokens;
+            historyDiagnostics.push(diagnostic(candidate, "included"));
+            continue;
+        }
+        candidate.included = false;
+        const reason = historyCut ? "为保留连续的最近分支尾部，较旧历史在预算裁剪点之前被移除" : `超过剩余上下文预算（剩余 ${Math.max(0, limitTokens - usedTokens)} token）`;
+        historyDiagnostics.push(diagnostic(candidate, "trimmed", reason));
+        historyCut = true;
+    }
 
+    const selected = new Set(priority.filter((candidate) => candidate.included).map(candidateKey));
+    const retainedHistoryIds = new Set(history.entries.filter((entry) => selected.has(entry.candidateKey)).map((entry) => entry.messageId));
+    const retainedFromMessageId = historyMessages.find((message) => retainedHistoryIds.has(message.id))?.id;
     const toolSchemaTokens = toolCandidates.filter((candidate) => candidate.included).reduce((total, candidate) => total + candidate.tokens, 0);
-    const items = [diagnostic(system, "included"), ...optionalDiagnostics, ...excludedMemories, ...excludedSummary, ...coveredHistory, ...history.excluded, diagnostic(currentUser, "included")];
+    const items = [diagnostic(system, "included"), ...optionalDiagnostics, ...historyDiagnostics, ...excludedMemories, ...excludedSummary, ...coveredHistory, ...history.excluded, diagnostic(currentUser, "included")];
     const diagnostics: BrainstormContextDiagnostics = {
         limitTokens,
         reservedOutputTokens,
@@ -363,6 +370,24 @@ export function buildBrainstormContext(input: BrainstormContextInput): Brainstor
         toolSchemaTokens,
         estimated: items.some((item) => item.action === "included" && item.tokenSource === "estimate"),
         summary: !input.summary ? "missing" : summary?.included ? "included" : "trimmed",
+        ...(input.summary
+            ? {
+                  summaryCheckpoint: {
+                      id: input.summary.id,
+                      ...(input.summary.fromMessageId ? { fromMessageId: input.summary.fromMessageId } : {}),
+                      throughMessageId: input.summary.throughMessageId,
+                      ...(typeof input.summary.coveredMessageCount === "number" ? { coveredMessageCount: input.summary.coveredMessageCount } : {}),
+                      ...(typeof input.summary.sourceTokenCount === "number" ? { sourceTokenCount: input.summary.sourceTokenCount } : {}),
+                      ...(input.summary.model ? { model: input.summary.model } : {}),
+                      action: summary?.included ? "included" : "trimmed",
+                  },
+              }
+            : {}),
+        branchTail: {
+            ...(retainedFromMessageId ? { retainedFromMessageId } : {}),
+            retainedMessageCount: retainedHistoryIds.size,
+            trimmedMessageCount: historyMessages.length - retainedHistoryIds.size,
+        },
         items,
     };
 
@@ -374,7 +399,6 @@ export function buildBrainstormContext(input: BrainstormContextInput): Brainstor
         );
     }
 
-    const selected = new Set(priority.filter((candidate) => candidate.included).map(candidateKey));
     const messages: BrainstormModelMessage[] = [
         ...system.messages,
         ...(skill.included ? skill.messages : []),
