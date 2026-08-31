@@ -71,10 +71,7 @@ test("never chooses a User boundary that splits a Tool Call and Tool Result", ()
 
 test("does not plan compression below the trigger or without a User boundary", () => {
     assert.equal(planBrainstormSummaryCheckpoint({ messages: [user("u1", null, "短消息")], triggerTokens: 10_000, retainTokens: 100, model: "model-1" }), null);
-    assert.equal(
-        planBrainstormSummaryCheckpoint({ messages: [assistant("a1", null, [{ type: "text", text: "没有用户边界" }])], triggerTokens: 1, retainTokens: 1, model: "model-1" }),
-        null,
-    );
+    assert.equal(planBrainstormSummaryCheckpoint({ messages: [assistant("a1", null, [{ type: "text", text: "没有用户边界" }])], triggerTokens: 1, retainTokens: 1, model: "model-1" }), null);
 });
 
 test("counts the previous checkpoint toward the compression trigger before merging it", () => {

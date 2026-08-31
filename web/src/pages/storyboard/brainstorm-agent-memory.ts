@@ -1,11 +1,4 @@
-import type {
-    BrainstormFocus,
-    BrainstormMemoryCandidate,
-    BrainstormMemoryLimits,
-    BrainstormMemoryState,
-    BrainstormMemoryWriteInput,
-    BrainstormProjectMemory,
-} from "./brainstorm-agent";
+import type { BrainstormFocus, BrainstormMemoryCandidate, BrainstormMemoryLimits, BrainstormMemoryState, BrainstormMemoryWriteInput, BrainstormProjectMemory } from "./brainstorm-agent";
 
 const MAX_ID_BYTES = 200;
 const MAX_KIND_BYTES = 64;
@@ -77,14 +70,7 @@ export function prepareBrainstormMemoryConfirmation(candidate: BrainstormMemoryC
 }
 
 export function projectBrainstormMemory(memory: BrainstormProjectMemory): BrainstormMemoryCandidate {
-    const scope =
-        memory.scope === "project"
-            ? { kind: "project" as const }
-            : memory.scope === "scene"
-              ? { kind: "scene" as const, sceneId: memory.path }
-              : memory.scope === "shot"
-                ? { kind: "shot" as const, shotId: memory.path }
-                : undefined;
+    const scope = memory.scope === "project" ? { kind: "project" as const } : memory.scope === "scene" ? { kind: "scene" as const, sceneId: memory.path } : memory.scope === "shot" ? { kind: "shot" as const, shotId: memory.path } : undefined;
     if (!scope || (memory.scope === "project" && memory.path.trim())) throw new Error("Memory scope/path 无效");
 
     const candidate: BrainstormMemoryCandidate = {

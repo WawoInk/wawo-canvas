@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import {
-    applyBrainstormMemoryStateChange,
-    prepareBrainstormMemoryConfirmation,
-    projectBrainstormMemories,
-    selectBrainstormMemories,
-    validateBrainstormMemoryCandidate,
-} from "./brainstorm-agent-memory.ts";
+import { applyBrainstormMemoryStateChange, prepareBrainstormMemoryConfirmation, projectBrainstormMemories, selectBrainstormMemories, validateBrainstormMemoryCandidate } from "./brainstorm-agent-memory.ts";
 
 const candidate = (overrides = {}) => ({
     id: "memory-1",
@@ -51,9 +45,7 @@ test("validates candidates and prepares a stable normalized confirmation command
         operationId: "operation-1",
     });
 
-    const issues = validateBrainstormMemoryCandidate(
-        candidate({ id: " ", kind: " ", content: " ", tags: Array.from({ length: 33 }, (_, index) => `tag-${index}`), scope: { kind: "scene", sceneId: " " } }),
-    );
+    const issues = validateBrainstormMemoryCandidate(candidate({ id: " ", kind: " ", content: " ", tags: Array.from({ length: 33 }, (_, index) => `tag-${index}`), scope: { kind: "scene", sceneId: " " } }));
     assert.deepEqual(
         issues.map((issue) => issue.field),
         ["id", "kind", "scope", "content", "tags"],
