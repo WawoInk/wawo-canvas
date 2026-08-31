@@ -93,6 +93,49 @@ func TestProxyAIRequestPreservesNonStreamingJSONResponse(t *testing.T) {
 	}
 }
 
+func TestProxyAIRequestPreservesNonStreamingBinaryResponses(t *testing.T) {
+	for _, testCase := range []struct {
+		name        string
+		contentType string
+		body        []byte
+	}{
+		{name: "image", contentType: "image/png", body: []byte{'P', 'N', 'G', 0, 0xff}},
+		{name: "audio", contentType: "audio/mpeg", body: []byte{'I', 'D', '3', 0, 0xfe}},
+		{name: "video", contentType: "video/mp4", body: []byte{0, 0, 0, 4, 'm', 'd', 'a', 't', 0xfd}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", testCase.contentType)
+				w.Header().Set("X-Upstream-Request-Id", "request-"+testCase.name)
+				w.WriteHeader(http.StatusPartialContent)
+				_, _ = w.Write(testCase.body)
+			}))
+			t.Cleanup(upstream.Close)
+
+			modelName, userID := setupAIProxyHTTPTest(t, upstream.URL)
+			proxy := newAIProxyHTTPServer(t, userID)
+			request, err := http.NewRequest(http.MethodPost, proxy.URL, strings.NewReader(`{"model":"`+modelName+`","messages":[]}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Content-Type", "application/json")
+			response, err := proxy.Client().Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if response.StatusCode != http.StatusPartialContent || response.Header.Get("Content-Type") != testCase.contentType || response.Header.Get("X-Upstream-Request-Id") != "request-"+testCase.name || !bytes.Equal(body, testCase.body) {
+				t.Fatalf("response = status %d content-type %q request-id %q body %v", response.StatusCode, response.Header.Get("Content-Type"), response.Header.Get("X-Upstream-Request-Id"), body)
+			}
+		})
+	}
+}
+
 func TestProxyAIRequestStreamsFirstChunkBeforeUpstreamCompletes(t *testing.T) {
 	for _, testCase := range []struct {
 		name        string
