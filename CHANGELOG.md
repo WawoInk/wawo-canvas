@@ -2,6 +2,7 @@
 
 ## Unreleased
 
++ [新增] 分镜创作室新增 Brainstorm Agent Core：提供最终上下文预算、稳定分镜焦点优先、Tool Pair 清理、四轮工具循环、审批续跑、受控重试和五个代码内版本化 Skill，并可通过 Fake Completion/Fake Tool 独立测试。
 + [修复] 远程 AI Compatibility Proxy 支持 SSE/NDJSON 实时分块透传和客户端取消传播，流式中断不再误记为完整成功并按既有规则退款；任务审计统一脱敏 Authorization、API Key 和敏感查询参数，普通非流式请求保持原有行为。
 + [新增] Storyboard Project 支持无文档 Draft、`expectedRevision` CAS 更新和安全 artifact 切换；Scene、Segment、Shot 使用稳定 ID，插入或重编号时不会把旧 ID 串给新实体。
 

@@ -5,6 +5,8 @@ description: 当前版本已实现但仍需人工验证的变更项
 
 # 待测试
 
+- Storyboard Brainstorm Agent Core：已新增与 UI、HTTP 和具体 Provider 解耦的强类型消息/输出合同、Context Builder、保守 Token Budget、Tool Call/Result 原子清理、最多四轮的 Tool Loop、审批后继续/拒绝回注、未注册工具拦截、首个输出前最多一次重试，以及五个代码内版本化 Skill。定向自动化测试覆盖固定 System/当前输入不裁剪、稳定 Scene/Shot 焦点优先、Memory/Summary/最近历史预算、Tool Schema 计费、孤立或待审批 Pair 不重放、Fake Completion/Fake Tool、取消和部分输出保留。当前尚未接入 Brainstorm HTTP API、真实模型 Transport、Storyboard Tool Executor 或页面 UI，因此没有新增真实浏览器验收入口；后续任务集成时需继续验证持久化、真实流式和审批卡片。
+
 - 远程 AI Compatibility Proxy 流式、取消与审计：配置远程文本渠道并使用可控制首段和结束时机的 SSE/NDJSON 上游，确认第一段内容会在上游完整响应结束前到达浏览器，流式响应不携带 `Content-Length`；收到第一段后停止生成、关闭响应或离开页面时，上游请求应被取消，平台任务不得记录为完整成功，已扣积分应按同一任务只退款一次。流式上游在响应开始前返回 4xx/5xx 时应显示可读的 JSON 失败信息，而不是伪装为成功流；流已经开始后的取消或中断不得再向流中拼接 JSON 错误。请同时检查用户和管理员使用日志详情中的请求 Header、请求正文、响应 Header、响应正文及原始错误，不得出现 Authorization、真实 API Key 或签名 URL/敏感 Query 的值，同时实际返回给浏览器的上游数据应保持可用。普通非流式 JSON、图片、音频和视频 Compatibility 请求的响应、扣费与任务记录应保持原有行为。Go 自动化测试负责验证分块时序、取消传播、任务终态、一次性退款、审计脱敏和非流式回归；真实浏览器停止操作、部署层响应缓冲及外部上游连通性仍由用户人工验证。
 
 - 可变 Storyboard Workspace：请在真实浏览器中创建一个未带 `directorPlan`、`document`、`validation` 的项目，确认可保存为 `draft`、`revision=1`，刷新或重新登录后列表与详情仍可恢复；随后生成或编辑 Document 并再次保存，确认同一 Project ID 和原 `createdAt` 保持不变、状态变为 `ready`、revision 逐次递增。重新生成时确认既有 Scene、Segment、Shot 保留稳定 ID，新实体获得非空新 ID；在同级列表前方插入新实体并重编号后，原实体也应按自身 ID 保持身份，不得把旧 ID 串给新实体。再用两个窗口加载同一 revision，先后保存不同修改，确认后提交的旧 revision 不会静默覆盖，并能取得服务端最新完整项目；同时验证删除、账号 A/B 所有权隔离，以及更新成功后刷新读取的是新 artifact。必要时配合受控对象存储或数据库失败检查：切换前失败仍能读取旧 artifact，新对象得到补偿清理，成功切换后旧对象仅做 best-effort 清理。当前待测范围只包含 Storyboard Workspace 持久化，不表示 Brainstorm Conversation、Project Memory、Canvas 关联或其他业务数据云同步已经实现。

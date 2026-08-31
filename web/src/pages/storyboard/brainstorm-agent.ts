@@ -123,7 +123,7 @@ export type BrainstormContextDiagnostics = {
 };
 
 export type BrainstormContextInput = {
-    skill: BrainstormSkill;
+    skillId: BrainstormSkillId;
     storyboard: BrainstormStoryboardSnapshot;
     focus: BrainstormFocus;
     priorMessages: BrainstormMessage[];
@@ -168,7 +168,7 @@ export type BrainstormToolExecution = {
     sideEffect?: "none" | "write";
 };
 
-export type BrainstormExecuteTool = (call: BrainstormToolCall, options: { signal?: AbortSignal; definition?: BrainstormToolDefinition }) => Promise<BrainstormToolExecution>;
+export type BrainstormExecuteTool = (call: BrainstormToolCall, options: { signal?: AbortSignal; definition: BrainstormToolDefinition }) => Promise<BrainstormToolExecution>;
 
 export type BrainstormTurnEvent =
     | { type: "status"; status: BrainstormAssistantStatus }
@@ -184,9 +184,20 @@ export type BrainstormTurnBaseResult = {
     usage?: BrainstormTokenUsage;
 };
 
+export type BrainstormTurnContinuation = {
+    context: BrainstormContextResult;
+    messages: BrainstormModelMessage[];
+    output: BrainstormOutputItem[];
+    pendingCalls: BrainstormToolCall[];
+    toolRounds: number;
+    usage?: BrainstormTokenUsage;
+};
+
+export type BrainstormToolApprovalDecision = "approved" | "rejected";
+
 export type BrainstormTurnResult =
     | (BrainstormTurnBaseResult & { status: "completed" })
-    | (BrainstormTurnBaseResult & { status: "awaiting_approval"; call: BrainstormToolCall })
+    | (BrainstormTurnBaseResult & { status: "awaiting_approval"; call: BrainstormToolCall; continuation: BrainstormTurnContinuation })
     | (BrainstormTurnBaseResult & { status: "failed" | "cancelled"; error: { code: BrainstormErrorCode; message: string } });
 
 export type BrainstormTurnDependencies = {

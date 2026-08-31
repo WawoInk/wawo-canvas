@@ -3,14 +3,6 @@ import { test } from "node:test";
 
 import { BrainstormContextError, buildBrainstormContext } from "./brainstorm-agent-context.ts";
 
-const skill = {
-    id: "visual_storytelling",
-    version: "1.0.0",
-    label: "视觉叙事",
-    description: "用画面推进故事",
-    instruction: "SKILL_MARKER：优先给出可拍摄的视觉方案。",
-};
-
 const storyboard = {
     id: "storyboard-1",
     revision: 3,
@@ -100,7 +92,7 @@ function assistant(id, parentId, output, usage) {
 
 function input(overrides = {}) {
     return {
-        skill,
+        skillId: "visual_storytelling",
         storyboard,
         focus: { kind: "shot", sceneId: "scene-a", segmentId: "segment-a", shotId: "shot-b" },
         priorMessages: [],
@@ -135,7 +127,7 @@ test("builds focused context by stable ids and keeps untrusted data outside syst
     );
 
     const allContent = content(result);
-    assert.match(allContent, /SKILL_MARKER/);
+    assert.match(allContent, /代码内 Skill：视觉叙事/);
     assert.match(allContent, /SELECTED_SHOT_MARKER/);
     assert.doesNotMatch(allContent, /UNSELECTED_SHOT_MARKER/);
     assert.match(allContent, /SHOT_MEMORY_MARKER/);
@@ -191,6 +183,8 @@ test("replays only unambiguous forward tool pairs matched by callId", () => {
                     { type: "tool_call", callId: "ambiguous", name: "read_scene", arguments: "{\"n\":1}" },
                     { type: "tool_call", callId: "ambiguous", name: "read_scene", arguments: "{\"n\":2}" },
                     { type: "tool_result", callId: "ambiguous", name: "read_scene", status: "succeeded", content: "AMBIGUOUS_RESULT" },
+                    { type: "tool_call", callId: "pending", name: "save_memory", arguments: "{}" },
+                    { type: "tool_result", callId: "pending", name: "save_memory", status: "awaiting_approval", content: "PENDING_RESULT" },
                 ]),
             ],
             currentUserMessage: user("current", "a1", "继续"),
@@ -208,6 +202,45 @@ test("replays only unambiguous forward tool pairs matched by callId", () => {
     assert.match(trimmedPairs.find((item) => item.id === "tool-pair:orphan-result").reason, /孤立/);
     assert.match(trimmedPairs.find((item) => item.id === "tool-pair:reversed").reason, /早于/);
     assert.match(trimmedPairs.find((item) => item.id === "tool-pair:ambiguous").reason, /不明确/);
+    assert.match(trimmedPairs.find((item) => item.id === "tool-pair:pending").reason, /审批/);
+});
+
+test("keeps the selected shot when the generic storyboard overview is too large", () => {
+    const largeStoryboard = structuredClone(storyboard);
+    largeStoryboard.document.scenes.push(
+        ...Array.from({ length: 80 }, (_, index) => ({
+            id: `extra-scene-${index}`,
+            sceneNo: index + 3,
+            sourceRefs: [],
+            location: `OVERVIEW_ONLY_${index}_${"大厅".repeat(20)}`,
+            time: "夜",
+            characters: ["群演"],
+            emotion: "混乱",
+            segments: [],
+        })),
+    );
+
+    const result = buildBrainstormContext(input({ storyboard: largeStoryboard, budget: { contextWindowTokens: 1_100, outputReserveTokens: 200 } }));
+    const allContent = content(result);
+
+    assert.match(allContent, /SELECTED_SHOT_MARKER/);
+    assert.doesNotMatch(allContent, /OVERVIEW_ONLY_79/);
+    assert.equal(diagnostic(result, "storyboard", "storyboard:storyboard-1:focus:shot:scene-a:segment-a:shot-b").action, "included");
+    assert.equal(diagnostic(result, "storyboard", "storyboard:storyboard-1:overview").action, "trimmed");
+});
+
+test("does not replay trimmed history when another candidate reuses its raw id", () => {
+    const result = buildBrainstormContext(
+        input({
+            priorMessages: [assistant("shared-id", null, [{ type: "text", text: `HUGE_HISTORY_MARKER_${"历史".repeat(8_000)}` }])],
+            memories: [{ id: "shared-id", content: "SMALL_MEMORY_MARKER", confirmed: true, scope: { kind: "project" } }],
+            budget: { contextWindowTokens: 2_000, outputReserveTokens: 200 },
+        }),
+    );
+
+    assert.match(content(result), /SMALL_MEMORY_MARKER/);
+    assert.doesNotMatch(content(result), /HUGE_HISTORY_MARKER/);
+    assert.equal(diagnostic(result, "history", "shared-id").action, "trimmed");
 });
 
 test("applies one final budget including tool schemas and trims valid tool pairs atomically", () => {

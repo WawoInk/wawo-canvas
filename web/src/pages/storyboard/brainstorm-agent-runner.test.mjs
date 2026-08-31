@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { runBrainstormTurn } from "./brainstorm-agent-runner.ts";
+import { resumeBrainstormTurn, runBrainstormTurn } from "./brainstorm-agent-runner.ts";
 
 const diagnostics = {
     limitTokens: 1000,
@@ -129,29 +129,88 @@ test("executes tools sequentially, skips calls after a failure, and feeds every 
     assert.deepEqual(completion.requests[1].messages, [...context.messages, first, failed, second, skipped]);
 });
 
-test("suspends an approval-required tool without executing it", async () => {
+test("suspends an approval-required tool and resumes after approval", async () => {
     const call = { type: "tool_call", callId: "write-1", name: "save_memory", arguments: '{"content":"雨夜"}' };
     const tool = { name: "save_memory", description: "Save memory", parameters: {}, risk: "write", approval: "required" };
-    const events = [];
-    const result = await runBrainstormTurn(
-        { ...context, tools: [tool] },
-        {
-            complete: queueCompletion({ content: "建议保存。", toolCalls: [call] }).complete,
-            executeTool: noTool,
+    const completion = queueCompletion({ content: "建议保存。", toolCalls: [call] }, { content: "已保存。", toolCalls: [] });
+    let executions = 0;
+    const dependencies = {
+        complete: completion.complete,
+        executeTool: async () => {
+            executions += 1;
+            return { status: "succeeded", content: "saved", sideEffect: "write" };
         },
-        { onEvent: (event) => events.push(event) },
-    );
+    };
+    const result = await runBrainstormTurn({ ...context, tools: [tool] }, dependencies);
 
-    const awaiting = { type: "tool_result", callId: "write-1", name: "save_memory", status: "awaiting_approval", content: "Tool requires approval before execution.", sideEffect: "write" };
-    assert.deepEqual(result, {
-        status: "awaiting_approval",
-        call,
-        content: "建议保存。",
-        output: [{ type: "text", text: "建议保存。" }, call, awaiting],
-        diagnostics,
-        toolRounds: 1,
+    assert.equal(executions, 0);
+    assert.equal(result.status, "awaiting_approval");
+    assert.deepEqual(result.call, call);
+    assert.equal(result.output.at(-1).status, "awaiting_approval");
+
+    const resumed = await resumeBrainstormTurn(result.continuation, "approved", dependencies);
+    assert.equal(executions, 1);
+    assert.equal(resumed.status, "completed");
+    assert.equal(resumed.content, "建议保存。已保存。");
+    assert.equal(completion.requests.length, 2);
+    assert.deepEqual(completion.requests[1].messages.at(-1), {
+        type: "tool_result",
+        callId: "write-1",
+        name: "save_memory",
+        status: "succeeded",
+        content: "saved",
+        sideEffect: "write",
     });
-    assert.deepEqual(events.at(-1), { type: "status", status: "awaiting_approval" });
+});
+
+test("resumes an approval-required tool with a rejected result without executing it", async () => {
+    const call = { type: "tool_call", callId: "write-1", name: "save_memory", arguments: "{}" };
+    const completion = queueCompletion({ content: "", toolCalls: [call] }, { content: "已取消保存。", toolCalls: [] });
+    let executions = 0;
+    const dependencies = {
+        complete: completion.complete,
+        executeTool: async () => {
+            executions += 1;
+            return { status: "succeeded", content: "unexpected" };
+        },
+    };
+    const pending = await runBrainstormTurn(
+        { ...context, tools: [{ name: "save_memory", description: "", parameters: {}, risk: "write", approval: "required" }] },
+        dependencies,
+    );
+    const resumed = await resumeBrainstormTurn(pending.continuation, "rejected", dependencies);
+
+    assert.equal(executions, 0);
+    assert.equal(resumed.status, "completed");
+    assert.equal(resumed.content, "已取消保存。");
+    assert.deepEqual(completion.requests[1].messages.at(-1), {
+        type: "tool_result",
+        callId: "write-1",
+        name: "save_memory",
+        status: "rejected",
+        content: "Tool execution was rejected by the user.",
+        sideEffect: "none",
+    });
+});
+
+test("rejects an unregistered tool without invoking the executor", async () => {
+    const call = { type: "tool_call", callId: "call-unknown", name: "delete_everything", arguments: "{}" };
+    const completion = queueCompletion({ content: "", toolCalls: [call] }, { content: "该工具不可用。", toolCalls: [] });
+    let executions = 0;
+    const result = await runBrainstormTurn(context, {
+        complete: completion.complete,
+        executeTool: async () => {
+            executions += 1;
+            return { status: "succeeded", content: "unexpected" };
+        },
+    });
+
+    assert.equal(executions, 0);
+    assert.equal(result.status, "completed");
+    assert.deepEqual(result.output.slice(0, 2), [
+        call,
+        { type: "tool_result", callId: "call-unknown", name: "delete_everything", status: "failed", content: "Tool is not registered." },
+    ]);
 });
 
 test("executes four tool batches and returns the round limit without a fifth completion", async () => {
@@ -310,13 +369,13 @@ test("suspends when an executor reports that approval is required", async () => 
         { ...context, tools: [{ name: "conditional_write", description: "", parameters: {}, risk: "write", approval: "auto" }] },
         {
             complete: queueCompletion({ content: "", toolCalls: [call] }).complete,
-            executeTool: async () => ({ status: "awaiting_approval", content: "Dynamic approval required.", sideEffect: "write" }),
+            executeTool: async () => ({ status: "awaiting_approval", content: "Dynamic approval required.", sideEffect: "none" }),
         },
     );
 
     assert.equal(result.status, "awaiting_approval");
     assert.deepEqual(result.call, call);
-    assert.deepEqual(result.output, [call, { type: "tool_result", callId: "call-1", name: "conditional_write", status: "awaiting_approval", content: "Dynamic approval required.", sideEffect: "write" }]);
+    assert.deepEqual(result.output, [call, { type: "tool_result", callId: "call-1", name: "conditional_write", status: "awaiting_approval", content: "Dynamic approval required.", sideEffect: "none" }]);
 });
 
 test("preserves streamed text when completion is cancelled", async () => {

@@ -80,7 +80,8 @@
   - 未保存输出也会生成非空 ID；编辑或重新生成时优先保留当前 Document 已有 ID，缺失或不可信 ID 再按 `sceneNo/segmentNo/shotNo` 匹配未被其他实体保留的旧 ID，新实体生成新 UUID。
   - 服务端保存详情是权威结果；成功保存保留 Project ID 和原 `createdAt`，并采用返回的新 revision。
   - stale revision 由 `ApiError.data.current` 暴露，不在客户端静默覆盖或自动字段合并。
-  - 当前只实现 Storyboard Workspace 基础，不表示 Brainstorm、Project Memory 或 Canvas 关联已经存在。
+  - Brainstorm Core 已提供纯 `Context Builder -> Turn Runner` 合同：最终预算同时计算固定 System、代码内 Skill、分镜焦点、Memory、Summary、历史和 Tool Schema；Tool Pair 按 `callId` 原子清理，Runner 通过可注入 Completion/Executor 测试四轮 Tool Loop、审批续跑与首输出前单次重试。
+  - Brainstorm Core 尚未接入 Conversation/Message HTTP、Project Memory/Summary、真实模型 Transport、Storyboard Tool Executor、页面 UI 或 Canvas 关联；不要把纯 Core 视为完整 Brainstorm 功能。
 
 ## 个人素材 Store
 
