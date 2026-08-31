@@ -328,6 +328,14 @@ func buildGeminiUpstream(channel model.ModelChannel, modelName, path string, bod
 	if stream {
 		action = "streamGenerateContent"
 	}
+	var payload map[string]json.RawMessage
+	if json.Unmarshal(body, &payload) == nil {
+		delete(payload, "model")
+		delete(payload, "stream")
+		if upstreamBody, marshalErr := json.Marshal(payload); marshalErr == nil {
+			body = upstreamBody
+		}
+	}
 	baseURL := strings.TrimRight(strings.TrimSpace(channel.BaseURL), "/")
 	urlStr := fmt.Sprintf("%s/models/%s:%s?key=%s", baseURL, modelName, action, url.QueryEscape(normalizeModelChannelAPIKey(channel.APIKey)))
 	if stream {
