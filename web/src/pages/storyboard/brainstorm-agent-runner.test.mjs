@@ -254,3 +254,81 @@ test("does not retry after a streamed tool-call delta", async () => {
     assert.equal(result.status, "failed");
     assert.deepEqual(result.output, []);
 });
+
+test("turns a thrown tool error into a failed result and continues the model loop", async () => {
+    const first = { type: "tool_call", callId: "call-1", name: "read_scene", arguments: "{}" };
+    const second = { type: "tool_call", callId: "call-2", name: "read_shot", arguments: "{}" };
+    const completion = queueCompletion(
+        { content: "", toolCalls: [first, second] },
+        { content: "工具失败已说明。", toolCalls: [] },
+    );
+    const executed = [];
+    const result = await runBrainstormTurn(
+        {
+            ...context,
+            tools: [
+                { name: "read_scene", description: "", parameters: {}, risk: "read", approval: "auto" },
+                { name: "read_shot", description: "", parameters: {}, risk: "read", approval: "auto" },
+            ],
+        },
+        {
+            complete: completion.complete,
+            executeTool: async (call) => {
+                executed.push(call.callId);
+                throw new Error("lookup exploded");
+            },
+        },
+    );
+
+    assert.deepEqual(executed, ["call-1"]);
+    assert.deepEqual(result.output.slice(0, 4), [
+        first,
+        { type: "tool_result", callId: "call-1", name: "read_scene", status: "failed", content: "lookup exploded" },
+        second,
+        { type: "tool_result", callId: "call-2", name: "read_shot", status: "skipped", content: "Skipped because a previous tool call failed." },
+    ]);
+    assert.equal(result.status, "completed");
+});
+
+test("skips an approval-required call when an earlier call in the batch failed", async () => {
+    const first = { type: "tool_call", callId: "call-1", name: "read_scene", arguments: "{}" };
+    const second = { type: "tool_call", callId: "call-2", name: "save_memory", arguments: "{}" };
+    const completion = queueCompletion(
+        { content: "", toolCalls: [first, second] },
+        { content: "未保存。", toolCalls: [] },
+    );
+    const result = await runBrainstormTurn(
+        {
+            ...context,
+            tools: [
+                { name: "read_scene", description: "", parameters: {}, risk: "read", approval: "auto" },
+                { name: "save_memory", description: "", parameters: {}, risk: "write", approval: "required" },
+            ],
+        },
+        {
+            complete: completion.complete,
+            executeTool: async () => ({ status: "failed", content: "missing" }),
+        },
+    );
+
+    assert.equal(result.status, "completed");
+    assert.deepEqual(result.output[3], { type: "tool_result", callId: "call-2", name: "save_memory", status: "skipped", content: "Skipped because a previous tool call failed." });
+});
+
+test("suspends when an executor reports that approval is required", async () => {
+    const call = { type: "tool_call", callId: "call-1", name: "conditional_write", arguments: "{}" };
+    const result = await runBrainstormTurn(
+        { ...context, tools: [{ name: "conditional_write", description: "", parameters: {}, risk: "write", approval: "auto" }] },
+        {
+            complete: queueCompletion({ content: "", toolCalls: [call] }).complete,
+            executeTool: async () => ({ status: "awaiting_approval", content: "Dynamic approval required.", sideEffect: "write" }),
+        },
+    );
+
+    assert.equal(result.status, "awaiting_approval");
+    assert.deepEqual(result.call, call);
+    assert.deepEqual(result.output, [
+        call,
+        { type: "tool_result", callId: "call-1", name: "conditional_write", status: "awaiting_approval", content: "Dynamic approval required.", sideEffect: "write" },
+    ]);
+});

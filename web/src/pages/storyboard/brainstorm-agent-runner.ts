@@ -110,18 +110,27 @@ export async function runBrainstormTurn(
         for (const call of completion.toolCalls) {
             append(call);
             const definition = context.tools.find((tool) => tool.name === call.name);
-            if (definition?.approval === "required") {
+            if (!stopped && definition?.approval === "required") {
                 append({ type: "tool_result", callId: call.callId, name: call.name, status: "awaiting_approval", content: "Tool requires approval before execution.", sideEffect: definition.risk === "write" ? "write" : "none" });
                 options.onEvent?.({ type: "status", status: "awaiting_approval" });
                 return { status: "awaiting_approval", call, ...base() };
             }
-            const execution = stopped
-                ? { status: "skipped" as const, content: "Skipped because a previous tool call failed." }
-                : await dependencies.executeTool(call, { signal: options.signal, definition });
+            let execution;
+            try {
+                execution = stopped
+                    ? { status: "skipped" as const, content: "Skipped because a previous tool call failed." }
+                    : await dependencies.executeTool(call, { signal: options.signal, definition });
+            } catch (error) {
+                execution = { status: "failed" as const, content: errorMessage(error, "Tool execution failed.") };
+            }
             const result: BrainstormToolResult = { type: "tool_result", callId: call.callId, name: call.name, ...execution };
             wrote ||= execution.sideEffect === "write";
             append(result);
             messages.push(call, result);
+            if (execution.status === "awaiting_approval") {
+                options.onEvent?.({ type: "status", status: "awaiting_approval" });
+                return { status: "awaiting_approval", call, ...base() };
+            }
             stopped ||= execution.status !== "succeeded";
         }
         if (toolRounds === 4) {
