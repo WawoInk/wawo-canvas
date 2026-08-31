@@ -1,6 +1,7 @@
 import type {
     BrainstormFocus,
     BrainstormMemoryCandidate,
+    BrainstormMemoryLimits,
     BrainstormMemoryState,
     BrainstormMemoryWriteInput,
     BrainstormProjectMemory,
@@ -17,7 +18,6 @@ const encoder = new TextEncoder();
 export const DEFAULT_BRAINSTORM_MEMORY_LIMITS = Object.freeze({ maxItems: 24, maxContentBytes: 8 * 1024, maxTotalBytes: 32 * 1024 });
 
 export type BrainstormMemoryValidationIssue = { field: "id" | "kind" | "scope" | "content" | "tags" | "sourceMessageId" | "operationId"; message: string };
-export type BrainstormMemoryLimits = { maxItems: number; maxContentBytes: number; maxTotalBytes: number };
 export type BrainstormMemorySelection = { included: BrainstormMemoryCandidate[]; excluded: { memory: BrainstormMemoryCandidate; reason: string }[] };
 export type BrainstormMemoryStateChange =
     | { type: "candidate_added"; candidate: BrainstormMemoryCandidate }
@@ -77,8 +77,17 @@ export function prepareBrainstormMemoryConfirmation(candidate: BrainstormMemoryC
 }
 
 export function projectBrainstormMemory(memory: BrainstormProjectMemory): BrainstormMemoryCandidate {
-    const scope = memory.scope === "project" ? { kind: "project" as const } : memory.scope === "scene" ? { kind: "scene" as const, sceneId: memory.path } : { kind: "shot" as const, shotId: memory.path };
-    return {
+    const scope =
+        memory.scope === "project"
+            ? { kind: "project" as const }
+            : memory.scope === "scene"
+              ? { kind: "scene" as const, sceneId: memory.path }
+              : memory.scope === "shot"
+                ? { kind: "shot" as const, shotId: memory.path }
+                : undefined;
+    if (!scope || (memory.scope === "project" && memory.path.trim())) throw new Error("Memory scope/path 无效");
+
+    const candidate: BrainstormMemoryCandidate = {
         id: memory.id,
         kind: memory.kind,
         content: memory.content,
@@ -89,6 +98,10 @@ export function projectBrainstormMemory(memory: BrainstormProjectMemory): Brains
         ...(memory.updatedAt ? { updatedAt: memory.updatedAt } : {}),
         scope,
     };
+    const issues = validateBrainstormMemoryCandidate(candidate);
+    if (!validText(memory.operationId, MAX_ID_BYTES)) issues.push({ field: "operationId", message: "operationId 无效" });
+    if (issues.length) throw new Error(issues.map((issue) => issue.message).join("；"));
+    return candidate;
 }
 
 export function projectBrainstormMemories(memories: BrainstormProjectMemory[]): BrainstormMemoryCandidate[] {

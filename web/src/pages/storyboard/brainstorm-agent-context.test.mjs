@@ -441,3 +441,53 @@ test("keeps Tool Call and Tool Result across assistant messages atomic at the br
     );
     assert.doesNotMatch(content(result), /旧问题/);
 });
+
+test("rejects a User-boundary Summary checkpoint that splits a Tool Call and Result", () => {
+    const result = buildBrainstormContext(
+        input({
+            priorMessages: [
+                user("u1", null, "开始"),
+                assistant("a-call", "u1", [{ type: "tool_call", callId: "pair", name: "read_scene", arguments: "{}" }]),
+                user("u2", "a-call", "不要在这里切分"),
+                assistant("a-result", "u2", [{ type: "tool_result", callId: "pair", name: "read_scene", status: "succeeded", content: "RESULT" }]),
+            ],
+            currentUserMessage: user("current", "a-result", "继续"),
+            summary: { id: "summary-split", throughMessageId: "u2", content: "INVALID_SPLIT_SUMMARY" },
+        }),
+    );
+
+    assert.doesNotMatch(content(result), /INVALID_SPLIT_SUMMARY/);
+    assert.match(diagnostic(result, "summary", "summary-split").reason, /Tool Call\/Result/);
+});
+
+test("accepts a detached branch Summary only with complete coverage metadata", () => {
+    const priorMessages = [user("u2", null, "分页后保留的问题"), assistant("a2", "u2", [{ type: "text", text: "分页后的回答" }])];
+    const detached = buildBrainstormContext(
+        input({
+            priorMessages,
+            currentUserMessage: user("current", "a2", "继续"),
+            summary: {
+                id: "summary-detached",
+                fromMessageId: "u0",
+                throughMessageId: "u1",
+                content: "DETACHED_SUMMARY",
+                tokenCount: 12,
+                sourceTokenCount: 100,
+                coveredMessageCount: 6,
+                model: "summary-model",
+            },
+        }),
+    );
+    assert.match(content(detached), /DETACHED_SUMMARY/);
+    assert.equal(detached.diagnostics.summary, "included");
+
+    const incomplete = buildBrainstormContext(
+        input({
+            priorMessages,
+            currentUserMessage: user("current", "a2", "继续"),
+            summary: { id: "summary-incomplete", throughMessageId: "u1", content: "INCOMPLETE_SUMMARY" },
+        }),
+    );
+    assert.doesNotMatch(content(incomplete), /INCOMPLETE_SUMMARY/);
+    assert.match(diagnostic(incomplete, "summary", "summary-incomplete").reason, /覆盖元数据/);
+});

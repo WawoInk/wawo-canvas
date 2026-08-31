@@ -56,6 +56,8 @@ export type BrainstormFocus = { kind: "project" } | { kind: "scene"; sceneId: st
 
 export type BrainstormMemoryScope = { kind: "project" } | { kind: "scene"; sceneId: string } | { kind: "shot"; shotId: string };
 
+export type BrainstormMemoryLimits = { maxItems: number; maxContentBytes: number; maxTotalBytes: number };
+
 export type BrainstormMemoryCandidate = {
     id: string;
     kind?: string;
@@ -166,7 +168,7 @@ export type BrainstormContextInput = {
     priorMessages: BrainstormMessage[];
     currentUserMessage: BrainstormUserMessage;
     memories: BrainstormMemoryCandidate[];
-    memoryLimits?: { maxItems: number; maxContentBytes: number; maxTotalBytes: number };
+    memoryLimits?: BrainstormMemoryLimits;
     summary?: BrainstormSummaryCheckpoint;
     tools: BrainstormToolDefinition[];
     budget: BrainstormTokenBudget;

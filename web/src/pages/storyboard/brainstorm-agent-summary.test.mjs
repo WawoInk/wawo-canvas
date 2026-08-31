@@ -91,3 +91,30 @@ test("counts the previous checkpoint toward the compression trigger before mergi
     assert.equal(plan.previousSummary, "OLD_SUMMARY");
     assert.equal(plan.throughMessageId, "u2");
 });
+
+test("merges a prior branch Summary even when its covered boundary is no longer loaded", () => {
+    const messages = [user("u2", null, "新增问题"), assistant("a2", "u2", [{ type: "text", text: "新增回答" }]), user("u3", "a2", "继续")];
+    const plan = planBrainstormSummaryCheckpoint({
+        messages,
+        previous: {
+            id: "summary-1",
+            fromMessageId: "u0",
+            throughMessageId: "u1",
+            content: "OLD_SUMMARY",
+            tokenCount: 20,
+            sourceTokenCount: 100,
+            coveredMessageCount: 6,
+            model: "model-old",
+        },
+        triggerTokens: 1,
+        retainTokens: 10_000,
+        model: "model-new",
+    });
+
+    assert.ok(plan);
+    assert.equal(plan.previousSummary, "OLD_SUMMARY");
+    assert.equal(plan.fromMessageId, "u0");
+    assert.equal(plan.throughMessageId, "u2");
+    assert.equal(plan.coveredMessageCount, 7);
+    assert.ok(plan.sourceTokenCount > 100);
+});

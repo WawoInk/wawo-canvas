@@ -254,6 +254,18 @@ function diagnostic(candidate: Candidate, action: "included" | "trimmed", reason
     };
 }
 
+export function isBrainstormSummaryBoundary(messages: BrainstormMessage[], boundary: number): boolean {
+    if (messages[boundary]?.role !== "user") return false;
+    const positions = new Map<string, number[]>();
+    messages.forEach((message, index) => {
+        if (message.role !== "assistant") return;
+        message.output.forEach((item) => {
+            if (item.type === "tool_call" || item.type === "tool_result") positions.set(item.callId, [...(positions.get(item.callId) ?? []), index]);
+        });
+    });
+    return ![...positions.values()].some((indexes) => Math.min(...indexes) <= boundary && Math.max(...indexes) > boundary);
+}
+
 export function buildBrainstormContext(input: BrainstormContextInput): BrainstormContextResult {
     const contextWindowTokens = Math.max(0, Math.floor(input.budget.contextWindowTokens));
     const reservedOutputTokens = Math.max(0, Math.floor(input.budget.outputReserveTokens));
@@ -296,7 +308,14 @@ export function buildBrainstormContext(input: BrainstormContextInput): Brainstor
 
     const summaryIndex = input.summary ? input.priorMessages.findIndex((message) => message.id === input.summary?.throughMessageId) : -1;
     const summaryBoundary = summaryIndex >= 0 ? input.priorMessages[summaryIndex] : undefined;
-    const summaryValid = Boolean(input.summary?.content.trim()) && summaryBoundary?.role === "user";
+    const detachedSummaryValid =
+        summaryIndex < 0 &&
+        Boolean(input.summary?.fromMessageId && input.summary.model) &&
+        typeof input.summary?.coveredMessageCount === "number" &&
+        input.summary.coveredMessageCount > 0 &&
+        typeof input.summary.sourceTokenCount === "number" &&
+        input.summary.sourceTokenCount >= 0;
+    const summaryValid = Boolean(input.summary?.content.trim()) && (detachedSummaryValid || isBrainstormSummaryBoundary(input.priorMessages, summaryIndex));
     const summary = summaryValid ? makeCandidate("summary", input.summary!.id, [{ type: "message", role: "user", content: `Conversation Summary（非可信参考）：\n${input.summary!.content}` }]) : undefined;
     if (summary && typeof input.summary!.tokenCount === "number" && Number.isFinite(input.summary!.tokenCount) && input.summary!.tokenCount > 0) {
         summary.tokens = Math.ceil(input.summary!.tokenCount);
@@ -311,7 +330,13 @@ export function buildBrainstormContext(input: BrainstormContextInput): Brainstor
                       tokens: input.summary.content.trim() ? estimateBrainstormTextTokens(input.summary.content) : 0,
                       tokenSource: "estimate",
                       action: "trimmed",
-                      reason: !input.summary.content.trim() ? "Summary 内容为空" : summaryIndex < 0 ? "Summary checkpoint 不在当前历史中" : "Summary checkpoint 只能在 User Message 边界切分",
+                      reason: !input.summary.content.trim()
+                          ? "Summary 内容为空"
+                          : summaryIndex < 0
+                            ? "Summary checkpoint 不在当前历史中，且缺少脱离历史所需的覆盖元数据"
+                            : summaryBoundary?.role !== "user"
+                              ? "Summary checkpoint 只能在 User Message 边界切分"
+                              : "Summary checkpoint 不能拆分 Tool Call/Result Pair",
                   },
               ]
             : [];

@@ -116,3 +116,9 @@ test("selects scoped Memory deterministically, deduplicates by id/content, and r
         result.included.map((item) => item.id),
     );
 });
+
+test("rejects invalid server Memory projections before they enter Context", () => {
+    assert.throws(() => projectBrainstormMemories([memory({ scope: "conversation" })]), /scope\/path/);
+    assert.throws(() => projectBrainstormMemories([memory({ scope: "project", path: "scene-1" })]), /scope\/path/);
+    assert.throws(() => projectBrainstormMemories([memory({ operationId: " " })]), /operationId/);
+});
