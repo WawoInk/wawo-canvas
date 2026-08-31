@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -423,11 +422,17 @@ func TestProxyAIRequestMarksStreamSuccessOnlyAfterEOF(t *testing.T) {
 }
 
 func TestProxyAIRequestReturnsReadableJSONForStreamingUpstreamErrors(t *testing.T) {
-	for _, status := range []int{http.StatusBadRequest, http.StatusInternalServerError} {
-		t.Run(http.StatusText(status), func(t *testing.T) {
+	for _, testCase := range []struct {
+		status   int
+		wantCode string
+	}{
+		{status: http.StatusBadRequest, wantCode: "INVALID_REQUEST"},
+		{status: http.StatusInternalServerError, wantCode: "UPSTREAM_UNAVAILABLE"},
+	} {
+		t.Run(http.StatusText(testCase.status), func(t *testing.T) {
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "text/event-stream")
-				w.WriteHeader(status)
+				w.WriteHeader(testCase.status)
 				_, _ = w.Write([]byte(`{"error":{"code":"provider_error","message":"provider detail"}}`))
 			}))
 			t.Cleanup(upstream.Close)
@@ -462,12 +467,101 @@ func TestProxyAIRequestReturnsReadableJSONForStreamingUpstreamErrors(t *testing.
 
 			taskID := response.Header.Get("X-Generation-Task-Id")
 			task, err := repository.GetGenerationTaskByID(taskID)
-			if taskID == "" || err != nil || task.Status != model.TaskStatusFailed || task.ErrorCode != "UPSTREAM_"+fmt.Sprint(status) {
+			if taskID == "" || err != nil || task.Status != model.TaskStatusFailed || task.ErrorCode != testCase.wantCode || task.ErrorMessage != "文本模型请求失败" {
 				t.Fatalf("taskID = %q task = %#v, err = %v", taskID, task, err)
 			}
 			user, ok, err := repository.GetUserByID(userID)
 			if err != nil || !ok || !user.Credits.Equal(credit(10)) {
 				t.Fatalf("user = %#v, ok = %v, err = %v; want refunded balance", user, ok, err)
+			}
+		})
+	}
+}
+
+func TestProxyAIRequestChatErrorAuditOmitsUpstreamEcho(t *testing.T) {
+	const (
+		scriptSentinel  = "ERROR_SCRIPT_SENTINEL_65"
+		memorySentinel  = "ERROR_MEMORY_SENTINEL_65"
+		contextSentinel = "ERROR_CONTEXT_SENTINEL_65"
+	)
+	for _, testCase := range []struct {
+		status   int
+		wantCode string
+	}{
+		{status: http.StatusBadRequest, wantCode: "INVALID_REQUEST"},
+		{status: http.StatusInternalServerError, wantCode: "UPSTREAM_UNAVAILABLE"},
+	} {
+		t.Run(http.StatusText(testCase.status), func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(testCase.status)
+				_, _ = w.Write([]byte(`{"error":{"code":"provider_error","message":"` + scriptSentinel + ` ` + memorySentinel + ` ` + contextSentinel + `"}}`))
+			}))
+			t.Cleanup(upstream.Close)
+
+			modelName, userID := setupAIProxyHTTPTest(t, upstream.URL)
+			handlerDone := make(chan struct{})
+			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer close(handlerDone)
+				r = r.WithContext(WithUser(r.Context(), model.AuthUser{ID: userID}))
+				ProxyAIRequest(w, r, "/chat/completions")
+			}))
+			t.Cleanup(proxy.Close)
+
+			requestBody := `{"model":"` + modelName + `","messages":[{"role":"system","content":"` + memorySentinel + `"},{"role":"user","content":"` + scriptSentinel + ` ` + contextSentinel + `"}]}`
+			request, err := http.NewRequest(http.MethodPost, proxy.URL, strings.NewReader(requestBody))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Content-Type", "application/json")
+			response, err := proxy.Client().Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var envelope struct {
+				Code int    `json:"code"`
+				Data any    `json:"data"`
+				Msg  string `json:"msg"`
+			}
+			if err := json.Unmarshal(body, &envelope); err != nil {
+				t.Fatalf("decode response %q: %v", body, err)
+			}
+			if response.StatusCode != http.StatusOK || envelope.Code != 1 || envelope.Data != nil {
+				t.Fatalf("client response = status %d body %s", response.StatusCode, body)
+			}
+			for _, sentinel := range []string{scriptSentinel, memorySentinel, contextSentinel} {
+				if !strings.Contains(envelope.Msg, sentinel) {
+					t.Errorf("client error missing readable upstream detail %q: %s", sentinel, envelope.Msg)
+				}
+			}
+			select {
+			case <-handlerDone:
+			case <-time.After(time.Second):
+				t.Fatal("proxy handler did not return")
+			}
+
+			taskID := response.Header.Get("X-Generation-Task-Id")
+			task, err := repository.GetGenerationTaskByID(taskID)
+			if taskID == "" || err != nil {
+				t.Fatalf("taskID = %q, get task: %v", taskID, err)
+			}
+			if task.Status != model.TaskStatusFailed || task.ErrorCode != testCase.wantCode || task.ErrorMessage != "文本模型请求失败" {
+				t.Fatalf("task error = status %q code %q message %q", task.Status, task.ErrorCode, task.ErrorMessage)
+			}
+			payload, err := repository.GetGenerationPayloadByTaskID(taskID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			audit := strings.Join([]string{task.ErrorMessage, payload.RequestBody, payload.ResponseBody, payload.RawError}, "\n")
+			for _, sentinel := range []string{scriptSentinel, memorySentinel, contextSentinel} {
+				if strings.Contains(audit, sentinel) {
+					t.Errorf("persisted audit leaked %q: %s", sentinel, audit)
+				}
 			}
 		})
 	}
@@ -528,9 +622,111 @@ func TestProxyAIRequestPersistsRedactedCompatibilityAudit(t *testing.T) {
 		}
 	}
 	lowerAudit := strings.ToLower(audit)
-	for _, marker := range []string{"authorization", "api_key", "token", "x-amz-signature", "x-api-key", "x-result-url", "[redacted]"} {
+	for _, marker := range []string{"authorization", "token", "x-api-key", "x-result-url", "[redacted]", "omitted"} {
 		if !strings.Contains(lowerAudit, marker) {
 			t.Errorf("audit missing %q: %s", marker, audit)
+		}
+	}
+}
+
+func TestProxyAIRequestChatAuditOmitsConversationBodies(t *testing.T) {
+	const (
+		scriptSentinel        = "SCRIPT_ORIGINAL_SENTINEL_65"
+		projectMemorySentinel = "PROJECT_MEMORY_SENTINEL_65"
+		contextSentinel       = "FULL_CONTEXT_SENTINEL_65"
+		clientAPIKeySentinel  = "CLIENT_API_KEY_SENTINEL_65"
+		generatedSentinel     = "GENERATED_TEXT_SENTINEL_65"
+	)
+	type upstreamRequest struct {
+		body          string
+		authorization string
+	}
+	received := make(chan upstreamRequest, 1)
+	wantResponse := `{"id":"chatcmpl-private","choices":[{"message":{"content":"` + generatedSentinel + `"}}]}`
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read upstream request: %v", err)
+		}
+		received <- upstreamRequest{body: string(body), authorization: r.Header.Get("Authorization")}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(wantResponse))
+	}))
+	t.Cleanup(upstream.Close)
+
+	modelName, userID := setupAIProxyHTTPTest(t, upstream.URL)
+	handlerDone := make(chan struct{})
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(handlerDone)
+		r = r.WithContext(WithUser(r.Context(), model.AuthUser{ID: userID}))
+		ProxyAIRequest(w, r, "/chat/completions")
+	}))
+	t.Cleanup(proxy.Close)
+
+	requestBody, err := json.Marshal(map[string]any{
+		"model": modelName,
+		"messages": []any{
+			map[string]any{"role": "system", "content": "Project Memory: " + projectMemorySentinel},
+			map[string]any{"role": "user", "content": "Script: " + scriptSentinel},
+			map[string]any{"role": "assistant", "tool_calls": []any{map[string]any{"function": map[string]any{"name": "brainstorm", "arguments": `{"context":"` + contextSentinel + `","apiKey":"` + clientAPIKeySentinel + `"}`}}}},
+		},
+		"tools": []any{map[string]any{"type": "function", "function": map[string]any{"name": "brainstorm", "description": contextSentinel}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequest(http.MethodPost, proxy.URL, bytes.NewReader(requestBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := proxy.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(responseBody) != wantResponse {
+		t.Fatalf("client response = %q; want unchanged upstream response", responseBody)
+	}
+	select {
+	case <-handlerDone:
+	case <-time.After(time.Second):
+		t.Fatal("proxy handler did not return")
+	}
+
+	forwarded := <-received
+	for _, sentinel := range []string{scriptSentinel, projectMemorySentinel, contextSentinel, clientAPIKeySentinel} {
+		if !strings.Contains(forwarded.body, sentinel) {
+			t.Errorf("upstream request missing %q: %s", sentinel, forwarded.body)
+		}
+	}
+	if forwarded.authorization != "Bearer "+aiProxyTestAPIKey {
+		t.Fatalf("upstream authorization = %q", forwarded.authorization)
+	}
+
+	taskID := response.Header.Get("X-Generation-Task-Id")
+	payload, err := repository.GetGenerationPayloadByTaskID(taskID)
+	if taskID == "" || err != nil {
+		t.Fatalf("taskID = %q, get payload: %v", taskID, err)
+	}
+	auditFields := map[string]string{
+		"RequestBody": payload.RequestBody, "ResponseBody": payload.ResponseBody, "RawError": payload.RawError,
+		"RequestHeaders": payload.RequestHeaders, "ResponseHeaders": payload.ResponseHeaders,
+	}
+	for field, audit := range auditFields {
+		for _, secret := range []string{scriptSentinel, projectMemorySentinel, contextSentinel, clientAPIKeySentinel, generatedSentinel, aiProxyTestAPIKey} {
+			if strings.Contains(audit, secret) {
+				t.Errorf("%s leaked %q: %s", field, secret, audit)
+			}
+		}
+	}
+	for field, audit := range map[string]string{"RequestBody": payload.RequestBody, "ResponseBody": payload.ResponseBody} {
+		if !strings.Contains(strings.ToLower(audit), "omitted") {
+			t.Errorf("%s = %q; want omission marker", field, audit)
 		}
 	}
 }

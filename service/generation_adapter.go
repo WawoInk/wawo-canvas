@@ -697,7 +697,12 @@ func sanitizeGenerationAuditValue(key string, value any) any {
 
 func isGenerationSecretKey(key string) bool {
 	key = strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "-", ""), "_", ""))
-	return key == "authorization" || strings.Contains(key, "apikey") || strings.Contains(key, "callbacksecret")
+	switch key {
+	case "authorization", "token", "accesstoken", "refreshtoken", "idtoken", "sessiontoken", "authtoken", "bearertoken", "clientsecret", "callbacksecret", "webhooksecret", "password", "secret", "secretkey", "accesskey", "secretaccesskey", "privatekey", "credential", "credentials":
+		return true
+	default:
+		return strings.Contains(key, "apikey")
+	}
 }
 
 var generationAuditURLPattern = regexp.MustCompile(`https?://[^\s"']+|/[^\s"'?]*\?[^\s"']+`)
@@ -709,9 +714,6 @@ func redactGenerationAuditString(value string) string {
 			return value[:marker+1] + "[REDACTED]"
 		}
 		return "data:[REDACTED]"
-	}
-	if redacted, ok := redactGenerationAuditURL(value); ok {
-		return redacted
 	}
 	value = generationAuditSecretHeaderPattern.ReplaceAllString(value, "${1}: [REDACTED]")
 	return generationAuditURLPattern.ReplaceAllStringFunc(value, func(candidate string) string {

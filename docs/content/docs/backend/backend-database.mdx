@@ -63,7 +63,7 @@ artifact 变化时，服务端先上传新对象，再在同一 PostgreSQL 事�
 
 ## Storyboard Brainstorm 持久化表
 
-Storyboard Brainstorm 使用且只使用三张子表，不新增 Conversation revision、Project `activeConversationId`、Summary 字段、Turn ledger、Tool 表、GIN/vector 索引或外键框架。当前范围是后端持久化与并发边界，不代表模型调用、Summary、Context Builder、Tool Executor、前端 UI、Canvas 关联或真实浏览器验证已经完成。
+Storyboard Brainstorm 使用且只使用三张持久化子表，不新增 Conversation revision、Project `activeConversationId`、Summary 字段、Turn ledger、Tool 表、GIN/vector 索引或外键框架。模型流、Context Builder、Skill、页内分支 Summary 和 Tool Executor 在浏览器侧运行；数据库不保存流式 chunk、第二份 Conversation JSON 或独立 Tool/Summary 记录。Canvas 关联仍是可选后续，不属于 Brainstorm Agent MVP 的持久化门槛。
 
 ### storyboard_brainstorm_conversations
 
@@ -93,7 +93,7 @@ Conversation 不保存独立 revision。Turn 写入通过 PostgreSQL `FOR UPDATE
 | `continue_request_id`、`continue_request_hash` | 最近一次 continue 的独立幂等键与规范语义输入 SHA-256 |
 | `created_at`、`updated_at` | 消息创建与更新时间 |
 
-User Message 正文只使用 `content`；Assistant 正文只使用 `output`，避免双重事实。output 只要求是有界 JSON 数组，按原顺序保留 text、tool call、tool result、status、error 等未知 item；具体 item 联合类型由后续任务定义。Conversation 和 Project Memory 列表使用 `page/pageSize` 返回 `{items,total}`；Message 列表按 `created_at ASC, id ASC` 分页返回平铺图，单页可能不包含祖先，客户端需要继续请求其他页。
+User Message 正文只使用 `content`；Assistant 正文只使用 `output`，避免双重事实。后端只校验 output 为有界 JSON 数组并按原顺序保存；当前前端合同识别 `text`、`tool_call` 和 `tool_result`，待审批状态与页内续跑所需的 pending calls/tool rounds 元数据随 `tool_result` 保存，不使用独立 Tool 表。Conversation 和 Project Memory 列表使用 `page/pageSize` 返回 `{items,total}`；Message 列表按 `created_at ASC, id ASC` 分页返回平铺图，单页可能不包含祖先，客户端需要继续请求其他页。
 
 数据库为 active Assistant 建立 `(user_id, project_id, conversation_id)` 部分唯一索引，只覆盖 `role='assistant' AND status IN ('pending','streaming','awaiting_approval')`，保证同一 Conversation 最多一个 active Turn。非空 `client_request_id` 与 `continue_request_id` 分别建立 Conversation scope 的部分唯一索引，查询同时检查两个命名空间。原始 Turn key/hash 保持不可变，continue 只更新独立字段；相同 key 会比较对应 hash，语义相同返回已有结果，语义不同返回 HTTP 409。相同 Message ID 与相同规范语义输入也返回原 Turn；复用 ID 但输入不同返回 409。
 
@@ -115,7 +115,7 @@ append Turn 在一个数据库事务内依次锁定 Conversation、先判断幂�
 | `operation_id` | 当前 `user_id + project_id` 内必填且唯一的操作 ID |
 | `created_at`、`updated_at` | 创建与更新时间 |
 
-Memory 表只保存已确认记录；候选 Memory、Summary 和运行时 Context 仍不属于持久事实。`source_message_id` 存在时必须属于同一账号和 Project，不能借引用读取其他账号或项目的 Message。
+Memory 表只保存已确认记录；候选 Memory 和运行时 Context 不属于持久事实。Summary 由浏览器 Runtime 按当前 Conversation 分支派生，使用 20k token trigger 和 8k token retain，在同一页面内按 Conversation 缓存；boundary 不属于当前 sibling 分支时重新构建，刷新后从持久 Message 历史重新生成。Summary 作为非可信上下文使用，不新增数据库字段、数据表或 API。`source_message_id` 存在时必须属于同一账号和 Project，不能借引用读取其他账号或项目的 Message。
 
 ### 所有权与删除
 
@@ -164,7 +164,9 @@ Memory 表只保存已确认记录；候选 Memory、Summary 和运行时 Contex
 
 ## generation_payloads
 
-`generation_payloads` 保存完整命令和脱敏后的上游请求、响应及原始错误。它与任务一一对应，可按保留策略清理；长期任务摘要仍保存在 `generation_tasks.metadata`。
+`generation_payloads` 保存第一方 Generation Command 和按业务类型最小化后的上游审计。Chat Compatibility 的请求正文、响应正文和 raw error 只保存固定 omission marker，持久化任务错误只保留稳定规范 code 与通用消息，不保存完整剧本、Memory、Context、Tool Result、上游正文或原始错误；该省略不影响客户端收到的即时响应。其他生成类型继续保存经过通用 sanitizer 脱敏的必要审计字段。记录与任务一一对应，可按保留策略清理；长期任务摘要仍保存在 `generation_tasks.metadata`。
+
+数据库与访问日志遵循同一最小化边界：GORM 使用参数化日志，不插值输出 SQL 参数；Gin access log 不记录 query；legacy `task_sync` 不记录上游 body。通用 sanitizer 除 Authorization、API Key、data URI 和签名 Query 外，也会处理 `token`、`access_token`、`client_secret` 和 `password`。
 
 ## generation_task_events
 

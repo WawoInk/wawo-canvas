@@ -664,6 +664,71 @@ test("Runtime 异常会把服务端 Placeholder 持久化为 failed", async () =
     await unmount(mounted);
 });
 
+test("Runtime resolved failed 会持久化部分输出并保留可读 Runner 错误", async () => {
+    apiCalls.length = 0;
+    accountId = "user-1";
+    listConversations = async () => ({ items: [conversation("conversation-1")], total: 1 });
+    listMessages = async () => ({ conversation: conversation("conversation-1"), items: [], total: 0 });
+    createTurn = async (_projectId, conversationId, input) => ({
+        conversation: conversation(conversationId, input.assistantMessageId),
+        userMessage: userMessage(input.userMessage!.id, conversationId),
+        assistantMessage: assistantMessage(input.assistantMessageId, conversationId, "pending"),
+    });
+    updateAssistant = async (_projectId, conversationId, id, input) => ({
+        ...assistantMessage(id, conversationId, input.status, input.expectedRevision + 1),
+        output: input.output,
+    });
+    const partialOutput = [{ type: "text" as const, text: "已完成的部分" }];
+    runTurn = async () => ({
+        ...completed,
+        status: "failed",
+        content: "已完成的部分",
+        output: partialOutput,
+        error: { code: "TOOL_ROUND_LIMIT", message: "工具调用已达到 4 轮上限" },
+    });
+
+    const mounted = await mount();
+    await act(async () => void (await current.send("继续分析")));
+    await flush();
+
+    const run = current.runs["conversation-1"];
+    const failed = apiCalls.filter((call) => call[0] === "update").at(-1);
+    assert.deepEqual(failed?.[4], { expectedRevision: 1, status: "failed", output: partialOutput });
+    assert.equal(findAssistant(current.messages, run.assistantMessageId)?.status, "failed");
+    assert.deepEqual(findAssistant(current.messages, run.assistantMessageId)?.output, partialOutput);
+    assert.equal(run.error, "工具调用已达到 4 轮上限");
+    await unmount(mounted);
+});
+
+test("Runtime resolved cancelled 不会显示为失败错误", async () => {
+    apiCalls.length = 0;
+    accountId = "user-1";
+    listConversations = async () => ({ items: [conversation("conversation-1")], total: 1 });
+    listMessages = async () => ({ conversation: conversation("conversation-1"), items: [], total: 0 });
+    createTurn = async (_projectId, conversationId, input) => ({
+        conversation: conversation(conversationId, input.assistantMessageId),
+        userMessage: userMessage(input.userMessage!.id, conversationId),
+        assistantMessage: assistantMessage(input.assistantMessageId, conversationId, "pending"),
+    });
+    updateAssistant = async (_projectId, conversationId, id, input) => ({
+        ...assistantMessage(id, conversationId, input.status, input.expectedRevision + 1),
+        output: input.output,
+    });
+    runTurn = async () => ({
+        ...completed,
+        status: "cancelled",
+        error: { code: "ABORTED", message: "Brainstorm turn was cancelled." },
+    });
+
+    const mounted = await mount();
+    await act(async () => void (await current.send("开始")));
+    await flush();
+
+    assert.equal(current.runs["conversation-1"].status, "cancelled");
+    assert.equal(current.runs["conversation-1"].error, "");
+    await unmount(mounted);
+});
+
 test("awaiting approval Tool Result 与状态在同一次 checkpoint 持久化", async () => {
     apiCalls.length = 0;
     accountId = "user-1";
