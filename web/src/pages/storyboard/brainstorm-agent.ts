@@ -52,11 +52,7 @@ export type BrainstormMessage = BrainstormUserMessage | BrainstormAssistantMessa
 
 export type BrainstormStoryboardSnapshot = Pick<StoryboardRecord, "id" | "revision" | "title" | "sourceHash" | "status" | "options" | "directorPlan" | "document" | "validation">;
 
-export type BrainstormFocus =
-    | { kind: "project" }
-    | { kind: "scene"; sceneId: string }
-    | { kind: "segment"; sceneId: string; segmentId: string }
-    | { kind: "shot"; sceneId: string; segmentId: string; shotId: string };
+export type BrainstormFocus = { kind: "project" } | { kind: "scene"; sceneId: string } | { kind: "segment"; sceneId: string; segmentId: string } | { kind: "shot"; sceneId: string; segmentId: string; shotId: string };
 
 export type BrainstormMemoryCandidate = {
     id: string;
@@ -91,10 +87,7 @@ export type BrainstormToolDefinition = {
     approval: "auto" | "required";
 };
 
-export type BrainstormModelMessage =
-    | { type: "message"; role: "system" | "user" | "assistant"; content: string }
-    | BrainstormToolCall
-    | BrainstormToolResult;
+export type BrainstormModelMessage = { type: "message"; role: "system" | "user" | "assistant"; content: string } | BrainstormToolCall | BrainstormToolResult;
 
 export type BrainstormTokenBudget = {
     contextWindowTokens: number;
@@ -140,10 +133,7 @@ export type BrainstormContextResult = {
     diagnostics: BrainstormContextDiagnostics;
 };
 
-export type BrainstormCompletionEvent =
-    | { type: "text_delta"; delta: string }
-    | { type: "tool_call_delta"; callId?: string; name?: string; argumentsDelta?: string }
-    | { type: "usage"; usage: BrainstormTokenUsage };
+export type BrainstormCompletionEvent = { type: "text_delta"; delta: string } | { type: "tool_call_delta"; callId?: string; name?: string; argumentsDelta?: string } | { type: "usage"; usage: BrainstormTokenUsage };
 
 export type BrainstormCompletionRequest = {
     messages: BrainstormModelMessage[];
@@ -157,10 +147,7 @@ export type BrainstormCompletionResult = {
     finishReason?: string;
 };
 
-export type BrainstormComplete = (
-    request: BrainstormCompletionRequest,
-    options: { signal?: AbortSignal; onEvent: (event: BrainstormCompletionEvent) => void },
-) => Promise<BrainstormCompletionResult>;
+export type BrainstormComplete = (request: BrainstormCompletionRequest, options: { signal?: AbortSignal; onEvent: (event: BrainstormCompletionEvent) => void }) => Promise<BrainstormCompletionResult>;
 
 export type BrainstormToolExecution = {
     status: "succeeded" | "failed" | "rejected" | "awaiting_approval";
@@ -170,11 +157,7 @@ export type BrainstormToolExecution = {
 
 export type BrainstormExecuteTool = (call: BrainstormToolCall, options: { signal?: AbortSignal; definition: BrainstormToolDefinition }) => Promise<BrainstormToolExecution>;
 
-export type BrainstormTurnEvent =
-    | { type: "status"; status: BrainstormAssistantStatus }
-    | { type: "text_delta"; delta: string }
-    | { type: "output_item"; item: BrainstormOutputItem }
-    | { type: "retry" };
+export type BrainstormTurnEvent = { type: "status"; status: BrainstormAssistantStatus } | { type: "text_delta"; delta: string } | { type: "output_item"; item: BrainstormOutputItem } | { type: "retry" };
 
 export type BrainstormTurnBaseResult = {
     content: string;

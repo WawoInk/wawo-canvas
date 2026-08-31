@@ -124,16 +124,16 @@ test("stream business errors emit error without done and reject with the upstrea
             ),
     );
 
-    assert.deepEqual(
-        events.slice(0, 2),
-        [
-            { type: "phase", phase: "requesting" },
-            { type: "phase", phase: "streaming" },
-        ],
-    );
+    assert.deepEqual(events.slice(0, 2), [
+        { type: "phase", phase: "requesting" },
+        { type: "phase", phase: "streaming" },
+    ]);
     assert.equal(events.at(-1)?.type, "error");
     assert.equal(events.at(-1)?.error?.message, "quota exceeded");
-    assert.equal(events.some((event) => event.type === "done"), false);
+    assert.equal(
+        events.some((event) => event.type === "done"),
+        false,
+    );
 });
 
 test("AbortError emits abort and remains distinguishable from ordinary failures", async () => {
@@ -159,7 +159,10 @@ test("AbortError emits abort and remains distinguishable from ordinary failures"
     assert.deepEqual(events.slice(0, 1), [{ type: "phase", phase: "requesting" }]);
     assert.equal(events.at(-1)?.type, "abort");
     assert.equal(events.at(-1)?.error?.name, "AbortError");
-    assert.equal(events.some((event) => event.type === "error" || event.type === "done"), false);
+    assert.equal(
+        events.some((event) => event.type === "error" || event.type === "done"),
+        false,
+    );
 });
 
 test("bodyless OpenAI responses still emit normalized deltas, usage, and done", async () => {

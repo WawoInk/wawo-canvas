@@ -174,10 +174,7 @@ test("resumes an approval-required tool with a rejected result without executing
             return { status: "succeeded", content: "unexpected" };
         },
     };
-    const pending = await runBrainstormTurn(
-        { ...context, tools: [{ name: "save_memory", description: "", parameters: {}, risk: "write", approval: "required" }] },
-        dependencies,
-    );
+    const pending = await runBrainstormTurn({ ...context, tools: [{ name: "save_memory", description: "", parameters: {}, risk: "write", approval: "required" }] }, dependencies);
     const resumed = await resumeBrainstormTurn(pending.continuation, "rejected", dependencies);
 
     assert.equal(executions, 0);
@@ -207,10 +204,7 @@ test("rejects an unregistered tool without invoking the executor", async () => {
 
     assert.equal(executions, 0);
     assert.equal(result.status, "completed");
-    assert.deepEqual(result.output.slice(0, 2), [
-        call,
-        { type: "tool_result", callId: "call-unknown", name: "delete_everything", status: "failed", content: "Tool is not registered." },
-    ]);
+    assert.deepEqual(result.output.slice(0, 2), [call, { type: "tool_result", callId: "call-unknown", name: "delete_everything", status: "failed", content: "Tool is not registered." }]);
 });
 
 test("executes four tool batches and returns the round limit without a fifth completion", async () => {

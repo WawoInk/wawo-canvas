@@ -211,19 +211,10 @@ async function continueTurn(state: TurnState, dependencies: BrainstormTurnDepend
 
 export function runBrainstormTurn(context: BrainstormContextResult, dependencies: BrainstormTurnDependencies, options: BrainstormTurnOptions = {}): Promise<BrainstormTurnResult> {
     options.onEvent?.({ type: "status", status: "streaming" });
-    return continueTurn(
-        { context, messages: [...context.messages], output: [], toolRounds: 0, producedOutput: false, wrote: false, retried: false },
-        dependencies,
-        options,
-    );
+    return continueTurn({ context, messages: [...context.messages], output: [], toolRounds: 0, producedOutput: false, wrote: false, retried: false }, dependencies, options);
 }
 
-export async function resumeBrainstormTurn(
-    pending: BrainstormTurnContinuation,
-    decision: BrainstormToolApprovalDecision,
-    dependencies: BrainstormTurnDependencies,
-    options: BrainstormTurnOptions = {},
-): Promise<BrainstormTurnResult> {
+export async function resumeBrainstormTurn(pending: BrainstormTurnContinuation, decision: BrainstormToolApprovalDecision, dependencies: BrainstormTurnDependencies, options: BrainstormTurnOptions = {}): Promise<BrainstormTurnResult> {
     const call = pending.pendingCalls[0];
     if (!call) throw new Error("Brainstorm continuation has no pending tool call.");
     const output = [...pending.output];

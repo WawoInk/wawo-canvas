@@ -110,10 +110,7 @@ const diagnostic = (result, kind, id) => result.diagnostics.items.find((item) =>
 test("builds focused context by stable ids and keeps untrusted data outside system messages", () => {
     const result = buildBrainstormContext(
         input({
-            priorMessages: [
-                user("old-user", null, "OLD_USER_MARKER"),
-                assistant("old-assistant", "old-user", [{ type: "text", text: "RECENT_ASSISTANT_MARKER" }], { outputTokens: 9 }),
-            ],
+            priorMessages: [user("old-user", null, "OLD_USER_MARKER"), assistant("old-assistant", "old-user", [{ type: "text", text: "RECENT_ASSISTANT_MARKER" }], { outputTokens: 9 })],
             currentUserMessage: user("current", "old-assistant", "CURRENT_USER_MARKER"),
             memories: [
                 { id: "project-memory", content: "PROJECT_MEMORY_MARKER", confirmed: true, scope: { kind: "project" } },
@@ -180,8 +177,8 @@ test("replays only unambiguous forward tool pairs matched by callId", () => {
                     { type: "tool_result", callId: "orphan-result", name: "read_scene", status: "failed", content: "ORPHAN_RESULT" },
                     { type: "tool_result", callId: "reversed", name: "read_scene", status: "succeeded", content: "REVERSED_RESULT" },
                     { type: "tool_call", callId: "reversed", name: "read_scene", arguments: "{}" },
-                    { type: "tool_call", callId: "ambiguous", name: "read_scene", arguments: "{\"n\":1}" },
-                    { type: "tool_call", callId: "ambiguous", name: "read_scene", arguments: "{\"n\":2}" },
+                    { type: "tool_call", callId: "ambiguous", name: "read_scene", arguments: '{"n":1}' },
+                    { type: "tool_call", callId: "ambiguous", name: "read_scene", arguments: '{"n":2}' },
                     { type: "tool_result", callId: "ambiguous", name: "read_scene", status: "succeeded", content: "AMBIGUOUS_RESULT" },
                     { type: "tool_call", callId: "pending", name: "save_memory", arguments: "{}" },
                     { type: "tool_result", callId: "pending", name: "save_memory", status: "awaiting_approval", content: "PENDING_RESULT" },
@@ -193,8 +190,14 @@ test("replays only unambiguous forward tool pairs matched by callId", () => {
 
     const calls = result.messages.filter((message) => message.type === "tool_call");
     const results = result.messages.filter((message) => message.type === "tool_result");
-    assert.deepEqual(calls.map((item) => item.callId), ["valid"]);
-    assert.deepEqual(results.map((item) => item.callId), ["valid"]);
+    assert.deepEqual(
+        calls.map((item) => item.callId),
+        ["valid"],
+    );
+    assert.deepEqual(
+        results.map((item) => item.callId),
+        ["valid"],
+    );
     assert.equal(results[0].name, "renamed_result");
 
     const trimmedPairs = result.diagnostics.items.filter((item) => item.kind === "history" && item.action === "trimmed");
@@ -266,8 +269,14 @@ test("applies one final budget including tool schemas and trims valid tool pairs
     );
 
     assert.match(content(result), /RECENT_SMALL_HISTORY/);
-    assert.equal(result.messages.some((message) => message.type === "tool_call" && message.callId === "large-pair"), false);
-    assert.equal(result.messages.some((message) => message.type === "tool_result" && message.callId === "large-pair"), false);
+    assert.equal(
+        result.messages.some((message) => message.type === "tool_call" && message.callId === "large-pair"),
+        false,
+    );
+    assert.equal(
+        result.messages.some((message) => message.type === "tool_result" && message.callId === "large-pair"),
+        false,
+    );
     assert.equal(result.tools.length, 1);
     assert.ok(result.diagnostics.toolSchemaTokens > 0);
     assert.equal(diagnostic(result, "tool_schema", "read_scene").action, "included");
