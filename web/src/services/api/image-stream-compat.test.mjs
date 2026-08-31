@@ -99,9 +99,7 @@ test("interleaved OpenAI tool call indexes keep independent metadata and argumen
         { id: "call-b", type: "function", function: { name: "save_note", arguments: '{"note":"B2"}' } },
     ]);
     assert.deepEqual(
-        events
-            .filter((event) => event.type === "tool_call_delta")
-            .map(({ index, id, name, arguments: args }) => ({ index, id, name, arguments: args })),
+        events.filter((event) => event.type === "tool_call_delta").map(({ index, id, name, arguments: args }) => ({ index, id, name, arguments: args })),
         [
             { index: 0, id: "call-a", name: "save_note", arguments: '{"note":"A' },
             { index: 1, id: "call-b", name: "save_note", arguments: '{"note":"B' },
@@ -124,7 +122,10 @@ test("OpenAI compatibility streams without usage or finish reason still expose l
     assert.equal(result.usage, undefined);
     assert.equal(result.finishReason, undefined);
     assert.deepEqual(legacyDeltas, ["兼容回复"]);
-    assert.equal(events.some((event) => event.type === "usage"), false);
+    assert.equal(
+        events.some((event) => event.type === "usage"),
+        false,
+    );
     assert.equal(events.at(-1)?.type, "done");
     assert.deepEqual(events.at(-1)?.result, result);
 });
@@ -169,9 +170,11 @@ test("observing an error event never converts a rejected model request into succ
 
     assert.equal(events.at(-1)?.type, "error");
     assert.equal(events.at(-1)?.error?.message, "socket closed");
-    assert.equal(events.some((event) => event.type === "done"), false);
+    assert.equal(
+        events.some((event) => event.type === "done"),
+        false,
+    );
 });
-
 
 test("OpenAI JSON fallback with a readable body uses the non-stream result contract", async () => {
     const events = [];
@@ -213,7 +216,6 @@ test("OpenAI DONE terminates parsing and usage opt-in is explicit", async () => 
     assert.equal(events.filter((event) => event.type === "done").length, 1);
 });
 
-
 test("provider error finish reasons reject without done", async () => {
     for (const [apiFormat, payload] of [
         ["openai", { choices: [{ delta: {}, finish_reason: "error" }] }],
@@ -222,14 +224,13 @@ test("provider error finish reasons reject without done", async () => {
         const events = [];
         await withFetch(
             async () => sseResponse([payload, "[DONE]"]),
-            () =>
-                assert.rejects(
-                    () => requestToolResponse(modelConfig(apiFormat), messages, tools, "auto", undefined, { onEvent: (event) => events.push(event) }),
-                    new RegExp(apiFormat === "openai" ? "error" : "MALFORMED_FUNCTION_CALL", "i"),
-                ),
+            () => assert.rejects(() => requestToolResponse(modelConfig(apiFormat), messages, tools, "auto", undefined, { onEvent: (event) => events.push(event) }), new RegExp(apiFormat === "openai" ? "error" : "MALFORMED_FUNCTION_CALL", "i")),
         );
         assert.equal(events.at(-1)?.type, "error");
-        assert.equal(events.some((event) => event.type === "done"), false);
+        assert.equal(
+            events.some((event) => event.type === "done"),
+            false,
+        );
     }
 });
 
@@ -237,38 +238,31 @@ test("bodyless SSE rejects clearly instead of parsing an empty JSON fallback", a
     const events = [];
     await withFetch(
         async () => new Response(null, { status: 200, headers: { "Content-Type": "text/event-stream" } }),
-        () =>
-            assert.rejects(
-                () => requestToolResponse(modelConfig("openai"), messages, tools, "auto", undefined, { onEvent: (event) => events.push(event) }),
-                /流响应缺少响应体/,
-            ),
+        () => assert.rejects(() => requestToolResponse(modelConfig("openai"), messages, tools, "auto", undefined, { onEvent: (event) => events.push(event) }), /流响应缺少响应体/),
     );
     assert.equal(events.at(-1)?.type, "error");
-    assert.equal(events.some((event) => event.type === "done"), false);
+    assert.equal(
+        events.some((event) => event.type === "done"),
+        false,
+    );
 });
-
 
 test("remote Gemini proxy error envelopes reject without done", async () => {
     const events = [];
     await withFetch(
         async () => new Response(JSON.stringify({ code: 1, data: null, msg: "余额不足" }), { status: 200, headers: { "Content-Type": "application/json" } }),
-        () =>
-            assert.rejects(
-                () => requestToolResponse(modelConfig("gemini", "remote"), messages, tools, "auto", undefined, { onEvent: (event) => events.push(event) }),
-                /余额不足/,
-            ),
+        () => assert.rejects(() => requestToolResponse(modelConfig("gemini", "remote"), messages, tools, "auto", undefined, { onEvent: (event) => events.push(event) }), /余额不足/),
     );
     assert.equal(events.at(-1)?.type, "error");
-    assert.equal(events.some((event) => event.type === "done"), false);
+    assert.equal(
+        events.some((event) => event.type === "done"),
+        false,
+    );
 });
 
 test("OpenAI tool calls without provider ids receive a local final id", async () => {
     const result = await withFetch(
-        async () =>
-            sseResponse([
-                { choices: [{ delta: { tool_calls: [{ index: 0, function: { name: "save_note", arguments: '{"note":"完成"}' } }] }, finish_reason: "tool_calls" }] },
-                "[DONE]",
-            ]),
+        async () => sseResponse([{ choices: [{ delta: { tool_calls: [{ index: 0, function: { name: "save_note", arguments: '{"note":"完成"}' } }] }, finish_reason: "tool_calls" }] }, "[DONE]"]),
         () => requestToolResponse(modelConfig("openai"), messages, tools),
     );
 
@@ -297,11 +291,7 @@ test("DONE resolves even when the upstream keeps the connection open", async () 
 
 test("Gemini keeps tool_calls when STOP arrives in a later chunk", async () => {
     const result = await withFetch(
-        async () =>
-            sseResponse([
-                { candidates: [{ content: { parts: [{ functionCall: { id: "gemini-split", name: "save_note", args: { note: "完成" } } }] } }] },
-                { candidates: [{ finishReason: "STOP" }] },
-            ]),
+        async () => sseResponse([{ candidates: [{ content: { parts: [{ functionCall: { id: "gemini-split", name: "save_note", args: { note: "完成" } } }] } }] }, { candidates: [{ finishReason: "STOP" }] }]),
         () => requestToolResponse(modelConfig("gemini"), messages, tools),
     );
 
@@ -363,8 +353,17 @@ test("remote Gemini SSE uses the unified text, tool, usage, and done contract", 
     assert.equal(result.finishReason, "tool_calls");
     assert.deepEqual(result.usage, { inputTokens: 3, outputTokens: 2, totalTokens: 5 });
     assert.equal(result.toolCalls[0].id, "remote-call");
-    assert.equal(events.some((event) => event.type === "text_delta"), true);
-    assert.equal(events.some((event) => event.type === "tool_call_delta"), true);
-    assert.equal(events.some((event) => event.type === "usage"), true);
+    assert.equal(
+        events.some((event) => event.type === "text_delta"),
+        true,
+    );
+    assert.equal(
+        events.some((event) => event.type === "tool_call_delta"),
+        true,
+    );
+    assert.equal(
+        events.some((event) => event.type === "usage"),
+        true,
+    );
     assert.equal(events.at(-1)?.type, "done");
 });

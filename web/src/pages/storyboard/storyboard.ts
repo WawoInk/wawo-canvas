@@ -224,11 +224,7 @@ const storyboardDocumentSchema = {
     },
 };
 
-export async function runStoryboardPipeline(
-    input: StoryboardPipelineInput,
-    complete: (request: StoryboardCompletionRequest) => Promise<StructuredCompletion>,
-    onStage?: (stage: StoryboardStage) => void,
-): Promise<StoryboardPipelineResult> {
+export async function runStoryboardPipeline(input: StoryboardPipelineInput, complete: (request: StoryboardCompletionRequest) => Promise<StructuredCompletion>, onStage?: (stage: StoryboardStage) => void): Promise<StoryboardPipelineResult> {
     const title = input.title.trim() || "未命名分镜";
     const source = input.source.trim();
     if (!source) throw new Error("请输入剧本文本");
@@ -262,7 +258,10 @@ export async function runStoryboardPipeline(
 
 export function parseStructuredCompletion(result: StructuredCompletion, toolName: StoryboardCompletionRequest["toolName"]) {
     const raw = result.toolCalls.find((call) => call.function.name === toolName)?.function.arguments || result.content;
-    const text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+    const text = raw
+        .trim()
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```$/, "");
     if (!text) throw new Error("模型未返回结构化结果");
     try {
         return JSON.parse(text) as unknown;
@@ -340,15 +339,8 @@ export function normalizeStoryboardDocument(document: StoryboardDocument, curren
         usedIds.add(id);
         return id;
     };
-    const reservedIds = <T extends { id: string }>(incoming: T[], currentById: Map<string, T>) =>
-        new Set(incoming.flatMap((entity) => (currentById.has(entity.id) ? [entity.id] : [])));
-    const previousEntity = <T extends { id: string }>(
-        incomingId: string,
-        number: number,
-        currentById: Map<string, T>,
-        currentByNumber: Map<number, T>,
-        reserved: Set<string>,
-    ) => {
+    const reservedIds = <T extends { id: string }>(incoming: T[], currentById: Map<string, T>) => new Set(incoming.flatMap((entity) => (currentById.has(entity.id) ? [entity.id] : [])));
+    const previousEntity = <T extends { id: string }>(incomingId: string, number: number, currentById: Map<string, T>, currentByNumber: Map<number, T>, reserved: Set<string>) => {
         const byId = currentById.get(incomingId);
         if (byId && !usedIds.has(byId.id)) return byId;
         const byNumber = currentByNumber.get(number);
