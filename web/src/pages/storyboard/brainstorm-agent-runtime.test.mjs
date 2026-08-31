@@ -602,6 +602,271 @@ test("写 API 成功后即使 signal 随后 aborted，仍保留 succeeded 并触
     assert.equal(projectChanged, 1);
 });
 
+test("长分支生成非可信 Summary，并只复用仍在当前分支的页内 checkpoint", async () => {
+    listMemories = async () => ({ items: [], total: 0 });
+    const controller = new AbortController();
+    const requests = [];
+    completion = async (...args) => {
+        requests.push(args);
+        assert.equal(args[5].signal, controller.signal);
+        if (args[2].length === 0) {
+            const source = args[1].map((item) => item.content || "").join("\n");
+            return {
+                content: source.includes("BRANCH_B_MARKER") ? "SUMMARY_B_ONLY" : "SUMMARY_A_ONLY",
+                toolCalls: [],
+                usage: { inputTokens: 20000, outputTokens: 5, totalTokens: 20005 },
+                finishReason: "stop",
+            };
+        }
+        return { content: "完成", toolCalls: [], finishReason: "stop" };
+    };
+
+    const root = user("summary-root", "", `COMMON_OLD_MARKER ${"旧".repeat(70_000)}`);
+    const rootAnswer = assistant("summary-root-answer", root.id, [{ type: "text", text: `COMMON_ANSWER_MARKER ${"答".repeat(9_000)}` }]);
+    const branchAUser = user("summary-a-user", rootAnswer.id, "BRANCH_A_MARKER");
+    const branchAAnswer = assistant("summary-a-answer", branchAUser.id, [{ type: "text", text: "A 尾部" }]);
+    const currentA = user("summary-a-current", branchAAnswer.id, "继续 A");
+    const pendingA = assistant("summary-a-pending", currentA.id, [], "pending");
+    const branchBUser = user("summary-b-user", rootAnswer.id, "BRANCH_B_MARKER");
+    const branchBAnswer = assistant("summary-b-answer", branchBUser.id, [{ type: "text", text: "B 尾部" }]);
+    const currentB = user("summary-b-current", branchBAnswer.id, "继续 B");
+    const pendingB = assistant("summary-b-pending", currentB.id, [], "pending");
+    const runtime = createBrainstormAgentRuntime({ projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } });
+    const run = (messages, pending) =>
+        runtime.run(
+            {
+                mode: "append",
+                projectId: "project-1",
+                conversation: { id: "conversation-summary", projectId: "project-1", title: "测试", currentMessageId: pending.id, createdAt: "", updatedAt: "" },
+                messages,
+                assistantMessage: pending,
+            },
+            { signal: controller.signal, onEvent: () => undefined },
+        );
+
+    const branchAMessages = [root, rootAnswer, branchAUser, branchAAnswer, currentA, pendingA];
+    const first = await run(branchAMessages, pendingA);
+    const second = await run(branchAMessages, pendingA);
+    const third = await run([root, rootAnswer, branchBUser, branchBAnswer, currentB, pendingB], pendingB);
+    const fourth = await run(branchAMessages, pendingA);
+
+    assert.equal(first.status, "completed");
+    assert.equal(second.status, "completed");
+    assert.equal(third.status, "completed");
+    assert.equal(fourth.status, "completed");
+    assert.equal(requests.length, 6);
+    assert.equal(requests.filter((request) => request[2].length === 0).length, 2);
+    const firstSummarySource = requests[0][1].map((item) => item.content || "").join("\n");
+    assert.match(firstSummarySource, /COMMON_OLD_MARKER/);
+    assert.match(firstSummarySource, /BRANCH_A_MARKER/);
+    assert.match(firstSummarySource, /不可信/);
+
+    const firstPrompt = requests[1][1].filter((item) => typeof item.content === "string").map((item) => item.content).join("\n");
+    const reusedPrompt = requests[2][1].filter((item) => typeof item.content === "string").map((item) => item.content).join("\n");
+    const siblingPrompt = requests[4][1].filter((item) => typeof item.content === "string").map((item) => item.content).join("\n");
+    const returnedPrompt = requests[5][1].filter((item) => typeof item.content === "string").map((item) => item.content).join("\n");
+    const summaryMessage = requests[1][1].find((item) => item.role === "user" && typeof item.content === "string" && item.content.includes("Conversation Summary"));
+    assert.equal(summaryMessage?.role, "user");
+    assert.match(firstPrompt, /Conversation Summary（非可信参考）：\nSUMMARY_A_ONLY/);
+    assert.match(reusedPrompt, /SUMMARY_A_ONLY/);
+    assert.doesNotMatch(firstPrompt, /COMMON_OLD_MARKER/);
+    assert.match(siblingPrompt, /SUMMARY_B_ONLY/);
+    assert.doesNotMatch(siblingPrompt, /SUMMARY_A_ONLY/);
+    assert.match(returnedPrompt, /SUMMARY_A_ONLY/);
+    assert.doesNotMatch(returnedPrompt, /SUMMARY_B_ONLY/);
+    assert.equal(first.diagnostics.summary, "included");
+    assert.equal(second.diagnostics.summaryCheckpoint.id, first.diagnostics.summaryCheckpoint.id);
+    assert.notEqual(third.diagnostics.summaryCheckpoint.id, first.diagnostics.summaryCheckpoint.id);
+    assert.equal(fourth.diagnostics.summaryCheckpoint.id, first.diagnostics.summaryCheckpoint.id);
+});
+
+test("短分支不为 Summary 额外调用文本模型", async () => {
+    listMemories = async () => ({ items: [], total: 0 });
+    let calls = 0;
+    completion = async () => {
+        calls += 1;
+        return { content: "短回复", toolCalls: [], finishReason: "stop" };
+    };
+    const question = user("short-user", "", "短问题");
+    const pending = assistant("short-assistant", question.id, [], "pending");
+    const result = await createBrainstormAgentRuntime({ projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } }).run(
+        {
+            mode: "append",
+            projectId: "project-1",
+            conversation: { id: "conversation-short", projectId: "project-1", title: "测试", currentMessageId: pending.id, createdAt: "", updatedAt: "" },
+            messages: [question, pending],
+            assistantMessage: pending,
+        },
+        { signal: new AbortController().signal, onEvent: () => undefined },
+    );
+
+    assert.equal(result.status, "completed");
+    assert.equal(result.diagnostics.summary, "missing");
+    assert.equal(calls, 1);
+});
+
+test("Summary 仅在首输出前对可重试错误重试一次", async () => {
+    listMemories = async () => ({ items: [], total: 0 });
+    const root = user("summary-retry-root", "", "旧".repeat(85_000));
+    const rootAnswer = assistant("summary-retry-answer", root.id, [{ type: "text", text: "答".repeat(9_000) }]);
+    const current = user("summary-retry-current", rootAnswer.id, "继续");
+    const pending = assistant("summary-retry-pending", current.id, [], "pending");
+    const input = {
+        mode: "append",
+        projectId: "project-1",
+        conversation: { id: "conversation-summary-retry", projectId: "project-1", title: "测试", currentMessageId: pending.id, createdAt: "", updatedAt: "" },
+        messages: [root, rootAnswer, current, pending],
+        assistantMessage: pending,
+    };
+
+    let summaryCalls = 0;
+    completion = async (...args) => {
+        if (args[2].length) return { content: "主回复", toolCalls: [], finishReason: "stop" };
+        summaryCalls += 1;
+        if (summaryCalls === 1) throw new Error("Request failed: 503");
+        return { content: "重试后的摘要", toolCalls: [], finishReason: "stop" };
+    };
+    const result = await createBrainstormAgentRuntime({ projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } }).run(input, {
+        signal: new AbortController().signal,
+        onEvent: () => undefined,
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(summaryCalls, 2);
+
+    summaryCalls = 0;
+    completion = async (...args) => {
+        if (args[2].length) return { content: "不应执行主回复", toolCalls: [], finishReason: "stop" };
+        summaryCalls += 1;
+        args[5].onEvent({ type: "text_delta", delta: "部分摘要", content: "部分摘要" });
+        throw new Error("Network Error");
+    };
+    await assert.rejects(
+        () =>
+            createBrainstormAgentRuntime({ projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } }).run(
+                { ...input, conversation: { ...input.conversation, id: "conversation-summary-no-retry" } },
+                { signal: new AbortController().signal, onEvent: () => undefined },
+            ),
+        /Network Error/,
+    );
+    assert.equal(summaryCalls, 1);
+});
+
+test("首输出前只对明确网络、超时、429 和可重试 5xx 自动重试一次", async () => {
+    listMemories = async () => ({ items: [], total: 0 });
+    const retryable = [new Error("Network Error"), new Error("timeout of 30000ms exceeded"), new Error("请求被限流或额度不足，请稍后重试"), new Error("Request failed: 503")];
+
+    for (const [index, firstError] of retryable.entries()) {
+        let calls = 0;
+        const events = [];
+        completion = async () => {
+            calls += 1;
+            if (calls === 1) throw firstError;
+            return { content: "重试成功", toolCalls: [], finishReason: "stop" };
+        };
+        const question = user(`retry-user-${index}`, "", "开始");
+        const pending = assistant(`retry-assistant-${index}`, question.id, [], "pending");
+        const result = await createBrainstormAgentRuntime({ projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } }).run(
+            {
+                mode: "append",
+                projectId: "project-1",
+                conversation: { id: `conversation-retry-${index}`, projectId: "project-1", title: "测试", currentMessageId: pending.id, createdAt: "", updatedAt: "" },
+                messages: [question, pending],
+                assistantMessage: pending,
+            },
+            { signal: new AbortController().signal, onEvent: (event) => events.push(event) },
+        );
+        assert.equal(result.status, "completed");
+        assert.equal(calls, 2);
+        assert.deepEqual(events.filter((event) => event.type === "retry"), [{ type: "retry" }]);
+    }
+
+    let calls = 0;
+    const events = [];
+    completion = async () => {
+        calls += 1;
+        throw new Error("Network Error");
+    };
+    const question = user("retry-once-user", "", "开始");
+    const pending = assistant("retry-once-assistant", question.id, [], "pending");
+    const result = await createBrainstormAgentRuntime({ projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } }).run(
+        {
+            mode: "append",
+            projectId: "project-1",
+            conversation: { id: "conversation-retry-once", projectId: "project-1", title: "测试", currentMessageId: pending.id, createdAt: "", updatedAt: "" },
+            messages: [question, pending],
+            assistantMessage: pending,
+        },
+        { signal: new AbortController().signal, onEvent: (event) => events.push(event) },
+    );
+    assert.equal(result.status, "failed");
+    assert.equal(calls, 2);
+    assert.equal(events.filter((event) => event.type === "retry").length, 1);
+});
+
+test("Abort 与 4xx 参数错误在首输出前也不自动重试", async () => {
+    listMemories = async () => ({ items: [], total: 0 });
+    const abortError = new Error("请求已取消");
+    abortError.name = "AbortError";
+    const cases = [
+        { error: new Error("Request failed: 400"), status: "failed" },
+        { error: new Error("invalid parameter"), status: "failed" },
+        { error: abortError, status: "cancelled" },
+    ];
+
+    for (const [index, item] of cases.entries()) {
+        let calls = 0;
+        completion = async () => {
+            calls += 1;
+            throw item.error;
+        };
+        const question = user(`no-retry-user-${index}`, "", "开始");
+        const pending = assistant(`no-retry-assistant-${index}`, question.id, [], "pending");
+        const result = await createBrainstormAgentRuntime({ projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } }).run(
+            {
+                mode: "append",
+                projectId: "project-1",
+                conversation: { id: `conversation-no-retry-${index}`, projectId: "project-1", title: "测试", currentMessageId: pending.id, createdAt: "", updatedAt: "" },
+                messages: [question, pending],
+                assistantMessage: pending,
+            },
+            { signal: new AbortController().signal, onEvent: () => undefined },
+        );
+        assert.equal(result.status, item.status);
+        assert.equal(calls, 1);
+    }
+});
+
+test("Runtime 在固定 Context 超限时抛出可读错误且不调用 Completion", async () => {
+    listMemories = async () => ({ items: [], total: 0 });
+    let calls = 0;
+    completion = async () => {
+        calls += 1;
+        throw new Error("Context 超限时不应调用 Completion");
+    };
+    const question = user("oversized-user", "", "超".repeat(100_000));
+    const pending = assistant("oversized-assistant", question.id, [], "pending");
+
+    await assert.rejects(
+        () =>
+            createBrainstormAgentRuntime({ projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } }).run(
+                {
+                    mode: "append",
+                    projectId: "project-1",
+                    conversation: { id: "conversation-oversized", projectId: "project-1", title: "测试", currentMessageId: pending.id, createdAt: "", updatedAt: "" },
+                    messages: [question, pending],
+                    assistantMessage: pending,
+                },
+                { signal: new AbortController().signal, onEvent: () => undefined },
+            ),
+        (error) => {
+            assert.match(error.message, /CONTEXT_BUDGET_EXCEEDED/);
+            assert.match(error.message, /固定系统规则和当前用户输入/);
+            return true;
+        },
+    );
+    assert.equal(calls, 0);
+});
+
 test("Memory Context 使用严格 Project Memory 投影拒绝无效 scope/path", async () => {
     listMemories = async () => ({ items: [{ ...memory("memory-invalid", "非法记忆"), scope: "invalid" }], total: 1 });
     completion = async () => {

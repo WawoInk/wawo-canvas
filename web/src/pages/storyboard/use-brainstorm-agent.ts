@@ -320,9 +320,10 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
                     if (generationRef.current !== generation || controlsRef.current.get(conversation.id) !== control) return;
                     setMessagesByConversation((current) => ({ ...current, [conversation.id]: mergeMessages(current[conversation.id] || [], [finalMessage]) }));
                     const stopState: BrainstormStopState = control.stopRequested ? (finalMessage.status === "cancelled" ? "confirmed" : "failed") : "idle";
+                    const runError = result.status === "failed" ? result.error.message : "";
                     setRuns((current) => ({
                         ...current,
-                        [conversation.id]: { ...current[conversation.id], status: finalMessage.status, output: finalMessage.output, streamedText: "", active: false, stopState },
+                        [conversation.id]: { ...current[conversation.id], status: finalMessage.status, output: finalMessage.output, streamedText: "", active: false, stopState, error: runError },
                     }));
                     control.finish(stopState);
                 } catch (cause) {

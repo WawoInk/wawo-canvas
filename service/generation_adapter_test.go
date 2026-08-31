@@ -1990,9 +1990,9 @@ func TestGenerationAdapterMapsHTTPFailuresToStableErrors(t *testing.T) {
 }
 
 func TestGenerationAuditRedactsSecretsAndBodies(t *testing.T) {
-	input := `{"Authorization":"Bearer secret","api_key":"secret-key","x-api-key":"header-secret","callback_secret":"callback-value","image_uri":"data:image/png;base64,AAAA","url":"https://cdn.example/video.mp4?X-Amz-Signature=signed&token=secret","nested":{"callback_url":"https://app.example/hook?secret=callback-value"}}`
+	input := `{"Authorization":"Bearer secret","api_key":"secret-key","x-api-key":"header-secret","callback_secret":"callback-value","webhook_secret":"webhook-secret","secret":"generic-secret","secret_key":"secret-key-value","access_key":"access-key-secret","token":"json-token-secret","access_token":"access-token-secret","refresh_token":"refresh-token-secret","id_token":"id-token-secret","session_token":"session-token-secret","auth_token":"auth-token-secret","bearer_token":"bearer-token-secret","client_secret":"client-secret-value","private_key":"private-key-secret","credential":"credential-secret","password":"password-secret","image_uri":"data:image/png;base64,AAAA","url":"https://cdn.example/video.mp4?X-Amz-Signature=signed&token=secret","nested":{"callback_url":"https://app.example/hook?secret=callback-value"}}`
 	got := sanitizeGenerationAuditJSON(input)
-	for _, secret := range []string{"Bearer secret", "secret-key", "header-secret", "callback-value", "AAAA", "signed", "token=secret"} {
+	for _, secret := range []string{"Bearer secret", "secret-key", "header-secret", "callback-value", "webhook-secret", "generic-secret", "secret-key-value", "access-key-secret", "json-token-secret", "access-token-secret", "refresh-token-secret", "id-token-secret", "session-token-secret", "auth-token-secret", "bearer-token-secret", "client-secret-value", "private-key-secret", "credential-secret", "password-secret", "AAAA", "signed", "token=secret"} {
 		if strings.Contains(got, secret) {
 			t.Fatalf("audit leaked %q: %s", secret, got)
 		}

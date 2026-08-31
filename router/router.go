@@ -1,7 +1,10 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
+	"runtime/debug"
+	"time"
 
 	"github.com/basketikun/infinite-canvas/handler"
 	"github.com/basketikun/infinite-canvas/middleware"
@@ -9,8 +12,35 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func querySafeLogFormatter(param gin.LogFormatterParams) string {
+	param.Path = param.Request.URL.Path
+	var statusColor, methodColor, resetColor string
+	if param.IsOutputColor() {
+		statusColor = param.StatusCodeColor()
+		methodColor = param.MethodColor()
+		resetColor = param.ResetColor()
+	}
+	if param.Latency > time.Minute {
+		param.Latency = param.Latency.Truncate(time.Second)
+	}
+	return fmt.Sprintf("[GIN] %v |%s %3d %s| %13v | %15s |%s %-7s %s %#v\n%s",
+		param.TimeStamp.Format("2006/01/02 - 15:04:05"),
+		statusColor, param.StatusCode, resetColor,
+		param.Latency,
+		param.ClientIP,
+		methodColor, param.Method, resetColor, param.Path,
+		param.ErrorMessage,
+	)
+}
+
+func querySafeRecovery(c *gin.Context, _ any) {
+	fmt.Fprintf(gin.DefaultErrorWriter, "[GIN] panic recovered: path=%q\n%s", c.Request.URL.Path, debug.Stack())
+	c.AbortWithStatus(http.StatusInternalServerError)
+}
+
 func New() *gin.Engine {
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.LoggerWithConfig(gin.LoggerConfig{Formatter: querySafeLogFormatter}), gin.CustomRecoveryWithWriter(nil, querySafeRecovery))
 	router.RedirectTrailingSlash = false
 	_ = router.SetTrustedProxies(nil)
 	api := router.Group("/api")

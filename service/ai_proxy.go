@@ -43,6 +43,12 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		return
 	}
 	taskType := DetermineTaskType(path)
+	auditBody := func(body []byte) []byte {
+		if taskType == model.TaskTypeChat {
+			return []byte(`{"omitted":"chat content"}`)
+		}
+		return []byte(sanitizeGenerationAuditJSON(string(body)))
+	}
 	public, err := PublicSettings()
 	if err != nil || !publicModelAllowed(public, taskType, modelName) {
 		proxyAILogf("AI proxy model not exposed: model=%s taskType=%s err=%v", modelName, taskType, err)
@@ -82,7 +88,7 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 	// ── 生成任务日志：开始 ──
 	provider := DetermineProvider(channel)
 	source := DetermineSource(r)
-	auditRequestBody := []byte(sanitizeGenerationAuditJSON(string(requestAuditBody(body, contentType))))
+	auditRequestBody := auditBody(requestAuditBody(body, contentType))
 	auditRequestHeaders := sanitizeGenerationAuditJSON(sanitizeGenerationAuditHeaders(resolved.Headers))
 	genTaskID, err := LogTaskStart(user, taskType, provider, modelName, auditRequestBody, auditRequestHeaders, source, "")
 	if err != nil {
@@ -109,7 +115,7 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		func(respBody []byte, respHeaders string) {
 			latencyMs := time.Since(startTime).Milliseconds()
 			upstreamTaskID := ExtractUpstreamTaskID(respBody)
-			auditResponseBody := []byte(sanitizeGenerationAuditJSON(string(respBody)))
+			auditResponseBody := auditBody(respBody)
 			if strings.HasPrefix(path, "/async/images/") {
 				task, err := repository.GetGenerationTaskByID(genTaskID)
 				if err == nil {
@@ -134,6 +140,14 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		},
 		func(errCode string, errMsg string, rawError string) {
 			latencyMs := time.Since(startTime).Milliseconds()
+			if taskType == model.TaskTypeChat {
+				rawError = string(auditBody(nil))
+				errMsg = "文本模型请求失败"
+				var status int
+				if _, err := fmt.Sscanf(errCode, "UPSTREAM_%d", &status); err == nil {
+					errCode = mapGenerationHTTPError(status).Code
+				}
+			}
 			LogTaskFailure(genTaskID, errCode, errMsg, rawError, latencyMs, credits)
 		},
 	)

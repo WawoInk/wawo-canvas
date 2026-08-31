@@ -159,7 +159,7 @@ func queryUpstreamTaskViaHTTP(cfg TaskSyncConfig) (model.TaskStatus, TaskResult)
 
 	resp, err := upstreamHTTPClient.Do(req)
 	if err != nil {
-		log.Printf("task_sync: HTTP query failed: genTask=%s url=%s err=%v", cfg.GenTaskID, targetURL, err)
+		log.Printf("task_sync: HTTP query failed: genTask=%s url=%s err=%s", cfg.GenTaskID, redactGenerationAuditString(targetURL), redactGenerationAuditString(err.Error()))
 		return model.TaskStatusRunning, TaskResult{}
 	}
 	defer resp.Body.Close()
@@ -178,11 +178,7 @@ func queryUpstreamTaskViaHTTP(cfg TaskSyncConfig) (model.TaskStatus, TaskResult)
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		snippet := string(body)
-		if len(snippet) > 200 {
-			snippet = snippet[:200]
-		}
-		log.Printf("task_sync: parse upstream response failed: genTask=%s status=%d body=%s err=%v", cfg.GenTaskID, resp.StatusCode, snippet, err)
+		log.Printf("task_sync: parse upstream response failed: genTask=%s status=%d err=%v", cfg.GenTaskID, resp.StatusCode, err)
 	}
 
 	status := mapArkStatusToModel(result.Status)

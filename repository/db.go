@@ -3,8 +3,12 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log"
+	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/basketikun/infinite-canvas/config"
 	"github.com/basketikun/infinite-canvas/model"
@@ -12,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 var promptCategories = []model.PromptCategory{
@@ -22,6 +27,36 @@ var promptCategories = []model.PromptCategory{
 	{Category: "youmind-gpt-image-2", Name: "YouMind GPT Image 2", Description: "YouMind OpenLab 的 GPT Image 2 中文提示词分类", GithubURL: "https://github.com/YouMind-OpenLab/awesome-gpt-image-2", Remote: true},
 	{Category: "youmind-nano-banana-pro", Name: "YouMind Nano Banana Pro", Description: "YouMind OpenLab 的 Nano Banana Pro 中文提示词分类", GithubURL: "https://github.com/YouMind-OpenLab/awesome-nano-banana-pro-prompts", Remote: true},
 	{Category: "davidwu-gpt-image2-prompts", Name: "awesome-gpt-image2-prompts", Description: "davidwuw0811-boop 整理的 GPT Image 2 提示词分类", GithubURL: "https://github.com/davidwuw0811-boop/awesome-gpt-image2-prompts", Remote: true},
+}
+
+type redactingDatabaseLogWriter struct {
+	logger.Writer
+}
+
+func (writer redactingDatabaseLogWriter) Printf(message string, data ...interface{}) {
+	safe := append([]interface{}(nil), data...)
+	for index, value := range safe {
+		err, ok := value.(error)
+		if !ok {
+			continue
+		}
+		var postgresError *pgconn.PgError
+		if errors.As(err, &postgresError) {
+			safe[index] = fmt.Sprintf("database error (SQLSTATE %s)", postgresError.Code)
+		} else {
+			safe[index] = fmt.Sprintf("database error (%T)", err)
+		}
+	}
+	writer.Writer.Printf(message, safe...)
+}
+
+func newDatabaseLogger(writer logger.Writer) logger.Interface {
+	return logger.New(redactingDatabaseLogWriter{Writer: writer}, logger.Config{
+		SlowThreshold:        200 * time.Millisecond,
+		LogLevel:             logger.Warn,
+		ParameterizedQueries: true,
+		Colorful:             true,
+	})
 }
 
 var (
@@ -38,7 +73,9 @@ func DB() (*gorm.DB, error) {
 		if dbErr != nil {
 			return
 		}
-		db, dbErr = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		db, dbErr = gorm.Open(postgres.Open(dsn), &gorm.Config{
+			Logger: newDatabaseLogger(log.New(os.Stdout, "\r\n", log.LstdFlags)),
+		})
 		if dbErr != nil {
 			return
 		}
