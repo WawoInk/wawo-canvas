@@ -8,6 +8,8 @@ const summary = {
     options: { aspectRatio: "9:16", targetDurationSec: 60, style: "电影叙事", maxSegmentDurationSec: 15, maxShotDurationSec: 8, dialogueMustBeExact: true, allowMusic: false },
     model: "text-model",
     sourceHash: "sha256:abc",
+    status: "ready",
+    revision: 3,
     validationStatus: "passed",
     sceneCount: 2,
     shotCount: 4,
@@ -31,14 +33,18 @@ mock.module("@/services/api/storyboards", () => ({
     },
     createStoryboardRecord: async (record) => {
         calls.push(["create", record]);
-        return detail;
+        return { ...detail, id: "storyboard-created", revision: 1 };
+    },
+    updateStoryboardRecord: async (id, record, expectedRevision) => {
+        calls.push(["update", id, record, expectedRevision]);
+        return { ...detail, ...record, id, revision: expectedRevision + 1 };
     },
     deleteStoryboardRecord: async (id) => {
         calls.push(["delete", id]);
     },
 }));
 
-const { deleteStoryboardRecord, listStoryboardRecords, loadStoryboardRecord, saveStoryboardRecord } = await import("./storyboard-storage.ts");
+const { deleteStoryboardRecord, listStoryboardRecords, loadStoryboardRecord, saveStoryboardRecord, storyboardConflictRecord } = await import("./storyboard-storage.ts");
 
 test("存储适配器把服务端摘要时间转换为现有页面时间戳", async () => {
     const records = await listStoryboardRecords();
@@ -53,16 +59,37 @@ test("存储适配器按需加载 S3 详情并恢复页面记录", async () => {
     assert.deepEqual(record, { ...expectedDetail, createdAt: Date.parse(detail.createdAt), updatedAt: Date.parse(detail.updatedAt) });
 });
 
-test("存储适配器只把生成内容交给服务端创建 ID 和时间", async () => {
+test("未保存工作区使用 POST 并由服务端创建首个修订", async () => {
     calls.length = 0;
     const { validationStatus: _validationStatus, sceneCount: _sceneCount, shotCount: _shotCount, ...recordDetail } = detail;
-    const localRecord = { ...recordDetail, id: "temporary", createdAt: 1, updatedAt: 2 };
+    const localRecord = { ...recordDetail, id: "temporary", revision: 0, createdAt: 1, updatedAt: 2 };
     const saved = await saveStoryboardRecord(localRecord);
-    const { createdAt: _createdAt, updatedAt: _updatedAt, ...expectedCreate } = localRecord;
+    const { createdAt: _createdAt, updatedAt: _updatedAt, status: _status, revision: _revision, ...expectedCreate } = localRecord;
 
     assert.deepEqual(calls, [["create", expectedCreate]]);
-    assert.equal(saved.id, "storyboard-1");
+    assert.equal(saved.id, "storyboard-created");
+    assert.equal(saved.revision, 1);
     assert.equal(saved.createdAt, Date.parse(detail.createdAt));
+});
+
+test("已保存工作区使用 PUT 并携带当前修订", async () => {
+    calls.length = 0;
+    const { validationStatus: _validationStatus, sceneCount: _sceneCount, shotCount: _shotCount, ...recordDetail } = detail;
+    const saved = await saveStoryboardRecord({ ...recordDetail, createdAt: 1, updatedAt: 2 });
+    const { createdAt: _createdAt, updatedAt: _updatedAt, status: _status, revision: _revision, ...expectedUpdate } = recordDetail;
+
+    assert.deepEqual(calls, [["update", "storyboard-1", expectedUpdate, 3]]);
+    assert.equal(saved.id, "storyboard-1");
+    assert.equal(saved.revision, 4);
+});
+
+test("409 冲突可恢复服务端最新工作区详情", () => {
+    const current = { ...detail, title: "服务端最新版本", revision: 8 };
+    const restored = storyboardConflictRecord({ status: 409, data: { current } });
+
+    assert.equal(restored.title, "服务端最新版本");
+    assert.equal(restored.revision, 8);
+    assert.equal(storyboardConflictRecord({ status: 500, data: { current } }), null);
 });
 
 test("存储适配器通过服务端删除记录", async () => {

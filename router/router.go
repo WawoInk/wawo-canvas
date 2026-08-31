@@ -183,6 +183,9 @@ func New() *gin.Engine {
 	v1.GET("/storyboards/:id", func(c *gin.Context) {
 		handler.GetStoryboardProject(c.Writer, c.Request, c.Param("id"))
 	})
+	v1.PUT("/storyboards/:id", func(c *gin.Context) {
+		handler.UpdateStoryboardProject(c.Writer, c.Request, c.Param("id"))
+	})
 	v1.DELETE("/storyboards/:id", func(c *gin.Context) {
 		handler.DeleteStoryboardProject(c.Writer, c.Request, c.Param("id"))
 	})

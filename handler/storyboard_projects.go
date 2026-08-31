@@ -8,6 +8,11 @@ import (
 	"github.com/basketikun/infinite-canvas/service"
 )
 
+type updateStoryboardProjectRequest struct {
+	service.StoryboardProjectInput
+	ExpectedRevision *uint64 `json:"expectedRevision"`
+}
+
 func ListStoryboardProjects(w http.ResponseWriter, r *http.Request) {
 	user, ok := service.UserFromContext(r.Context())
 	if !ok {
@@ -28,13 +33,44 @@ func CreateStoryboardProject(w http.ResponseWriter, r *http.Request) {
 		Fail(w, "未登录或权限不足")
 		return
 	}
-	var input service.CreateStoryboardProjectInput
+	var input service.StoryboardProjectInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		Fail(w, "请求格式无效")
 		return
 	}
 	project, err := service.CreateStoryboardProject(r.Context(), user.ID, input)
 	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, project)
+}
+
+func UpdateStoryboardProject(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		Fail(w, "未登录或权限不足")
+		return
+	}
+	var request updateStoryboardProjectRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		Fail(w, "请求格式无效")
+		return
+	}
+	if request.ExpectedRevision == nil {
+		Fail(w, "expectedRevision 不能为空")
+		return
+	}
+	project, err := service.UpdateStoryboardProject(r.Context(), id, user.ID, request.StoryboardProjectInput, *request.ExpectedRevision)
+	if err != nil {
+		if service.IsStudioProjectConflict(err) {
+			Conflict(w, "分镜项目已被其他会话修改", project)
+			return
+		}
+		if service.IsStudioProjectNotFound(err) {
+			NotFound(w, "项目不存在或无权操作")
+			return
+		}
 		FailError(w, err)
 		return
 	}

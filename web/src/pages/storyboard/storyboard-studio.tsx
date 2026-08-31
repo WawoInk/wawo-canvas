@@ -1,7 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, ChevronRight, Download, FileJson, FileText, History, LoaderCircle, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import {
+    AlertCircle,
+    CheckCircle2,
+    ChevronRight,
+    Download,
+    FileJson,
+    FileText,
+    History,
+    LoaderCircle,
+    Plus,
+    Sparkles,
+    Trash2,
+    Upload,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { saveAs } from "file-saver";
 import { Alert, App, Button, Collapse, Drawer, Empty, Input, InputNumber, Popconfirm, Progress, Select, Switch, Table, Tag } from "antd";
@@ -11,13 +24,26 @@ import { ModelPicker } from "@/components/model-picker";
 import { generateStoryboard } from "@/services/api/storyboard";
 import { useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
-import { deleteStoryboardRecord, listStoryboardRecords, loadStoryboardRecord, saveStoryboardRecord, type StoryboardRecordSummary } from "./storyboard-storage";
-import { defaultStoryboardOptions, storyboardToMarkdown, type StoryboardAspectRatio, type StoryboardRecord, type StoryboardScene, type StoryboardShot, type StoryboardStage } from "./storyboard";
+import { deleteStoryboardRecord, listStoryboardRecords, loadStoryboardRecord, saveStoryboardRecord, storyboardConflictRecord, type StoryboardRecordSummary } from "./storyboard-storage";
+import {
+    defaultStoryboardOptions,
+    normalizeStoryboardDocument,
+    storyboardToMarkdown,
+    type StoryboardAspectRatio,
+    type StoryboardRecord,
+    type StoryboardScene,
+    type StoryboardShot,
+    type StoryboardStage,
+} from "./storyboard";
 
 type ShotRow = StoryboardShot & {
     key: string;
     sceneNo: number;
     segmentNo: number;
+};
+
+type ReadyStoryboardRecord = StoryboardRecord & {
+    document: NonNullable<StoryboardRecord["document"]>;
 };
 
 const stageProgress: Record<StoryboardStage, number> = {
@@ -78,10 +104,11 @@ export function StoryboardStudio() {
         };
     }, [accountId]);
 
-    const sceneRows = record?.document.scenes || [];
+    const readyRecord = record?.status === "ready" && record.document ? (record as ReadyStoryboardRecord) : null;
+    const sceneRows = readyRecord?.document.scenes || [];
     const shotRows = useMemo<ShotRow[]>(
         () =>
-            (record?.document.scenes || []).flatMap((scene) =>
+            (readyRecord?.document.scenes || []).flatMap((scene) =>
                 scene.segments.flatMap((segment) =>
                     segment.shots.map((shot) => ({
                         ...shot,
@@ -91,7 +118,7 @@ export function StoryboardStudio() {
                     })),
                 ),
             ),
-        [record],
+        [readyRecord],
     );
 
     function applyRecord(next: StoryboardRecord) {
@@ -160,6 +187,7 @@ export function StoryboardStudio() {
         }
 
         const generationAccountId = accountId;
+        const activeRecord = record;
         const controller = new AbortController();
         controllerRef.current = controller;
         setRunning(true);
@@ -173,12 +201,16 @@ export function StoryboardStudio() {
             });
             if (controller.signal.aborted || accountIdRef.current !== generationAccountId) return;
             const now = Date.now();
+            const document = activeRecord?.document ? normalizeStoryboardDocument(result.document, activeRecord.document) : result.document;
             const nextRecord: StoryboardRecord = {
                 ...input,
                 ...result,
-                id: crypto.randomUUID(),
+                document,
+                id: activeRecord?.id || crypto.randomUUID(),
                 model,
-                createdAt: now,
+                status: "ready",
+                revision: activeRecord?.revision || 0,
+                createdAt: activeRecord?.createdAt || now,
                 updatedAt: now,
             };
             setRecord(nextRecord);
@@ -187,8 +219,15 @@ export function StoryboardStudio() {
                 if (accountIdRef.current !== generationAccountId) return;
                 setRecord(saved);
                 setRecords((items) => [storyboardSummary(saved), ...items.filter((item) => item.id !== saved.id)]);
-            } catch {
+            } catch (saveError) {
                 if (accountIdRef.current !== generationAccountId) return;
+                const current = storyboardConflictRecord(saveError);
+                if (current) {
+                    applyRecord(current);
+                    setRecords((items) => [storyboardSummary(current), ...items.filter((item) => item.id !== current.id)]);
+                    message.warning(text("messages.revisionConflict", "工作区已在其他位置更新，已恢复服务端最新版本"));
+                    return;
+                }
                 message.warning(text("messages.historySaveFailed", "分镜已生成，但保存历史记录失败"));
             }
             message.success(text("messages.generated", "分镜文档生成完成"));
@@ -229,11 +268,11 @@ export function StoryboardStudio() {
     }
 
     function exportRecord(format: "json" | "markdown") {
-        if (!record) return;
+        if (!readyRecord) return;
         const extension = format === "json" ? "json" : "md";
-        const content = format === "json" ? JSON.stringify(record.document, null, 2) : storyboardToMarkdown(record.document);
+        const content = format === "json" ? JSON.stringify(readyRecord.document, null, 2) : storyboardToMarkdown(readyRecord.document);
         const blob = new Blob([content], { type: format === "json" ? "application/json;charset=utf-8" : "text/markdown;charset=utf-8" });
-        saveAs(blob, `${safeFilename(record.title)}-storyboard.${extension}`);
+        saveAs(blob, `${safeFilename(readyRecord.title)}-storyboard.${extension}`);
     }
 
     const historyContent = (
@@ -244,22 +283,37 @@ export function StoryboardStudio() {
                     <h2 className="font-semibold">{text("history.title", "历史记录")}</h2>
                     <Tag className="m-0">{records.length}</Tag>
                 </div>
-                <Button type="text" size="small" icon={<Plus className="size-4" />} onClick={resetStudio}>
+                <Button type="text" size="small" icon={<Plus className="size-4" />} disabled={running} onClick={resetStudio}>
                     {text("history.new", "新建")}
                 </Button>
             </div>
             {records.length ? (
                 <div className="thin-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto">
                     {records.map((item) => (
-                        <div key={item.id} className={`group flex w-full items-start gap-1 rounded-lg border p-1 transition-colors ${record?.id === item.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}>
-                            <button type="button" className="min-w-0 flex-1 p-2 text-left" onClick={() => void selectRecord(item)}>
+                        <div
+                            key={item.id}
+                            className={`group flex w-full items-start gap-1 rounded-lg border p-1 transition-colors ${record?.id === item.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
+                        >
+                            <button type="button" className="min-w-0 flex-1 p-2 text-left" disabled={running} onClick={() => void selectRecord(item)}>
                                 <div className="truncate text-sm font-medium">{item.title}</div>
                                 <div className="mt-1 text-xs text-muted-foreground">
                                     {formatTimestamp(item.updatedAt, i18n.language)} · {item.sceneCount} {text("units.scenes", "场")}
                                 </div>
                             </button>
-                            <Popconfirm title={text("history.deleteTitle", "删除这条分镜记录？")} okText={text("actions.delete", "删除")} cancelText={text("actions.cancel", "取消")} onConfirm={() => void removeRecord(item.id)}>
-                                <Button type="text" size="small" aria-label={text("actions.delete", "删除")} className="mt-1 shrink-0 text-muted-foreground sm:opacity-0 sm:group-hover:opacity-100" icon={<Trash2 className="size-3.5" />} />
+                            <Popconfirm
+                                title={text("history.deleteTitle", "删除这条分镜记录？")}
+                                okText={text("actions.delete", "删除")}
+                                cancelText={text("actions.cancel", "取消")}
+                                onConfirm={() => void removeRecord(item.id)}
+                            >
+                                <Button
+                                    type="text"
+                                    size="small"
+                                    aria-label={text("actions.delete", "删除")}
+                                    disabled={running}
+                                    className="mt-1 shrink-0 text-muted-foreground sm:opacity-0 sm:group-hover:opacity-100"
+                                    icon={<Trash2 className="size-3.5" />}
+                                />
                             </Popconfirm>
                         </div>
                     ))}
@@ -329,7 +383,7 @@ export function StoryboardStudio() {
                     <div className="mt-6 space-y-5">
                         <label className="block">
                             <span className="mb-2 block text-base font-semibold">{text("input.title", "作品标题")}</span>
-                            <Input value={title} maxLength={100} placeholder={text("input.titlePlaceholder", "例如：雨夜来客")} onChange={(event) => setTitle(event.target.value)} />
+                            <Input value={title} maxLength={100} placeholder={text("input.titlePlaceholder", "例如：雨夜来客") } onChange={(event) => setTitle(event.target.value)} />
                         </label>
 
                         <div>
@@ -339,7 +393,13 @@ export function StoryboardStudio() {
                                     {text("input.upload", "上传 TXT / MD")}
                                 </Button>
                             </div>
-                            <Input.TextArea value={source} rows={10} showCount placeholder={text("input.placeholder", "粘贴完整剧本，保留场头、人物和台词结构…")} onChange={(event) => setSource(event.target.value)} />
+                            <Input.TextArea
+                                value={source}
+                                rows={10}
+                                showCount
+                                placeholder={text("input.placeholder", "粘贴完整剧本，保留场头、人物和台词结构…")}
+                                onChange={(event) => setSource(event.target.value)}
+                            />
                         </div>
 
                         <div>
@@ -347,7 +407,15 @@ export function StoryboardStudio() {
                             <div className="grid grid-cols-2 gap-3">
                                 <label className="col-span-2 block">
                                     <span className="mb-1.5 block text-sm text-muted-foreground">{text("options.model", "文本模型")}</span>
-                                    <ModelPicker config={effectiveConfig} value={model} capability="text" fullWidth onChange={(value) => updateConfig("textModel", value)} onMissingConfig={() => openConfigDialog(false)} disabled={running} />
+                                    <ModelPicker
+                                        config={effectiveConfig}
+                                        value={model}
+                                        capability="text"
+                                        fullWidth
+                                        onChange={(value) => updateConfig("textModel", value)}
+                                        onMissingConfig={() => openConfigDialog(false)}
+                                        disabled={running}
+                                    />
                                 </label>
                                 <label className="block">
                                     <span className="mb-1.5 block text-sm text-muted-foreground">{text("options.aspectRatio", "画幅")}</span>
@@ -398,7 +466,12 @@ export function StoryboardStudio() {
                                 </label>
                                 <div className="col-span-2 flex flex-wrap gap-x-6 gap-y-3 rounded-lg border px-3 py-2.5">
                                     <label className="flex items-center gap-2 text-sm">
-                                        <Switch size="small" checked={options.dialogueMustBeExact} disabled={running} onChange={(dialogueMustBeExact) => setOptions((value) => ({ ...value, dialogueMustBeExact }))} />
+                                        <Switch
+                                            size="small"
+                                            checked={options.dialogueMustBeExact}
+                                            disabled={running}
+                                            onChange={(dialogueMustBeExact) => setOptions((value) => ({ ...value, dialogueMustBeExact }))}
+                                        />
                                         {text("options.dialogueExact", "台词必须忠于原文")}
                                     </label>
                                     <label className="flex items-center gap-2 text-sm">
@@ -442,13 +515,13 @@ export function StoryboardStudio() {
                     <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <h2 className="text-xl font-semibold">{text("output.title", "分镜文档")}</h2>
-                            {record ? (
+                            {readyRecord ? (
                                 <p className="mt-1 text-sm text-muted-foreground">
-                                    {record.document.scenes.length} {text("units.scenes", "场")} · {shotRows.length} {text("units.shots", "镜头")} · {record.document.targetDurationSec}s
+                                    {readyRecord.document.scenes.length} {text("units.scenes", "场")} · {shotRows.length} {text("units.shots", "镜头")} · {readyRecord.document.targetDurationSec}s
                                 </p>
                             ) : null}
                         </div>
-                        {record ? (
+                        {readyRecord ? (
                             <div className="flex gap-2">
                                 <Button size="small" icon={<FileJson className="size-3.5" />} onClick={() => exportRecord("json")}>
                                     JSON
@@ -462,40 +535,40 @@ export function StoryboardStudio() {
 
                     {error ? <Alert className="mb-4" type="error" showIcon message={text("messages.generateFailed", "分镜生成失败")} description={error} closable onClose={() => setError("")} /> : null}
 
-                    {record ? (
+                    {readyRecord ? (
                         <div className="space-y-5">
-                            <Collapse
-                                items={[
-                                    {
-                                        key: "director-plan",
-                                        label: (
-                                            <span className="flex items-center gap-2 font-medium">
-                                                <FileText className="size-4" />
-                                                {text("directorPlan.title", "导演规划")}
-                                                <Tag className="m-0">{record.directorPlan.scenes.length}</Tag>
-                                            </span>
-                                        ),
-                                        children: (
-                                            <div className="space-y-3">
-                                                {record.directorPlan.scenes.map((scene) => (
-                                                    <div key={scene.sceneNo} className="rounded-lg border p-3">
-                                                        <div className="mb-1 flex flex-wrap items-center gap-2">
-                                                            <Tag color="blue">S{scene.sceneNo}</Tag>
-                                                            <span className="font-medium">{scene.location}</span>
-                                                            <span className="text-sm text-muted-foreground">{scene.time}</span>
-                                                            <span className="ml-auto text-xs text-muted-foreground">{scene.estimatedDurationSec}s</span>
+                            {readyRecord.directorPlan ? (
+                                <Collapse
+                                    items={[
+                                        {
+                                            key: "director-plan",
+                                            label: (
+                                                <span className="flex items-center gap-2 font-medium">
+                                                    <FileText className="size-4" />
+                                                    {text("directorPlan.title", "导演规划")}
+                                                    <Tag className="m-0">{readyRecord.directorPlan.scenes.length}</Tag>
+                                                </span>
+                                            ),
+                                            children: (
+                                                <div className="space-y-3">
+                                                    {readyRecord.directorPlan.scenes.map((scene) => (
+                                                        <div key={scene.sceneNo} className="rounded-lg border p-3">
+                                                            <div className="mb-1 flex flex-wrap items-center gap-2">
+                                                                <Tag color="blue">S{scene.sceneNo}</Tag>
+                                                                <span className="font-medium">{scene.location}</span>
+                                                                <span className="text-sm text-muted-foreground">{scene.time}</span>
+                                                                <span className="ml-auto text-xs text-muted-foreground">{scene.estimatedDurationSec}s</span>
+                                                            </div>
+                                                            <p className="text-sm leading-6">{scene.summary}</p>
+                                                            <div className="mt-2 text-xs text-muted-foreground">{scene.characters.join("、")} · {scene.emotion}</div>
                                                         </div>
-                                                        <p className="text-sm leading-6">{scene.summary}</p>
-                                                        <div className="mt-2 text-xs text-muted-foreground">
-                                                            {scene.characters.join("、")} · {scene.emotion}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ),
-                                    },
-                                ]}
-                            />
+                                                    ))}
+                                                </div>
+                                            ),
+                                        },
+                                    ]}
+                                />
+                            ) : null}
 
                             <section>
                                 <div className="mb-3 flex items-center gap-2">
@@ -513,7 +586,7 @@ export function StoryboardStudio() {
                                 <Table rowKey="key" size="small" pagination={false} columns={shotColumns} dataSource={shotRows} scroll={{ x: 1500 }} />
                             </section>
 
-                            <ValidationPanel record={record} text={text} />
+                            {readyRecord.validation ? <ValidationPanel validation={readyRecord.validation} text={text} /> : null}
                         </div>
                     ) : (
                         <div className="flex min-h-[320px] flex-col items-center justify-center rounded-lg border border-dashed text-center lg:min-h-[560px]">
@@ -541,8 +614,7 @@ export function StoryboardStudio() {
     );
 }
 
-function ValidationPanel({ record, text }: { record: StoryboardRecord; text: (key: string, fallback: string) => string }) {
-    const { validation } = record;
+function ValidationPanel({ validation, text }: { validation: NonNullable<StoryboardRecord["validation"]>; text: (key: string, fallback: string) => string }) {
     const passed = validation.status === "passed";
     const issues = [...validation.errors.map((item) => ({ ...item, severity: "error" as const })), ...validation.warnings.map((item) => ({ ...item, severity: "warning" as const }))];
 
@@ -571,6 +643,7 @@ function ValidationPanel({ record, text }: { record: StoryboardRecord; text: (ke
 }
 
 function storyboardSummary(record: StoryboardRecord): StoryboardRecordSummary {
+    const scenes = record.document?.scenes || [];
     return {
         id: record.id,
         title: record.title,
@@ -578,9 +651,11 @@ function storyboardSummary(record: StoryboardRecord): StoryboardRecordSummary {
         options: record.options,
         model: record.model,
         sourceHash: record.sourceHash,
-        validationStatus: record.validation.status,
-        sceneCount: record.document.scenes.length,
-        shotCount: record.document.scenes.reduce((total, scene) => total + scene.segments.reduce((count, segment) => count + segment.shots.length, 0), 0),
+        status: record.status,
+        revision: record.revision,
+        validationStatus: record.validation?.status || "",
+        sceneCount: scenes.length,
+        shotCount: scenes.reduce((total, scene) => total + scene.segments.reduce((count, segment) => count + segment.shots.length, 0), 0),
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
     };

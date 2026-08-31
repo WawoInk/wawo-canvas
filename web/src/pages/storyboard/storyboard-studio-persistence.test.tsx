@@ -5,10 +5,11 @@ import { test } from "node:test";
 if (typeof window === "undefined") GlobalRegistrator.register();
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-import type { StoryboardRecord } from "./storyboard";
+import type { StoryboardPipelineResult, StoryboardRecord } from "./storyboard";
+import type { StoryboardRecordSummary } from "./storyboard-storage";
 
 const options = { aspectRatio: "9:16" as const, targetDurationSec: 60, style: "电影叙事", maxSegmentDurationSec: 15, maxShotDurationSec: 8, dialogueMustBeExact: true, allowMusic: false };
-function record(id: string, title: string): StoryboardRecord {
+function record(id: string, title: string): StoryboardRecord & StoryboardPipelineResult {
     return {
         id,
         title,
@@ -16,6 +17,8 @@ function record(id: string, title: string): StoryboardRecord {
         options,
         model: "text-model",
         sourceHash: `sha256:${id}`,
+        status: "ready",
+        revision: 3,
         directorPlan: { schemaVersion: "1.0" as const, title, sourceType: "script" as const, scenes: [] },
         document: { schemaVersion: "1.0" as const, title, sourceType: "script" as const, aspectRatio: "9:16" as const, targetDurationSec: 60, scenes: [] },
         validation: { status: "passed" as const, errors: [], warnings: [] },
@@ -32,6 +35,8 @@ function summary(value: ReturnType<typeof record>) {
         options: value.options,
         model: value.model,
         sourceHash: value.sourceHash,
+        status: value.status,
+        revision: value.revision,
         validationStatus: value.validation.status,
         sceneCount: value.document.scenes.length,
         shotCount: value.document.scenes.flatMap((scene) => scene.segments.flatMap((segment) => segment.shots)).length,
@@ -46,12 +51,13 @@ function generatedResult(title: string) {
 }
 
 let accountId = "user-1";
-let listRecords = async () => [summary(record("storyboard-1", "账号一"))];
-let loadRecord = async (id: string) => record(id, "账号一详情");
-let saveRecord = async (value: ReturnType<typeof record>) => value;
+let listRecords: () => Promise<StoryboardRecordSummary[]> = async () => [summary(record("storyboard-1", "账号一"))];
+let loadRecord: (id: string) => Promise<StoryboardRecord> = async (id) => record(id, "账号一详情");
+let saveRecord: (value: StoryboardRecord) => Promise<StoryboardRecord> = async (value) => value;
 let deleteRecord = async (_id: string) => {};
 let generate = async (..._args: unknown[]) => generatedResult("生成结果");
 const calls: Array<[string, string?]> = [];
+const savedRecords: StoryboardRecord[] = [];
 
 // @ts-expect-error Bun provides module mocking at test runtime.
 const { mock } = await import("bun:test");
@@ -72,7 +78,14 @@ mock.module("./storyboard-storage", () => ({
         calls.push(["load", id]);
         return loadRecord(id);
     },
-    saveStoryboardRecord: (value: ReturnType<typeof record>) => saveRecord(value),
+    saveStoryboardRecord: (value: ReturnType<typeof record>) => {
+        savedRecords.push(value);
+        return saveRecord(value);
+    },
+    storyboardConflictRecord: (error: unknown) => {
+        if (!error || typeof error !== "object" || Number((error as { status?: number }).status) !== 409) return null;
+        return (error as { data?: { current?: StoryboardRecord } }).data?.current || null;
+    },
     deleteStoryboardRecord: (id: string) => {
         calls.push(["delete", id]);
         return deleteRecord(id);
@@ -172,6 +185,7 @@ function button(container: ParentNode, label: string) {
 
 test("生成结果只有服务端持久化成功后才进入历史记录", async () => {
     calls.length = 0;
+    savedRecords.length = 0;
     accountId = "user-1";
     listRecords = async () => [];
     generate = async () => generatedResult("新分镜");
@@ -191,11 +205,101 @@ test("生成结果只有服务端持久化成功后才进入历史记录", async
 
     assert.equal(container.querySelector("aside .ant-tag")?.textContent, "0");
     assert.match(container.textContent || "", /0 场 · 0 镜头/);
+    assert.equal(savedRecords[0].revision, 0);
+    assert.equal(savedRecords[0].status, "ready");
 
     pending.resolve(record("storyboard-server-1", "新分镜"));
     await flush();
     assert.equal(container.querySelector("aside .ant-tag")?.textContent, "1");
 
+    await act(async () => root.unmount());
+    container.remove();
+});
+
+test("重新生成当前工作区时保留 Project ID、创建时间和预期修订", async () => {
+    calls.length = 0;
+    savedRecords.length = 0;
+    accountId = "user-1";
+    const current = record("storyboard-1", "已有分镜");
+    listRecords = async () => [summary(current)];
+    loadRecord = async () => current;
+    generate = async () => generatedResult("重新生成");
+    saveRecord = async (value) => ({ ...value, revision: value.revision + 1, updatedAt: 3 });
+
+    const { container, root } = await mount();
+    await act(async () => button(container, "生成分镜").click());
+    await flush();
+
+    assert.equal(savedRecords.length, 1);
+    assert.equal(savedRecords[0].id, "storyboard-1");
+    assert.equal(savedRecords[0].createdAt, current.createdAt);
+    assert.equal(savedRecords[0].revision, 3);
+    assert.equal(container.querySelector("aside .ant-tag")?.textContent, "1");
+
+    await act(async () => root.unmount());
+    container.remove();
+});
+
+test("重新生成发生修订冲突时恢复服务端 current 工作区", async () => {
+    calls.length = 0;
+    savedRecords.length = 0;
+    accountId = "user-1";
+    const current = record("storyboard-1", "已有分镜");
+    const serverCurrent = { ...record("storyboard-1", "服务端最新版本"), revision: 8 };
+    listRecords = async () => [summary(current)];
+    loadRecord = async () => current;
+    generate = async () => generatedResult("冲突版本");
+    saveRecord = async () => {
+        throw { status: 409, data: { current: serverCurrent } };
+    };
+
+    const { container, root } = await mount();
+    await act(async () => button(container, "生成分镜").click());
+    await flush();
+
+    assert.equal(container.querySelector<HTMLInputElement>('input[maxlength="100"]')?.value, "服务端最新版本");
+    assert.equal(container.querySelector("aside .ant-tag")?.textContent, "1");
+
+    await act(async () => root.unmount());
+    container.remove();
+});
+
+test("ready 工作区即使规划和校验为空也渲染文档", async () => {
+    calls.length = 0;
+    accountId = "user-1";
+    const current = { ...record("storyboard-1", "部分工作区"), directorPlan: null, validation: null };
+    listRecords = async () => [{ ...summary(record("storyboard-1", "部分工作区")), validationStatus: "" }];
+    loadRecord = async () => current;
+
+    const { container, root } = await mount();
+
+    assert.match(container.textContent || "", /0 场 · 0 镜头/);
+    assert.ok(Array.from(container.querySelectorAll("button")).some((item) => item.textContent?.includes("JSON")));
+    assert.doesNotMatch(container.textContent || "", /导演规划|校验报告/);
+
+    await act(async () => root.unmount());
+    container.remove();
+});
+
+test("生成期间禁止切换、新建或删除工作区", async () => {
+    calls.length = 0;
+    accountId = "user-1";
+    const current = record("storyboard-1", "已有分镜");
+    listRecords = async () => [summary(current)];
+    loadRecord = async () => current;
+    const pending = deferred<StoryboardPipelineResult>();
+    generate = async () => pending.promise;
+
+    const { container, root } = await mount();
+    await act(async () => button(container, "生成分镜").click());
+    await flush();
+
+    assert.equal(button(container, "新建").disabled, true);
+    assert.equal(container.querySelector<HTMLButtonElement>("aside button.min-w-0")?.disabled, true);
+    assert.equal(container.querySelector<HTMLButtonElement>('aside button[aria-label="删除"]')?.disabled, true);
+
+    pending.resolve(generatedResult("生成结果"));
+    await flush();
     await act(async () => root.unmount());
     container.remove();
 });

@@ -29,6 +29,7 @@ export type DirectorPlan = {
 };
 
 export type StoryboardShot = {
+    id: string;
     shotNo: number;
     visual: string;
     durationSec: number;
@@ -40,6 +41,7 @@ export type StoryboardShot = {
 };
 
 export type StoryboardSegment = {
+    id: string;
     segmentNo: number;
     durationSec: number;
     assetIds: number[];
@@ -47,6 +49,7 @@ export type StoryboardSegment = {
 };
 
 export type StoryboardScene = {
+    id: string;
     sceneNo: number;
     sourceRefs: string[];
     location: string;
@@ -84,6 +87,7 @@ export type StoryboardPipelineInput = {
 };
 
 export type StoryboardStage = "planning" | "generating" | "validating";
+export type StoryboardStatus = "draft" | "ready";
 
 export type StructuredCompletion = {
     content: string;
@@ -104,13 +108,18 @@ export type StoryboardPipelineResult = {
     validation: StoryboardValidation;
 };
 
-export type StoryboardRecord = StoryboardPipelineResult &
-    StoryboardPipelineInput & {
-        id: string;
-        model: string;
-        createdAt: number;
-        updatedAt: number;
-    };
+export type StoryboardRecord = StoryboardPipelineInput & {
+    id: string;
+    model: string;
+    sourceHash: string;
+    directorPlan: DirectorPlan | null;
+    document: StoryboardDocument | null;
+    validation: StoryboardValidation | null;
+    status: StoryboardStatus;
+    revision: number;
+    createdAt: number;
+    updatedAt: number;
+};
 
 export const defaultStoryboardOptions: StoryboardOptions = {
     aspectRatio: "9:16",
@@ -215,7 +224,11 @@ const storyboardDocumentSchema = {
     },
 };
 
-export async function runStoryboardPipeline(input: StoryboardPipelineInput, complete: (request: StoryboardCompletionRequest) => Promise<StructuredCompletion>, onStage?: (stage: StoryboardStage) => void): Promise<StoryboardPipelineResult> {
+export async function runStoryboardPipeline(
+    input: StoryboardPipelineInput,
+    complete: (request: StoryboardCompletionRequest) => Promise<StructuredCompletion>,
+    onStage?: (stage: StoryboardStage) => void,
+): Promise<StoryboardPipelineResult> {
     const title = input.title.trim() || "未命名分镜";
     const source = input.source.trim();
     if (!source) throw new Error("请输入剧本文本");
@@ -249,10 +262,7 @@ export async function runStoryboardPipeline(input: StoryboardPipelineInput, comp
 
 export function parseStructuredCompletion(result: StructuredCompletion, toolName: StoryboardCompletionRequest["toolName"]) {
     const raw = result.toolCalls.find((call) => call.function.name === toolName)?.function.arguments || result.content;
-    const text = raw
-        .trim()
-        .replace(/^```(?:json)?\s*/i, "")
-        .replace(/\s*```$/, "");
+    const text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
     if (!text) throw new Error("模型未返回结构化结果");
     try {
         return JSON.parse(text) as unknown;
@@ -323,6 +333,63 @@ export function storyboardToMarkdown(document: StoryboardDocument) {
     return lines.join("\n").trimEnd() + "\n";
 }
 
+export function normalizeStoryboardDocument(document: StoryboardDocument, current?: StoryboardDocument | null): StoryboardDocument {
+    const usedIds = new Set<string>();
+    const entityId = (currentId?: string) => {
+        const id = currentId && !usedIds.has(currentId) ? currentId : crypto.randomUUID();
+        usedIds.add(id);
+        return id;
+    };
+    const reservedIds = <T extends { id: string }>(incoming: T[], currentById: Map<string, T>) =>
+        new Set(incoming.flatMap((entity) => (currentById.has(entity.id) ? [entity.id] : [])));
+    const previousEntity = <T extends { id: string }>(
+        incomingId: string,
+        number: number,
+        currentById: Map<string, T>,
+        currentByNumber: Map<number, T>,
+        reserved: Set<string>,
+    ) => {
+        const byId = currentById.get(incomingId);
+        if (byId && !usedIds.has(byId.id)) return byId;
+        const byNumber = currentByNumber.get(number);
+        return byNumber && !reserved.has(byNumber.id) && !usedIds.has(byNumber.id) ? byNumber : undefined;
+    };
+
+    const currentSceneList = current?.scenes || [];
+    const currentScenesById = new Map(currentSceneList.map((scene) => [scene.id, scene]));
+    const currentScenesByNumber = new Map(currentSceneList.map((scene) => [scene.sceneNo, scene]));
+    const reservedScenes = reservedIds(document.scenes, currentScenesById);
+    return {
+        ...document,
+        scenes: document.scenes.map((scene) => {
+            const currentScene = previousEntity(scene.id, scene.sceneNo, currentScenesById, currentScenesByNumber, reservedScenes);
+            const currentSegmentList = currentScene?.segments || [];
+            const currentSegmentsById = new Map(currentSegmentList.map((segment) => [segment.id, segment]));
+            const currentSegmentsByNumber = new Map(currentSegmentList.map((segment) => [segment.segmentNo, segment]));
+            const reservedSegments = reservedIds(scene.segments, currentSegmentsById);
+            return {
+                ...scene,
+                id: entityId(currentScene?.id),
+                segments: scene.segments.map((segment) => {
+                    const currentSegment = previousEntity(segment.id, segment.segmentNo, currentSegmentsById, currentSegmentsByNumber, reservedSegments);
+                    const currentShotList = currentSegment?.shots || [];
+                    const currentShotsById = new Map(currentShotList.map((shot) => [shot.id, shot]));
+                    const currentShotsByNumber = new Map(currentShotList.map((shot) => [shot.shotNo, shot]));
+                    const reservedShots = reservedIds(segment.shots, currentShotsById);
+                    return {
+                        ...segment,
+                        id: entityId(currentSegment?.id),
+                        shots: segment.shots.map((shot) => ({
+                            ...shot,
+                            id: entityId(previousEntity(shot.id, shot.shotNo, currentShotsById, currentShotsByNumber, reservedShots)?.id),
+                        })),
+                    };
+                }),
+            };
+        }),
+    };
+}
+
 function directorPrompt(input: StoryboardPipelineInput) {
     return `你是影视导演规划助手。请只规划场次，不设计具体镜头，不新增剧情，不改写台词。\n\n作品标题：${input.title}\n画幅：${input.options.aspectRatio}\n目标时长：${input.options.targetDurationSec} 秒\n风格：${input.options.style || "未指定"}\n\n请按地点、时间和戏剧单元拆分场次，保留人物、情绪变化、来源定位和预计时长。sourceRefs 使用 source:行号 或 source:段落号。\n\n【原始剧本】\n${input.source}`;
 }
@@ -357,7 +424,7 @@ function readStoryboardDocument(value: unknown): StoryboardDocument {
     const root = record(value, "document");
     const aspectRatio = string(root.aspectRatio, "document.aspectRatio");
     if (!["16:9", "9:16", "1:1", "4:3", "3:4"].includes(aspectRatio)) throw new Error("document.aspectRatio 格式无效");
-    return {
+    return normalizeStoryboardDocument({
         schemaVersion: literal(root.schemaVersion, "1.0", "document.schemaVersion"),
         title: string(root.title, "document.title"),
         sourceType: literal(root.sourceType, "script", "document.sourceType"),
@@ -367,6 +434,7 @@ function readStoryboardDocument(value: unknown): StoryboardDocument {
             const scenePath = `document.scenes[${sceneIndex}]`;
             const scene = record(item, scenePath);
             return {
+                id: "",
                 sceneNo: integer(scene.sceneNo, `${scenePath}.sceneNo`),
                 sourceRefs: strings(scene.sourceRefs, `${scenePath}.sourceRefs`),
                 location: string(scene.location, `${scenePath}.location`),
@@ -377,6 +445,7 @@ function readStoryboardDocument(value: unknown): StoryboardDocument {
                     const segmentPath = `${scenePath}.segments[${segmentIndex}]`;
                     const segment = record(item, segmentPath);
                     return {
+                        id: "",
                         segmentNo: integer(segment.segmentNo, `${segmentPath}.segmentNo`),
                         durationSec: integer(segment.durationSec, `${segmentPath}.durationSec`),
                         assetIds: list(segment.assetIds, `${segmentPath}.assetIds`).map((id, assetIndex) => integer(id, `${segmentPath}.assetIds[${assetIndex}]`)),
@@ -384,6 +453,7 @@ function readStoryboardDocument(value: unknown): StoryboardDocument {
                             const shotPath = `${segmentPath}.shots[${shotIndex}]`;
                             const shot = record(item, shotPath);
                             return {
+                                id: "",
                                 shotNo: integer(shot.shotNo, `${shotPath}.shotNo`),
                                 visual: string(shot.visual, `${shotPath}.visual`),
                                 durationSec: integer(shot.durationSec, `${shotPath}.durationSec`),
@@ -398,7 +468,7 @@ function readStoryboardDocument(value: unknown): StoryboardDocument {
                 }),
             };
         }),
-    };
+    });
 }
 
 async function sha256Text(value: string) {
