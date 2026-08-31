@@ -45,8 +45,9 @@ export function planBrainstormSummaryCheckpoint(input: BrainstormSummaryPlanInpu
     const previousIndex = input.previous ? input.messages.findIndex((message) => message.id === input.previous?.throughMessageId && message.role === "user") : -1;
     const previous = previousIndex >= 0 ? input.previous : undefined;
     const start = previous ? previousIndex + 1 : 0;
+    const previousTokenCount = previous ? (typeof previous.tokenCount === "number" && previous.tokenCount > 0 ? Math.ceil(previous.tokenCount) : estimateBrainstormTextTokens(previous.content)) : 0;
     const unsummarizedTokens = input.messages.slice(start).reduce((total, message) => total + messageTokens(message), 0);
-    if (unsummarizedTokens < Math.max(0, Math.floor(input.triggerTokens))) return null;
+    if (previousTokenCount + unsummarizedTokens < Math.max(0, Math.floor(input.triggerTokens))) return null;
 
     const retainTokens = Math.max(0, Math.floor(input.retainTokens));
     const boundaries = input.messages.map((message, index) => ({ message, index })).filter(({ message, index }) => index >= start && message.role === "user" && !splitToolPair(input.messages, index));
@@ -56,7 +57,6 @@ export function planBrainstormSummaryCheckpoint(input: BrainstormSummaryPlanInpu
     if (!source.length) return null;
 
     const sourceTokens = source.reduce((total, message) => total + messageTokens(message), 0);
-    const previousTokenCount = previous ? (typeof previous.tokenCount === "number" && previous.tokenCount > 0 ? Math.ceil(previous.tokenCount) : estimateBrainstormTextTokens(previous.content)) : 0;
     return {
         ...(previous ? { previousSummary: previous.content } : {}),
         messages: source,

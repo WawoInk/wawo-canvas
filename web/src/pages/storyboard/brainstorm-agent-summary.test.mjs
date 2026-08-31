@@ -76,3 +76,18 @@ test("does not plan compression below the trigger or without a User boundary", (
         null,
     );
 });
+
+test("counts the previous checkpoint toward the compression trigger before merging it", () => {
+    const messages = [user("u1", null, "旧边界"), assistant("a1", "u1", [{ type: "text", text: "新增回答" }]), user("u2", "a1", "新增问题")];
+    const plan = planBrainstormSummaryCheckpoint({
+        messages,
+        previous: { id: "summary-1", throughMessageId: "u1", content: "OLD_SUMMARY", tokenCount: 600 },
+        triggerTokens: 500,
+        retainTokens: 10_000,
+        model: "model-1",
+    });
+
+    assert.ok(plan);
+    assert.equal(plan.previousSummary, "OLD_SUMMARY");
+    assert.equal(plan.throughMessageId, "u2");
+});
