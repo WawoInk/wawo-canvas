@@ -2002,14 +2002,16 @@ func TestGenerationAuditRedactsSecretsAndBodies(t *testing.T) {
 			t.Fatalf("audit missing %q: %s", marker, got)
 		}
 	}
-	embedded := sanitizeGenerationAuditJSON(strconv.Quote(`Get "https://cdn.example/video.mp4?X-Amz-Signature=signed&token=secret": Authorization: Bearer secret`))
-	for _, secret := range []string{"signed", "token=secret", "Bearer secret"} {
+	embedded := sanitizeGenerationAuditJSON(strconv.Quote(`Get "/v1/models?key=relative-secret" and "https://cdn.example/video.mp4?X-Amz-Signature=signed&token=secret": Authorization: Basic basic-secret, X-API-Key: header-secret`))
+	for _, secret := range []string{"relative-secret", "signed", "token=secret", "basic-secret", "header-secret"} {
 		if strings.Contains(embedded, secret) {
 			t.Fatalf("embedded audit leaked %q: %s", secret, embedded)
 		}
 	}
-	if !strings.Contains(embedded, "X-Amz-Signature") {
-		t.Fatalf("embedded audit lost signed URL shape: %s", embedded)
+	for _, marker := range []string{"X-Amz-Signature", "/v1/models?key=", "Authorization: [REDACTED]", "X-API-Key: [REDACTED]"} {
+		if !strings.Contains(embedded, marker) {
+			t.Fatalf("embedded audit missing %q: %s", marker, embedded)
+		}
 	}
 }
 

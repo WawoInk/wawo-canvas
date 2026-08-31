@@ -700,8 +700,8 @@ func isGenerationSecretKey(key string) bool {
 	return key == "authorization" || strings.Contains(key, "apikey") || strings.Contains(key, "callbacksecret")
 }
 
-var generationAuditURLPattern = regexp.MustCompile(`https?://[^\s"']+`)
-var generationAuditAuthorizationPattern = regexp.MustCompile(`(?i)authorization:\s*bearer\s+[^\s"']+`)
+var generationAuditURLPattern = regexp.MustCompile(`https?://[^\s"']+|/[^\s"'?]*\?[^\s"']+`)
+var generationAuditSecretHeaderPattern = regexp.MustCompile(`(?i)(authorization|x-api-key|api-key):\s*[^,\r\n"']+`)
 
 func redactGenerationAuditString(value string) string {
 	if strings.HasPrefix(value, "data:") {
@@ -713,7 +713,7 @@ func redactGenerationAuditString(value string) string {
 	if redacted, ok := redactGenerationAuditURL(value); ok {
 		return redacted
 	}
-	value = generationAuditAuthorizationPattern.ReplaceAllString(value, "Authorization: [REDACTED]")
+	value = generationAuditSecretHeaderPattern.ReplaceAllString(value, "${1}: [REDACTED]")
 	return generationAuditURLPattern.ReplaceAllStringFunc(value, func(candidate string) string {
 		trimmed := strings.TrimRight(candidate, ".,;:)")
 		suffix := candidate[len(trimmed):]
@@ -726,7 +726,7 @@ func redactGenerationAuditString(value string) string {
 
 func redactGenerationAuditURL(value string) (string, bool) {
 	parsed, err := url.Parse(value)
-	if err != nil || !parsed.IsAbs() || parsed.RawQuery == "" {
+	if err != nil || parsed.RawQuery == "" {
 		return value, false
 	}
 	query, err := url.ParseQuery(parsed.RawQuery)
