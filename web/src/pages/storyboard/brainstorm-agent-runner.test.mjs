@@ -74,10 +74,7 @@ test("streams and preserves a completed text response", async () => {
 test("executes a read tool and replays the complete pair before continuing", async () => {
     const call = { type: "tool_call", callId: "call-1", name: "read_scene", arguments: '{"sceneId":"scene-1"}' };
     const tool = { name: "read_scene", description: "Read one scene", parameters: { type: "object" }, risk: "read", approval: "auto" };
-    const completion = queueCompletion(
-        { content: "我先查看。", toolCalls: [call], usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 } },
-        { content: "完成。", toolCalls: [], usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6 } },
-    );
+    const completion = queueCompletion({ content: "我先查看。", toolCalls: [call], usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 } }, { content: "完成。", toolCalls: [], usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6 } });
     const executed = [];
     const result = await runBrainstormTurn(
         { ...context, tools: [tool] },
@@ -100,21 +97,13 @@ test("executes a read tool and replays the complete pair before continuing", asy
         usage: { inputTokens: 9, outputTokens: 3, totalTokens: 12 },
     });
     assert.deepEqual(executed, [[call, tool]]);
-    assert.deepEqual(completion.requests[1].messages, [
-        ...context.messages,
-        { type: "message", role: "assistant", content: "我先查看。" },
-        call,
-        toolResult,
-    ]);
+    assert.deepEqual(completion.requests[1].messages, [...context.messages, { type: "message", role: "assistant", content: "我先查看。" }, call, toolResult]);
 });
 
 test("executes tools sequentially, skips calls after a failure, and feeds every result back", async () => {
     const first = { type: "tool_call", callId: "call-1", name: "read_scene", arguments: "{}" };
     const second = { type: "tool_call", callId: "call-2", name: "read_shot", arguments: "{}" };
-    const completion = queueCompletion(
-        { content: "", toolCalls: [first, second] },
-        { content: "读取失败，请检查场次。", toolCalls: [] },
-    );
+    const completion = queueCompletion({ content: "", toolCalls: [first, second] }, { content: "读取失败，请检查场次。", toolCalls: [] });
     const executed = [];
     const result = await runBrainstormTurn(
         {
@@ -182,7 +171,10 @@ test("executes four tool batches and returns the round limit without a fifth com
     assert.equal(result.status, "failed");
     assert.equal(result.toolRounds, 4);
     assert.deepEqual(result.error, { code: "TOOL_ROUND_LIMIT", message: "Brainstorm tool loop reached the maximum of 4 rounds." });
-    assert.deepEqual(result.output.map((item) => item.type), ["tool_call", "tool_result", "tool_call", "tool_result", "tool_call", "tool_result", "tool_call", "tool_result"]);
+    assert.deepEqual(
+        result.output.map((item) => item.type),
+        ["tool_call", "tool_result", "tool_call", "tool_result", "tool_call", "tool_result", "tool_call", "tool_result"],
+    );
     assert.deepEqual(events.at(-1), { type: "status", status: "failed" });
 });
 
@@ -207,7 +199,10 @@ test("retries one retryable completion failure before any output", async () => {
     assert.equal(completion.requests.length, 2);
     assert.equal(result.status, "completed");
     assert.equal(result.content, "重试成功");
-    assert.deepEqual(events.filter((event) => event.type === "retry"), [{ type: "retry" }]);
+    assert.deepEqual(
+        events.filter((event) => event.type === "retry"),
+        [{ type: "retry" }],
+    );
 });
 
 test("does not retry after streamed text and preserves the partial response", async () => {
@@ -258,10 +253,7 @@ test("does not retry after a streamed tool-call delta", async () => {
 test("turns a thrown tool error into a failed result and continues the model loop", async () => {
     const first = { type: "tool_call", callId: "call-1", name: "read_scene", arguments: "{}" };
     const second = { type: "tool_call", callId: "call-2", name: "read_shot", arguments: "{}" };
-    const completion = queueCompletion(
-        { content: "", toolCalls: [first, second] },
-        { content: "工具失败已说明。", toolCalls: [] },
-    );
+    const completion = queueCompletion({ content: "", toolCalls: [first, second] }, { content: "工具失败已说明。", toolCalls: [] });
     const executed = [];
     const result = await runBrainstormTurn(
         {
@@ -293,10 +285,7 @@ test("turns a thrown tool error into a failed result and continues the model loo
 test("skips an approval-required call when an earlier call in the batch failed", async () => {
     const first = { type: "tool_call", callId: "call-1", name: "read_scene", arguments: "{}" };
     const second = { type: "tool_call", callId: "call-2", name: "save_memory", arguments: "{}" };
-    const completion = queueCompletion(
-        { content: "", toolCalls: [first, second] },
-        { content: "未保存。", toolCalls: [] },
-    );
+    const completion = queueCompletion({ content: "", toolCalls: [first, second] }, { content: "未保存。", toolCalls: [] });
     const result = await runBrainstormTurn(
         {
             ...context,
@@ -327,8 +316,126 @@ test("suspends when an executor reports that approval is required", async () => 
 
     assert.equal(result.status, "awaiting_approval");
     assert.deepEqual(result.call, call);
-    assert.deepEqual(result.output, [
-        call,
-        { type: "tool_result", callId: "call-1", name: "conditional_write", status: "awaiting_approval", content: "Dynamic approval required.", sideEffect: "write" },
-    ]);
+    assert.deepEqual(result.output, [call, { type: "tool_result", callId: "call-1", name: "conditional_write", status: "awaiting_approval", content: "Dynamic approval required.", sideEffect: "write" }]);
+});
+
+test("preserves streamed text when completion is cancelled", async () => {
+    const controller = new AbortController();
+    const completion = queueCompletion((options) => {
+        options.onEvent({ type: "text_delta", delta: "保留这部分" });
+        controller.abort();
+        throw new DOMException("Aborted", "AbortError");
+    });
+    const result = await runBrainstormTurn(
+        context,
+        {
+            complete: completion.complete,
+            executeTool: noTool,
+            isRetryableCompletionError: () => true,
+        },
+        { signal: controller.signal },
+    );
+
+    assert.deepEqual(result, {
+        status: "cancelled",
+        error: { code: "ABORTED", message: "Brainstorm turn was cancelled." },
+        content: "保留这部分",
+        output: [{ type: "text", text: "保留这部分" }],
+        diagnostics,
+        toolRounds: 0,
+    });
+    assert.equal(completion.requests.length, 1);
+});
+
+test("cancels during tool execution and keeps the tool pair complete", async () => {
+    const call = { type: "tool_call", callId: "call-1", name: "read_scene", arguments: "{}" };
+    const completion = queueCompletion({ content: "正在读取。", toolCalls: [call] });
+    const events = [];
+    const result = await runBrainstormTurn(
+        { ...context, tools: [{ name: "read_scene", description: "", parameters: {}, risk: "read", approval: "auto" }] },
+        {
+            complete: completion.complete,
+            executeTool: async () => {
+                throw new DOMException("Aborted", "AbortError");
+            },
+        },
+        { onEvent: (event) => events.push(event) },
+    );
+
+    assert.equal(completion.requests.length, 1);
+    assert.deepEqual(result, {
+        status: "cancelled",
+        error: { code: "ABORTED", message: "Brainstorm turn was cancelled." },
+        content: "正在读取。",
+        output: [{ type: "text", text: "正在读取。" }, call, { type: "tool_result", callId: "call-1", name: "read_scene", status: "failed", content: "Brainstorm turn was cancelled." }],
+        diagnostics,
+        toolRounds: 1,
+    });
+    assert.deepEqual(events.at(-1), { type: "status", status: "cancelled" });
+});
+
+test("retries at most once per turn", async () => {
+    const completion = queueCompletion(
+        () => {
+            throw new Error("temporary one");
+        },
+        () => {
+            throw new Error("temporary two");
+        },
+        { content: "must not run", toolCalls: [] },
+    );
+    const events = [];
+    const result = await runBrainstormTurn(context, { complete: completion.complete, executeTool: noTool, isRetryableCompletionError: () => true }, { onEvent: (event) => events.push(event) });
+
+    assert.equal(completion.requests.length, 2);
+    assert.equal(result.status, "failed");
+    assert.equal(result.error.message, "temporary two");
+    assert.equal(events.filter((event) => event.type === "retry").length, 1);
+});
+
+test("does not retry a later completion after a write side effect", async () => {
+    const call = { type: "tool_call", callId: "call-1", name: "write_tool", arguments: "{}" };
+    const completion = queueCompletion(
+        { content: "", toolCalls: [call] },
+        () => {
+            throw new Error("temporary after write");
+        },
+        { content: "must not run", toolCalls: [] },
+    );
+    const result = await runBrainstormTurn(
+        { ...context, tools: [{ name: "write_tool", description: "", parameters: {}, risk: "write", approval: "auto" }] },
+        {
+            complete: completion.complete,
+            executeTool: async () => ({ status: "succeeded", content: "written", sideEffect: "write" }),
+            isRetryableCompletionError: () => true,
+        },
+    );
+
+    assert.equal(completion.requests.length, 2);
+    assert.equal(result.status, "failed");
+    assert.equal(result.error.message, "temporary after write");
+});
+
+test("does not start tool execution when cancellation wins after completion", async () => {
+    const controller = new AbortController();
+    const call = { type: "tool_call", callId: "call-1", name: "read_scene", arguments: "{}" };
+    let executions = 0;
+    const result = await runBrainstormTurn(
+        { ...context, tools: [{ name: "read_scene", description: "", parameters: {}, risk: "read", approval: "auto" }] },
+        {
+            complete: async () => {
+                controller.abort();
+                return { content: "", toolCalls: [call] };
+            },
+            executeTool: async () => {
+                executions += 1;
+                return { status: "succeeded", content: "unexpected" };
+            },
+        },
+        { signal: controller.signal },
+    );
+
+    assert.equal(executions, 0);
+    assert.equal(result.status, "cancelled");
+    assert.deepEqual(result.output, [call, { type: "tool_result", callId: "call-1", name: "read_scene", status: "failed", content: "Brainstorm turn was cancelled." }]);
 });

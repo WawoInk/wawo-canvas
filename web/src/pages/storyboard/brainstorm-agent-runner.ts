@@ -24,14 +24,10 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 function isAborted(error: unknown, signal?: AbortSignal) {
-    return signal?.aborted || (error instanceof Error && error.name === "AbortError");
+    return signal?.aborted || (typeof error === "object" && error !== null && "name" in error && error.name === "AbortError");
 }
 
-export async function runBrainstormTurn(
-    context: BrainstormContextResult,
-    dependencies: BrainstormTurnDependencies,
-    options: BrainstormTurnOptions = {},
-): Promise<BrainstormTurnResult> {
+export async function runBrainstormTurn(context: BrainstormContextResult, dependencies: BrainstormTurnDependencies, options: BrainstormTurnOptions = {}): Promise<BrainstormTurnResult> {
     const messages: BrainstormModelMessage[] = [...context.messages];
     const output: BrainstormOutputItem[] = [];
     let toolRounds = 0;
@@ -45,7 +41,10 @@ export async function runBrainstormTurn(
         options.onEvent?.({ type: "output_item", item });
     };
     const base = () => ({
-        content: output.filter((item) => item.type === "text").map((item) => item.text).join(""),
+        content: output
+            .filter((item) => item.type === "text")
+            .map((item) => item.text)
+            .join(""),
         output,
         diagnostics: context.diagnostics,
         toolRounds,
@@ -110,23 +109,34 @@ export async function runBrainstormTurn(
         for (const call of completion.toolCalls) {
             append(call);
             const definition = context.tools.find((tool) => tool.name === call.name);
+            if (options.signal?.aborted) {
+                const result: BrainstormToolResult = { type: "tool_result", callId: call.callId, name: call.name, status: "failed", content: "Brainstorm turn was cancelled." };
+                append(result);
+                messages.push(call, result);
+                options.onEvent?.({ type: "status", status: "cancelled" });
+                return { status: "cancelled", error: { code: "ABORTED", message: "Brainstorm turn was cancelled." }, ...base() };
+            }
             if (!stopped && definition?.approval === "required") {
                 append({ type: "tool_result", callId: call.callId, name: call.name, status: "awaiting_approval", content: "Tool requires approval before execution.", sideEffect: definition.risk === "write" ? "write" : "none" });
                 options.onEvent?.({ type: "status", status: "awaiting_approval" });
                 return { status: "awaiting_approval", call, ...base() };
             }
-            let execution;
+            let execution: Pick<BrainstormToolResult, "status" | "content" | "sideEffect">;
+            let cancelled = false;
             try {
-                execution = stopped
-                    ? { status: "skipped" as const, content: "Skipped because a previous tool call failed." }
-                    : await dependencies.executeTool(call, { signal: options.signal, definition });
+                execution = stopped ? { status: "skipped" as const, content: "Skipped because a previous tool call failed." } : await dependencies.executeTool(call, { signal: options.signal, definition });
             } catch (error) {
-                execution = { status: "failed" as const, content: errorMessage(error, "Tool execution failed.") };
+                cancelled = isAborted(error, options.signal);
+                execution = { status: "failed" as const, content: cancelled ? "Brainstorm turn was cancelled." : errorMessage(error, "Tool execution failed.") };
             }
             const result: BrainstormToolResult = { type: "tool_result", callId: call.callId, name: call.name, ...execution };
             wrote ||= execution.sideEffect === "write";
             append(result);
             messages.push(call, result);
+            if (cancelled) {
+                options.onEvent?.({ type: "status", status: "cancelled" });
+                return { status: "cancelled", error: { code: "ABORTED", message: "Brainstorm turn was cancelled." }, ...base() };
+            }
             if (execution.status === "awaiting_approval") {
                 options.onEvent?.({ type: "status", status: "awaiting_approval" });
                 return { status: "awaiting_approval", call, ...base() };
