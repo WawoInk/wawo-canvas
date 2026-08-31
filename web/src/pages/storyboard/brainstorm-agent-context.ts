@@ -11,7 +11,7 @@ import type {
     BrainstormModelMessage,
     BrainstormOutputItem,
 } from "./brainstorm-agent";
-import { getBrainstormSkill } from "./brainstorm-agent-skills";
+import { getBrainstormSkill } from "./brainstorm-agent-skills.ts";
 
 const SYSTEM_PROMPT = `你是 Infinite Canvas 分镜创作室的脑暴助手。
 固定规则：
@@ -33,30 +33,29 @@ type HistoryEntry = { order: number; candidateKey: string; messages: BrainstormM
 
 export class BrainstormContextError extends Error {
     readonly code = "CONTEXT_BUDGET_EXCEEDED" as const;
+    readonly diagnostics: BrainstormContextDiagnostics;
 
-    constructor(
-        message: string,
-        readonly diagnostics: BrainstormContextDiagnostics,
-    ) {
+    constructor(message: string, diagnostics: BrainstormContextDiagnostics) {
         super(message);
         this.name = "BrainstormContextError";
+        this.diagnostics = diagnostics;
     }
 }
 
-function estimateText(text: string): number {
+export function estimateBrainstormTextTokens(text: string): number {
     return Math.max(1, Math.ceil(new TextEncoder().encode(text).length / 3) + 4);
 }
 
-function estimateValue(value: unknown): number {
-    return estimateText(JSON.stringify(value));
+export function estimateBrainstormValueTokens(value: unknown): number {
+    return estimateBrainstormTextTokens(JSON.stringify(value));
 }
 
-function messageTokens(messages: BrainstormModelMessage[]): number {
-    return messages.reduce((total, message) => total + estimateValue(message), 0);
+export function estimateBrainstormModelMessageTokens(messages: BrainstormModelMessage[]): number {
+    return messages.reduce((total, message) => total + estimateBrainstormValueTokens(message), 0);
 }
 
 function makeCandidate(kind: BrainstormContextKind, id: string, messages: BrainstormModelMessage[], order = 0): Candidate {
-    return { kind, id, messages, order, tokens: messageTokens(messages), tokenSource: "estimate" };
+    return { kind, id, messages, order, tokens: estimateBrainstormModelMessageTokens(messages), tokenSource: "estimate" };
 }
 
 function focusKey(focus: BrainstormFocus): string {
@@ -198,7 +197,7 @@ function historyCandidates(messages: BrainstormMessage[]): {
             excluded.push({
                 kind: "history",
                 id: `tool-pair:${callId}`,
-                tokens: items.reduce((total, entry) => total + estimateValue(entry.item), 0),
+                tokens: items.reduce((total, entry) => total + estimateBrainstormValueTokens(entry.item), 0),
                 tokenSource: "estimate",
                 action: "trimmed",
                 reason,
@@ -242,7 +241,7 @@ function historyCandidates(messages: BrainstormMessage[]): {
             id: candidateId,
             messages: replayGroup,
             order: Math.max(...group),
-            tokens: usage && !hasToolResult ? Math.ceil(usage) : messageTokens(replayGroup),
+            tokens: usage && !hasToolResult ? Math.ceil(usage) : estimateBrainstormModelMessageTokens(replayGroup),
             tokenSource: usage && !hasToolResult ? "usage" : "estimate",
         });
     });
@@ -278,7 +277,7 @@ export function buildBrainstormContext(input: BrainstormContextInput): Brainstor
         kind: "tool_schema",
         id: names.get(tool.name) === 1 ? tool.name : `${tool.name}#${index + 1}`,
         messages: [],
-        tokens: estimateValue(tool),
+        tokens: estimateBrainstormValueTokens(tool),
         tokenSource: "estimate",
         order: index,
     }));
@@ -303,7 +302,7 @@ export function buildBrainstormContext(input: BrainstormContextInput): Brainstor
         .map((memory) => ({
             kind: "memory",
             id: memory.id,
-            tokens: estimateText(memory.content),
+            tokens: estimateBrainstormTextTokens(memory.content),
             tokenSource: "estimate",
             action: "trimmed",
             reason: !memory.confirmed ? "Memory 尚未由用户确认" : !memory.content.trim() ? "Memory 内容为空" : "Memory 与当前焦点无关",
@@ -322,7 +321,7 @@ export function buildBrainstormContext(input: BrainstormContextInput): Brainstor
                   {
                       kind: "summary",
                       id: input.summary.id,
-                      tokens: input.summary.content.trim() ? estimateText(input.summary.content) : 0,
+                      tokens: input.summary.content.trim() ? estimateBrainstormTextTokens(input.summary.content) : 0,
                       tokenSource: "estimate",
                       action: "trimmed",
                       reason: input.summary.content.trim() ? "Summary checkpoint 不在当前历史中" : "Summary 内容为空",
@@ -334,7 +333,7 @@ export function buildBrainstormContext(input: BrainstormContextInput): Brainstor
     const coveredHistory: BrainstormContextDiagnosticItem[] = input.priorMessages.slice(0, historyStart).map((message) => ({
         kind: "history",
         id: message.id,
-        tokens: message.role === "user" ? estimateText(message.content) : messageTokens(modelMessages(message.output)),
+        tokens: message.role === "user" ? estimateBrainstormTextTokens(message.content) : estimateBrainstormModelMessageTokens(modelMessages(message.output)),
         tokenSource: "estimate",
         action: "trimmed",
         reason: "已由 Summary checkpoint 覆盖",

@@ -90,9 +90,13 @@ export type BrainstormMemoryState = {
 
 export type BrainstormSummaryCheckpoint = {
     id: string;
+    fromMessageId?: string;
     throughMessageId: string;
     content: string;
     tokenCount?: number;
+    sourceTokenCount?: number;
+    coveredMessageCount?: number;
+    model?: string;
 };
 
 export type BrainstormSkillId = "divergent_ideation" | "character_conflict" | "visual_storytelling" | "shot_rhythm" | "continuity_check";
