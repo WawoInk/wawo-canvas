@@ -5,7 +5,9 @@ description: 当前版本已实现但仍需人工验证的变更项
 
 # 待测试
 
-- Storyboard Brainstorm Agent Core：已新增与 UI、HTTP 和具体 Provider 解耦的强类型消息/输出合同、Context Builder、保守 Token Budget、Tool Call/Result 原子清理、最多四轮的 Tool Loop、审批后继续/拒绝回注、未注册工具拦截、首个输出前最多一次重试，以及五个代码内版本化 Skill。定向自动化测试覆盖固定 System/当前输入不裁剪、稳定 Scene/Shot 焦点优先、Memory/Summary/最近历史预算、Tool Schema 计费、孤立或待审批 Pair 不重放、Fake Completion/Fake Tool、取消和部分输出保留。当前尚未接入 Brainstorm HTTP API、真实模型 Transport、Storyboard Tool Executor 或页面 UI，因此没有新增真实浏览器验收入口；后续任务集成时需继续验证持久化、真实流式和审批卡片。
+- Storyboard Brainstorm API Client 与页面私有状态 Hook：已新增 Conversation、Message、Turn、Assistant CAS、Continue 和 Project Memory 的认证 API Client，并新增 `useBrainstormAgent` 管理 Conversation 创建/切换/重命名/删除、服务端确认后的 User/Assistant Placeholder、完整分页恢复、不同 Conversation 独立运行、流式文本内存态、Tool 边界 checkpoint、Stop requested/confirmed/failed、Regenerate sibling、Continue 原 Assistant、Retry 新 Regenerate、刷新遗留 active Message 转 interrupted，以及 Pending Approval 的 revision CAS 占用和注入 Runtime 续跑。定向自动化测试覆盖 API 路径/请求合同、账号与 Project 迟到响应、并行 Conversation、异常终态持久化、审批状态原子 checkpoint、scope 切换期间禁止旧终态写入和确认中的 Turn 不被误中断。当前任务未修改 `storyboard-studio.tsx`，没有新增可操作 UI 或真实浏览器验收入口；后续 UI 集成时需验证 Conversation 面板、流式渲染、停止按钮、审批卡片和模型 Transport。
+
+- Storyboard Brainstorm Agent Core：已新增与 UI、HTTP 和具体 Provider 解耦的强类型消息/输出合同、Context Builder、保守 Token Budget、Tool Call/Result 原子清理、最多四轮的 Tool Loop、审批后继续/拒绝回注、未注册工具拦截、首个输出前最多一次重试，以及五个代码内版本化 Skill。定向自动化测试覆盖固定 System/当前输入不裁剪、稳定 Scene/Shot 焦点优先、Memory/Summary/最近历史预算、Tool Schema 计费、孤立或待审批 Pair 不重放、Fake Completion/Fake Tool、取消和部分输出保留。当前已由 Brainstorm API Client 和页面私有状态 Hook 接入持久化合同，但尚未接入真实模型 Transport、Storyboard Tool Executor 或最终页面 UI，因此没有新增真实浏览器验收入口；后续任务集成时需继续验证真实流式和审批卡片。
 
 - 统一文本模型流事件协议：在现有 Storyboard、剧本 Agent 和 Canvas 在线助手中分别使用 OpenAI-compatible 与 Gemini 文本渠道，确认累计文本仍持续覆盖现有 UI，不会只显示最后一个分片；重点验证 OpenAI Tool Arguments 被任意拆分后仍组成完整 JSON，多 Tool Call 不串线，Gemini Function Call 映射为相同内部结构，Usage、结束原因和 Done 只在可用时返回。主动停止时应以 `AbortError` 区分用户取消，已生成的部分文本保留；流中业务错误应显示上游错误且不得误发 Done。远程 Gemini 应复用 Compatibility Proxy 真流式路径并传播同一 AbortSignal，普通 JSON 降级响应仍可完成。自动化测试已覆盖任意字节边界、Tool Arguments、Usage、Done、Error、Abort、JSON 降级与旧调用兼容；真实浏览器、本地/远程上游联调和停止交互仍由用户人工验证。
 

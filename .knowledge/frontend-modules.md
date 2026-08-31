@@ -81,7 +81,8 @@
   - 服务端保存详情是权威结果；成功保存保留 Project ID 和原 `createdAt`，并采用返回的新 revision。
   - stale revision 由 `ApiError.data.current` 暴露，不在客户端静默覆盖或自动字段合并。
   - Brainstorm Core 已提供纯 `Context Builder -> Turn Runner` 合同：最终预算同时计算固定 System、代码内 Skill、分镜焦点、Memory、Summary、历史和 Tool Schema；Tool Pair 按 `callId` 原子清理，Runner 通过可注入 Completion/Executor 测试四轮 Tool Loop、审批续跑与首输出前单次重试。
-  - Brainstorm Core 尚未接入 Conversation/Message HTTP、Project Memory/Summary、真实模型 Transport、Storyboard Tool Executor、页面 UI 或 Canvas 关联；不要把纯 Core 视为完整 Brainstorm 功能。
+  - Brainstorm 前端已提供认证 API Client 和页面私有 `useBrainstormAgent`：完整分页恢复 Conversation/Message，服务端确认 User/Assistant Placeholder 后才启动浏览器 Runtime；不同 Conversation 可独立运行，Tool 边界与终态使用 revision CAS 持久化，刷新遗留 active Message 转为 interrupted，审批先 CAS 占用后续跑。
+  - 当前仍未接入 Project Memory/Summary 选择、真实模型 Transport、Storyboard Tool Executor、最终页面 UI 或 Canvas 关联；不要把 Core 与状态 Hook 视为完整 Brainstorm 功能。
 
 ## 个人素材 Store
 
