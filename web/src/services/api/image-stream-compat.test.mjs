@@ -294,3 +294,77 @@ test("DONE resolves even when the upstream keeps the connection open", async () 
     );
     assert.equal(result.content, "完成");
 });
+
+test("Gemini keeps tool_calls when STOP arrives in a later chunk", async () => {
+    const result = await withFetch(
+        async () =>
+            sseResponse([
+                { candidates: [{ content: { parts: [{ functionCall: { id: "gemini-split", name: "save_note", args: { note: "完成" } } }] } }] },
+                { candidates: [{ finishReason: "STOP" }] },
+            ]),
+        () => requestToolResponse(modelConfig("gemini"), messages, tools),
+    );
+
+    assert.equal(result.toolCalls.length, 1);
+    assert.equal(result.finishReason, "tool_calls");
+});
+
+test("OpenAI JSON fallback adds an id when a compatible provider omits it", async () => {
+    const result = await withFetch(
+        async () =>
+            new Response(
+                JSON.stringify({
+                    choices: [{ message: { role: "assistant", content: null, tool_calls: [{ type: "function", function: { name: "save_note", arguments: "{}" } }] }, finish_reason: "tool_calls" }],
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            ),
+        () => requestToolResponse(modelConfig("openai"), messages, tools),
+    );
+
+    assert.match(result.toolCalls[0].id, /.+/);
+    assert.equal(result.toolCalls[0].function.name, "save_note");
+});
+
+test("non-standard JSON content types still use the JSON fallback", async () => {
+    const result = await withFetch(
+        async () =>
+            new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "纯文本标头 JSON" }, finish_reason: "stop" }] }), {
+                status: 200,
+                headers: { "Content-Type": "text/plain" },
+            }),
+        () => requestToolResponse(modelConfig("openai"), messages, tools),
+    );
+
+    assert.equal(result.content, "纯文本标头 JSON");
+    assert.equal(result.finishReason, "stop");
+});
+
+test("remote Gemini SSE uses the unified text, tool, usage, and done contract", async () => {
+    const events = [];
+    const result = await withFetch(
+        async (input, init) => {
+            assert.equal(input, "/api/v1/chat/completions");
+            const body = JSON.parse(init.body);
+            assert.equal(body.model, "gemini-compat-test");
+            assert.equal(body.stream, true);
+            return sseResponse([
+                { candidates: [{ content: { parts: [{ text: "远程" }] } }] },
+                {
+                    candidates: [{ content: { parts: [{ functionCall: { id: "remote-call", name: "save_note", args: { note: "完成" } } }] }, finishReason: "STOP" }],
+                    usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 2, totalTokenCount: 5 },
+                },
+                "[DONE]",
+            ]);
+        },
+        () => requestToolResponse(modelConfig("gemini", "remote"), messages, tools, "auto", undefined, { onEvent: (event) => events.push(event) }),
+    );
+
+    assert.equal(result.content, "远程");
+    assert.equal(result.finishReason, "tool_calls");
+    assert.deepEqual(result.usage, { inputTokens: 3, outputTokens: 2, totalTokens: 5 });
+    assert.equal(result.toolCalls[0].id, "remote-call");
+    assert.equal(events.some((event) => event.type === "text_delta"), true);
+    assert.equal(events.some((event) => event.type === "tool_call_delta"), true);
+    assert.equal(events.some((event) => event.type === "usage"), true);
+    assert.equal(events.at(-1)?.type, "done");
+});

@@ -134,7 +134,10 @@ type ChatCompletionChunk = {
 
 type ChatCompletionPayload = {
     id?: string;
-    choices?: Array<{ message?: { role?: string; content?: string | null; tool_calls?: ResponseToolCall[] }; finish_reason?: string }>;
+    choices?: Array<{
+        message?: { role?: string; content?: string | null; tool_calls?: Array<{ id?: string; type?: "function"; function?: { name?: string; arguments?: string } }> };
+        finish_reason?: string;
+    }>;
     usage?: ChatUsage;
     error?: { message?: string };
     code?: number;
@@ -189,6 +192,37 @@ function normalizeGeminiUsage(usage?: GeminiPayload["usageMetadata"]): ModelUsag
     const inputTokens = usage.promptTokenCount || 0;
     const outputTokens = usage.candidatesTokenCount || 0;
     return { inputTokens, outputTokens, totalTokens: usage.totalTokenCount ?? inputTokens + outputTokens };
+}
+
+function isJsonMediaType(contentType: string) {
+    return /(?:^|[\/+])json(?:;|$)/i.test(contentType);
+}
+
+function isEventStreamMediaType(contentType: string) {
+    return /text\/event-stream/i.test(contentType);
+}
+
+function looksLikeJson(text: string) {
+    const first = text.trimStart()[0];
+    return first === "{" || first === "[";
+}
+
+async function readResponseStart(reader: ReadableStreamDefaultReader<Uint8Array>, decoder: TextDecoder) {
+    let text = "";
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) return { done, text: text + decoder.decode() };
+        text += decoder.decode(value, { stream: true });
+        if (text.trim()) return { done, text };
+    }
+}
+
+async function readRemainingText(reader: ReadableStreamDefaultReader<Uint8Array>, decoder: TextDecoder, text: string) {
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) return text + decoder.decode();
+        text += decoder.decode(value, { stream: true });
+    }
 }
 
 function completeRequest(result: ToolResponseResult, options?: RequestOptions) {
@@ -646,8 +680,8 @@ async function requestChatCompletions(config: AiConfig, messages: ResponseInputM
     if (!response.ok) throw new Error(await readFetchError(response, i18n.t("errors.requestFailed")));
     options?.onEvent?.({ type: "phase", phase: "streaming" });
     const contentType = response.headers?.get?.("content-type") || "";
-    const eventStream = contentType.includes("text/event-stream");
-    if (contentType.includes("application/json") || (!response.body && !eventStream)) {
+    const eventStream = isEventStreamMediaType(contentType);
+    if (isJsonMediaType(contentType) || (!response.body && !eventStream)) {
         const payload = (await response.json()) as ChatCompletionPayload;
         validateChatCompletionPayload(payload);
         return completeNonStreamingRequest(parseChatCompletionPayload(payload), onDelta, options);
@@ -656,11 +690,19 @@ async function requestChatCompletions(config: AiConfig, messages: ResponseInputM
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     const state: ChatStreamState = { buffer: "", text: "", toolCalls: new Map() };
-    for (;;) {
+    if (!eventStream) {
+        const start = await readResponseStart(reader, decoder);
+        if (looksLikeJson(start.text)) {
+            const payload = JSON.parse(start.done ? start.text : await readRemainingText(reader, decoder, start.text)) as ChatCompletionPayload;
+            validateChatCompletionPayload(payload);
+            return completeNonStreamingRequest(parseChatCompletionPayload(payload), onDelta, options);
+        }
+        consumeChatStream(state, start.text, onDelta, options);
+    }
+    while (!state.done) {
         const { done, value } = await reader.read();
         if (done) break;
         consumeChatStream(state, decoder.decode(value, { stream: true }), onDelta, options);
-        if (state.done) break;
     }
     consumeChatStream(state, decoder.decode(), onDelta, options, true);
     const toolCalls = Array.from(state.toolCalls.entries())
@@ -751,9 +793,16 @@ function parseChatCompletionPayload(payload: ChatCompletionPayload): ToolRespons
     const usage = normalizeChatUsage(payload.usage);
     const finishReason = normalizeFinishReason(choice?.finish_reason);
     if (finishReason === "error") throw new Error(`模型返回错误结束原因：${choice?.finish_reason || "error"}`);
+    const toolCalls = (message?.tool_calls || [])
+        .filter((toolCall) => toolCall.function?.name)
+        .map((toolCall) => ({
+            id: toolCall.id || nanoid(),
+            type: "function" as const,
+            function: { name: toolCall.function?.name || "", arguments: toolCall.function?.arguments || "" },
+        }));
     return {
         content: message?.content || "",
-        toolCalls: message?.tool_calls || [],
+        toolCalls,
         ...(usage ? { usage } : {}),
         ...(finishReason ? { finishReason } : {}),
     };
@@ -859,8 +908,8 @@ async function requestGeminiStreamingResponse(config: AiConfig, body: Record<str
     if (!response.ok) throw new Error(await readFetchError(response, remote ? i18n.t("errors.backendProxyFailed") : i18n.t("errors.requestFailed")));
     options?.onEvent?.({ type: "phase", phase: "streaming" });
     const contentType = response.headers?.get?.("content-type") || "";
-    const eventStream = contentType.includes("text/event-stream");
-    if (contentType.includes("application/json") || (!response.body && !eventStream)) {
+    const eventStream = isEventStreamMediaType(contentType);
+    if (isJsonMediaType(contentType) || (!response.body && !eventStream)) {
         const payload = (await response.json()) as GeminiPayload;
         return completeNonStreamingRequest(parseGeminiToolResponse(payload), onDelta, options);
     }
@@ -869,18 +918,26 @@ async function requestGeminiStreamingResponse(config: AiConfig, body: Record<str
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     const state: GeminiStreamState = { buffer: "", text: "", toolCalls: [] };
-    for (;;) {
+    if (!eventStream) {
+        const start = await readResponseStart(reader, decoder);
+        if (looksLikeJson(start.text)) {
+            const payload = JSON.parse(start.done ? start.text : await readRemainingText(reader, decoder, start.text)) as GeminiPayload;
+            return completeNonStreamingRequest(parseGeminiToolResponse(payload), onDelta, options);
+        }
+        consumeGeminiStreamText(state, start.text, onDelta, options);
+    }
+    while (!state.done) {
         const { done, value } = await reader.read();
         if (done) break;
         consumeGeminiStreamText(state, decoder.decode(value, { stream: true }), onDelta, options);
-        if (state.done) break;
     }
     consumeGeminiStreamText(state, decoder.decode(), onDelta, options, true);
+    const finishReason = state.toolCalls.length ? "tool_calls" : state.finishReason;
     return {
         content: state.text,
         toolCalls: state.toolCalls,
         ...(state.usage ? { usage: state.usage } : {}),
-        ...(state.finishReason ? { finishReason: state.finishReason } : {}),
+        ...(finishReason ? { finishReason } : {}),
     };
 }
 
