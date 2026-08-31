@@ -1001,7 +1001,7 @@ func TestSafeUpstreamTextTruncates(t *testing.T) {
 
 func TestBuildGeminiUpstreamURLAndAuth(t *testing.T) {
 	channel := model.ModelChannel{Protocol: "gemini", BaseURL: "https://generativelanguage.googleapis.com", APIKey: "secret-key", Models: []string{"gemini-2.5-flash"}}
-	body := []byte(`{"model":"gemini-2.5-flash","stream":true,"contents":[{"parts":[{"text":"hi"}]}]}`)
+	body := []byte(`{"model":"gemini-2.5-flash","stream":true,"contents":[{"parts":[{"text":"hi"}]}],"generationConfig":{"temperature":0.5}}`)
 	got := resolveUpstreamRequest(channel, "gemini-2.5-flash", "/chat/completions", body, "application/json")
 	if !strings.HasPrefix(got.URL, "https://generativelanguage.googleapis.com/models/gemini-2.5-flash:streamGenerateContent?alt=sse") {
 		t.Fatalf("gemini stream URL = %q", got.URL)
@@ -1012,14 +1012,37 @@ func TestBuildGeminiUpstreamURLAndAuth(t *testing.T) {
 	if got.Headers.Get("Authorization") != "" {
 		t.Fatalf("gemini must not set Bearer, got %q", got.Headers.Get("Authorization"))
 	}
+	var upstreamBody map[string]json.RawMessage
+	if err := json.Unmarshal(got.Body, &upstreamBody); err != nil {
+		t.Fatalf("decode gemini stream body: %v", err)
+	}
+	if _, ok := upstreamBody["model"]; ok {
+		t.Fatalf("gemini stream body must omit model: %s", got.Body)
+	}
+	if _, ok := upstreamBody["stream"]; ok {
+		t.Fatalf("gemini stream body must omit stream: %s", got.Body)
+	}
+	if string(upstreamBody["contents"]) != `[{"parts":[{"text":"hi"}]}]` || string(upstreamBody["generationConfig"]) != `{"temperature":0.5}` {
+		t.Fatalf("gemini stream business fields changed: %s", got.Body)
+	}
 }
 
 func TestBuildGeminiUpstreamNonStreamImage(t *testing.T) {
 	channel := model.ModelChannel{Protocol: "gemini", BaseURL: "https://generativelanguage.googleapis.com", APIKey: "k", Models: []string{"gemini-2.5-flash-image"}}
-	body := []byte(`{"model":"gemini-2.5-flash-image","contents":[{"parts":[{"text":"a cat"}]}]}`)
+	body := []byte(`{"model":"gemini-2.5-flash-image","contents":[{"parts":[{"text":"a cat"}]}],"generationConfig":{"responseModalities":["TEXT","IMAGE"]},"streamingConfig":{"preserve":true}}`)
 	got := resolveUpstreamRequest(channel, "gemini-2.5-flash-image", "/images/generations", body, "application/json")
 	if !strings.Contains(got.URL, ":generateContent") || strings.Contains(got.URL, "streamGenerateContent") {
 		t.Fatalf("gemini image URL = %q", got.URL)
+	}
+	var upstreamBody map[string]json.RawMessage
+	if err := json.Unmarshal(got.Body, &upstreamBody); err != nil {
+		t.Fatalf("decode gemini image body: %v", err)
+	}
+	if _, ok := upstreamBody["model"]; ok {
+		t.Fatalf("gemini image body must omit model: %s", got.Body)
+	}
+	if string(upstreamBody["contents"]) != `[{"parts":[{"text":"a cat"}]}]` || string(upstreamBody["generationConfig"]) != `{"responseModalities":["TEXT","IMAGE"]}` || string(upstreamBody["streamingConfig"]) != `{"preserve":true}` {
+		t.Fatalf("gemini image business fields changed: %s", got.Body)
 	}
 }
 
