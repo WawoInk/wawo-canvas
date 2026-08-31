@@ -65,6 +65,9 @@ func DB() (*gorm.DB, error) {
 			&model.VideoTask{},
 			&model.UserFile{},
 			&model.StoryboardProject{},
+			&model.StoryboardBrainstormConversation{},
+			&model.StoryboardBrainstormMessage{},
+			&model.StoryboardMemory{},
 			&model.ScriptProject{},
 			&model.ScriptConversation{},
 			&model.ScriptMessage{},
@@ -81,6 +84,18 @@ func DB() (*gorm.DB, error) {
 		}
 		if dbErr == nil {
 			dbErr = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_generation_tasks_user_client_request ON generation_tasks (user_id, client_request_id) WHERE client_request_id <> ''").Error
+		}
+		if dbErr == nil {
+			dbErr = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_brainstorm_active_assistant ON storyboard_brainstorm_messages (user_id, project_id, conversation_id) WHERE role = 'assistant' AND status IN ('pending', 'streaming', 'awaiting_approval')").Error
+		}
+		if dbErr == nil {
+			dbErr = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_brainstorm_client_request ON storyboard_brainstorm_messages (user_id, project_id, conversation_id, client_request_id) WHERE role = 'assistant' AND client_request_id <> ''").Error
+		}
+		if dbErr == nil {
+			dbErr = db.Exec("CREATE INDEX IF NOT EXISTS idx_brainstorm_message_parent ON storyboard_brainstorm_messages (user_id, project_id, conversation_id, parent_id)").Error
+		}
+		if dbErr == nil {
+			dbErr = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_storyboard_memory_operation ON storyboard_memories (user_id, project_id, operation_id)").Error
 		}
 		if dbErr == nil {
 			dbErr = db.Exec(`WITH duplicates AS (
