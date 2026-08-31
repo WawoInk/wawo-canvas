@@ -123,7 +123,7 @@ export type BrainstormContextDiagnostics = {
 };
 
 export type BrainstormContextInput = {
-    skillId: BrainstormSkillId;
+    skill: BrainstormSkill;
     storyboard: BrainstormStoryboardSnapshot;
     focus: BrainstormFocus;
     priorMessages: BrainstormMessage[];
