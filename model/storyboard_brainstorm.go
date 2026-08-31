@@ -34,20 +34,22 @@ func (StoryboardBrainstormConversation) TableName() string {
 }
 
 type StoryboardBrainstormMessage struct {
-	ID              string          `json:"id" gorm:"primaryKey"`
-	ProjectID       string          `json:"projectId" gorm:"not null;index:idx_brainstorm_message_scope,priority:2"`
-	ConversationID  string          `json:"conversationId" gorm:"not null;index:idx_brainstorm_message_scope,priority:3"`
-	UserID          string          `json:"-" gorm:"not null;index:idx_brainstorm_message_scope,priority:1"`
-	ParentID        string          `json:"parentId" gorm:"not null;default:''"`
-	Role            string          `json:"role" gorm:"not null"`
-	Content         string          `json:"content,omitempty" gorm:"type:text;not null;default:''"`
-	Output          json.RawMessage `json:"output,omitempty" gorm:"type:jsonb;serializer:json;not null"`
-	Status          string          `json:"status,omitempty" gorm:"not null;default:''"`
-	ClientRequestID string          `json:"clientRequestId,omitempty" gorm:"not null;default:''"`
-	RequestHash     string          `json:"-" gorm:"not null;default:''"`
-	Revision        uint64          `json:"revision" gorm:"not null;default:1"`
-	CreatedAt       string          `json:"createdAt" gorm:"not null;index:idx_brainstorm_message_scope,priority:4"`
-	UpdatedAt       string          `json:"updatedAt" gorm:"not null"`
+	ID                  string          `json:"id" gorm:"primaryKey"`
+	ProjectID           string          `json:"projectId" gorm:"not null;index:idx_brainstorm_message_scope,priority:2"`
+	ConversationID      string          `json:"conversationId" gorm:"not null;index:idx_brainstorm_message_scope,priority:3"`
+	UserID              string          `json:"-" gorm:"not null;index:idx_brainstorm_message_scope,priority:1"`
+	ParentID            string          `json:"parentId" gorm:"not null;default:''"`
+	Role                string          `json:"role" gorm:"not null"`
+	Content             string          `json:"content,omitempty" gorm:"type:text;not null;default:''"`
+	Output              json.RawMessage `json:"output,omitempty" gorm:"type:jsonb;serializer:json;not null"`
+	Status              string          `json:"status,omitempty" gorm:"not null;default:''"`
+	ClientRequestID     string          `json:"clientRequestId,omitempty" gorm:"not null;default:''"`
+	RequestHash         string          `json:"-" gorm:"not null;default:''"`
+	ContinueRequestID   string          `json:"-" gorm:"not null;default:''"`
+	ContinueRequestHash string          `json:"-" gorm:"not null;default:''"`
+	Revision            uint64          `json:"revision" gorm:"not null;default:1"`
+	CreatedAt           string          `json:"createdAt" gorm:"not null;index:idx_brainstorm_message_scope,priority:4"`
+	UpdatedAt           string          `json:"updatedAt" gorm:"not null"`
 }
 
 func (StoryboardBrainstormMessage) TableName() string {

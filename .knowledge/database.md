@@ -283,17 +283,18 @@ Conversation 不使用独立 revision，也不在 Project 上保存 `activeConve
 | `output` | Assistant 完整有序 JSON 数组；不按 chunk 落库，也不拆具体 item 表 |
 | `status` | Assistant lifecycle；User Message 不参与 active/terminal 转换 |
 | `revision` | Message 级 CAS；初始为 1，每次成功 Assistant 更新或 continue 递增 |
-| `client_request_id/request_hash` | Turn/continue 幂等键与规范语义输入 SHA-256 |
+| `client_request_id/request_hash` | 不可变的 append/regenerate 幂等键与规范语义输入 SHA-256 |
+| `continue_request_id/continue_request_hash` | 最近一次 continue 的独立幂等键与规范语义输入 SHA-256 |
 | `created_at/updated_at` | `created_at ASC, id ASC` 稳定图分页排序 |
 
 PostgreSQL 手写索引保持两个关键不变量：
 
 - 对 `(user_id, project_id, conversation_id)` 建立 active Assistant 部分唯一索引，仅覆盖 `role='assistant'` 且 `status IN ('pending','streaming','awaiting_approval')`，保证同一 Conversation 最多一个 active Turn。
-- 对非空 `client_request_id` 建立当前 Conversation scope 的部分唯一索引；相同 key 先比较 `request_hash`，语义相同返回已有结果，语义不同返回冲突。Message 主键同时保证客户端 Message ID 重放不会重复插入。
+- 对非空 `client_request_id` 和 `continue_request_id` 分别建立当前 Conversation scope 的部分唯一索引；查询会同时检查两个命名空间。原始 Turn key/hash 保持不可变，continue 只更新独立字段；相同 key 先比较对应 hash，语义相同返回已有结果，语义不同返回冲突。Message 主键同时保证客户端 Message ID 重放不会重复插入。
 
 Assistant 更新使用 `id + user_id + project_id + conversation_id + expectedRevision` CAS，替换完整 `output`、校验生命周期转换并递增 revision。旧 revision、late completion、非法状态转换都不能覆盖 cancelled、interrupted 或其他较新状态；冲突返回当前 Message。
 
-append Turn 在一个事务中锁定 Conversation、先判定幂等重放与 active 冲突，再插入 User Message、pending Assistant Placeholder 并更新 `current_message_id`；Assistant 插入或指针更新失败时 User Message 也回滚。regenerate 在同样边界内创建目标 Assistant 的 sibling，保留旧 Assistant。continue 不创建新 Message，而是对 terminal Assistant 做 expectedRevision CAS，保留 ID/output、写入新的幂等键、转为 pending 并更新当前指针。由于没有 Turn ledger，Assistant 只保留最近一次 `client_request_id`；稳定 Message ID 与 `expectedRevision` 提供有界重放保护。事务不会跨越模型调用或浏览器流式过程。
+append Turn 在一个事务中锁定 Conversation、先判定幂等重放与 active 冲突，再插入 User Message、pending Assistant Placeholder 并更新 `current_message_id`；Assistant 插入或指针更新失败时 User Message 也回滚。regenerate 在同样边界内创建目标 Assistant 的 sibling，保留旧 Assistant。continue 不创建新 Message，而是对 terminal Assistant 做 expectedRevision CAS，保留 ID/output 和原始 Turn 幂等字段，只更新独立的最新 continue 幂等字段，转为 pending 并更新当前指针。事务不会跨越模型调用或浏览器流式过程。
 
 ### `storyboard_memories`
 
@@ -313,7 +314,7 @@ append Turn 在一个事务中锁定 Conversation、先判定幂等重放与 act
 
 本表不创建 GIN/vector 索引，也不引入 Summary、Tool 或 Turn ledger 表。Memory CRUD 总是以当前用户和 Project 限定；`source_message_id` 存在时只能引用同一 scoped Project 的 Message。
 
-Brainstorm 子表不依赖数据库外键级联：删除 Conversation 时在同一业务事务清理其 Messages；删除 Storyboard Project 时先按 owner scope 清理 Conversations、Messages、Memories，再执行既有 Project/file 删除流程。不存在和越权均投影为 404，不能靠裸 ID 扩大查询范围。
+Brainstorm 子表不依赖数据库外键级联：删除 Conversation 时先获取与 Turn 相同的 Conversation 行锁再清理 Messages；删除 Storyboard Project 时先锁 Project 和全部 scoped Conversation，再清理 Conversations、Messages、Memories并执行既有 Project/file 删除流程。Conversation/Memory 创建先锁 Project，避免并发删除留下孤儿记录。不存在和越权均投影为 404，不能靠裸 ID 扩大查询范围。
 
 ### `canvas_projects`
 

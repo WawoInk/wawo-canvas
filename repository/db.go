@@ -92,6 +92,9 @@ func DB() (*gorm.DB, error) {
 			dbErr = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_brainstorm_client_request ON storyboard_brainstorm_messages (user_id, project_id, conversation_id, client_request_id) WHERE role = 'assistant' AND client_request_id <> ''").Error
 		}
 		if dbErr == nil {
+			dbErr = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_brainstorm_continue_request ON storyboard_brainstorm_messages (user_id, project_id, conversation_id, continue_request_id) WHERE role = 'assistant' AND continue_request_id <> ''").Error
+		}
+		if dbErr == nil {
 			dbErr = db.Exec("CREATE INDEX IF NOT EXISTS idx_brainstorm_message_parent ON storyboard_brainstorm_messages (user_id, project_id, conversation_id, parent_id)").Error
 		}
 		if dbErr == nil {

@@ -89,16 +89,17 @@ Conversation 不保存独立 revision。Turn 写入通过 PostgreSQL `FOR UPDATE
 | `output` | Assistant 的完整有序 JSON 数组；不按 chunk 落库 |
 | `status` | `pending/streaming/awaiting_approval/completed/failed/cancelled/interrupted` |
 | `revision` | Message CAS 版本；初始为 1，每次成功 Assistant 更新或 continue 递增 |
-| `client_request_id`、`request_hash` | Turn/continue 幂等键与规范语义输入 SHA-256 |
+| `client_request_id`、`request_hash` | 不可变的 append/regenerate 幂等键与规范语义输入 SHA-256 |
+| `continue_request_id`、`continue_request_hash` | 最近一次 continue 的独立幂等键与规范语义输入 SHA-256 |
 | `created_at`、`updated_at` | 消息创建与更新时间 |
 
 User Message 正文只使用 `content`；Assistant 正文只使用 `output`，避免双重事实。output 只要求是有界 JSON 数组，按原顺序保留 text、tool call、tool result、status、error 等未知 item；具体 item 联合类型由后续任务定义。Conversation 和 Project Memory 列表使用 `page/pageSize` 返回 `{items,total}`；Message 列表按 `created_at ASC, id ASC` 分页返回平铺图，单页可能不包含祖先，客户端需要继续请求其他页。
 
-数据库为 active Assistant 建立 `(user_id, project_id, conversation_id)` 部分唯一索引，只覆盖 `role='assistant' AND status IN ('pending','streaming','awaiting_approval')`，保证同一 Conversation 最多一个 active Turn。非空 `client_request_id` 也建立 Conversation scope 的部分唯一索引；相同 key 会先比较 `request_hash`，语义相同返回已有结果，语义不同返回 HTTP 409。相同 Message ID 与相同规范语义输入也返回原 Turn；复用 ID 但输入不同返回 409。
+数据库为 active Assistant 建立 `(user_id, project_id, conversation_id)` 部分唯一索引，只覆盖 `role='assistant' AND status IN ('pending','streaming','awaiting_approval')`，保证同一 Conversation 最多一个 active Turn。非空 `client_request_id` 与 `continue_request_id` 分别建立 Conversation scope 的部分唯一索引，查询同时检查两个命名空间。原始 Turn key/hash 保持不可变，continue 只更新独立字段；相同 key 会比较对应 hash，语义相同返回已有结果，语义不同返回 HTTP 409。相同 Message ID 与相同规范语义输入也返回原 Turn；复用 ID 但输入不同返回 409。
 
 Assistant 更新必须提交 `expectedRevision`，并以 `id + user_id + project_id + conversation_id + revision` compare-and-set：成功时替换完整 output、校验生命周期转换并将 revision 加 1；旧 revision、迟到 completion 或非法转换不能覆盖已经 cancelled、interrupted 或更高 revision 的 Message。冲突返回 HTTP 409，并在可用时通过 `data.current` 返回当前 Message。
 
-append Turn 在一个数据库事务内依次锁定 Conversation、先判断幂等重放和 active 冲突、创建 User Message、创建 pending Assistant Placeholder、更新 `current_message_id`。任何 Message 插入或指针更新失败都会整体回滚。regenerate 不创建新 User Message，而是在同一 User Message 下创建新的 pending Assistant sibling，旧 Assistant 保留。continue 只接受 terminal Assistant，通过 `expectedRevision` 复用原 ID/output，写入新的幂等键、转回 pending、revision 加 1 并更新当前指针；它不创建 sibling。由于没有 Turn ledger，Assistant 只保留最近一次 `client_request_id`，稳定 Message ID 与 `expectedRevision` 提供有界重放保护。事务在模型调用或浏览器流式处理开始前提交，不跨网络等待。
+append Turn 在一个数据库事务内依次锁定 Conversation、先判断幂等重放和 active 冲突、创建 User Message、创建 pending Assistant Placeholder、更新 `current_message_id`。任何 Message 插入或指针更新失败都会整体回滚。regenerate 不创建新 User Message，而是在同一 User Message 下创建新的 pending Assistant sibling，旧 Assistant 保留。continue 只接受 terminal Assistant，通过 `expectedRevision` 复用原 ID/output，保留不可变的原始 Turn 幂等字段，只写入独立的最新 continue 幂等字段，转回 pending、revision 加 1 并更新当前指针；它不创建 sibling。事务在模型调用或浏览器流式处理开始前提交，不跨网络等待。
 
 ### storyboard_memories
 

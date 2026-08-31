@@ -204,8 +204,11 @@ func TestStoryboardBrainstormStaleCompletionCannotOverwriteTerminalRevision(t *t
 func TestStoryboardBrainstormContinueReplayDoesNotIncrementRevisionTwice(t *testing.T) {
 	harness := newConcurrencyBrainstormHarness(t)
 	conversationID := harness.createConversation(t)
+	originalRequestID := "request-" + uuid.NewString()
+	userID := "user-" + uuid.NewString()
 	assistantID := "assistant-" + uuid.NewString()
-	harness.mustTurn(t, conversationID, concurrencyAppendPayload("request-"+uuid.NewString(), "user-"+uuid.NewString(), assistantID, "完成后继续"))
+	original := concurrencyAppendPayload(originalRequestID, userID, assistantID, "完成后继续")
+	harness.mustTurn(t, conversationID, original)
 	harness.mustUpdateAssistant(t, conversationID, assistantID, 1, "completed", []any{map[string]any{"type": "text", "text": "已完成内容"}})
 	payload := map[string]any{"clientRequestId": "continue-" + uuid.NewString(), "expectedRevision": 2}
 
@@ -215,6 +218,14 @@ func TestStoryboardBrainstormContinueReplayDoesNotIncrementRevisionTwice(t *test
 		t.Fatalf("first continue = %#v", first)
 	}
 	harness.mustContinue(t, conversationID, assistantID, payload)
+	status, replay := harness.turn(t, conversationID, original)
+	if status != http.StatusOK || replay.Code != 0 {
+		t.Fatalf("original turn replay after continue status=%d response=%#v", status, replay)
+	}
+	status, conflict := harness.turn(t, conversationID, concurrencyAppendPayload(originalRequestID, "user-"+uuid.NewString(), "assistant-"+uuid.NewString(), "不得复用原始 key"))
+	if status != http.StatusConflict || conflict.Code != -1 {
+		t.Fatalf("original clientRequestId was released by continue status=%d response=%#v", status, conflict)
+	}
 	page := harness.messages(t, conversationID)
 	replayed := concurrencyMessageByID(t, page, assistantID)
 	if page.Total != 2 || len(page.Items) != 2 || page.Conversation.CurrentMessageID != assistantID || replayed.Status != "pending" || replayed.Revision != 3 {

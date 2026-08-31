@@ -36,6 +36,7 @@ type StoryboardBrainstormTurnCommand struct {
 	UserID             string
 	ClientRequestID    string
 	RequestHash        string
+	ActiveStatuses     []string
 	ParentMessageID    string
 	TargetMessageID    string
 	UserMessageID      string
@@ -65,6 +66,9 @@ type StoryboardBrainstormContinueCommand struct {
 	ClientRequestID  string
 	RequestHash      string
 	ExpectedRevision uint64
+	ActiveStatuses   []string
+	AllowedStatuses  []string
+	TargetStatus     string
 	UpdatedAt        string
 }
 
@@ -196,9 +200,9 @@ func CreateStoryboardBrainstormTurn(command StoryboardBrainstormTurnCommand) (mo
 		}
 		turn.Conversation = conversation
 
-		existing, err := findAssistantByClientRequest(tx, command.ProjectID, command.ConversationID, command.UserID, command.ClientRequestID)
+		existing, existingHash, err := findAssistantByClientRequest(tx, command.ProjectID, command.ConversationID, command.UserID, command.ClientRequestID)
 		if err == nil {
-			if existing.RequestHash != command.RequestHash {
+			if existingHash != command.RequestHash {
 				return &BrainstormConflictError{Kind: BrainstormConflictIdempotency, Current: existing}
 			}
 			turn.AssistantMessage = existing
@@ -219,7 +223,7 @@ func CreateStoryboardBrainstormTurn(command StoryboardBrainstormTurnCommand) (mo
 			turn = existingTurn
 			return nil
 		}
-		if active, err := findActiveAssistant(tx, command.ProjectID, command.ConversationID, command.UserID); err == nil {
+		if active, err := findActiveAssistant(tx, command.ProjectID, command.ConversationID, command.UserID, command.ActiveStatuses); err == nil {
 			return &BrainstormConflictError{Kind: BrainstormConflictActiveTurn, Current: active}
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -347,9 +351,9 @@ func ContinueStoryboardBrainstormAssistant(command StoryboardBrainstormContinueC
 			return err
 		}
 		turn.Conversation = conversation
-		existing, err := findAssistantByClientRequest(tx, command.ProjectID, command.ConversationID, command.UserID, command.ClientRequestID)
+		existing, existingHash, err := findAssistantByClientRequest(tx, command.ProjectID, command.ConversationID, command.UserID, command.ClientRequestID)
 		if err == nil {
-			if existing.ID != command.MessageID || existing.RequestHash != command.RequestHash {
+			if existing.ID != command.MessageID || existingHash != command.RequestHash {
 				return &BrainstormConflictError{Kind: BrainstormConflictIdempotency, Current: existing}
 			}
 			turn.AssistantMessage = existing
@@ -358,7 +362,7 @@ func ContinueStoryboardBrainstormAssistant(command StoryboardBrainstormContinueC
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		if active, err := findActiveAssistant(tx, command.ProjectID, command.ConversationID, command.UserID); err == nil {
+		if active, err := findActiveAssistant(tx, command.ProjectID, command.ConversationID, command.UserID, command.ActiveStatuses); err == nil {
 			return &BrainstormConflictError{Kind: BrainstormConflictActiveTurn, Current: active}
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -370,13 +374,10 @@ func ContinueStoryboardBrainstormAssistant(command StoryboardBrainstormContinueC
 		if assistant.Revision != command.ExpectedRevision {
 			return &BrainstormConflictError{Kind: BrainstormConflictRevision, Current: assistant}
 		}
-		if !model.IsBrainstormTerminalStatus(assistant.Status) {
-			return &BrainstormConflictError{Kind: BrainstormConflictLifecycle, Current: assistant}
-		}
 		result := tx.Model(&model.StoryboardBrainstormMessage{}).
-			Where("id = ? AND project_id = ? AND conversation_id = ? AND user_id = ? AND role = ? AND revision = ?", command.MessageID, command.ProjectID, command.ConversationID, command.UserID, model.BrainstormRoleAssistant, command.ExpectedRevision).
+			Where("id = ? AND project_id = ? AND conversation_id = ? AND user_id = ? AND role = ? AND revision = ? AND status IN ?", command.MessageID, command.ProjectID, command.ConversationID, command.UserID, model.BrainstormRoleAssistant, command.ExpectedRevision, command.AllowedStatuses).
 			Updates(map[string]any{
-				"status": model.BrainstormStatusPending, "client_request_id": command.ClientRequestID, "request_hash": command.RequestHash,
+				"status": command.TargetStatus, "continue_request_id": command.ClientRequestID, "continue_request_hash": command.RequestHash,
 				"revision": gorm.Expr("revision + 1"), "updated_at": command.UpdatedAt,
 			})
 		if result.Error != nil {
@@ -386,16 +387,24 @@ func ContinueStoryboardBrainstormAssistant(command StoryboardBrainstormContinueC
 			return result.Error
 		}
 		if result.RowsAffected != 1 {
-			return &BrainstormConflictError{Kind: BrainstormConflictRevision, Current: assistant}
+			var latest model.StoryboardBrainstormMessage
+			if err := tx.Where("id = ? AND project_id = ? AND conversation_id = ? AND user_id = ? AND role = ?", command.MessageID, command.ProjectID, command.ConversationID, command.UserID, model.BrainstormRoleAssistant).First(&latest).Error; err != nil {
+				return err
+			}
+			kind := BrainstormConflictLifecycle
+			if latest.Revision != command.ExpectedRevision {
+				kind = BrainstormConflictRevision
+			}
+			return &BrainstormConflictError{Kind: kind, Current: latest}
 		}
 		if err := tx.Model(&model.StoryboardBrainstormConversation{}).
 			Where("id = ? AND project_id = ? AND user_id = ?", command.ConversationID, command.ProjectID, command.UserID).
 			Updates(map[string]any{"current_message_id": assistant.ID, "updated_at": command.UpdatedAt}).Error; err != nil {
 			return err
 		}
-		assistant.Status = model.BrainstormStatusPending
-		assistant.ClientRequestID = command.ClientRequestID
-		assistant.RequestHash = command.RequestHash
+		assistant.Status = command.TargetStatus
+		assistant.ContinueRequestID = command.ClientRequestID
+		assistant.ContinueRequestHash = command.RequestHash
 		assistant.Revision++
 		assistant.UpdatedAt = command.UpdatedAt
 		turn.Conversation.CurrentMessageID = assistant.ID
@@ -568,17 +577,21 @@ func lockStoryboardBrainstormConversation(tx *gorm.DB, projectID, conversationID
 	return conversation, err
 }
 
-func findAssistantByClientRequest(tx *gorm.DB, projectID, conversationID, userID, clientRequestID string) (model.StoryboardBrainstormMessage, error) {
+func findAssistantByClientRequest(tx *gorm.DB, projectID, conversationID, userID, clientRequestID string) (model.StoryboardBrainstormMessage, string, error) {
 	var message model.StoryboardBrainstormMessage
-	err := tx.Where("project_id = ? AND conversation_id = ? AND user_id = ? AND role = ? AND client_request_id = ?", projectID, conversationID, userID, model.BrainstormRoleAssistant, clientRequestID).First(&message).Error
-	return message, err
+	err := tx.Where("project_id = ? AND conversation_id = ? AND user_id = ? AND role = ? AND (client_request_id = ? OR continue_request_id = ?)", projectID, conversationID, userID, model.BrainstormRoleAssistant, clientRequestID, clientRequestID).First(&message).Error
+	if err != nil {
+		return model.StoryboardBrainstormMessage{}, "", err
+	}
+	if message.ClientRequestID == clientRequestID {
+		return message, message.RequestHash, nil
+	}
+	return message, message.ContinueRequestHash, nil
 }
 
-func findActiveAssistant(tx *gorm.DB, projectID, conversationID, userID string) (model.StoryboardBrainstormMessage, error) {
+func findActiveAssistant(tx *gorm.DB, projectID, conversationID, userID string, activeStatuses []string) (model.StoryboardBrainstormMessage, error) {
 	var message model.StoryboardBrainstormMessage
-	err := tx.Where("project_id = ? AND conversation_id = ? AND user_id = ? AND role = ? AND status IN ?", projectID, conversationID, userID, model.BrainstormRoleAssistant, []string{
-		model.BrainstormStatusPending, model.BrainstormStatusStreaming, model.BrainstormStatusAwaitingApproval,
-	}).First(&message).Error
+	err := tx.Where("project_id = ? AND conversation_id = ? AND user_id = ? AND role = ? AND status IN ?", projectID, conversationID, userID, model.BrainstormRoleAssistant, activeStatuses).First(&message).Error
 	return message, err
 }
 
@@ -589,7 +602,7 @@ func brainstormInsertError(err error) error {
 	switch uniqueConstraint(err) {
 	case "idx_brainstorm_active_assistant":
 		return &BrainstormConflictError{Kind: BrainstormConflictActiveTurn}
-	case "idx_brainstorm_client_request":
+	case "idx_brainstorm_client_request", "idx_brainstorm_continue_request":
 		return &BrainstormConflictError{Kind: BrainstormConflictIdempotency}
 	default:
 		return &BrainstormConflictError{Kind: BrainstormConflictID}

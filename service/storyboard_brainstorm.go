@@ -191,7 +191,7 @@ func CreateStoryboardBrainstormTurn(projectID, conversationID, userID string, in
 	}
 	command := repository.StoryboardBrainstormTurnCommand{
 		Mode: strings.TrimSpace(input.Mode), ProjectID: projectID, ConversationID: conversationID, UserID: userID,
-		ClientRequestID: clientRequestID, AssistantMessageID: assistantMessageID,
+		ClientRequestID: clientRequestID, AssistantMessageID: assistantMessageID, ActiveStatuses: brainstormActiveStatuses(),
 	}
 	semantic := map[string]any{"mode": command.Mode, "assistantMessageId": assistantMessageID}
 	switch command.Mode {
@@ -287,7 +287,8 @@ func ContinueStoryboardBrainstormAssistant(projectID, conversationID, messageID,
 	requestHash := brainstormRequestHash(map[string]any{"mode": "continue", "messageId": messageID, "expectedRevision": *input.ExpectedRevision})
 	turn, err := repository.ContinueStoryboardBrainstormAssistant(repository.StoryboardBrainstormContinueCommand{
 		ProjectID: projectID, ConversationID: conversationID, MessageID: messageID, UserID: userID,
-		ClientRequestID: clientRequestID, RequestHash: requestHash, ExpectedRevision: *input.ExpectedRevision, UpdatedAt: studioNow(),
+		ClientRequestID: clientRequestID, RequestHash: requestHash, ExpectedRevision: *input.ExpectedRevision,
+		ActiveStatuses: brainstormActiveStatuses(), AllowedStatuses: brainstormTerminalStatuses(), TargetStatus: model.BrainstormStatusPending, UpdatedAt: studioNow(),
 	})
 	return turn, brainstormError(err)
 }
@@ -441,18 +442,19 @@ func normalizeStoryboardMemoryTags(input []string) ([]string, error) {
 	return tags, nil
 }
 
+func brainstormActiveStatuses() []string {
+	return []string{model.BrainstormStatusPending, model.BrainstormStatusStreaming, model.BrainstormStatusAwaitingApproval}
+}
+
+func brainstormTerminalStatuses() []string {
+	return []string{model.BrainstormStatusCompleted, model.BrainstormStatusFailed, model.BrainstormStatusCancelled, model.BrainstormStatusInterrupted}
+}
+
 func brainstormAssistantAllowedFrom(status string) []string {
-	active := []string{model.BrainstormStatusPending, model.BrainstormStatusStreaming, model.BrainstormStatusAwaitingApproval}
-	switch status {
-	case model.BrainstormStatusPending:
+	if status == model.BrainstormStatusPending {
 		return []string{model.BrainstormStatusPending}
-	case model.BrainstormStatusStreaming:
-		return active
-	case model.BrainstormStatusAwaitingApproval:
-		return active
-	default:
-		return active
 	}
+	return brainstormActiveStatuses()
 }
 
 func normalizeBrainstormOutput(raw json.RawMessage) (json.RawMessage, error) {
