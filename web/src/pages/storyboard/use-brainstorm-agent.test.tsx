@@ -252,3 +252,148 @@ test("同一 Conversation 只允许一个本地 Turn，不同 Conversation 可�
     await flush();
     await unmount(mounted);
 });
+
+test("文本 delta 只留在内存，工具边界 checkpoint，结束时持久化完整有序 output", async () => {
+    apiCalls.length = 0;
+    accountId = "user-1";
+    listConversations = async () => ({ items: [conversation("conversation-1")], total: 1 });
+    listMessages = async () => ({ conversation: conversation("conversation-1"), items: [], total: 0 });
+    createTurn = async (_projectId, conversationId, input) => ({
+        conversation: conversation(conversationId, input.assistantMessageId),
+        userMessage: userMessage(input.userMessage!.id, conversationId),
+        assistantMessage: assistantMessage(input.assistantMessageId, conversationId, "pending"),
+    });
+    updateAssistant = async (_projectId, conversationId, id, input) => ({
+        ...assistantMessage(id, conversationId, input.status, input.expectedRevision + 1),
+        output: input.output,
+    });
+    const beforeTool = deferred<void>();
+    const afterCall = deferred<void>();
+    const output = [
+        { type: "text" as const, text: "先拉近镜头" },
+        { type: "tool_call" as const, callId: "call-1", name: "save_memory", arguments: "{}" },
+        { type: "tool_result" as const, callId: "call-1", name: "save_memory", status: "succeeded" as const, content: "已保存" },
+    ];
+    runTurn = async (_input, { onEvent }) => {
+        onEvent({ type: "status", status: "streaming" });
+        onEvent({ type: "text_delta", delta: "先拉" });
+        await beforeTool.promise;
+        onEvent({ type: "output_item", item: output[0] });
+        onEvent({ type: "output_item", item: output[1] });
+        await afterCall.promise;
+        onEvent({ type: "output_item", item: output[2] });
+        return { ...completed, content: "先拉近镜头", output };
+    };
+
+    const mounted = await mount();
+    await act(async () => void (await current.send("调整镜头")));
+    await flush();
+
+    assert.equal(current.runs["conversation-1"].streamedText, "先拉");
+    assert.equal(apiCalls.filter((call) => call[0] === "update").length, 0);
+    beforeTool.resolve();
+    await flush();
+
+    const checkpoints = apiCalls.filter((call) => call[0] === "update");
+    assert.equal(checkpoints.length, 1);
+    assert.deepEqual(checkpoints[0][4], { expectedRevision: 1, status: "streaming", output: output.slice(0, 2) });
+    assert.equal(current.runs["conversation-1"].streamedText, "");
+    afterCall.resolve();
+    await flush();
+
+    const persisted = apiCalls.filter((call) => call[0] === "update");
+    assert.equal(persisted.length, 3);
+    assert.deepEqual(persisted[1][4], { expectedRevision: 2, status: "streaming", output });
+    assert.deepEqual(persisted[2][4], { expectedRevision: 3, status: "completed", output });
+    assert.deepEqual((current.messages.at(-1) as { output: unknown }).output, output);
+    await unmount(mounted);
+});
+
+test("停止生成依次暴露 requested 和服务端确认后的 confirmed", async () => {
+    apiCalls.length = 0;
+    accountId = "user-1";
+    listConversations = async () => ({ items: [conversation("conversation-1")], total: 1 });
+    listMessages = async () => ({ conversation: conversation("conversation-1"), items: [], total: 0 });
+    createTurn = async (_projectId, conversationId, input) => ({
+        conversation: conversation(conversationId, input.assistantMessageId),
+        userMessage: userMessage(input.userMessage!.id, conversationId),
+        assistantMessage: assistantMessage(input.assistantMessageId, conversationId, "pending"),
+    });
+    const cancelledSave = deferred<ReturnType<typeof assistantMessage>>();
+    updateAssistant = async (_projectId, conversationId, id, input) =>
+        input.status === "cancelled"
+            ? cancelledSave.promise
+            : { ...assistantMessage(id, conversationId, input.status, input.expectedRevision + 1), output: input.output };
+    runTurn = async (_input, { signal, onEvent }) =>
+        new Promise<BrainstormTurnResult>((resolve) => {
+            signal.addEventListener(
+                "abort",
+                () => {
+                    onEvent({ type: "status", status: "cancelled" });
+                    resolve({ ...completed, status: "cancelled", error: { code: "ABORTED", message: "cancelled" } });
+                },
+                { once: true },
+            );
+        });
+
+    const mounted = await mount();
+    await act(async () => void (await current.send("开始")));
+    let stopping!: Promise<string>;
+    await act(async () => {
+        stopping = current.stop();
+        await Promise.resolve();
+    });
+    assert.equal(current.runs["conversation-1"].stopState, "requested");
+
+    const assistantId = current.runs["conversation-1"].assistantMessageId;
+    cancelledSave.resolve(assistantMessage(assistantId, "conversation-1", "cancelled", 2));
+    let outcome = "";
+    await act(async () => {
+        outcome = await stopping;
+    });
+    assert.equal(outcome, "confirmed");
+    assert.equal(current.runs["conversation-1"].stopState, "confirmed");
+    assert.equal(current.messages.find((message) => message.id === assistantId)?.status, "cancelled");
+    await unmount(mounted);
+});
+
+test("取消持久化失败时报告 failed，不能把 Assistant 伪装成 stopped", async () => {
+    apiCalls.length = 0;
+    accountId = "user-1";
+    listConversations = async () => ({ items: [conversation("conversation-1")], total: 1 });
+    listMessages = async () => ({ conversation: conversation("conversation-1"), items: [], total: 0 });
+    createTurn = async (_projectId, conversationId, input) => ({
+        conversation: conversation(conversationId, input.assistantMessageId),
+        userMessage: userMessage(input.userMessage!.id, conversationId),
+        assistantMessage: assistantMessage(input.assistantMessageId, conversationId, "pending"),
+    });
+    updateAssistant = async (_projectId, conversationId, id, input) => {
+        if (input.status === "cancelled") throw new Error("cancel persistence failed");
+        return { ...assistantMessage(id, conversationId, input.status, input.expectedRevision + 1), output: input.output };
+    };
+    runTurn = async (_input, { signal, onEvent }) =>
+        new Promise<BrainstormTurnResult>((resolve) => {
+            signal.addEventListener(
+                "abort",
+                () => {
+                    onEvent({ type: "status", status: "cancelled" });
+                    resolve({ ...completed, status: "cancelled", error: { code: "ABORTED", message: "cancelled" } });
+                },
+                { once: true },
+            );
+        });
+
+    const mounted = await mount();
+    await act(async () => void (await current.send("开始")));
+    let outcome = "";
+    await act(async () => {
+        outcome = await current.stop();
+    });
+
+    const run = current.runs["conversation-1"];
+    assert.equal(outcome, "failed");
+    assert.equal(run.stopState, "failed");
+    assert.notEqual(run.status, "cancelled");
+    assert.notEqual(current.messages.find((message) => message.id === run.assistantMessageId)?.status, "cancelled");
+    await unmount(mounted);
+});

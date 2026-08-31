@@ -76,6 +76,16 @@ export type BrainstormAgentRunState = {
     error: string;
 };
 
+export type BrainstormStopState = BrainstormAgentRunState["stopState"];
+
+type BrainstormRunControl = {
+    id: string;
+    controller: AbortController;
+    stopRequested: boolean;
+    finished: Promise<BrainstormStopState>;
+    finish: (state: BrainstormStopState) => void;
+};
+
 export type BrainstormAgentState = {
     conversations: BrainstormConversation[];
     currentConversationId: string;
@@ -87,6 +97,7 @@ export type BrainstormAgentState = {
     error: string;
     selectConversation: (conversationId: string) => Promise<void>;
     send: (content: string, parentMessageId?: string) => Promise<BrainstormAgentAssistantMessage>;
+    stop: (conversationId?: string) => Promise<BrainstormStopState>;
 };
 
 function errorMessage(error: unknown) {
@@ -110,7 +121,7 @@ function mergeMessages(current: BrainstormAgentMessage[], additions: BrainstormA
 export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRuntime): BrainstormAgentState {
     const accountId = useUserStore((state) => state.user?.id || "");
     const generationRef = useRef(0);
-    const controlsRef = useRef(new Map<string, { id: string; controller: AbortController }>());
+    const controlsRef = useRef(new Map<string, BrainstormRunControl>());
     const submittingRef = useRef(new Set<string>());
     const [conversations, setConversations] = useState<BrainstormConversation[]>([]);
     const [currentConversationId, setCurrentConversationId] = useState("");
@@ -202,11 +213,35 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
             const generation = generationRef.current;
             const id = createId("run");
             const controller = new AbortController();
-            const control = { id, controller };
+            let finishPromise!: (state: BrainstormStopState) => void;
+            const finished = new Promise<BrainstormStopState>((resolve) => {
+                finishPromise = resolve;
+            });
+            const control: BrainstormRunControl = { id, controller, stopRequested: false, finished, finish: finishPromise };
             controlsRef.current.set(conversation.id, control);
             let output = [...assistantMessage.output];
             let streamedText = "";
             let status = assistantMessage.status;
+            let persisted = assistantMessage;
+            let persistenceError: unknown;
+            let persistence = Promise.resolve();
+            const checkpoint = (snapshot: BrainstormOutputItem[], checkpointStatus: BrainstormAssistantStatus) => {
+                persistence = persistence
+                    .then(async () => {
+                        if (persistenceError || generationRef.current !== generation || controlsRef.current.get(conversation.id) !== control) return;
+                        persisted = (await updateStoryboardBrainstormAssistant(projectId, conversation.id, assistantMessage.id, {
+                            expectedRevision: persisted.revision,
+                            status: checkpointStatus,
+                            output: snapshot,
+                        })) as BrainstormAgentAssistantMessage;
+                        if (generationRef.current !== generation || controlsRef.current.get(conversation.id) !== control) return;
+                        setMessagesByConversation((current) => ({ ...current, [conversation.id]: mergeMessages(current[conversation.id] || [], [persisted]) }));
+                    })
+                    .catch((cause) => {
+                        persistenceError = cause;
+                        controller.abort();
+                    });
+            };
             setRuns((current) => ({
                 ...current,
                 [conversation.id]: { assistantMessageId: assistantMessage.id, status, output, streamedText, retrying: false, active: true, stopState: "idle", error: "" },
@@ -224,6 +259,7 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
                                 else if (event.type === "output_item") {
                                     output = [...output, event.item];
                                     if (event.item.type === "text") streamedText = "";
+                                    else checkpoint([...output], status);
                                 }
                                 setRuns((current) => ({
                                     ...current,
@@ -240,25 +276,40 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
                     );
                     if (generationRef.current !== generation || controlsRef.current.get(conversation.id) !== control) return;
                     if (result.output.length) output = result.output;
-                    const persisted = (await updateStoryboardBrainstormAssistant(projectId, conversation.id, assistantMessage.id, {
-                        expectedRevision: assistantMessage.revision,
+                    await persistence;
+                    if (persistenceError) throw persistenceError;
+                    const finalMessage = (await updateStoryboardBrainstormAssistant(projectId, conversation.id, assistantMessage.id, {
+                        expectedRevision: persisted.revision,
                         status: result.status,
                         output,
                     })) as BrainstormAgentAssistantMessage;
                     if (generationRef.current !== generation || controlsRef.current.get(conversation.id) !== control) return;
-                    setMessagesByConversation((current) => ({ ...current, [conversation.id]: mergeMessages(current[conversation.id] || [], [persisted]) }));
+                    setMessagesByConversation((current) => ({ ...current, [conversation.id]: mergeMessages(current[conversation.id] || [], [finalMessage]) }));
+                    const stopState: BrainstormStopState = control.stopRequested ? (finalMessage.status === "cancelled" ? "confirmed" : "failed") : "idle";
                     setRuns((current) => ({
                         ...current,
-                        [conversation.id]: { ...current[conversation.id], status: persisted.status, output: persisted.output, streamedText: "", active: false },
+                        [conversation.id]: { ...current[conversation.id], status: finalMessage.status, output: finalMessage.output, streamedText: "", active: false, stopState },
                     }));
+                    control.finish(stopState);
                 } catch (cause) {
                     if (generationRef.current !== generation || controlsRef.current.get(conversation.id) !== control) return;
+                    const stopState: BrainstormStopState = control.stopRequested ? "failed" : "idle";
                     setError(errorMessage(cause));
                     setRuns((current) => ({
                         ...current,
-                        [conversation.id]: { ...current[conversation.id], active: false, error: errorMessage(cause) },
+                        [conversation.id]: {
+                            ...current[conversation.id],
+                            status: persisted.status,
+                            output: persisted.output,
+                            streamedText: "",
+                            active: false,
+                            stopState,
+                            error: errorMessage(cause),
+                        },
                     }));
+                    control.finish(stopState);
                 } finally {
+                    control.finish(control.stopRequested ? "failed" : "idle");
                     if (controlsRef.current.get(conversation.id) === control) controlsRef.current.delete(conversation.id);
                 }
             })();
@@ -298,13 +349,28 @@ export function useBrainstormAgent(projectId: string, runtime: BrainstormAgentRu
         [currentConversationId, launchRun, projectId],
     );
 
+    const stop = useCallback(
+        async (conversationId = currentConversationId) => {
+            const control = controlsRef.current.get(conversationId);
+            if (!control) return runs[conversationId]?.stopState || "idle";
+            control.stopRequested = true;
+            setRuns((current) => ({
+                ...current,
+                [conversationId]: { ...current[conversationId], stopState: "requested" },
+            }));
+            control.controller.abort();
+            return control.finished;
+        },
+        [currentConversationId, runs],
+    );
+
     const messages = messagesByConversation[currentConversationId] || [];
     const awaitingApproval = useMemo(
         () => messages.filter((message): message is BrainstormAgentAssistantMessage => message.role === "assistant" && message.status === "awaiting_approval"),
         [messages],
     );
 
-    return { conversations, currentConversationId, messages, messagesByConversation, awaitingApproval, runs, isLoading, error, selectConversation, send };
+    return { conversations, currentConversationId, messages, messagesByConversation, awaitingApproval, runs, isLoading, error, selectConversation, send, stop };
 }
 
 void createStoryboardBrainstormConversation;
