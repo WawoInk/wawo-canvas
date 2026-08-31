@@ -153,11 +153,11 @@
 
 - **职责**：持久化可变 Storyboard Project 聚合根、私有 JSON artifact、Brainstorm Conversation/Message 图、Project Memory、revision CAS 和删除清理。
 - **输入**：当前用户、Project ID、workspace 字段、Conversation/Turn/Assistant/Memory 命令及各自的 `expectedRevision`、`clientRequestId` 或 `operationId`。
-- **输出**：Storyboard 摘要/详情、Conversation 列表、平铺分页 Message 图、Turn 创建结果、Assistant 当前版本和 Project Memory。冲突返回 HTTP 409，存在当前记录时放在 `data.current`。
+- **输出**：Storyboard 摘要/详情、分页 Conversation/Project Memory 列表、平铺分页 Message 图、Turn 创建结果和 Assistant 当前版本。冲突返回 HTTP 409，存在当前记录时放在 `data.current`。
 - **核心文件**：Workspace 使用 `handler/storyboard_projects.go`、`service/storyboard_project.go`、`repository/storyboard_project.go`、`model/storyboard_project.go`；Brainstorm 使用同层级的 `storyboard_brainstorm.go` 文件并在 `router/router.go` 注册认证路由。
 - **数据流**：
   - Workspace create/update 继续负责 artifact 规范化、稳定 Scene/Segment/Shot ID、S3 补偿和项目级 CAS。
-  - append Turn 在锁定 Conversation 的单个数据库事务中创建 User Message 与 pending Assistant Placeholder，并更新 `currentMessageId`；regenerate 创建同一 User Message 下的新 Assistant sibling，保留旧 Assistant。
+  - append Turn 在锁定 Conversation 的单个数据库事务中创建 User Message 与 pending Assistant Placeholder，并更新 `currentMessageId`；相同 Message ID 的同语义重放返回原 Turn；regenerate 创建同一 User Message 下的新 Assistant sibling，保留旧 Assistant。
   - Assistant 更新以 `expectedRevision` 替换完整有序 output JSON 并推进生命周期；continue 对原 terminal Assistant 做 CAS，保留 ID/output 后重置为 pending，不创建 sibling。
   - Project Memory 只保存已确认记录；`project/scene/shot` scope、稳定 path、tags、`sourceMessageId` 和 `operationId` 由 service 校验。
 - **依赖关系**：依赖 auth、PostgreSQL、S3 和个人 `user_files`；Storyboard Workspace API 已有消费方，Brainstorm UI、模型调用和 Canvas 集成不在本次后端持久化范围。
@@ -165,7 +165,7 @@
   - status 只使用 `draft/ready`，validation outcome 继续保存在 `validationStatus`。
   - Project ID、`createdAt` 和已匹配实体 ID 在保存/重新生成后保持稳定；Workspace 更新是整体 CAS，不做字段级 merge。
   - 所有 Brainstorm 子资源按 `user_id + project_id` 限定，Message 额外限定 `conversation_id`；越权与不存在都返回 404。
-  - 同一 Conversation 最多一个 active Assistant Turn，不同 Conversation 可并行；数据库事务不跨越模型或浏览器流式处理。
+  - 同一 Conversation 最多一个 active Assistant Turn，不同 Conversation 可并行；删除 Conversation 使用同一行锁，删除 Project 先锁 Project 与全部 Conversation 后再清理，避免并发写入留下孤儿记录；数据库事务不跨越模型或浏览器流式处理。
   - 当前范围不包含模型调用、Summary、Context Builder、Tool Executor、前端 UI、Canvas 关联或真实浏览器验证。
 
 ## Canvas 项目与增量同步

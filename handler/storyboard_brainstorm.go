@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/basketikun/infinite-canvas/service"
 )
@@ -17,7 +16,7 @@ func ListStoryboardBrainstormConversations(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	conversations, err := service.ListStoryboardBrainstormConversations(projectID, userID)
+	conversations, err := service.ListStoryboardBrainstormConversations(projectID, userID, parseQuery(r))
 	if err != nil {
 		writeStoryboardBrainstormError(w, err)
 		return
@@ -66,11 +65,12 @@ func DeleteStoryboardBrainstormConversation(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	if _, err := service.DeleteStoryboardBrainstormConversation(projectID, conversationID, userID); err != nil {
+	result, err := service.DeleteStoryboardBrainstormConversation(projectID, conversationID, userID)
+	if err != nil {
 		writeStoryboardBrainstormError(w, err)
 		return
 	}
-	OK(w, map[string]string{"id": conversationID, "deletedAt": time.Now().UTC().Format(time.RFC3339Nano)})
+	OK(w, result)
 }
 
 func ListStoryboardBrainstormMessages(w http.ResponseWriter, r *http.Request, projectID, conversationID string) {
@@ -145,7 +145,7 @@ func ListStoryboardMemories(w http.ResponseWriter, r *http.Request, projectID st
 	if !ok {
 		return
 	}
-	memories, err := service.ListStoryboardMemories(projectID, userID)
+	memories, err := service.ListStoryboardMemories(projectID, userID, parseQuery(r))
 	if err != nil {
 		writeStoryboardBrainstormError(w, err)
 		return
@@ -194,11 +194,12 @@ func DeleteStoryboardMemory(w http.ResponseWriter, r *http.Request, projectID, m
 	if !ok {
 		return
 	}
-	if _, err := service.DeleteStoryboardMemory(projectID, memoryID, userID); err != nil {
+	result, err := service.DeleteStoryboardMemory(projectID, memoryID, userID)
+	if err != nil {
 		writeStoryboardBrainstormError(w, err)
 		return
 	}
-	OK(w, map[string]string{"id": memoryID, "deletedAt": time.Now().UTC().Format(time.RFC3339Nano)})
+	OK(w, result)
 }
 
 func storyboardBrainstormUser(w http.ResponseWriter, r *http.Request) (string, bool) {

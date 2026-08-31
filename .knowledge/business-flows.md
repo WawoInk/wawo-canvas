@@ -141,12 +141,12 @@ Assistant progress/terminal update
 ```
 
 - **输入**：稳定 Conversation/Message ID、`clientRequestId`、append/regenerate/continue 模式、完整 Assistant output、Project Memory。
-- **输出**：Conversation、平铺分页 Message 图、当前 Assistant revision 和 confirmed Project Memory。
+- **输出**：分页 Conversation/Project Memory、平铺分页 Message 图和当前 Assistant revision。
 - **并发**：同一 Conversation 由行锁与 active Assistant 部分唯一索引限制为一个 active Turn；不同 Conversation 可同时推进。late completion 或旧 revision 不能覆盖 cancelled/interrupted/较新状态。
 - **分支语义**：append 创建 User + Assistant；regenerate 在同一 User 下创建新 Assistant sibling 并保留旧响应；continue 复用原 terminal Assistant 的 ID/output，不创建 sibling。
-- **幂等**：相同 `clientRequestId` 与相同规范语义输入返回已有 Turn；复用 key 但输入不同返回 409。Message ID 和 Memory `operationId` 也保持 scoped 幂等。
+- **幂等**：相同 `clientRequestId` 或相同 Message ID 与相同规范语义输入返回已有 Turn；复用 key/ID 但输入不同返回 409。Memory `operationId` 也保持 scoped 幂等。
 - **所有权**：Project、Conversation、Message、Memory 查询逐层限定当前 `user_id` 和父级 ID；不存在与越权都返回 404。
-- **删除**：删除 Conversation 同时清理其 Messages；删除 Storyboard Project 清理全部 Brainstorm Conversations、Messages、Memories，再执行既有 artifact/file 删除流程。
+- **删除**：删除 Conversation 使用与 Turn 相同的 Conversation 行锁后清理 Messages；删除 Storyboard Project 锁定 Project 和全部 Conversation 后清理 Brainstorm Conversations、Messages、Memories，再执行既有 artifact/file 删除流程。Conversation/Memory 创建先锁 Project，避免删除并发留下孤儿记录。
 - **边界**：数据库事务不跨模型或浏览器 streaming；当前流程只覆盖后端持久化 API，不包含模型调用、Summary、Context Builder、Tool Executor、前端 UI、Canvas 集成或真实浏览器验证。
 - **核心文件**：`model/storyboard_brainstorm.go`、`repository/storyboard_brainstorm.go`、`service/storyboard_brainstorm.go`、`handler/storyboard_brainstorm.go`、`router/router.go`。
 

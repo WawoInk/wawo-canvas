@@ -65,6 +65,24 @@ func TestStoryboardBrainstormReplayPrecedesActiveTurnConflict(t *testing.T) {
 	}
 }
 
+func TestStoryboardBrainstormMessageIDReplayIsIdempotent(t *testing.T) {
+	harness := newConcurrencyBrainstormHarness(t)
+	conversationID := harness.createConversation(t)
+	userID := "user-" + uuid.NewString()
+	assistantID := "assistant-" + uuid.NewString()
+	harness.mustTurn(t, conversationID, concurrencyAppendPayload("request-"+uuid.NewString(), userID, assistantID, "稳定消息 ID"))
+	harness.mustUpdateAssistant(t, conversationID, assistantID, 1, "completed", []any{map[string]any{"type": "text", "text": "已完成"}})
+
+	status, response := harness.turn(t, conversationID, concurrencyAppendPayload("request-"+uuid.NewString(), userID, assistantID, "稳定消息 ID"))
+	if status != http.StatusOK || response.Code != 0 {
+		t.Fatalf("message ID replay status=%d response=%#v", status, response)
+	}
+	page := harness.messages(t, conversationID)
+	if page.Total != 2 || len(page.Items) != 2 || page.Conversation.CurrentMessageID != assistantID {
+		t.Fatalf("message ID replay created duplicate turn: %#v", page)
+	}
+}
+
 func TestStoryboardBrainstormClientRequestReuseWithDifferentSemanticInputConflicts(t *testing.T) {
 	harness := newConcurrencyBrainstormHarness(t)
 	conversationID := harness.createConversation(t)
@@ -201,6 +219,66 @@ func TestStoryboardBrainstormContinueReplayDoesNotIncrementRevisionTwice(t *test
 	replayed := concurrencyMessageByID(t, page, assistantID)
 	if page.Total != 2 || len(page.Items) != 2 || page.Conversation.CurrentMessageID != assistantID || replayed.Status != "pending" || replayed.Revision != 3 {
 		t.Fatalf("continued request replay changed message twice: page=%#v assistant=%#v", page, replayed)
+	}
+}
+
+func TestStoryboardBrainstormConversationDeleteWaitsForActiveTurnCleanup(t *testing.T) {
+	harness := newConcurrencyBrainstormHarness(t)
+	conversationID := harness.createConversation(t)
+	userID := "user-" + uuid.NewString()
+	assistantID := "assistant-" + uuid.NewString()
+	gate := newConcurrencyAssistantInsertGate(t)
+	turn := asyncJSONRequest(http.MethodPost, harness.turnURL(conversationID), harness.Token, concurrencyAppendPayload("request-"+uuid.NewString(), userID, assistantID, "删除前消息"))
+	turnPID := gate.waitForWaiters(t, 1)[0]
+	deleteURL := harness.Server.URL + "/api/v1/storyboards/" + harness.ProjectID + "/conversations/" + conversationID
+	deleted := asyncJSONRequest(http.MethodDelete, deleteURL, harness.Token, nil)
+	gate.waitForBlockedBy(t, turnPID)
+	gate.release(t)
+	if response := waitForAsyncRequest(t, turn); response.status != http.StatusOK {
+		t.Fatalf("blocked turn status=%d body=%s", response.status, response.body)
+	}
+	if response := waitForAsyncRequest(t, deleted); response.status != http.StatusOK {
+		t.Fatalf("conversation delete status=%d body=%s", response.status, response.body)
+	}
+
+	created := doJSON[concurrencyBrainstormConversationView](t, http.MethodPost, harness.Server.URL+"/api/v1/storyboards/"+harness.ProjectID+"/conversations", harness.Token, map[string]any{"id": conversationID})
+	if created.Code != 0 {
+		t.Fatalf("recreate conversation = %#v", created)
+	}
+	harness.mustTurn(t, conversationID, concurrencyAppendPayload("request-"+uuid.NewString(), userID, assistantID, "删除后重建"))
+	page := harness.messages(t, conversationID)
+	if page.Total != 2 || concurrencyMessageByID(t, page, userID).Content != "删除后重建" {
+		t.Fatalf("conversation delete left orphan messages: %#v", page)
+	}
+}
+
+func TestStoryboardBrainstormProjectDeleteWaitsForActiveTurnCleanup(t *testing.T) {
+	harness := newConcurrencyBrainstormHarness(t)
+	conversationID := harness.createConversation(t)
+	userID := "user-" + uuid.NewString()
+	assistantID := "assistant-" + uuid.NewString()
+	gate := newConcurrencyAssistantInsertGate(t)
+	turn := asyncJSONRequest(http.MethodPost, harness.turnURL(conversationID), harness.Token, concurrencyAppendPayload("request-"+uuid.NewString(), userID, assistantID, "删除项目前消息"))
+	turnPID := gate.waitForWaiters(t, 1)[0]
+	deleted := asyncJSONRequest(http.MethodDelete, harness.Server.URL+"/api/v1/storyboards/"+harness.ProjectID, harness.Token, nil)
+	gate.waitForBlockedBy(t, turnPID)
+	gate.release(t)
+	if response := waitForAsyncRequest(t, turn); response.status != http.StatusOK {
+		t.Fatalf("blocked project turn status=%d body=%s", response.status, response.body)
+	}
+	if response := waitForAsyncRequest(t, deleted); response.status != http.StatusOK {
+		t.Fatalf("project delete status=%d body=%s", response.status, response.body)
+	}
+
+	createStoryboardBrainstormProject(t, harness.Server.URL, harness.Token, harness.ProjectID)
+	created := doJSON[concurrencyBrainstormConversationView](t, http.MethodPost, harness.Server.URL+"/api/v1/storyboards/"+harness.ProjectID+"/conversations", harness.Token, map[string]any{"id": conversationID})
+	if created.Code != 0 {
+		t.Fatalf("recreate project conversation = %#v", created)
+	}
+	harness.mustTurn(t, conversationID, concurrencyAppendPayload("request-"+uuid.NewString(), userID, assistantID, "删除项目后重建"))
+	page := harness.messages(t, conversationID)
+	if page.Total != 2 || concurrencyMessageByID(t, page, userID).Content != "删除项目后重建" {
+		t.Fatalf("project delete left orphan messages: %#v", page)
 	}
 }
 

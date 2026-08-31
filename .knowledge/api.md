@@ -229,7 +229,7 @@ Scene、Segment、Shot 的 `id` 是非空稳定字符串。创建时服务端不
 
 | Method / Path | Auth | 输入 | 输出/行为 |
 | --- | --- | --- | --- |
-| `GET /api/v1/storyboards/:projectId/conversations` | U | 项目 ID | 当前项目的 Conversation 列表 |
+| `GET /api/v1/storyboards/:projectId/conversations` | U | `page/pageSize` | `{items,total}`；当前项目的 Conversation 分页列表 |
 | `POST /api/v1/storyboards/:projectId/conversations` | U | `{id,title?}` | 创建 Conversation；空标题默认为“新对话” |
 | `PUT /api/v1/storyboards/:projectId/conversations/:conversationId/title` | U | `{title}` | 重命名 scoped Conversation |
 | `DELETE /api/v1/storyboards/:projectId/conversations/:conversationId` | U | Conversation ID | 删除 Conversation 并清理其 Messages |
@@ -237,7 +237,7 @@ Scene、Segment、Shot 的 `id` 是非空稳定字符串。创建时服务端不
 | `POST /api/v1/storyboards/:projectId/conversations/:conversationId/turns` | U | append 或 regenerate Turn | 原子创建 pending Assistant；append 同时创建 User Message，regenerate 保留旧 Assistant 并创建 sibling |
 | `PUT /api/v1/storyboards/:projectId/conversations/:conversationId/messages/:messageId/assistant` | U | `{expectedRevision,status,output}` | 以 CAS 替换完整有序 output 数组并推进 Assistant 生命周期 |
 | `POST /api/v1/storyboards/:projectId/conversations/:conversationId/messages/:messageId/continue` | U | `{clientRequestId,expectedRevision}` | 复用 terminal Assistant 的 ID/output，转回 pending 并递增 revision |
-| `GET /api/v1/storyboards/:projectId/memories` | U | 项目 ID | 当前项目的 Project Memory 列表 |
+| `GET /api/v1/storyboards/:projectId/memories` | U | `page/pageSize` | `{items,total}`；当前项目的 Project Memory 分页列表 |
 | `POST /api/v1/storyboards/:projectId/memories` | U | `{id,kind,scope,path,content,tags,sourceMessageId?,operationId}` | 创建已确认 Project Memory |
 | `PUT /api/v1/storyboards/:projectId/memories/:memoryId` | U | `{kind,scope,path,content,tags,sourceMessageId?,operationId}` | 更新 scoped Project Memory |
 | `DELETE /api/v1/storyboards/:projectId/memories/:memoryId` | U | Memory ID | 删除 scoped Project Memory |
@@ -249,7 +249,7 @@ Turn 请求：
 
 Assistant `output` 只校验为有界 JSON 数组，并按原顺序整体保存；具体 text/tool call/tool result/status/error item 联合类型和流事件协议由后续任务定义。User Message 的正文只以 `content` 为准，Assistant 正文只以 `output` 为准。active 状态为 `pending/streaming/awaiting_approval`，terminal 状态为 `completed/failed/cancelled/interrupted`。
 
-同一 Conversation 同时只能存在一个 active Turn；同一 `clientRequestId` 的相同语义输入幂等返回已有结果，不同语义复用返回 HTTP 409。旧 Message revision、非法生命周期转换和 active Turn 冲突也返回 409，存在当前 Message 时放在 `data.current`。Memory 的 `scope` 为 `project/scene/shot`：project 要求空 path，scene/shot 要求稳定实体 ID path；`operationId` 在当前用户和项目内唯一。没有单独的 active Conversation 切换接口。
+同一 Conversation 同时只能存在一个 active Turn；同一 `clientRequestId` 或相同 Message ID 的相同语义输入幂等返回已有结果，不同语义复用返回 HTTP 409。旧 Message revision、非法生命周期转换和 active Turn 冲突也返回 409，存在当前 Message 时放在 `data.current`。Memory 的 `scope` 为 `project/scene/shot`：project 要求空 path，scene/shot 要求稳定实体 ID path；`operationId` 在当前用户和项目内唯一。没有单独的 active Conversation 切换接口。
 
 当前接口只提供持久化与并发边界，不执行模型调用，也不表示 Summary、Context Builder、Tool Executor、Brainstorm UI、Canvas 集成或真实浏览器验证已完成。
 

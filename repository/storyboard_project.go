@@ -87,10 +87,15 @@ func DeleteStoryboardProject(id, userID string) (model.StoryboardProject, model.
 	var project model.StoryboardProject
 	var file model.UserFile
 	err = db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("id = ? AND user_id = ?", id, userID).First(&project).Error; err != nil {
+		var err error
+		project, err = lockStoryboardProject(tx, id, userID)
+		if err != nil {
 			return err
 		}
 		if err := tx.Where("id = ? AND user_id = ? AND enterprise_id IS NULL", project.ArtifactFileID, userID).First(&file).Error; err != nil {
+			return err
+		}
+		if err := lockStoryboardBrainstormConversations(tx, id, userID); err != nil {
 			return err
 		}
 		if err := tx.Where("project_id = ? AND user_id = ?", id, userID).Delete(&model.StoryboardBrainstormMessage{}).Error; err != nil {

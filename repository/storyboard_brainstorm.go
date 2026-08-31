@@ -51,6 +51,7 @@ type StoryboardBrainstormAssistantUpdate struct {
 	MessageID        string
 	UserID           string
 	ExpectedRevision uint64
+	AllowedStatuses  []string
 	Status           string
 	Output           json.RawMessage
 	UpdatedAt        string
@@ -67,14 +68,19 @@ type StoryboardBrainstormContinueCommand struct {
 	UpdatedAt        string
 }
 
-func ListStoryboardBrainstormConversations(projectID, userID string) ([]model.StoryboardBrainstormConversation, error) {
+func ListStoryboardBrainstormConversations(projectID, userID string, query model.Query) ([]model.StoryboardBrainstormConversation, int64, error) {
 	db, err := DB()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	scope := db.Model(&model.StoryboardBrainstormConversation{}).Where("user_id = ? AND project_id = ?", userID, projectID)
+	var total int64
+	if err := scope.Count(&total).Error; err != nil {
+		return nil, 0, err
 	}
 	var conversations []model.StoryboardBrainstormConversation
-	err = db.Where("user_id = ? AND project_id = ?", userID, projectID).Order("updated_at DESC, id DESC").Find(&conversations).Error
-	return conversations, err
+	err = scope.Order("updated_at DESC, id DESC").Offset(query.Offset()).Limit(query.PageSize).Find(&conversations).Error
+	return conversations, total, err
 }
 
 func CreateStoryboardBrainstormConversation(conversation model.StoryboardBrainstormConversation) (model.StoryboardBrainstormConversation, error) {
@@ -82,9 +88,16 @@ func CreateStoryboardBrainstormConversation(conversation model.StoryboardBrainst
 	if err != nil {
 		return model.StoryboardBrainstormConversation{}, err
 	}
-	if err := db.Create(&conversation).Error; err == nil {
+	err = db.Transaction(func(tx *gorm.DB) error {
+		if _, err := lockStoryboardProject(tx, conversation.ProjectID, conversation.UserID); err != nil {
+			return err
+		}
+		return tx.Create(&conversation).Error
+	})
+	if err == nil {
 		return conversation, nil
-	} else if !isUniqueViolation(err) {
+	}
+	if !isUniqueViolation(err) {
 		return model.StoryboardBrainstormConversation{}, err
 	}
 	var current model.StoryboardBrainstormConversation
@@ -128,7 +141,9 @@ func DeleteStoryboardBrainstormConversation(projectID, conversationID, userID st
 	}
 	var conversation model.StoryboardBrainstormConversation
 	err = db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("id = ? AND project_id = ? AND user_id = ?", conversationID, projectID, userID).First(&conversation).Error; err != nil {
+		var err error
+		conversation, err = lockStoryboardBrainstormConversation(tx, projectID, conversationID, userID)
+		if err != nil {
 			return err
 		}
 		if err := tx.Where("conversation_id = ? AND project_id = ? AND user_id = ?", conversationID, projectID, userID).Delete(&model.StoryboardBrainstormMessage{}).Error; err != nil {
@@ -197,6 +212,12 @@ func CreateStoryboardBrainstormTurn(command StoryboardBrainstormTurnCommand) (mo
 		}
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
+		}
+		if existingTurn, found, err := findTurnByMessageIDs(tx, command, conversation); err != nil {
+			return err
+		} else if found {
+			turn = existingTurn
+			return nil
 		}
 		if active, err := findActiveAssistant(tx, command.ProjectID, command.ConversationID, command.UserID); err == nil {
 			return &BrainstormConflictError{Kind: BrainstormConflictActiveTurn, Current: active}
@@ -289,21 +310,23 @@ func UpdateStoryboardBrainstormAssistant(command StoryboardBrainstormAssistantUp
 	if current.Revision != command.ExpectedRevision {
 		return model.StoryboardBrainstormMessage{}, &BrainstormConflictError{Kind: BrainstormConflictRevision, Current: current}
 	}
-	if !brainstormTransitionAllowed(current.Status, command.Status) {
-		return model.StoryboardBrainstormMessage{}, &BrainstormConflictError{Kind: BrainstormConflictLifecycle, Current: current}
-	}
 	result := db.Model(&model.StoryboardBrainstormMessage{}).
-		Where("id = ? AND project_id = ? AND conversation_id = ? AND user_id = ? AND role = ? AND revision = ?", command.MessageID, command.ProjectID, command.ConversationID, command.UserID, model.BrainstormRoleAssistant, command.ExpectedRevision).
+		Where("id = ? AND project_id = ? AND conversation_id = ? AND user_id = ? AND role = ? AND revision = ? AND status IN ?", command.MessageID, command.ProjectID, command.ConversationID, command.UserID, model.BrainstormRoleAssistant, command.ExpectedRevision, command.AllowedStatuses).
 		Updates(map[string]any{"status": command.Status, "output": gorm.Expr("?::jsonb", string(command.Output)), "revision": gorm.Expr("revision + 1"), "updated_at": command.UpdatedAt})
 	if result.Error != nil {
 		return model.StoryboardBrainstormMessage{}, result.Error
 	}
 	if result.RowsAffected != 1 {
-		latest, findErr := GetStoryboardBrainstormMessage(command.ProjectID, command.MessageID, command.UserID)
+		var latest model.StoryboardBrainstormMessage
+		findErr := db.Where("id = ? AND project_id = ? AND conversation_id = ? AND user_id = ? AND role = ?", command.MessageID, command.ProjectID, command.ConversationID, command.UserID, model.BrainstormRoleAssistant).First(&latest).Error
 		if findErr != nil {
 			return model.StoryboardBrainstormMessage{}, findErr
 		}
-		return model.StoryboardBrainstormMessage{}, &BrainstormConflictError{Kind: BrainstormConflictRevision, Current: latest}
+		kind := BrainstormConflictLifecycle
+		if latest.Revision != command.ExpectedRevision {
+			kind = BrainstormConflictRevision
+		}
+		return model.StoryboardBrainstormMessage{}, &BrainstormConflictError{Kind: kind, Current: latest}
 	}
 	current.Status = command.Status
 	current.Output = command.Output
@@ -383,14 +406,19 @@ func ContinueStoryboardBrainstormAssistant(command StoryboardBrainstormContinueC
 	return turn, err
 }
 
-func ListStoryboardMemories(projectID, userID string) ([]model.StoryboardMemory, error) {
+func ListStoryboardMemories(projectID, userID string, query model.Query) ([]model.StoryboardMemory, int64, error) {
 	db, err := DB()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	scope := db.Model(&model.StoryboardMemory{}).Where("project_id = ? AND user_id = ?", projectID, userID)
+	var total int64
+	if err := scope.Count(&total).Error; err != nil {
+		return nil, 0, err
 	}
 	var memories []model.StoryboardMemory
-	err = db.Where("project_id = ? AND user_id = ?", projectID, userID).Order("updated_at DESC, id DESC").Find(&memories).Error
-	return memories, err
+	err = scope.Order("updated_at DESC, id DESC").Offset(query.Offset()).Limit(query.PageSize).Find(&memories).Error
+	return memories, total, err
 }
 
 func CreateStoryboardMemory(memory model.StoryboardMemory) (model.StoryboardMemory, error) {
@@ -400,6 +428,9 @@ func CreateStoryboardMemory(memory model.StoryboardMemory) (model.StoryboardMemo
 	}
 	var result model.StoryboardMemory
 	err = db.Transaction(func(tx *gorm.DB) error {
+		if _, err := lockStoryboardProject(tx, memory.ProjectID, memory.UserID); err != nil {
+			return err
+		}
 		var existing model.StoryboardMemory
 		if err := tx.Where("project_id = ? AND user_id = ? AND operation_id = ?", memory.ProjectID, memory.UserID, memory.OperationID).First(&existing).Error; err == nil {
 			if sameStoryboardMemory(existing, memory) {
@@ -434,6 +465,9 @@ func UpdateStoryboardMemory(memory model.StoryboardMemory) (model.StoryboardMemo
 	}
 	var result model.StoryboardMemory
 	err = db.Transaction(func(tx *gorm.DB) error {
+		if _, err := lockStoryboardProject(tx, memory.ProjectID, memory.UserID); err != nil {
+			return err
+		}
 		var current model.StoryboardMemory
 		if err := tx.Where("id = ? AND project_id = ? AND user_id = ?", memory.ID, memory.ProjectID, memory.UserID).First(&current).Error; err != nil {
 			return err
@@ -470,12 +504,62 @@ func DeleteStoryboardMemory(projectID, memoryID, userID string) (model.Storyboar
 	}
 	var memory model.StoryboardMemory
 	err = db.Transaction(func(tx *gorm.DB) error {
+		if _, err := lockStoryboardProject(tx, projectID, userID); err != nil {
+			return err
+		}
 		if err := tx.Where("id = ? AND project_id = ? AND user_id = ?", memoryID, projectID, userID).First(&memory).Error; err != nil {
 			return err
 		}
 		return tx.Where("id = ? AND project_id = ? AND user_id = ?", memoryID, projectID, userID).Delete(&model.StoryboardMemory{}).Error
 	})
 	return memory, err
+}
+
+func lockStoryboardProject(tx *gorm.DB, projectID, userID string) (model.StoryboardProject, error) {
+	var project model.StoryboardProject
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND user_id = ?", projectID, userID).First(&project).Error
+	return project, err
+}
+
+func findTurnByMessageIDs(tx *gorm.DB, command StoryboardBrainstormTurnCommand, conversation model.StoryboardBrainstormConversation) (model.StoryboardBrainstormTurn, bool, error) {
+	var assistant model.StoryboardBrainstormMessage
+	err := tx.Where("id = ? AND project_id = ? AND conversation_id = ? AND user_id = ? AND role = ?", command.AssistantMessageID, command.ProjectID, command.ConversationID, command.UserID, model.BrainstormRoleAssistant).First(&assistant).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		if command.Mode == "append" {
+			var userMessage model.StoryboardBrainstormMessage
+			err = tx.Where("id = ? AND project_id = ? AND conversation_id = ? AND user_id = ?", command.UserMessageID, command.ProjectID, command.ConversationID, command.UserID).First(&userMessage).Error
+			if err == nil {
+				return model.StoryboardBrainstormTurn{}, false, &BrainstormConflictError{Kind: BrainstormConflictID, Current: userMessage}
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return model.StoryboardBrainstormTurn{}, false, err
+			}
+		}
+		return model.StoryboardBrainstormTurn{}, false, nil
+	}
+	if err != nil {
+		return model.StoryboardBrainstormTurn{}, false, err
+	}
+	if assistant.RequestHash != command.RequestHash {
+		return model.StoryboardBrainstormTurn{}, false, &BrainstormConflictError{Kind: BrainstormConflictID, Current: assistant}
+	}
+	turn := model.StoryboardBrainstormTurn{Conversation: conversation, AssistantMessage: assistant}
+	if command.Mode == "append" {
+		var userMessage model.StoryboardBrainstormMessage
+		if err := tx.Where("id = ? AND project_id = ? AND conversation_id = ? AND user_id = ? AND role = ?", command.UserMessageID, command.ProjectID, command.ConversationID, command.UserID, model.BrainstormRoleUser).First(&userMessage).Error; err != nil {
+			return model.StoryboardBrainstormTurn{}, false, err
+		}
+		if assistant.ParentID != userMessage.ID || userMessage.ParentID != command.ParentMessageID || userMessage.Content != command.UserMessageContent {
+			return model.StoryboardBrainstormTurn{}, false, &BrainstormConflictError{Kind: BrainstormConflictID, Current: userMessage}
+		}
+		turn.UserMessage = &userMessage
+	}
+	return turn, true, nil
+}
+
+func lockStoryboardBrainstormConversations(tx *gorm.DB, projectID, userID string) error {
+	var conversations []model.StoryboardBrainstormConversation
+	return tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("project_id = ? AND user_id = ?", projectID, userID).Find(&conversations).Error
 }
 
 func lockStoryboardBrainstormConversation(tx *gorm.DB, projectID, conversationID, userID string) (model.StoryboardBrainstormConversation, error) {
@@ -509,19 +593,6 @@ func brainstormInsertError(err error) error {
 		return &BrainstormConflictError{Kind: BrainstormConflictIdempotency}
 	default:
 		return &BrainstormConflictError{Kind: BrainstormConflictID}
-	}
-}
-
-func brainstormTransitionAllowed(from, to string) bool {
-	switch from {
-	case model.BrainstormStatusPending:
-		return to == model.BrainstormStatusPending || to == model.BrainstormStatusStreaming || to == model.BrainstormStatusAwaitingApproval || model.IsBrainstormTerminalStatus(to)
-	case model.BrainstormStatusStreaming:
-		return to == model.BrainstormStatusStreaming || to == model.BrainstormStatusAwaitingApproval || model.IsBrainstormTerminalStatus(to)
-	case model.BrainstormStatusAwaitingApproval:
-		return to == model.BrainstormStatusAwaitingApproval || to == model.BrainstormStatusStreaming || model.IsBrainstormTerminalStatus(to)
-	default:
-		return false
 	}
 }
 

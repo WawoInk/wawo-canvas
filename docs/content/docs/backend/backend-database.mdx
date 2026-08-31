@@ -92,9 +92,9 @@ Conversation 不保存独立 revision。Turn 写入通过 PostgreSQL `FOR UPDATE
 | `client_request_id`、`request_hash` | Turn/continue 幂等键与规范语义输入 SHA-256 |
 | `created_at`、`updated_at` | 消息创建与更新时间 |
 
-User Message 正文只使用 `content`；Assistant 正文只使用 `output`，避免双重事实。output 只要求是有界 JSON 数组，按原顺序保留 text、tool call、tool result、status、error 等未知 item；具体 item 联合类型由后续任务定义。Message 列表按 `created_at ASC, id ASC` 分页返回平铺图，单页可能不包含祖先，客户端需要继续请求其他页。
+User Message 正文只使用 `content`；Assistant 正文只使用 `output`，避免双重事实。output 只要求是有界 JSON 数组，按原顺序保留 text、tool call、tool result、status、error 等未知 item；具体 item 联合类型由后续任务定义。Conversation 和 Project Memory 列表使用 `page/pageSize` 返回 `{items,total}`；Message 列表按 `created_at ASC, id ASC` 分页返回平铺图，单页可能不包含祖先，客户端需要继续请求其他页。
 
-数据库为 active Assistant 建立 `(user_id, project_id, conversation_id)` 部分唯一索引，只覆盖 `role='assistant' AND status IN ('pending','streaming','awaiting_approval')`，保证同一 Conversation 最多一个 active Turn。非空 `client_request_id` 也建立 Conversation scope 的部分唯一索引；相同 key 会先比较 `request_hash`，语义相同返回已有结果，语义不同返回 HTTP 409。稳定 Message 主键进一步防止同一客户端 ID 被重复插入。
+数据库为 active Assistant 建立 `(user_id, project_id, conversation_id)` 部分唯一索引，只覆盖 `role='assistant' AND status IN ('pending','streaming','awaiting_approval')`，保证同一 Conversation 最多一个 active Turn。非空 `client_request_id` 也建立 Conversation scope 的部分唯一索引；相同 key 会先比较 `request_hash`，语义相同返回已有结果，语义不同返回 HTTP 409。相同 Message ID 与相同规范语义输入也返回原 Turn；复用 ID 但输入不同返回 409。
 
 Assistant 更新必须提交 `expectedRevision`，并以 `id + user_id + project_id + conversation_id + revision` compare-and-set：成功时替换完整 output、校验生命周期转换并将 revision 加 1；旧 revision、迟到 completion 或非法转换不能覆盖已经 cancelled、interrupted 或更高 revision 的 Message。冲突返回 HTTP 409，并在可用时通过 `data.current` 返回当前 Message。
 
@@ -120,7 +120,7 @@ Memory 表只保存已确认记录；候选 Memory、Summary 和运行时 Contex
 
 每个 Conversation、Message 和 Memory 读写都先限定当前 `user_id + project_id`，Message 再限定 `conversation_id`。子资源不存在和越权统一返回 404，不能通过猜测子资源 ID 扩大范围。
 
-这些逻辑关系不依赖数据库外键级联。删除 Conversation 时在同一业务事务删除其 Messages；删除 Storyboard Project 时按 owner scope 清理全部 Brainstorm Messages、Conversations 和 Memories，再执行既有 Project 与 `user_files` 删除流程。Project artifact 的对象存储补偿和 best-effort 旧对象清理语义保持不变。
+这些逻辑关系不依赖数据库外键级联。删除 Conversation 时先获取与 Turn 相同的 Conversation 行锁，再删除其 Messages；删除 Storyboard Project 时先锁 Project 与全部 scoped Conversation，再按 owner scope 清理 Brainstorm Messages、Conversations 和 Memories，最后执行既有 Project 与 `user_files` 删除流程。Conversation/Memory 创建先锁 Project，避免并发删除时留下孤儿记录。Project artifact 的对象存储补偿和 best-effort 旧对象清理语义保持不变。
 
 ## script_projects、script_conversations 与 script_messages
 

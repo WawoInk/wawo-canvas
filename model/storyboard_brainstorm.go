@@ -73,10 +73,20 @@ func (StoryboardMemory) TableName() string {
 	return "storyboard_memories"
 }
 
+type StoryboardBrainstormConversationPage struct {
+	Items []StoryboardBrainstormConversation `json:"items"`
+	Total int64                              `json:"total"`
+}
+
 type StoryboardBrainstormMessagePage struct {
 	Conversation StoryboardBrainstormConversation `json:"conversation"`
 	Items        []StoryboardBrainstormMessage    `json:"items"`
 	Total        int64                            `json:"total"`
+}
+
+type StoryboardMemoryPage struct {
+	Items []StoryboardMemory `json:"items"`
+	Total int64              `json:"total"`
 }
 
 type StoryboardBrainstormTurn struct {

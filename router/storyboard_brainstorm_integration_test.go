@@ -22,6 +22,11 @@ type brainstormConversationView struct {
 	UpdatedAt        string `json:"updatedAt"`
 }
 
+type brainstormConversationPageView struct {
+	Items []brainstormConversationView `json:"items"`
+	Total int64                        `json:"total"`
+}
+
 type brainstormMessageView struct {
 	ID             string          `json:"id"`
 	ProjectID      string          `json:"projectId"`
@@ -56,6 +61,11 @@ type brainstormMemoryView struct {
 	UpdatedAt       string   `json:"updatedAt"`
 }
 
+type brainstormMemoryPageView struct {
+	Items []brainstormMemoryView `json:"items"`
+	Total int64                  `json:"total"`
+}
+
 type brainstormConflictView[T any] struct {
 	Current T `json:"current"`
 }
@@ -70,19 +80,25 @@ func TestStoryboardBrainstormConversationCRUDOwnershipIdempotencyAndCleanup(t *t
 	conversationsURL := brainstormConversationsURL(server.URL, projectID)
 
 	brainstormOK[json.RawMessage](t, http.MethodPost, conversationsURL, ownerToken, map[string]any{"id": conversationID})
-	created := findBrainstormConversation(t, listBrainstormConversations(t, server.URL, ownerToken, projectID), conversationID)
+	created := findBrainstormConversation(t, listBrainstormConversations(t, server.URL, ownerToken, projectID).Items, conversationID)
 	if created.ProjectID != projectID || created.Title != "新对话" || created.CurrentMessageID != "" || created.CreatedAt == "" || created.UpdatedAt == "" {
 		t.Fatalf("created conversation = %#v", created)
 	}
+	secondConversationID := "conversation-page-" + uuid.NewString()
+	brainstormOK[json.RawMessage](t, http.MethodPost, conversationsURL, ownerToken, map[string]any{"id": secondConversationID})
+	page := brainstormOK[brainstormConversationPageView](t, http.MethodGet, conversationsURL+"?page=1&pageSize=1", ownerToken, nil).Data
+	if page.Total != 2 || len(page.Items) != 1 {
+		t.Fatalf("paginated conversations = %#v", page)
+	}
 
 	brainstormOK[json.RawMessage](t, http.MethodPost, conversationsURL, ownerToken, map[string]any{"id": conversationID})
-	if countBrainstormConversation(listBrainstormConversations(t, server.URL, ownerToken, projectID), conversationID) != 1 {
+	if countBrainstormConversation(listBrainstormConversations(t, server.URL, ownerToken, projectID).Items, conversationID) != 1 {
 		t.Fatalf("idempotent conversation %q was duplicated", conversationID)
 	}
 
 	renameURL := conversationsURL + "/" + conversationID + "/title"
 	brainstormOK[json.RawMessage](t, http.MethodPut, renameURL, ownerToken, map[string]any{"title": "镜头节奏"})
-	renamed := findBrainstormConversation(t, listBrainstormConversations(t, server.URL, ownerToken, projectID), conversationID)
+	renamed := findBrainstormConversation(t, listBrainstormConversations(t, server.URL, ownerToken, projectID).Items, conversationID)
 	if renamed.Title != "镜头节奏" {
 		t.Fatalf("renamed conversation = %#v", renamed)
 	}
@@ -100,7 +116,7 @@ func TestStoryboardBrainstormConversationCRUDOwnershipIdempotencyAndCleanup(t *t
 	}
 
 	brainstormOK[json.RawMessage](t, http.MethodDelete, conversationsURL+"/"+conversationID, ownerToken, nil)
-	if countBrainstormConversation(listBrainstormConversations(t, server.URL, ownerToken, projectID), conversationID) != 0 {
+	if countBrainstormConversation(listBrainstormConversations(t, server.URL, ownerToken, projectID).Items, conversationID) != 0 {
 		t.Fatalf("deleted conversation %q is still listed", conversationID)
 	}
 	assertBrainstormStatus(t, http.StatusNotFound, http.MethodGet, brainstormMessagesURL(server.URL, projectID, conversationID), ownerToken, nil)
@@ -270,10 +286,14 @@ func TestStoryboardBrainstormMemoryCRUDFieldsAndOwnership(t *testing.T) {
 		"operationId":     operationID,
 	})
 	memories := listStoryboardBrainstormMemories(t, server.URL, ownerToken, projectID)
-	if len(memories) != 1 {
+	if memories.Total != 1 || len(memories.Items) != 1 {
 		t.Fatalf("created memories = %#v", memories)
 	}
-	created := memories[0]
+	created := memories.Items[0]
+	bounded := brainstormOK[brainstormMemoryPageView](t, http.MethodGet, memoriesURL+"?page=1&pageSize=1", ownerToken, nil).Data
+	if bounded.Total != 1 || len(bounded.Items) != 1 {
+		t.Fatalf("paginated memories = %#v", bounded)
+	}
 	if created.ID == "" || created.ProjectID != projectID || created.Kind != "constraint" || created.Scope != "scene" || created.Path != "scene-1" || created.Content != "雨夜场景保持冷蓝色调" || created.SourceMessageID != userMessageID || created.OperationID != operationID || !reflect.DeepEqual(created.Tags, []string{"tone", "rain"}) {
 		t.Fatalf("created memory = %#v", created)
 	}
@@ -288,7 +308,7 @@ func TestStoryboardBrainstormMemoryCRUDFieldsAndOwnership(t *testing.T) {
 		"operationId":     operationID,
 	})
 	updated := listStoryboardBrainstormMemories(t, server.URL, ownerToken, projectID)
-	if len(updated) != 1 || updated[0].ID != created.ID || updated[0].Kind != "decision" || updated[0].Scope != "shot" || updated[0].Path != "shot-2" || updated[0].Content != "第二镜使用近景并保留雨丝" || updated[0].SourceMessageID != assistantMessageID || updated[0].OperationID != operationID || !reflect.DeepEqual(updated[0].Tags, []string{"shot", "continuity"}) {
+	if updated.Total != 1 || len(updated.Items) != 1 || updated.Items[0].ID != created.ID || updated.Items[0].Kind != "decision" || updated.Items[0].Scope != "shot" || updated.Items[0].Path != "shot-2" || updated.Items[0].Content != "第二镜使用近景并保留雨丝" || updated.Items[0].SourceMessageID != assistantMessageID || updated.Items[0].OperationID != operationID || !reflect.DeepEqual(updated.Items[0].Tags, []string{"shot", "continuity"}) {
 		t.Fatalf("updated memories = %#v", updated)
 	}
 
@@ -299,7 +319,7 @@ func TestStoryboardBrainstormMemoryCRUDFieldsAndOwnership(t *testing.T) {
 	assertBrainstormStatus(t, http.StatusNotFound, http.MethodDelete, memoriesURL+"/"+created.ID, otherToken, nil)
 
 	brainstormOK[json.RawMessage](t, http.MethodDelete, memoriesURL+"/"+created.ID, ownerToken, nil)
-	if remaining := listStoryboardBrainstormMemories(t, server.URL, ownerToken, projectID); len(remaining) != 0 {
+	if remaining := listStoryboardBrainstormMemories(t, server.URL, ownerToken, projectID); remaining.Total != 0 || len(remaining.Items) != 0 {
 		t.Fatalf("deleted memory remains = %#v", remaining)
 	}
 }
@@ -337,7 +357,7 @@ func TestStoryboardBrainstormStoryboardDeletionCleansAllChildren(t *testing.T) {
 		t.Fatalf("storyboard message cleanup was incomplete: %#v", recreatedMessages)
 	}
 	recreatedMemories := listStoryboardBrainstormMemories(t, server.URL, ownerToken, projectID)
-	if len(recreatedMemories) != 1 || recreatedMemories[0].Content != "重建项目后的记忆" || recreatedMemories[0].OperationID != operationID {
+	if recreatedMemories.Total != 1 || len(recreatedMemories.Items) != 1 || recreatedMemories.Items[0].Content != "重建项目后的记忆" || recreatedMemories.Items[0].OperationID != operationID {
 		t.Fatalf("storyboard memory cleanup was incomplete: %#v", recreatedMemories)
 	}
 }
@@ -389,9 +409,9 @@ func updateStoryboardBrainstormAssistant(t *testing.T, endpoint, token string, e
 	brainstormOK[json.RawMessage](t, http.MethodPut, endpoint, token, map[string]any{"expectedRevision": expectedRevision, "status": status, "output": output})
 }
 
-func listBrainstormConversations(t *testing.T, baseURL, token, projectID string) []brainstormConversationView {
+func listBrainstormConversations(t *testing.T, baseURL, token, projectID string) brainstormConversationPageView {
 	t.Helper()
-	return brainstormOK[[]brainstormConversationView](t, http.MethodGet, brainstormConversationsURL(baseURL, projectID), token, nil).Data
+	return brainstormOK[brainstormConversationPageView](t, http.MethodGet, brainstormConversationsURL(baseURL, projectID)+"?page=1&pageSize=100", token, nil).Data
 }
 
 func getStoryboardBrainstormMessages(t *testing.T, baseURL, token, projectID, conversationID string, page, pageSize int) brainstormMessagePageView {
@@ -400,9 +420,9 @@ func getStoryboardBrainstormMessages(t *testing.T, baseURL, token, projectID, co
 	return brainstormOK[brainstormMessagePageView](t, http.MethodGet, endpoint, token, nil).Data
 }
 
-func listStoryboardBrainstormMemories(t *testing.T, baseURL, token, projectID string) []brainstormMemoryView {
+func listStoryboardBrainstormMemories(t *testing.T, baseURL, token, projectID string) brainstormMemoryPageView {
 	t.Helper()
-	return brainstormOK[[]brainstormMemoryView](t, http.MethodGet, brainstormMemoriesURL(baseURL, projectID), token, nil).Data
+	return brainstormOK[brainstormMemoryPageView](t, http.MethodGet, brainstormMemoriesURL(baseURL, projectID)+"?page=1&pageSize=100", token, nil).Data
 }
 
 func brainstormRequest[T any](t *testing.T, method, endpoint, token string, payload any) (int, apiResponse[T]) {

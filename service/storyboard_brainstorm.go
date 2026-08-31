@@ -67,15 +67,28 @@ type StoryboardMemoryInput struct {
 	OperationID     string   `json:"operationId"`
 }
 
-func ListStoryboardBrainstormConversations(projectID, userID string) ([]model.StoryboardBrainstormConversation, error) {
+type StoryboardBrainstormDeleteResult struct {
+	ID        string `json:"id"`
+	DeletedAt string `json:"deletedAt"`
+}
+
+func ListStoryboardBrainstormConversations(projectID, userID string, query model.Query) (model.StoryboardBrainstormConversationPage, error) {
 	projectID, err := validateBrainstormID(projectID, "项目 ID")
 	if err != nil {
-		return nil, err
+		return model.StoryboardBrainstormConversationPage{}, err
 	}
 	if err := ensureStoryboardProject(projectID, userID); err != nil {
-		return nil, err
+		return model.StoryboardBrainstormConversationPage{}, err
 	}
-	return repository.ListStoryboardBrainstormConversations(projectID, userID)
+	query.Normalize()
+	items, total, err := repository.ListStoryboardBrainstormConversations(projectID, userID, query)
+	if err != nil {
+		return model.StoryboardBrainstormConversationPage{}, err
+	}
+	if items == nil {
+		items = []model.StoryboardBrainstormConversation{}
+	}
+	return model.StoryboardBrainstormConversationPage{Items: items, Total: total}, nil
 }
 
 func CreateStoryboardBrainstormConversation(projectID, userID string, input StoryboardBrainstormConversationInput) (model.StoryboardBrainstormConversation, error) {
@@ -124,17 +137,19 @@ func RenameStoryboardBrainstormConversation(projectID, conversationID, userID, t
 	return conversation, brainstormError(err)
 }
 
-func DeleteStoryboardBrainstormConversation(projectID, conversationID, userID string) (model.StoryboardBrainstormConversation, error) {
+func DeleteStoryboardBrainstormConversation(projectID, conversationID, userID string) (StoryboardBrainstormDeleteResult, error) {
 	projectID, err := validateBrainstormID(projectID, "项目 ID")
 	if err != nil {
-		return model.StoryboardBrainstormConversation{}, err
+		return StoryboardBrainstormDeleteResult{}, err
 	}
 	conversationID, err = validateBrainstormID(conversationID, "对话 ID")
 	if err != nil {
-		return model.StoryboardBrainstormConversation{}, err
+		return StoryboardBrainstormDeleteResult{}, err
 	}
-	conversation, err := repository.DeleteStoryboardBrainstormConversation(projectID, conversationID, userID)
-	return conversation, brainstormError(err)
+	if _, err := repository.DeleteStoryboardBrainstormConversation(projectID, conversationID, userID); err != nil {
+		return StoryboardBrainstormDeleteResult{}, brainstormError(err)
+	}
+	return StoryboardBrainstormDeleteResult{ID: conversationID, DeletedAt: studioNow()}, nil
 }
 
 func ListStoryboardBrainstormMessages(projectID, conversationID, userID string, query model.Query) (model.StoryboardBrainstormMessagePage, error) {
@@ -244,7 +259,7 @@ func UpdateStoryboardBrainstormAssistant(projectID, conversationID, messageID, u
 	}
 	message, err := repository.UpdateStoryboardBrainstormAssistant(repository.StoryboardBrainstormAssistantUpdate{
 		ProjectID: projectID, ConversationID: conversationID, MessageID: messageID, UserID: userID,
-		ExpectedRevision: *input.ExpectedRevision, Status: status, Output: output, UpdatedAt: studioNow(),
+		ExpectedRevision: *input.ExpectedRevision, AllowedStatuses: brainstormAssistantAllowedFrom(status), Status: status, Output: output, UpdatedAt: studioNow(),
 	})
 	return message, brainstormError(err)
 }
@@ -277,19 +292,23 @@ func ContinueStoryboardBrainstormAssistant(projectID, conversationID, messageID,
 	return turn, brainstormError(err)
 }
 
-func ListStoryboardMemories(projectID, userID string) ([]model.StoryboardMemory, error) {
+func ListStoryboardMemories(projectID, userID string, query model.Query) (model.StoryboardMemoryPage, error) {
 	projectID, err := validateBrainstormID(projectID, "项目 ID")
 	if err != nil {
-		return nil, err
+		return model.StoryboardMemoryPage{}, err
 	}
 	if err := ensureStoryboardProject(projectID, userID); err != nil {
-		return nil, err
+		return model.StoryboardMemoryPage{}, err
 	}
-	memories, err := repository.ListStoryboardMemories(projectID, userID)
-	if memories == nil {
-		memories = []model.StoryboardMemory{}
+	query.Normalize()
+	items, total, err := repository.ListStoryboardMemories(projectID, userID, query)
+	if err != nil {
+		return model.StoryboardMemoryPage{}, err
 	}
-	return memories, err
+	if items == nil {
+		items = []model.StoryboardMemory{}
+	}
+	return model.StoryboardMemoryPage{Items: items, Total: total}, nil
 }
 
 func CreateStoryboardMemory(projectID, userID string, input StoryboardMemoryInput) (model.StoryboardMemory, error) {
@@ -329,17 +348,19 @@ func UpdateStoryboardMemory(projectID, memoryID, userID string, input Storyboard
 	return memory, brainstormError(err)
 }
 
-func DeleteStoryboardMemory(projectID, memoryID, userID string) (model.StoryboardMemory, error) {
+func DeleteStoryboardMemory(projectID, memoryID, userID string) (StoryboardBrainstormDeleteResult, error) {
 	projectID, err := validateBrainstormID(projectID, "项目 ID")
 	if err != nil {
-		return model.StoryboardMemory{}, err
+		return StoryboardBrainstormDeleteResult{}, err
 	}
 	memoryID, err = validateBrainstormID(memoryID, "Memory ID")
 	if err != nil {
-		return model.StoryboardMemory{}, err
+		return StoryboardBrainstormDeleteResult{}, err
 	}
-	memory, err := repository.DeleteStoryboardMemory(projectID, memoryID, userID)
-	return memory, brainstormError(err)
+	if _, err := repository.DeleteStoryboardMemory(projectID, memoryID, userID); err != nil {
+		return StoryboardBrainstormDeleteResult{}, brainstormError(err)
+	}
+	return StoryboardBrainstormDeleteResult{ID: memoryID, DeletedAt: studioNow()}, nil
 }
 
 func normalizeStoryboardMemory(projectID, userID, memoryID string, input StoryboardMemoryInput) (model.StoryboardMemory, error) {
@@ -418,6 +439,20 @@ func normalizeStoryboardMemoryTags(input []string) ([]string, error) {
 		}
 	}
 	return tags, nil
+}
+
+func brainstormAssistantAllowedFrom(status string) []string {
+	active := []string{model.BrainstormStatusPending, model.BrainstormStatusStreaming, model.BrainstormStatusAwaitingApproval}
+	switch status {
+	case model.BrainstormStatusPending:
+		return []string{model.BrainstormStatusPending}
+	case model.BrainstormStatusStreaming:
+		return active
+	case model.BrainstormStatusAwaitingApproval:
+		return active
+	default:
+		return active
+	}
 }
 
 func normalizeBrainstormOutput(raw json.RawMessage) (json.RawMessage, error) {
