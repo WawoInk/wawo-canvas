@@ -54,12 +54,38 @@ export type BrainstormStoryboardSnapshot = Pick<StoryboardRecord, "id" | "revisi
 
 export type BrainstormFocus = { kind: "project" } | { kind: "scene"; sceneId: string } | { kind: "segment"; sceneId: string; segmentId: string } | { kind: "shot"; sceneId: string; segmentId: string; shotId: string };
 
+export type BrainstormMemoryScope = { kind: "project" } | { kind: "scene"; sceneId: string } | { kind: "shot"; shotId: string };
+
 export type BrainstormMemoryCandidate = {
     id: string;
+    kind?: string;
     content: string;
     confirmed: boolean;
     tags?: string[];
-    scope: { kind: "project" } | { kind: "scene"; sceneId: string } | { kind: "shot"; shotId: string };
+    sourceMessageId?: string;
+    operationId?: string;
+    updatedAt?: string;
+    scope: BrainstormMemoryScope;
+};
+
+export type BrainstormProjectMemory = {
+    id: string;
+    kind: string;
+    scope: BrainstormMemoryScope["kind"];
+    path: string;
+    content: string;
+    tags: string[];
+    sourceMessageId: string;
+    operationId: string;
+    createdAt?: string;
+    updatedAt?: string;
+};
+
+export type BrainstormMemoryWriteInput = Pick<BrainstormProjectMemory, "id" | "kind" | "scope" | "path" | "content" | "tags" | "sourceMessageId" | "operationId">;
+
+export type BrainstormMemoryState = {
+    candidates: BrainstormMemoryCandidate[];
+    memories: BrainstormProjectMemory[];
 };
 
 export type BrainstormSummaryCheckpoint = {
