@@ -202,7 +202,9 @@ export type BrainstormToolExecution = {
     sideEffect?: "none" | "write";
 };
 
-export type BrainstormExecuteTool = (call: BrainstormToolCall, options: { signal?: AbortSignal; definition: BrainstormToolDefinition }) => Promise<BrainstormToolExecution>;
+export type BrainstormExecuteTool = (call: BrainstormToolCall, options: { signal?: AbortSignal; definition: BrainstormToolDefinition; authorization: "auto" | "approved" }) => Promise<BrainstormToolExecution>;
+
+export type BrainstormPreflightTool = (call: BrainstormToolCall, options: { signal?: AbortSignal; definition: BrainstormToolDefinition }) => Promise<BrainstormToolExecution>;
 
 export type BrainstormTurnEvent = { type: "status"; status: BrainstormAssistantStatus } | { type: "text_delta"; delta: string } | { type: "output_item"; item: BrainstormOutputItem } | { type: "retry" };
 
@@ -233,6 +235,7 @@ export type BrainstormTurnResult =
 export type BrainstormTurnDependencies = {
     complete: BrainstormComplete;
     executeTool: BrainstormExecuteTool;
+    preflightTool?: BrainstormPreflightTool;
     isRetryableCompletionError?: (error: unknown) => boolean;
 };
 
