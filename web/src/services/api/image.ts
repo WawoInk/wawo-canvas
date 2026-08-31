@@ -37,10 +37,29 @@ export type ResponseFunctionTool = {
     };
 };
 
+export type ModelUsage = {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+};
+
+export type ModelFinishReason = "stop" | "length" | "tool_calls" | "content_filter" | "error" | "other";
+
 export type ToolResponseResult = {
     content: string;
     toolCalls: ResponseToolCall[];
+    usage?: ModelUsage;
+    finishReason?: ModelFinishReason;
 };
+
+export type ModelStreamEvent =
+    | { type: "phase"; phase: "requesting" | "streaming" }
+    | { type: "text_delta"; delta: string; content: string }
+    | { type: "tool_call_delta"; index: number; id?: string; name?: string; argumentsDelta: string; arguments: string }
+    | ({ type: "usage" } & ModelUsage)
+    | { type: "done"; result: ToolResponseResult }
+    | { type: "error"; error: Error }
+    | { type: "abort"; error: Error };
 
 type ToolChoice = "auto" | "required" | { type: "function"; name: string };
 type ResponseMessageContent = AiTextMessage["content"] | string;
@@ -86,9 +105,12 @@ type GeminiPayload = {
     candidates?: Array<{ content?: { parts?: GeminiPart[] }; finishReason?: string }>;
     models?: Array<{ name?: string }>;
     error?: { message?: string };
+    code?: number;
+    msg?: string;
     promptFeedback?: { blockReason?: string };
+    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
 };
-type GeminiStreamState = { buffer: string; text: string; toolCalls: ResponseToolCall[]; error?: string };
+type GeminiStreamState = { buffer: string; text: string; toolCalls: ResponseToolCall[]; usage?: ModelUsage; finishReason?: ModelFinishReason; done?: boolean };
 type ChatMessage = {
     role: "system" | "user" | "assistant" | "tool";
     content?: string | null;
@@ -101,20 +123,143 @@ type ChatToolDef = {
     function: { name: string; description?: string; parameters: Record<string, unknown> };
 };
 
+type ChatUsage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 type ChatCompletionChunk = {
     choices?: Array<{ delta?: { role?: string; content?: string | null; tool_calls?: Array<{ index?: number; id?: string; type?: "function"; function?: { name?: string; arguments?: string } }> }; finish_reason?: string | null }>;
-};
-
-type ChatCompletionPayload = {
-    id?: string;
-    choices?: Array<{ message?: { role?: string; content?: string | null; tool_calls?: ResponseToolCall[] }; finish_reason?: string }>;
+    usage?: ChatUsage;
     error?: { message?: string };
     code?: number;
     msg?: string;
 };
 
-type ChatStreamState = { buffer: string; text: string; toolCalls: Map<number, { id: string; name: string; args: string }>; error?: string };
-type RequestOptions = { signal?: AbortSignal };
+type ChatCompletionPayload = {
+    id?: string;
+    choices?: Array<{
+        message?: { role?: string; content?: string | null; tool_calls?: Array<{ id?: string; type?: "function"; function?: { name?: string; arguments?: string } }> };
+        finish_reason?: string;
+    }>;
+    usage?: ChatUsage;
+    error?: { message?: string };
+    code?: number;
+    msg?: string;
+};
+
+type ChatStreamState = { buffer: string; text: string; toolCalls: Map<number, { id: string; name: string; args: string }>; usage?: ModelUsage; finishReason?: ModelFinishReason; done?: boolean };
+export type RequestOptions = { signal?: AbortSignal; onEvent?: (event: ModelStreamEvent) => void; includeUsage?: boolean };
+
+function normalizeFinishReason(reason?: string | null): ModelFinishReason | undefined {
+    switch (reason?.trim().toLowerCase()) {
+        case "stop":
+            return "stop";
+        case "length":
+        case "max_tokens":
+            return "length";
+        case "tool_calls":
+        case "function_call":
+            return "tool_calls";
+        case "content_filter":
+        case "safety":
+        case "recitation":
+        case "blocklist":
+        case "prohibited_content":
+        case "spii":
+        case "image_safety":
+            return "content_filter";
+        case "error":
+        case "malformed_function_call":
+        case "unexpected_tool_call":
+        case "too_many_tool_calls":
+        case "missing_thought_signature":
+        case "malformed_response":
+            return "error";
+        case undefined:
+        case "":
+            return undefined;
+        default:
+            return "other";
+    }
+}
+
+function normalizeChatUsage(usage?: ChatUsage): ModelUsage | undefined {
+    if (!usage || !Object.values(usage).some((value) => typeof value === "number")) return undefined;
+    const inputTokens = usage.prompt_tokens || 0;
+    const outputTokens = usage.completion_tokens || 0;
+    return { inputTokens, outputTokens, totalTokens: usage.total_tokens ?? inputTokens + outputTokens };
+}
+
+function normalizeGeminiUsage(usage?: GeminiPayload["usageMetadata"]): ModelUsage | undefined {
+    if (!usage || !Object.values(usage).some((value) => typeof value === "number")) return undefined;
+    const inputTokens = usage.promptTokenCount || 0;
+    const outputTokens = usage.candidatesTokenCount || 0;
+    return { inputTokens, outputTokens, totalTokens: usage.totalTokenCount ?? inputTokens + outputTokens };
+}
+
+function isJsonMediaType(contentType: string) {
+    return /(?:^|[\/+])json(?:;|$)/i.test(contentType);
+}
+
+function isEventStreamMediaType(contentType: string) {
+    return /text\/event-stream/i.test(contentType);
+}
+
+function looksLikeJson(text: string) {
+    const first = text.trimStart()[0];
+    return first === "{" || first === "[";
+}
+
+async function readResponseStart(reader: ReadableStreamDefaultReader<Uint8Array>, decoder: TextDecoder) {
+    let text = "";
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) return { done, text: text + decoder.decode() };
+        text += decoder.decode(value, { stream: true });
+        if (text.trim()) return { done, text };
+    }
+}
+
+async function readRemainingText(reader: ReadableStreamDefaultReader<Uint8Array>, decoder: TextDecoder, text: string) {
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) return text + decoder.decode();
+        text += decoder.decode(value, { stream: true });
+    }
+}
+
+function completeRequest(result: ToolResponseResult, options?: RequestOptions) {
+    options?.onEvent?.({ type: "done", result });
+    return result;
+}
+
+function completeNonStreamingRequest(result: ToolResponseResult, onDelta?: (text: string) => void, options?: RequestOptions) {
+    if (result.content) {
+        onDelta?.(result.content);
+        options?.onEvent?.({ type: "text_delta", delta: result.content, content: result.content });
+    }
+    result.toolCalls.forEach((toolCall, index) =>
+        options?.onEvent?.({
+            type: "tool_call_delta",
+            index,
+            id: toolCall.id,
+            name: toolCall.function.name,
+            argumentsDelta: toolCall.function.arguments,
+            arguments: toolCall.function.arguments,
+        }),
+    );
+    if (result.usage) options?.onEvent?.({ type: "usage", ...result.usage });
+    return result;
+}
+
+function failRequest(error: unknown, options: RequestOptions | undefined, fallback: string): never {
+    if (options?.signal?.aborted || (error instanceof Error && error.name === "AbortError") || axios.isCancel(error)) {
+        const abortError = error instanceof Error && error.name === "AbortError" ? error : new Error(readAxiosError(error, i18n.t("errors.requestCancelled")));
+        if (abortError.name !== "AbortError") abortError.name = "AbortError";
+        options?.onEvent?.({ type: "abort", error: abortError });
+        throw abortError;
+    }
+    const requestError = new Error(readAxiosError(error, fallback));
+    options?.onEvent?.({ type: "error", error: requestError });
+    throw requestError;
+}
 
 function responseHeader(headers: unknown, name: string) {
     if (!headers || typeof headers !== "object") return "";
@@ -404,6 +549,7 @@ function validateResponsePayload(payload: ResponseApiPayload) {
 }
 
 function validateGeminiPayload(payload: GeminiPayload) {
+    if (typeof payload.code === "number" && payload.code !== 0) throw new Error(payload.msg || i18n.t("errors.requestFailed"));
     if (payload.error?.message) throw new Error(payload.error.message);
     if (payload.promptFeedback?.blockReason) throw new Error(i18n.t("errors.image.geminiRejected", { reason: payload.promptFeedback.blockReason }));
 }
@@ -517,8 +663,10 @@ function toChatTools(tools: ResponseFunctionTool[]): ChatToolDef[] {
 }
 
 async function requestChatCompletions(config: AiConfig, messages: ResponseInputMessage[], tools?: ResponseFunctionTool[], toolChoice: ToolChoice = "auto", onDelta?: (text: string) => void, options?: RequestOptions): Promise<ToolResponseResult> {
+    options?.onEvent?.({ type: "phase", phase: "requesting" });
     const chatMessages = toChatMessages(withSystemMessage(config, messages));
     const body: Record<string, unknown> = { model: config.model, messages: chatMessages, stream: true };
+    if (options?.includeUsage) body.stream_options = { include_usage: true };
     if (tools?.length) {
         body.tools = toChatTools(tools);
         body.tool_choice = toolChoice;
@@ -530,76 +678,134 @@ async function requestChatCompletions(config: AiConfig, messages: ResponseInputM
         signal: options?.signal,
     });
     if (!response.ok) throw new Error(await readFetchError(response, i18n.t("errors.requestFailed")));
-    if (!response.body) {
+    options?.onEvent?.({ type: "phase", phase: "streaming" });
+    const contentType = response.headers?.get?.("content-type") || "";
+    const eventStream = isEventStreamMediaType(contentType);
+    if (isJsonMediaType(contentType) || (!response.body && !eventStream)) {
         const payload = (await response.json()) as ChatCompletionPayload;
         validateChatCompletionPayload(payload);
-        return parseChatCompletionPayload(payload);
+        return completeNonStreamingRequest(parseChatCompletionPayload(payload), onDelta, options);
     }
+    if (!response.body) throw new Error("模型流响应缺少响应体");
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     const state: ChatStreamState = { buffer: "", text: "", toolCalls: new Map() };
-    for (;;) {
+    if (!eventStream) {
+        const start = await readResponseStart(reader, decoder);
+        if (looksLikeJson(start.text)) {
+            const payload = JSON.parse(start.done ? start.text : await readRemainingText(reader, decoder, start.text)) as ChatCompletionPayload;
+            validateChatCompletionPayload(payload);
+            return completeNonStreamingRequest(parseChatCompletionPayload(payload), onDelta, options);
+        }
+        consumeChatStream(state, start.text, onDelta, options);
+    }
+    while (!state.done) {
         const { done, value } = await reader.read();
         if (done) break;
-        consumeChatStream(state, decoder.decode(value, { stream: true }), onDelta);
-        if (state.error) throw new Error(state.error);
+        consumeChatStream(state, decoder.decode(value, { stream: true }), onDelta, options);
     }
-    consumeChatStream(state, decoder.decode(), onDelta, true);
-    if (state.error) throw new Error(state.error);
-    return { content: state.text, toolCalls: Array.from(state.toolCalls.values()).map((tc) => ({ id: tc.id, type: "function" as const, function: { name: tc.name, arguments: tc.args } })) };
+    consumeChatStream(state, decoder.decode(), onDelta, options, true);
+    const toolCalls = Array.from(state.toolCalls.entries())
+        .sort(([left], [right]) => left - right)
+        .map(([, toolCall]) => toolCall)
+        .filter((toolCall) => toolCall.name)
+        .map((toolCall) => ({ id: toolCall.id || nanoid(), type: "function" as const, function: { name: toolCall.name, arguments: toolCall.args } }));
+    return {
+        content: state.text,
+        toolCalls,
+        ...(state.usage ? { usage: state.usage } : {}),
+        ...(state.finishReason ? { finishReason: state.finishReason } : {}),
+    };
 }
 
-function consumeChatStream(state: ChatStreamState, text: string, onDelta?: (text: string) => void, flush = false) {
+function consumeChatStream(state: ChatStreamState, text: string, onDelta?: (text: string) => void, options?: RequestOptions, flush = false) {
     state.buffer += text;
     for (;;) {
         const match = state.buffer.match(/\r?\n\r?\n/);
         if (!match || match.index === undefined) break;
-        consumeChatStreamBlock(state.buffer.slice(0, match.index), state, onDelta);
+        consumeChatStreamBlock(state.buffer.slice(0, match.index), state, onDelta, options);
         state.buffer = state.buffer.slice(match.index + match[0].length);
     }
     if (flush && state.buffer.trim()) {
-        consumeChatStreamBlock(state.buffer, state, onDelta);
+        consumeChatStreamBlock(state.buffer, state, onDelta, options);
         state.buffer = "";
     }
 }
 
-function consumeChatStreamBlock(block: string, state: ChatStreamState, onDelta?: (text: string) => void) {
+function consumeChatStreamBlock(block: string, state: ChatStreamState, onDelta?: (text: string) => void, options?: RequestOptions) {
     const data = block
         .split(/\r?\n/)
         .filter((line) => line.startsWith("data:"))
         .map((line) => line.slice(5).replace(/^ /, ""))
         .join("\n")
         .trim();
-    if (!data || data === "[DONE]") return;
+    if (!data || state.done) return;
+    if (data === "[DONE]") {
+        state.done = true;
+        return;
+    }
     const chunk = JSON.parse(data) as ChatCompletionChunk;
+    validateChatCompletionPayload(chunk);
     for (const choice of chunk.choices || []) {
+        const finishReason = normalizeFinishReason(choice.finish_reason);
+        if (finishReason === "error") throw new Error(`模型返回错误结束原因：${choice.finish_reason || "error"}`);
+        if (finishReason) state.finishReason = finishReason;
         const delta = choice.delta;
         if (!delta) continue;
         if (delta.content) {
             state.text += delta.content;
             onDelta?.(state.text);
+            options?.onEvent?.({ type: "text_delta", delta: delta.content, content: state.text });
         }
-        if (delta.tool_calls) {
-            for (const tc of delta.tool_calls) {
-                const idx = tc.index ?? 0;
-                const existing = state.toolCalls.get(idx) || { id: "", name: "", args: "" };
-                if (tc.id) existing.id = tc.id;
-                if (tc.function?.name) existing.name = tc.function.name;
-                if (tc.function?.arguments) existing.args += tc.function.arguments;
-                if (existing.id && existing.name) state.toolCalls.set(idx, existing);
-            }
+        for (const toolCall of delta.tool_calls || []) {
+            const index = toolCall.index ?? 0;
+            const existing = state.toolCalls.get(index) || { id: "", name: "", args: "" };
+            if (toolCall.id) existing.id = toolCall.id;
+            if (toolCall.function?.name) existing.name = toolCall.function.name;
+            const argumentsDelta = toolCall.function?.arguments || "";
+            existing.args += argumentsDelta;
+            state.toolCalls.set(index, existing);
+            options?.onEvent?.({
+                type: "tool_call_delta",
+                index,
+                ...(existing.id ? { id: existing.id } : {}),
+                ...(existing.name ? { name: existing.name } : {}),
+                argumentsDelta,
+                arguments: existing.args,
+            });
         }
+    }
+    const usage = normalizeChatUsage(chunk.usage);
+    if (usage) {
+        state.usage = usage;
+        options?.onEvent?.({ type: "usage", ...usage });
     }
 }
 
-function validateChatCompletionPayload(payload: ChatCompletionPayload) {
+function validateChatCompletionPayload(payload: { error?: { message?: string }; code?: number; msg?: string }) {
     if (typeof payload.code === "number" && payload.code !== 0) throw new Error(payload.msg || i18n.t("errors.requestFailed"));
     if (payload.error?.message) throw new Error(payload.error.message);
 }
 
 function parseChatCompletionPayload(payload: ChatCompletionPayload): ToolResponseResult {
-    const message = payload.choices?.[0]?.message;
-    return { content: message?.content || "", toolCalls: message?.tool_calls || [] };
+    const choice = payload.choices?.[0];
+    const message = choice?.message;
+    const usage = normalizeChatUsage(payload.usage);
+    const finishReason = normalizeFinishReason(choice?.finish_reason);
+    if (finishReason === "error") throw new Error(`模型返回错误结束原因：${choice?.finish_reason || "error"}`);
+    const toolCalls = (message?.tool_calls || [])
+        .filter((toolCall) => toolCall.function?.name)
+        .map((toolCall) => ({
+            id: toolCall.id || nanoid(),
+            type: "function" as const,
+            function: { name: toolCall.function?.name || "", arguments: toolCall.function?.arguments || "" },
+        }));
+    return {
+        content: message?.content || "",
+        toolCalls,
+        ...(usage ? { usage } : {}),
+        ...(finishReason ? { finishReason } : {}),
+    };
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -677,77 +883,113 @@ function toGeminiToolOptions(tools: ResponseFunctionTool[], toolChoice: ToolChoi
  * to the backend proxy at `/api/v1*` using `aiApiUrl`/`aiHeaders`.
  * The backend re-writes the protocol to Gemini upstream per the selected channel.
  */
-async function postGeminiViaBackend(config: AiConfig, path: string, geminiBody: Record<string, unknown>): Promise<GeminiPayload> {
+async function postGeminiViaBackend(config: AiConfig, path: string, geminiBody: Record<string, unknown>, options?: RequestOptions): Promise<GeminiPayload> {
     const url = aiApiUrl(config, path);
     const headers = { ...aiHeaders(config, "application/json"), Accept: "application/json" };
     const response = await fetch(url, {
         method: "POST",
         headers,
-        body: JSON.stringify(geminiBody),
+        body: JSON.stringify({ model: config.model, ...geminiBody }),
+        signal: options?.signal,
     });
     if (!response.ok) throw new Error(await readFetchError(response, i18n.t("errors.backendProxyFailed")));
     return (await response.json()) as GeminiPayload;
 }
 
 async function requestGeminiStreamingResponse(config: AiConfig, body: Record<string, unknown>, onDelta?: (text: string) => void, options?: RequestOptions): Promise<ToolResponseResult> {
-    if (config.channelMode === "remote") {
-        const payload = await postGeminiViaBackend(config, "/chat/completions", body);
-        return parseGeminiToolResponse(payload);
-    }
-    const response = await fetch(`${geminiApiUrl(config, "streamGenerateContent")}?alt=sse`, {
+    options?.onEvent?.({ type: "phase", phase: "requesting" });
+    const remote = config.channelMode === "remote";
+    const response = await fetch(remote ? aiApiUrl(config, "/chat/completions") : `${geminiApiUrl(config, "streamGenerateContent")}?alt=sse`, {
         method: "POST",
-        headers: geminiHeaders(config),
-        body: JSON.stringify(body),
+        headers: remote ? { ...aiHeaders(config, "application/json"), Accept: "text/event-stream" } : { ...geminiHeaders(config), Accept: "text/event-stream" },
+        body: JSON.stringify(remote ? { model: config.model, ...body, stream: true } : body),
         signal: options?.signal,
     });
-    if (!response.ok) throw new Error(await readFetchError(response, i18n.t("errors.requestFailed")));
-    if (!response.body) {
+    if (!response.ok) throw new Error(await readFetchError(response, remote ? i18n.t("errors.backendProxyFailed") : i18n.t("errors.requestFailed")));
+    options?.onEvent?.({ type: "phase", phase: "streaming" });
+    const contentType = response.headers?.get?.("content-type") || "";
+    const eventStream = isEventStreamMediaType(contentType);
+    if (isJsonMediaType(contentType) || (!response.body && !eventStream)) {
         const payload = (await response.json()) as GeminiPayload;
-        return parseGeminiToolResponse(payload);
+        return completeNonStreamingRequest(parseGeminiToolResponse(payload), onDelta, options);
     }
+    if (!response.body) throw new Error("模型流响应缺少响应体");
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     const state: GeminiStreamState = { buffer: "", text: "", toolCalls: [] };
-    for (;;) {
+    if (!eventStream) {
+        const start = await readResponseStart(reader, decoder);
+        if (looksLikeJson(start.text)) {
+            const payload = JSON.parse(start.done ? start.text : await readRemainingText(reader, decoder, start.text)) as GeminiPayload;
+            return completeNonStreamingRequest(parseGeminiToolResponse(payload), onDelta, options);
+        }
+        consumeGeminiStreamText(state, start.text, onDelta, options);
+    }
+    while (!state.done) {
         const { done, value } = await reader.read();
         if (done) break;
-        consumeGeminiStreamText(state, decoder.decode(value, { stream: true }), onDelta);
-        if (state.error) throw new Error(state.error);
+        consumeGeminiStreamText(state, decoder.decode(value, { stream: true }), onDelta, options);
     }
-    consumeGeminiStreamText(state, decoder.decode(), onDelta, true);
-    if (state.error) throw new Error(state.error);
-    return { content: state.text, toolCalls: state.toolCalls };
+    consumeGeminiStreamText(state, decoder.decode(), onDelta, options, true);
+    const finishReason = state.toolCalls.length ? "tool_calls" : state.finishReason;
+    return {
+        content: state.text,
+        toolCalls: state.toolCalls,
+        ...(state.usage ? { usage: state.usage } : {}),
+        ...(finishReason ? { finishReason } : {}),
+    };
 }
 
-function consumeGeminiStreamText(state: GeminiStreamState, text: string, onDelta?: (text: string) => void, flush = false) {
+function consumeGeminiStreamText(state: GeminiStreamState, text: string, onDelta?: (text: string) => void, options?: RequestOptions, flush = false) {
     state.buffer += text;
     for (;;) {
         const match = state.buffer.match(/\r?\n\r?\n/);
         if (!match || match.index === undefined) break;
-        consumeGeminiStreamBlock(state.buffer.slice(0, match.index), state, onDelta);
+        consumeGeminiStreamBlock(state.buffer.slice(0, match.index), state, onDelta, options);
         state.buffer = state.buffer.slice(match.index + match[0].length);
     }
     if (flush && state.buffer.trim()) {
-        consumeGeminiStreamBlock(state.buffer, state, onDelta);
+        consumeGeminiStreamBlock(state.buffer, state, onDelta, options);
         state.buffer = "";
     }
 }
 
-function consumeGeminiStreamBlock(block: string, state: GeminiStreamState, onDelta?: (text: string) => void) {
+function consumeGeminiStreamBlock(block: string, state: GeminiStreamState, onDelta?: (text: string) => void, options?: RequestOptions) {
     const data = block
         .split(/\r?\n/)
         .filter((line) => line.startsWith("data:"))
         .map((line) => line.slice(5).replace(/^ /, ""))
         .join("\n")
         .trim();
-    if (!data || data === "[DONE]") return;
+    if (!data || state.done) return;
+    if (data === "[DONE]") {
+        state.done = true;
+        return;
+    }
     const result = parseGeminiToolResponse(JSON.parse(data) as GeminiPayload);
     if (result.content) {
         state.text += result.content;
         onDelta?.(state.text);
+        options?.onEvent?.({ type: "text_delta", delta: result.content, content: state.text });
     }
+    result.toolCalls.forEach((toolCall, offset) => {
+        const index = state.toolCalls.length + offset;
+        options?.onEvent?.({
+            type: "tool_call_delta",
+            index,
+            id: toolCall.id,
+            name: toolCall.function.name,
+            argumentsDelta: toolCall.function.arguments,
+            arguments: toolCall.function.arguments,
+        });
+    });
     state.toolCalls.push(...result.toolCalls);
+    if (result.usage) {
+        state.usage = result.usage;
+        options?.onEvent?.({ type: "usage", ...result.usage });
+    }
+    if (result.finishReason) state.finishReason = result.finishReason;
 }
 
 function parseGeminiToolResponse(payload: GeminiPayload): ToolResponseResult {
@@ -767,7 +1009,12 @@ function parseGeminiToolResponse(payload: GeminiPayload): ToolResponseResult {
                 ...(thoughtSignature ? { thoughtSignature } : {}),
             };
         });
-    return { content, toolCalls };
+    const usage = normalizeGeminiUsage(payload.usageMetadata);
+    const rawFinishReason = payload.candidates?.find((candidate) => candidate.finishReason)?.finishReason;
+    const normalizedFinishReason = normalizeFinishReason(rawFinishReason);
+    if (normalizedFinishReason === "error") throw new Error(`Gemini 返回错误结束原因：${rawFinishReason || "error"}`);
+    const finishReason = toolCalls.length ? "tool_calls" : normalizedFinishReason;
+    return { content, toolCalls, ...(usage ? { usage } : {}), ...(finishReason ? { finishReason } : {}) };
 }
 
 async function requestGeminiImages(config: AiConfig, prompt: string, references: ReferenceImage[], count: number, options?: RequestOptions) {
@@ -905,16 +1152,19 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
     const requestConfig = resolveModelRequestConfig(config, config.model || config.textModel);
     try {
         const emptyAnswer = i18n.t("errors.noContentReturned");
-        if (requestConfig.apiFormat === "gemini") {
-            const answer = (await requestGeminiStreamingResponse(requestConfig, toGeminiBody(requestConfig, messages), onDelta, options)).content || emptyAnswer;
-            if (answer === emptyAnswer) onDelta(answer);
-            return answer;
+        const result =
+            requestConfig.apiFormat === "gemini"
+                ? await requestGeminiStreamingResponse(requestConfig, toGeminiBody(requestConfig, messages), onDelta, options)
+                : await requestChatCompletions(requestConfig, messages as ResponseInputMessage[], undefined, "auto", onDelta, options);
+        const answer = result.content || emptyAnswer;
+        if (!result.content) {
+            onDelta(answer);
+            options?.onEvent?.({ type: "text_delta", delta: answer, content: answer });
         }
-        const answer = (await requestChatCompletions(requestConfig, messages as ResponseInputMessage[], undefined, "auto", onDelta, options)).content || emptyAnswer;
-        if (answer === emptyAnswer) onDelta(answer);
+        completeRequest({ ...result, content: answer }, options);
         return answer;
     } catch (error) {
-        throw new Error(readAxiosError(error, i18n.t("errors.requestFailed")));
+        return failRequest(error, options, i18n.t("errors.requestFailed"));
     } finally {
         if (requestConfig.channelMode === "remote") queueCreditBalanceRefresh();
     }
@@ -1042,12 +1292,13 @@ export async function cancelAsyncImageTask(config: AiConfig, task: AsyncImageTas
 export async function requestToolResponse(config: AiConfig, messages: ResponseInputMessage[], tools: ResponseFunctionTool[], toolChoice: ToolChoice = "auto", onDelta?: (text: string) => void, options?: RequestOptions): Promise<ToolResponseResult> {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.textModel);
     try {
-        if (requestConfig.apiFormat === "gemini") {
-            return await requestGeminiStreamingResponse(requestConfig, toGeminiBody(requestConfig, messages, toGeminiToolOptions(tools, toolChoice)), onDelta, options);
-        }
-        return await requestChatCompletions(requestConfig, messages, tools, toolChoice, onDelta, options);
+        const result =
+            requestConfig.apiFormat === "gemini"
+                ? await requestGeminiStreamingResponse(requestConfig, toGeminiBody(requestConfig, messages, toGeminiToolOptions(tools, toolChoice)), onDelta, options)
+                : await requestChatCompletions(requestConfig, messages, tools, toolChoice, onDelta, options);
+        return completeRequest(result, options);
     } catch (error) {
-        throw new Error(readAxiosError(error, i18n.t("errors.requestFailed")));
+        return failRequest(error, options, i18n.t("errors.requestFailed"));
     } finally {
         if (requestConfig.channelMode === "remote") queueCreditBalanceRefresh();
     }
