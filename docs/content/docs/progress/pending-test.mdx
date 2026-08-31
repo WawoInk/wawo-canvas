@@ -5,6 +5,8 @@ description: 当前版本已实现但仍需人工验证的变更项
 
 # 待测试
 
+- 统一文本模型流事件协议：在现有 Storyboard、剧本 Agent 和 Canvas 在线助手中分别使用 OpenAI-compatible 与 Gemini 文本渠道，确认累计文本仍持续覆盖现有 UI，不会只显示最后一个分片；重点验证 OpenAI Tool Arguments 被任意拆分后仍组成完整 JSON，多 Tool Call 不串线，Gemini Function Call 映射为相同内部结构，Usage、结束原因和 Done 只在可用时返回。主动停止时应以 `AbortError` 区分用户取消，已生成的部分文本保留；流中业务错误应显示上游错误且不得误发 Done。远程 Gemini 应复用 Compatibility Proxy 真流式路径并传播同一 AbortSignal，普通 JSON 降级响应仍可完成。自动化测试已覆盖任意字节边界、Tool Arguments、Usage、Done、Error、Abort、JSON 降级与旧调用兼容；真实浏览器、本地/远程上游联调和停止交互仍由用户人工验证。
+
 - 远程 AI Compatibility Proxy 流式、取消与审计：配置远程文本渠道并使用可控制首段和结束时机的 SSE/NDJSON 上游，确认第一段内容会在上游完整响应结束前到达浏览器，流式响应不携带 `Content-Length`；收到第一段后停止生成、关闭响应或离开页面时，上游请求应被取消，平台任务不得记录为完整成功，已扣积分应按同一任务只退款一次。流式上游在响应开始前返回 4xx/5xx 时应显示可读的 JSON 失败信息，而不是伪装为成功流；流已经开始后的取消或中断不得再向流中拼接 JSON 错误。请同时检查用户和管理员使用日志详情中的请求 Header、请求正文、响应 Header、响应正文及原始错误，不得出现 Authorization、真实 API Key 或签名 URL/敏感 Query 的值，同时实际返回给浏览器的上游数据应保持可用。普通非流式 JSON、图片、音频和视频 Compatibility 请求的响应、扣费与任务记录应保持原有行为。Go 自动化测试负责验证分块时序、取消传播、任务终态、一次性退款、审计脱敏和非流式回归；真实浏览器停止操作、部署层响应缓冲及外部上游连通性仍由用户人工验证。
 
 - 可变 Storyboard Workspace：请在真实浏览器中创建一个未带 `directorPlan`、`document`、`validation` 的项目，确认可保存为 `draft`、`revision=1`，刷新或重新登录后列表与详情仍可恢复；随后生成或编辑 Document 并再次保存，确认同一 Project ID 和原 `createdAt` 保持不变、状态变为 `ready`、revision 逐次递增。重新生成时确认既有 Scene、Segment、Shot 保留稳定 ID，新实体获得非空新 ID；在同级列表前方插入新实体并重编号后，原实体也应按自身 ID 保持身份，不得把旧 ID 串给新实体。再用两个窗口加载同一 revision，先后保存不同修改，确认后提交的旧 revision 不会静默覆盖，并能取得服务端最新完整项目；同时验证删除、账号 A/B 所有权隔离，以及更新成功后刷新读取的是新 artifact。必要时配合受控对象存储或数据库失败检查：切换前失败仍能读取旧 artifact，新对象得到补偿清理，成功切换后旧对象仅做 best-effort 清理。当前条目只验证 Storyboard Workspace；Brainstorm Conversation/Message/Project Memory 后端持久化另见下一条，Canvas 关联和其他业务数据统一云同步仍未实现。
