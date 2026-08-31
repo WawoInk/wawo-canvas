@@ -10,6 +10,8 @@ import type {
     BrainstormMessage,
     BrainstormModelMessage,
     BrainstormOutputItem,
+    BrainstormToolCall,
+    BrainstormToolResult,
 } from "./brainstorm-agent";
 import { selectBrainstormMemories } from "./brainstorm-agent-memory.ts";
 import { getBrainstormSkill } from "./brainstorm-agent-skills.ts";
@@ -157,7 +159,7 @@ function historyCandidates(messages: BrainstormMessage[]): {
 } {
     let sequence = 0;
     const positioned = messages.flatMap((message, messageIndex) =>
-        message.role === "assistant" ? message.output.map((item) => ({ item, messageIndex, order: sequence++ })).filter((entry) => entry.item.type === "tool_call" || entry.item.type === "tool_result") : [],
+        message.role === "assistant" ? message.output.filter((item): item is BrainstormToolCall | BrainstormToolResult => item.type === "tool_call" || item.type === "tool_result").map((item) => ({ item, messageIndex, order: sequence++ })) : [],
     );
     const pairs = new Map<string, typeof positioned>();
     for (const entry of positioned) pairs.set(entry.item.callId, [...(pairs.get(entry.item.callId) ?? []), entry]);

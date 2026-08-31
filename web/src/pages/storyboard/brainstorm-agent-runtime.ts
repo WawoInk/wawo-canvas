@@ -147,7 +147,9 @@ function isRetryableCompletionError(error: unknown) {
     const text = `${typeof value?.code === "string" ? value.code : ""} ${error instanceof Error ? error.message : String(error)}`.toLowerCase();
     const messageStatus = text.match(/\b([45]\d{2})\b/);
     if (messageStatus) return retryableStatus(Number(messageStatus[1]));
-    return /network error|failed to fetch|fetch failed|network request failed|econnreset|econnrefused|enotfound|eai_again|socket hang up|connection (?:reset|refused|closed)|网络(?:错误|失败|中断)|连接(?:失败|中断|重置)|timeout|timed out|超时|rate.?limit|too many requests|限流|service unavailable|upstream unavailable|服务暂时不可用|后端服务失败/.test(text);
+    return /network error|failed to fetch|fetch failed|network request failed|econnreset|econnrefused|enotfound|eai_again|socket hang up|connection (?:reset|refused|closed)|网络(?:错误|失败|中断)|连接(?:失败|中断|重置)|timeout|timed out|超时|rate.?limit|too many requests|限流|service unavailable|upstream unavailable|服务暂时不可用|后端服务失败/.test(
+        text,
+    );
 }
 
 async function createSummaryCheckpoint(plan: BrainstormSummaryPlan, conversationId: string, model: string, completion: BrainstormComplete, signal?: AbortSignal): Promise<BrainstormSummaryCheckpoint> {
@@ -186,7 +188,15 @@ async function createSummaryCheckpoint(plan: BrainstormSummaryPlan, conversation
 }
 
 function outputMessages(output: BrainstormOutputItem[]): BrainstormModelMessage[] {
-    return output.flatMap((item) => (item.type === "text" ? [{ type: "message" as const, role: "assistant" as const, content: item.text }] : item.type === "tool_result" && item.status === "awaiting_approval" ? [] : [item]));
+    const messages: BrainstormModelMessage[] = [];
+    for (const item of output) {
+        if (item.type === "text") {
+            messages.push({ type: "message", role: "assistant", content: item.text });
+        } else if (item.type !== "tool_result" || item.status !== "awaiting_approval") {
+            messages.push(item);
+        }
+    }
+    return messages;
 }
 
 function persistedContinuation(context: BrainstormContextResult, output: BrainstormOutputItem[]): BrainstormTurnContinuation {
