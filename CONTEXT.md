@@ -76,6 +76,32 @@ _Avoid_: Browser cache namespace
 An enterprise-owned asset read on demand from the enterprise API. It records its creator but does not enter personal asset persistence, incremental synchronization, or WebDAV.
 _Avoid_: Shared personal asset, synchronized enterprise asset
 
+## Storyboard Brainstorm
+
+**Brainstorm Conversation**:
+An independent ideation thread within one Storyboard Project. It owns a navigable Message graph and identifies the Message currently selected for continuation.
+_Avoid_: Active project, chat snapshot
+
+**Brainstorm Message**:
+A stable node in a Brainstorm Conversation. A User Message records the user contribution; an Assistant Message records one ordered response while retaining its identity across lifecycle changes.
+_Avoid_: Stream chunk, transcript row
+
+**Brainstorm Turn**:
+One user intent that establishes the next Assistant response in a Brainstorm Conversation. Appending, regenerating, and continuing are distinct Turn modes with different branching semantics.
+_Avoid_: Model request, message batch
+
+**Regenerated Response**:
+A new Assistant Message that answers the same User Message as an earlier Assistant Message while preserving the earlier response as a sibling branch.
+_Avoid_: Retry in place, overwrite
+
+**Continued Response**:
+The same terminal Assistant Message reopened to extend its ordered output without creating a sibling response.
+_Avoid_: Regeneration, new branch
+
+**Project Memory**:
+A confirmed, durable Brainstorm fact or constraint attached to a Storyboard Project, Scene, or Shot. Unconfirmed memory candidates are not Project Memory.
+_Avoid_: Summary, prompt context, candidate memory
+
 ## Compatibility
 
 **Compatibility Acceptance**:
