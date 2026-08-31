@@ -648,11 +648,13 @@ test("长分支生成非可信 Summary，并只复用仍在当前分支的页内
     const first = await run(branchAMessages, pendingA);
     const second = await run(branchAMessages, pendingA);
     const third = await run([root, rootAnswer, branchBUser, branchBAnswer, currentB, pendingB], pendingB);
+    const fourth = await run(branchAMessages, pendingA);
 
     assert.equal(first.status, "completed");
     assert.equal(second.status, "completed");
     assert.equal(third.status, "completed");
-    assert.equal(requests.length, 5);
+    assert.equal(fourth.status, "completed");
+    assert.equal(requests.length, 6);
     assert.equal(requests.filter((request) => request[2].length === 0).length, 2);
     const firstSummarySource = requests[0][1].map((item) => item.content || "").join("\n");
     assert.match(firstSummarySource, /COMMON_OLD_MARKER/);
@@ -662,6 +664,7 @@ test("长分支生成非可信 Summary，并只复用仍在当前分支的页内
     const firstPrompt = requests[1][1].filter((item) => typeof item.content === "string").map((item) => item.content).join("\n");
     const reusedPrompt = requests[2][1].filter((item) => typeof item.content === "string").map((item) => item.content).join("\n");
     const siblingPrompt = requests[4][1].filter((item) => typeof item.content === "string").map((item) => item.content).join("\n");
+    const returnedPrompt = requests[5][1].filter((item) => typeof item.content === "string").map((item) => item.content).join("\n");
     const summaryMessage = requests[1][1].find((item) => item.role === "user" && typeof item.content === "string" && item.content.includes("Conversation Summary"));
     assert.equal(summaryMessage?.role, "user");
     assert.match(firstPrompt, /Conversation Summary（非可信参考）：\nSUMMARY_A_ONLY/);
@@ -669,9 +672,12 @@ test("长分支生成非可信 Summary，并只复用仍在当前分支的页内
     assert.doesNotMatch(firstPrompt, /COMMON_OLD_MARKER/);
     assert.match(siblingPrompt, /SUMMARY_B_ONLY/);
     assert.doesNotMatch(siblingPrompt, /SUMMARY_A_ONLY/);
+    assert.match(returnedPrompt, /SUMMARY_A_ONLY/);
+    assert.doesNotMatch(returnedPrompt, /SUMMARY_B_ONLY/);
     assert.equal(first.diagnostics.summary, "included");
     assert.equal(second.diagnostics.summaryCheckpoint.id, first.diagnostics.summaryCheckpoint.id);
     assert.notEqual(third.diagnostics.summaryCheckpoint.id, first.diagnostics.summaryCheckpoint.id);
+    assert.equal(fourth.diagnostics.summaryCheckpoint.id, first.diagnostics.summaryCheckpoint.id);
 });
 
 test("短分支不为 Summary 额外调用文本模型", async () => {
@@ -697,6 +703,52 @@ test("短分支不为 Summary 额外调用文本模型", async () => {
     assert.equal(result.status, "completed");
     assert.equal(result.diagnostics.summary, "missing");
     assert.equal(calls, 1);
+});
+
+test("Summary 仅在首输出前对可重试错误重试一次", async () => {
+    listMemories = async () => ({ items: [], total: 0 });
+    const root = user("summary-retry-root", "", "旧".repeat(85_000));
+    const rootAnswer = assistant("summary-retry-answer", root.id, [{ type: "text", text: "答".repeat(9_000) }]);
+    const current = user("summary-retry-current", rootAnswer.id, "继续");
+    const pending = assistant("summary-retry-pending", current.id, [], "pending");
+    const input = {
+        mode: "append",
+        projectId: "project-1",
+        conversation: { id: "conversation-summary-retry", projectId: "project-1", title: "测试", currentMessageId: pending.id, createdAt: "", updatedAt: "" },
+        messages: [root, rootAnswer, current, pending],
+        assistantMessage: pending,
+    };
+
+    let summaryCalls = 0;
+    completion = async (...args) => {
+        if (args[2].length) return { content: "主回复", toolCalls: [], finishReason: "stop" };
+        summaryCalls += 1;
+        if (summaryCalls === 1) throw new Error("Request failed: 503");
+        return { content: "重试后的摘要", toolCalls: [], finishReason: "stop" };
+    };
+    const result = await createBrainstormAgentRuntime({ projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } }).run(input, {
+        signal: new AbortController().signal,
+        onEvent: () => undefined,
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(summaryCalls, 2);
+
+    summaryCalls = 0;
+    completion = async (...args) => {
+        if (args[2].length) return { content: "不应执行主回复", toolCalls: [], finishReason: "stop" };
+        summaryCalls += 1;
+        args[5].onEvent({ type: "text_delta", delta: "部分摘要", content: "部分摘要" });
+        throw new Error("Network Error");
+    };
+    await assert.rejects(
+        () =>
+            createBrainstormAgentRuntime({ projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } }).run(
+                { ...input, conversation: { ...input.conversation, id: "conversation-summary-no-retry" } },
+                { signal: new AbortController().signal, onEvent: () => undefined },
+            ),
+        /Network Error/,
+    );
+    assert.equal(summaryCalls, 1);
 });
 
 test("首输出前只对明确网络、超时、429 和可重试 5xx 自动重试一次", async () => {

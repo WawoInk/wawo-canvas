@@ -26,7 +26,32 @@ AI Compatibility Proxy 的成功响应保留上游响应格式。响应 `Content
 
 上游在流开始前返回 4xx/5xx 时，继续返回可展示的 `{ code: 1, data: null, msg }` 业务失败响应，不以成功 SSE/NDJSON 的形式转发。流已经开始后发生客户端取消、上游读取错误或下游写入错误时，服务端直接结束流，不再向已经开始的流追加 JSON 错误，也不得把任务记录为完整成功。
 
-任务审计只保存脱敏副本，不保存 Authorization、真实 API Key 或 URL 查询参数值；审计脱敏不修改实际转发给客户端或用于后续业务处理的上游响应。普通 JSON、图片、音频和视频 Compatibility 响应继续沿用原有非流式行为。
+任务审计不保存 Authorization、真实 API Key 或 URL 查询参数值。Chat Compatibility 的持久化 `request_body`、`response_body` 和 `raw_error` 只记录固定 omission marker，任务错误只保存稳定的规范 code 与通用消息；该最小化仅作用于审计和持久化任务错误，不修改实际转发给客户端的上游内容，也不改变客户端即时错误合同。普通 JSON、图片、音频和视频 Compatibility 响应继续沿用原有非流式行为。
+
+## Storyboard Brainstorm API
+
+Storyboard Brainstorm 的 JSON API 使用当前登录账号，并统一限定 Storyboard Project scope：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/v1/storyboards/{projectId}/conversations` | 分页读取 Conversation |
+| `POST` | `/api/v1/storyboards/{projectId}/conversations` | 创建 Conversation |
+| `PUT` | `/api/v1/storyboards/{projectId}/conversations/{conversationId}/title` | 重命名 Conversation |
+| `DELETE` | `/api/v1/storyboards/{projectId}/conversations/{conversationId}` | 删除 Conversation 及其 Messages |
+| `GET` | `/api/v1/storyboards/{projectId}/conversations/{conversationId}/messages` | 分页读取平铺 Message 图和当前 Conversation |
+| `POST` | `/api/v1/storyboards/{projectId}/conversations/{conversationId}/turns` | 以 `append` 或 `regenerate` 创建原子 Turn |
+| `PUT` | `/api/v1/storyboards/{projectId}/conversations/{conversationId}/messages/{messageId}/assistant` | 按 `expectedRevision` CAS 更新 Assistant 状态和完整 output |
+| `POST` | `/api/v1/storyboards/{projectId}/conversations/{conversationId}/messages/{messageId}/continue` | 按 `expectedRevision` 继续 terminal Assistant |
+| `GET` | `/api/v1/storyboards/{projectId}/memories` | 分页读取已确认 Project Memory |
+| `POST` | `/api/v1/storyboards/{projectId}/memories` | 创建已确认 Memory |
+| `PUT` | `/api/v1/storyboards/{projectId}/memories/{memoryId}` | 更新已确认 Memory |
+| `DELETE` | `/api/v1/storyboards/{projectId}/memories/{memoryId}` | 删除已确认 Memory |
+
+Conversation 和 Memory 列表使用 `page/pageSize`，返回 `{items,total}`；Message 列表额外返回 `conversation`，并按 `created_at ASC, id ASC` 返回平铺消息。`append` 在一个数据库事务中创建 User Message、pending Assistant Placeholder 并更新 `currentMessageId`；`regenerate` 在原 User Message 下创建新的 Assistant sibling，`continue` 复用原 terminal Assistant，不创建 sibling。
+
+Assistant 更新和 continue 必须提交 `expectedRevision`。同一 Conversation 已有 active Turn、幂等键或 ID 被不同语义复用、revision 过期或生命周期转换无效时返回 HTTP 409、`code: -1`，并在可用时通过 `data.current` 返回当前对象。Project、Conversation、Message 或 Memory 不存在及 scope 越权统一返回 HTTP 404 和安全消息，不区分资源不存在与无权访问。
+
+这些 JSON API 只持久化 Brainstorm 领域状态，不承载模型流。Stop 没有独立路由：浏览器先取消当前 Provider 请求，再通过 Assistant CAS 保存 `cancelled` 或相应终态；用户 Retry 等价于新的 `regenerate`。模型 Completion 只会在首个输出前对网络错误、超时、429、500、502、503 或 504 最多自动重试一次；Abort、400、参数错误、已经产生文本/Tool delta 或已经执行写操作后不自动重试。Summary 由浏览器 Runtime 在同一 Conversation 页面内按分支派生，使用 20k token trigger 和 8k token retain；分支 boundary 缺失时重建，刷新后从持久 Message 历史重新生成。Summary 是非可信上下文，没有独立数据库字段、数据表或 API。固定系统规则与当前用户输入无法装入 Context 时，浏览器会在调用 Completion 前返回可读的 `CONTEXT_BUDGET_EXCEEDED`，不会创建模型请求。
 
 ## 结构化生成错误
 
