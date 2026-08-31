@@ -63,7 +63,10 @@ mock.module("@/services/api/storyboard-brainstorm", () => ({
     renameStoryboardBrainstormConversation: (...args: Parameters<typeof renameConversation>) => renameConversation(...args),
     deleteStoryboardBrainstormConversation: (...args: Parameters<typeof deleteConversation>) => deleteConversation(...args),
     fetchStoryboardBrainstormMessages: (...args: Parameters<typeof listMessages>) => listMessages(...args),
-    createStoryboardBrainstormTurn: (...args: Parameters<typeof createTurn>) => createTurn(...args),
+    createStoryboardBrainstormTurn: (...args: Parameters<typeof createTurn>) => {
+        apiCalls.push(["turn", ...args]);
+        return createTurn(...args);
+    },
     updateStoryboardBrainstormAssistant: (...args: Parameters<typeof updateAssistant>) => {
         apiCalls.push(["update", ...args]);
         return updateAssistant(...args);
@@ -89,6 +92,14 @@ let current!: BrainstormAgentState;
 function Harness({ projectId }: { projectId: string }) {
     current = useBrainstormAgent(projectId, runtime);
     return null;
+}
+
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => {
+        resolve = done;
+    });
+    return { promise, resolve };
 }
 
 async function flush() {
@@ -129,5 +140,115 @@ test("加载时把孤立 active Assistant 标记为 interrupted，并保留待�
     ]);
     assert.equal(current.messages.find((message) => message.id === "assistant-pending")?.status, "interrupted");
     assert.deepEqual(current.awaitingApproval.map((message) => message.id), ["assistant-awaiting"]);
+    await unmount(mounted);
+});
+
+test("项目和会话切换后忽略迟到的加载结果", async () => {
+    accountId = "user-1";
+    const projectOne = deferred<{ items: ReturnType<typeof conversation>[]; total: number }>();
+    listConversations = async (projectId) => (projectId === "project-1" ? projectOne.promise : { items: [{ ...conversation("conversation-2"), projectId }], total: 1 });
+    listMessages = async (projectId, conversationId) => ({
+        conversation: { ...conversation(conversationId), projectId },
+        items: [userMessage(projectId === "project-2" ? "user-project-2" : "user-project-1", conversationId)],
+        total: 1,
+    });
+
+    const mounted = await mount("project-1");
+    await act(async () => mounted.root.render(<Harness projectId="project-2" />));
+    await flush();
+    projectOne.resolve({ items: [conversation("stale-conversation")], total: 1 });
+    await flush();
+
+    assert.equal(current.currentConversationId, "conversation-2");
+    assert.deepEqual(current.messages.map((message) => message.id), ["user-project-2"]);
+    await unmount(mounted);
+
+    const conversationOne = deferred<Awaited<ReturnType<typeof listMessages>>>();
+    listConversations = async () => ({ items: [conversation("conversation-1"), conversation("conversation-2")], total: 2 });
+    listMessages = async (_projectId, conversationId) =>
+        conversationId === "conversation-1"
+            ? conversationOne.promise
+            : { conversation: conversation("conversation-2"), items: [userMessage("user-2", "conversation-2")], total: 1 };
+
+    const switched = await mount();
+    await act(async () => current.selectConversation("conversation-2"));
+    await flush();
+    conversationOne.resolve({ conversation: conversation("conversation-1"), items: [userMessage("stale-user", "conversation-1")], total: 1 });
+    await flush();
+
+    assert.equal(current.currentConversationId, "conversation-2");
+    assert.deepEqual(current.messages.map((message) => message.id), ["user-2"]);
+    await unmount(switched);
+});
+
+test("只在服务端确认 Turn 后插入消息并启动 runtime", async () => {
+    apiCalls.length = 0;
+    accountId = "user-1";
+    listConversations = async () => ({ items: [conversation("conversation-1")], total: 1 });
+    listMessages = async () => ({ conversation: conversation("conversation-1"), items: [], total: 0 });
+    const confirmed = deferred<Awaited<ReturnType<typeof createTurn>>>();
+    createTurn = async () => confirmed.promise;
+    const running = deferred<BrainstormTurnResult>();
+    const runtimeInputs: unknown[] = [];
+    runTurn = async (input) => {
+        runtimeInputs.push(input);
+        return running.promise;
+    };
+
+    const mounted = await mount();
+    let sending!: Promise<unknown>;
+    await act(async () => {
+        sending = current.send("让雨夜冲突更强");
+        await Promise.resolve();
+    });
+
+    assert.deepEqual(current.messages, []);
+    assert.deepEqual(runtimeInputs, []);
+    const payload = apiCalls.at(-1)?.[3] as { userMessage: { id: string; content: string }; assistantMessageId: string };
+    confirmed.resolve({
+        conversation: conversation("conversation-1", payload.assistantMessageId),
+        userMessage: userMessage(payload.userMessage.id, "conversation-1"),
+        assistantMessage: assistantMessage(payload.assistantMessageId, "conversation-1", "pending"),
+    });
+    await act(async () => void (await sending));
+    await flush();
+
+    assert.deepEqual(current.messages.map((message) => message.id), [payload.userMessage.id, payload.assistantMessageId]);
+    assert.equal(runtimeInputs.length, 1);
+    assert.equal(current.runs["conversation-1"]?.active, true);
+    running.resolve(completed);
+    await flush();
+    await unmount(mounted);
+});
+
+test("同一 Conversation 只允许一个本地 Turn，不同 Conversation 可并行", async () => {
+    apiCalls.length = 0;
+    accountId = "user-1";
+    listConversations = async () => ({ items: [conversation("conversation-1"), conversation("conversation-2")], total: 2 });
+    listMessages = async (_projectId, conversationId) => ({ conversation: conversation(conversationId), items: [], total: 0 });
+    createTurn = async (_projectId, conversationId, input) => ({
+        conversation: conversation(conversationId, input.assistantMessageId),
+        ...(input.userMessage ? { userMessage: userMessage(input.userMessage.id, conversationId) } : {}),
+        assistantMessage: assistantMessage(input.assistantMessageId, conversationId, "pending"),
+    });
+    const pending = new Map<string, ReturnType<typeof deferred<BrainstormTurnResult>>>();
+    runTurn = async (input) => {
+        const value = deferred<BrainstormTurnResult>();
+        pending.set(input.conversation.id, value);
+        return value.promise;
+    };
+
+    const mounted = await mount();
+    await act(async () => void (await current.send("第一条")));
+    await assert.rejects(() => current.send("同会话第二条"), /active Turn/);
+    await act(async () => void (await current.selectConversation("conversation-2")));
+    await act(async () => void (await current.send("另一会话")));
+
+    assert.equal(current.runs["conversation-1"]?.active, true);
+    assert.equal(current.runs["conversation-2"]?.active, true);
+    assert.equal(apiCalls.filter((call) => call[0] === "turn").length, 2);
+    pending.get("conversation-1")?.resolve(completed);
+    pending.get("conversation-2")?.resolve(completed);
+    await flush();
     await unmount(mounted);
 });
