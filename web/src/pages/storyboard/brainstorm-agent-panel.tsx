@@ -244,7 +244,7 @@ export function BrainstormAgentPanel({
     const [composer, setComposer] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     const projectId = project?.id || STANDALONE_BRAINSTORM_SCOPE_ID;
     const options = useMemo(() => (project ? focusOptions(project) : []), [project]);
     const selectedFocus = project ? options.find((option) => option.value === focusKey)?.focus || standaloneFocus : standaloneFocus;
@@ -280,7 +280,8 @@ export function BrainstormAgentPanel({
     useEffect(() => () => onActiveChange?.(false), [onActiveChange]);
 
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ block: "end" });
+        const container = messagesContainerRef.current;
+        if (container) container.scrollTop = container.scrollHeight;
     }, [branch, currentRun?.streamedText]);
 
     async function run(action: () => Promise<unknown>, errorText: string, allowWhenDisabled = false) {
@@ -331,8 +332,8 @@ export function BrainstormAgentPanel({
     );
 
     return (
-        <section className="relative flex h-full min-h-[480px] flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm" aria-label="Brainstorm Agent Panel">
-            <header className="border-b px-4 py-3">
+        <section className="relative flex h-full min-w-0 min-h-[480px] flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm" aria-label="Brainstorm Agent Panel">
+            <header className="shrink-0 border-b px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -389,7 +390,7 @@ export function BrainstormAgentPanel({
             ) : (
                 <>
                     {visibleError ? <Alert className="m-4 mb-0" type="error" showIcon title="Brainstorm Agent 出错" description={visibleError} /> : null}
-                    <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-5">
+                    <div ref={messagesContainerRef} className="thin-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5">
                         {branch.length ? (
                             <div className="space-y-6">
                                 {branch.map((item) => (
@@ -405,13 +406,12 @@ export function BrainstormAgentPanel({
                                         onContinue={(id) => void run(() => agent.continueAssistant(id), "继续生成失败")}
                                     />
                                 ))}
-                                <div ref={messagesEndRef} />
                             </div>
                         ) : (
                             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="从一个问题开始这次脑暴" />
                         )}
                     </div>
-                    <footer className="border-t p-3">
+                    <footer className="shrink-0 border-t p-3">
                         {currentRun?.retrying ? <div className="mb-2 text-xs text-muted-foreground">模型请求正在重试...</div> : null}
                         {currentRun?.stopState === "failed" ? <Alert className="mb-2" type="warning" showIcon title="停止请求未能确认" /> : null}
                         <Input.TextArea
