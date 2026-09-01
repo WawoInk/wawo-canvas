@@ -276,6 +276,73 @@ test("Runtime 的主回复、Summary、Tool follow-up 和重试共享同一份�
     );
 });
 
+test("Runtime 使用用户选择的管理员文本模型，而不是强制回退到默认模型", async () => {
+    resetPublicSettings();
+    publicSettings = {
+        modelChannel: {
+            availableModels: ["admin-text-model", "admin-alt-model"],
+            defaultTextModel: "admin-text-model",
+            textModels: ["admin-text-model", "admin-alt-model"],
+            textModelProtocols: { "admin-text-model": "openai", "admin-alt-model": "xvanai" },
+        },
+    };
+    const requests = [];
+    completion = async (...args) => {
+        requests.push(args);
+        return { content: "已使用所选模型", toolCalls: [], finishReason: "stop" };
+    };
+
+    await createBrainstormAgentRuntime({ projectId: "project-1", model: "admin-alt-model", config, skillId: "divergent_ideation", focus: { kind: "project" } }).run(runtimeInput(), {
+        signal: new AbortController().signal,
+        onEvent: () => undefined,
+    });
+
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0][0].model, "admin-alt-model");
+    assert.equal(requests[0][0].textModel, "admin-alt-model");
+    assert.equal(requests[0][0].apiFormat, "xvanai");
+});
+
+test("审批恢复沿用原 Turn 的管理员模型快照", async () => {
+    resetPublicSettings();
+    publicSettings = {
+        modelChannel: {
+            availableModels: ["admin-text-model", "admin-alt-model"],
+            defaultTextModel: "admin-text-model",
+            textModels: ["admin-text-model", "admin-alt-model"],
+            textModelProtocols: { "admin-text-model": "openai", "admin-alt-model": "xvanai" },
+        },
+    };
+    const seen = [];
+    let callCount = 0;
+    completion = async (...args) => {
+        seen.push(args);
+        callCount += 1;
+        if (callCount === 1) {
+            return { content: "", toolCalls: [{ id: "call-memory", type: "function", function: { name: "storyboard_remember", arguments: JSON.stringify({ projectId: "project-1", kind: "constraint", scope: "project", content: "沿用模型", tags: [] }) } }], finishReason: "tool_calls" };
+        }
+        return { content: "已继续", toolCalls: [], finishReason: "stop" };
+    };
+    const runtime = createBrainstormAgentRuntime({ projectId: "project-1", model: "admin-text-model", config, skillId: "divergent_ideation", focus: { kind: "project" } });
+    const input = runtimeInput();
+    const awaiting = await runtime.run(input, { signal: new AbortController().signal, onEvent: () => undefined });
+    assert.equal(awaiting.status, "awaiting_approval");
+    assert.deepEqual(awaiting.continuation.modelSnapshot, { model: "admin-text-model", apiFormat: "openai" });
+
+    publicSettings = {
+        modelChannel: {
+            availableModels: ["admin-text-model", "admin-alt-model"],
+            defaultTextModel: "admin-alt-model",
+            textModels: ["admin-text-model", "admin-alt-model"],
+            textModelProtocols: { "admin-text-model": "openai", "admin-alt-model": "xvanai" },
+        },
+    };
+    const resumed = await runtime.run({ ...input, mode: "approval", decision: "rejected", continuation: awaiting.continuation }, { signal: new AbortController().signal, onEvent: () => undefined });
+    assert.equal(resumed.status, "completed");
+    assert.deepEqual(seen.map((args) => [args[0].model, args[0].apiFormat]), [["admin-text-model", "openai"], ["admin-text-model", "openai"]]);
+    resetPublicSettings();
+});
+
 test("standalone Runtime 在构造时拒绝非固定 scope ID", () => {
     assert.throws(() => createBrainstormAgentRuntime({ scope: "standalone", projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } }), new RegExp(`standalone.*${STANDALONE_BRAINSTORM_SCOPE_ID}`));
 });

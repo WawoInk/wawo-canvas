@@ -140,10 +140,51 @@ func TestProxyAIRequestPreservesNonStreamingJSONResponse(t *testing.T) {
 	}
 }
 
-func TestProxyAIRequestRejectsBrainstormModelOutsideAdminDefault(t *testing.T) {
+func TestProxyAIRequestRejectsUnmappedBrainstormTextModel(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Errorf("upstream should not receive an unmapped brainstorm model")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"unexpected"}}]}`))
+	}))
+	defer upstream.Close()
+
+	modelName, userID := setupAIProxyHTTPTest(t, upstream.URL)
+	settings, err := repository.GetSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	unmapped := modelName + "-unmapped"
+	settings.Public.ModelChannel.TextModels = append(settings.Public.ModelChannel.TextModels, unmapped)
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: unmapped, Credits: credit(2)})
+	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+
+	proxy := newAIProxyHTTPServer(t, userID)
+	request, err := http.NewRequest(http.MethodPost, proxy.URL, strings.NewReader(`{"model":"`+unmapped+`","messages":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Source", "brainstorm_agent")
+	response, err := proxy.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "管理员文本模型不可用") {
+		t.Fatalf("response body = %q", body)
+	}
+}
+
+func TestProxyAIRequestAllowsConfiguredBrainstormTextModel(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"should not be called"}}]}`))
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"selected model"}}]}`))
 	}))
 	defer upstream.Close()
 
@@ -178,7 +219,7 @@ func TestProxyAIRequestRejectsBrainstormModelOutsideAdminDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), "管理员文本模型已更新") {
+	if strings.Contains(string(body), "管理员文本模型已更新") || !strings.Contains(string(body), "selected model") {
 		t.Fatalf("response body = %q", body)
 	}
 }
