@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/basketikun/infinite-canvas/model"
 	"github.com/google/uuid"
 )
 
@@ -68,6 +69,62 @@ type brainstormMemoryPageView struct {
 
 type brainstormConflictView[T any] struct {
 	Current T `json:"current"`
+}
+
+func TestStoryboardBrainstormStandaloneScopePersistsWithoutProject(t *testing.T) {
+	server, ownerToken, _ := newStoryboardBrainstormServer(t)
+	defer server.Close()
+
+	projectID := "__brainstorm__"
+	suffix := uuid.NewString()
+	conversationID := "conversation-" + suffix
+	conversationsURL := brainstormConversationsURL(server.URL, projectID)
+
+	assertBrainstormStatus(t, http.StatusOK, http.MethodPost, server.URL+"/api/v1/storyboards", ownerToken, map[string]any{
+		"id": projectID, "title": "保留 ID 不应成为分镜项目", "source": "独立脑暴", "options": map[string]any{}, "model": "test-model", "sourceHash": suffix,
+	})
+	createdConversation := brainstormOK[brainstormConversationView](t, http.MethodPost, conversationsURL, ownerToken, map[string]any{"id": conversationID}).Data
+	if createdConversation.ID != conversationID || createdConversation.ProjectID != projectID {
+		t.Fatalf("standalone conversation = %#v", createdConversation)
+	}
+	conversations := listBrainstormConversations(t, server.URL, ownerToken, projectID)
+	if conversations.Total != 1 || len(conversations.Items) != 1 || conversations.Items[0].ID != conversationID {
+		t.Fatalf("standalone conversations = %#v", conversations)
+	}
+
+	userMessageID := "user-" + suffix
+	assistantMessageID := "assistant-" + suffix
+	brainstormOK[json.RawMessage](t, http.MethodPost, conversationsURL+"/"+conversationID+"/turns", ownerToken, map[string]any{
+		"mode": "append", "clientRequestId": "request-" + suffix, "userMessage": map[string]any{"id": userMessageID, "content": "从一句模糊灵感开始"}, "assistantMessageId": assistantMessageID,
+	})
+	messages := brainstormOK[brainstormMessagePageView](t, http.MethodGet, brainstormMessagesURL(server.URL, projectID, conversationID), ownerToken, nil).Data
+	if messages.Total != 2 || len(messages.Items) != 2 || messages.Conversation.CurrentMessageID != assistantMessageID {
+		t.Fatalf("standalone turn = %#v", messages)
+	}
+
+	memoriesURL := brainstormMemoriesURL(server.URL, projectID)
+	memory := brainstormOK[brainstormMemoryView](t, http.MethodPost, memoriesURL, ownerToken, map[string]any{
+		"id": "memory-" + suffix, "kind": "fact", "scope": model.StoryboardMemoryScopeProject, "path": "", "content": "脑暴工作区约束", "tags": []string{"workspace"}, "operationId": "operation-" + suffix,
+	}).Data
+	if memory.ProjectID != projectID || memory.Scope != model.StoryboardMemoryScopeProject || memory.Content != "脑暴工作区约束" {
+		t.Fatalf("standalone memory = %#v", memory)
+	}
+	memories := listStoryboardBrainstormMemories(t, server.URL, ownerToken, projectID)
+	if memories.Total != 1 || len(memories.Items) != 1 || memories.Items[0].ID != memory.ID {
+		t.Fatalf("standalone memories = %#v", memories)
+	}
+
+	for _, test := range []struct {
+		scope string
+		path  string
+	}{
+		{scope: model.StoryboardMemoryScopeScene, path: "scene-1"},
+		{scope: model.StoryboardMemoryScopeShot, path: "shot-1"},
+	} {
+		assertBrainstormStatus(t, http.StatusOK, http.MethodPost, memoriesURL, ownerToken, map[string]any{
+			"id": "memory-" + test.scope + "-" + suffix, "kind": "fact", "scope": test.scope, "path": test.path, "content": "不允许的范围", "tags": []string{}, "operationId": "operation-" + test.scope + "-" + suffix,
+		})
+	}
 }
 
 func TestStoryboardBrainstormConversationCRUDOwnershipIdempotencyAndCleanup(t *testing.T) {

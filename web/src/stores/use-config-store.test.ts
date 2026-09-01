@@ -18,6 +18,7 @@ let publicSettings: PublicSettings = {
         imageModels: [],
         videoModels: ["video-allowed"],
         textModels: [],
+        textModelProtocols: {},
         audioModels: [],
         imageRequestFormats: [],
         systemPrompt: "",

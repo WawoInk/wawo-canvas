@@ -176,6 +176,7 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 	setting.ModelChannel.VideoModels = uniqueModelNames(setting.ModelChannel.VideoModels)
 	setting.ModelChannel.TextModels = uniqueModelNames(setting.ModelChannel.TextModels)
 	setting.ModelChannel.AudioModels = uniqueModelNames(setting.ModelChannel.AudioModels)
+	setting.ModelChannel.TextModelProtocols = normalizeTextModelProtocols(channels, setting.ModelChannel.TextModels)
 	setting.ModelChannel.ImageRequestFormats = normalizeImageRequestFormats(setting.ModelChannel.ImageRequestFormats, setting.ModelChannel.ImageModels)
 	setting.ModelChannel.DefaultTextModel = repairDefaultModel(setting.ModelChannel.DefaultTextModel, setting.ModelChannel.TextModels, isTextModelName)
 	setting.ModelChannel.DefaultImageModel = repairDefaultModel(setting.ModelChannel.DefaultImageModel, setting.ModelChannel.ImageModels, isImageModelName)
@@ -183,6 +184,40 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 	setting.ModelChannel.DefaultAudioModel = repairDefaultModel(setting.ModelChannel.DefaultAudioModel, setting.ModelChannel.AudioModels, isAudioModelName)
 	setting.ModelChannel.DefaultModel = repairDefaultModel(setting.ModelChannel.DefaultModel, setting.ModelChannel.TextModels, isTextModelName)
 	return setting
+}
+
+func normalizeTextModelProtocols(channels []model.ModelChannel, textModels []string) map[string]string {
+	allowed := map[string]bool{}
+	for _, modelName := range textModels {
+		allowed[modelName] = true
+	}
+	result := map[string]string{}
+	conflicts := map[string]bool{}
+	for _, channel := range channels {
+		if !channel.Enabled {
+			continue
+		}
+		for _, modelName := range channel.Models {
+			modelName = strings.TrimSpace(modelName)
+			if !allowed[modelName] || conflicts[modelName] {
+				continue
+			}
+			if protocol, ok := result[modelName]; ok && protocol != channel.Protocol {
+				delete(result, modelName)
+				conflicts[modelName] = true
+				continue
+			}
+			result[modelName] = channel.Protocol
+		}
+	}
+	for modelName, protocol := range result {
+		switch protocol {
+		case "openai", "xvanai", "gemini":
+		default:
+			delete(result, modelName)
+		}
+	}
+	return result
 }
 
 func normalizeImageRequestFormats(items []model.ImageRequestFormatSetting, imageModels []string) []model.ImageRequestFormatSetting {

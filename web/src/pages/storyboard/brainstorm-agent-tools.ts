@@ -1,4 +1,5 @@
 import type { BrainstormExecuteTool, BrainstormPreflightTool, BrainstormToolCall, BrainstormToolDefinition, BrainstormToolExecution } from "./brainstorm-agent";
+import { STANDALONE_BRAINSTORM_SCOPE_ID } from "./brainstorm-agent-scope";
 import { normalizeStoryboardDocument, validateStoryboardDocument, type StoryboardScene, type StoryboardShot } from "./storyboard";
 import type { StoryboardRecordDetail, StoryboardWorkspaceInput } from "@/services/api/storyboards";
 
@@ -135,6 +136,8 @@ export const STORYBOARD_BRAINSTORM_TOOLS: readonly BrainstormToolDefinition[] = 
         "write",
     ),
 ]);
+
+const STANDALONE_MEMORY_TOOLS = new Set(["storyboard_list_memories", "storyboard_remember", "storyboard_forget_memory"]);
 
 class ToolError extends Error {
     constructor(
@@ -278,16 +281,18 @@ export function previewStoryboardToolCall(call: BrainstormToolCall): StoryboardT
     }
     if (call.name === "storyboard_remember") {
         const args = parseArgs(call, ["projectId", "kind", "scope", "path", "content", "tags"], ["projectId", "kind", "scope", "content", "tags"]);
+        const projectId = text(args, "projectId", false, 128);
         const scope = text(args, "scope", false, 16);
         const path = memoryText(args, "path", 128, true);
         if (!["project", "scene", "shot"].includes(scope) || (scope === "project" ? Boolean(path) : !path)) throw new ToolError("INVALID_ARGUMENTS", "Memory scope or path is invalid.");
         memoryText(args, "kind", 64);
         memoryTags(args.tags);
-        return { title: "保存项目 Memory", summary: memoryText(args, "content", 20000).slice(0, 120), targets: [scope === "project" ? "项目" : `${scope} ${path}`] };
+        const standalone = projectId === STANDALONE_BRAINSTORM_SCOPE_ID;
+        return { title: "保存 Memory", summary: memoryText(args, "content", 20000).slice(0, 120), targets: [standalone ? "脑暴工作区" : scope === "project" ? "项目" : `${scope} ${path}`] };
     }
     if (call.name === "storyboard_forget_memory") {
         const args = parseArgs(call, ["projectId", "memoryId"]);
-        return { title: "删除项目 Memory", summary: "删除后不会自动恢复。", targets: [`Memory ${text(args, "memoryId", false, 128)}`] };
+        return { title: "删除 Memory", summary: "删除后不会自动恢复。", targets: [`Memory ${text(args, "memoryId", false, 128)}`] };
     }
     throw new ToolError("INVALID_ARGUMENTS", "Tool does not require an approval preview.");
 }
@@ -371,13 +376,31 @@ function resultContent(tool: string, payload: { ok: boolean; data?: unknown; err
  * definitions must flow through runBrainstormTurn/resumeBrainstormTurn, not be called directly.
  */
 
-export function createStoryboardToolRuntime(options: { projectId: string; services: StoryboardToolServices; resultLimit?: number; memoryIdentity?: (call: BrainstormToolCall) => StoryboardToolMemoryIdentity }): {
+export function createStoryboardToolRuntime(options: { scope?: "storyboard" | "standalone"; projectId: string; services: StoryboardToolServices; resultLimit?: number; memoryIdentity?: (call: BrainstormToolCall) => StoryboardToolMemoryIdentity }): {
     tools: readonly BrainstormToolDefinition[];
     preflightTool: BrainstormPreflightTool;
     executeTool: BrainstormExecuteTool;
 } {
     const activeProjectId = options.projectId.trim();
     if (!activeProjectId) throw new Error("Storyboard Tool Runtime requires a projectId.");
+    if (options.scope === "standalone" && activeProjectId !== STANDALONE_BRAINSTORM_SCOPE_ID) throw new Error(`standalone Brainstorm Tool Runtime 的 scope ID 必须是 ${STANDALONE_BRAINSTORM_SCOPE_ID}`);
+    const ensureStandaloneCall = (call: BrainstormToolCall): BrainstormToolCall => {
+        if (options.scope !== "standalone") return call;
+        if (!STANDALONE_MEMORY_TOOLS.has(call.name)) throw new ToolError("TOOL_NOT_ALLOWED_IN_STANDALONE", "This tool is not available in standalone Brainstorm Runtime.");
+        let args: Args;
+        if (call.name === "storyboard_list_memories") {
+            args = parseArgs(call, ["projectId", "page", "pageSize"], []);
+        } else if (call.name === "storyboard_forget_memory") {
+            args = parseArgs(call, ["projectId", "memoryId"], ["memoryId"]);
+        } else {
+            args = parseArgs(call, ["projectId", "kind", "scope", "path", "content", "tags"], ["kind", "scope", "content", "tags"]);
+            const scope = text(args, "scope", false, 16);
+            const path = memoryText(args, "path", 128, true);
+            if (scope !== "project" || path) throw new ToolError("INVALID_ARGUMENTS", "Standalone Brainstorm Memory must use project scope with an empty path.");
+        }
+        if ("projectId" in args) projectId(args, activeProjectId);
+        return { ...call, arguments: JSON.stringify({ ...args, projectId: activeProjectId }) };
+    };
     const limit = Math.max(256, Math.min(32000, options.resultLimit ?? 12000));
     const success = (tool: string, data: unknown, sideEffect: "none" | "write" = "none"): BrainstormToolExecution => ({ status: "succeeded", content: resultContent(tool, { ok: true, data }, limit), sideEffect });
     const failure = (tool: string, error: unknown): BrainstormToolExecution => {
@@ -411,6 +434,7 @@ export function createStoryboardToolRuntime(options: { projectId: string; servic
     const preflightTool: BrainstormPreflightTool = async (call, { signal, definition }) => {
         try {
             throwIfAborted(signal);
+            call = ensureStandaloneCall(call);
             const canonical = canonicalDefinition(call, definition);
             if (canonical.approval !== "required") throw new ToolError("INVALID_ARGUMENTS", "Tool does not require approval preflight.");
             return success(call.name, previewStoryboardToolCall(call));
@@ -423,6 +447,7 @@ export function createStoryboardToolRuntime(options: { projectId: string; servic
     const executeTool: BrainstormExecuteTool = async (call, { signal, definition, authorization }) => {
         try {
             throwIfAborted(signal);
+            call = ensureStandaloneCall(call);
             const canonical = canonicalDefinition(call, definition);
             if (canonical.approval === "required" && authorization !== "approved") throw new ToolError("APPROVAL_REQUIRED", "Tool requires confirmed user approval before execution.");
             switch (call.name) {

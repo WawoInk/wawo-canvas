@@ -14,9 +14,10 @@ const (
 	BrainstormStatusCancelled        = "cancelled"
 	BrainstormStatusInterrupted      = "interrupted"
 
-	StoryboardMemoryScopeProject = "project"
-	StoryboardMemoryScopeScene   = "scene"
-	StoryboardMemoryScopeShot    = "shot"
+	StoryboardBrainstormStandaloneScopeID = "__brainstorm__"
+	StoryboardMemoryScopeProject          = "project"
+	StoryboardMemoryScopeScene            = "scene"
+	StoryboardMemoryScopeShot             = "shot"
 )
 
 type StoryboardBrainstormConversation struct {

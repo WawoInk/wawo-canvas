@@ -123,6 +123,15 @@ const config = {
 };
 
 let completion;
+let publicSettingsReads = 0;
+let publicSettings = {
+    modelChannel: {
+        availableModels: ["admin-text-model"],
+        defaultTextModel: "admin-text-model",
+        textModels: ["admin-text-model"],
+        textModelProtocols: { "admin-text-model": "openai" },
+    },
+};
 let updateProject = async () => structuredClone(project);
 let createMemory = async (_projectId, input) => ({ ...input, projectId: "project-1", createdAt: "", updatedAt: "" });
 let deleteMemory = async (_projectId, id) => ({ id, deletedAt: "" });
@@ -133,6 +142,12 @@ let listMemories = async (_projectId, query) => {
     return query.page === 1 ? { items: [memory("memory-project", "项目记忆")], total: 2 } : { items: [memory("memory-shot", "焦点镜头记忆", "shot", "shot-focus")], total: 2 };
 };
 mock.module("@/services/api/image", () => ({ requestToolResponse: (...args) => completion(...args) }));
+mock.module("@/services/api/settings", () => ({
+    fetchPublicSettings: async () => {
+        publicSettingsReads += 1;
+        return structuredClone(publicSettings);
+    },
+}));
 mock.module("@/services/api/storyboards", () => ({
     fetchStoryboardRecord: async () => {
         projectReads += 1;
@@ -146,7 +161,231 @@ mock.module("@/services/api/storyboard-brainstorm", () => ({
     deleteStoryboardMemory: (...args) => deleteMemory(...args),
 }));
 
+import { STANDALONE_BRAINSTORM_SCOPE_ID } from "./brainstorm-agent-scope.ts";
+
 const { createBrainstormAgentRuntime } = await import("./brainstorm-agent-runtime.ts");
+
+function resetPublicSettings() {
+    publicSettingsReads = 0;
+    publicSettings = {
+        modelChannel: {
+            availableModels: ["admin-text-model"],
+            defaultTextModel: "admin-text-model",
+            textModels: ["admin-text-model"],
+            textModelProtocols: { "admin-text-model": "openai" },
+        },
+    };
+}
+
+function runtimeInput(projectId = "project-1", conversationId = "conversation-1") {
+    const currentUser = { ...user(`runtime-user-${conversationId}`, "", "运行一次脑暴"), projectId, conversationId };
+    const currentAssistant = { ...assistant(`runtime-assistant-${conversationId}`, currentUser.id, [], "pending"), projectId, conversationId };
+    return {
+        mode: "append",
+        projectId,
+        conversation: { id: conversationId, projectId, title: "测试", currentMessageId: currentAssistant.id, createdAt: "", updatedAt: "" },
+        messages: [currentUser, currentAssistant],
+        assistantMessage: currentAssistant,
+    };
+}
+
+test("Runtime 每次 run 都读取最新管理员文本模型，并拒绝非法公开配置而不调用 Completion", async () => {
+    resetPublicSettings();
+    const requests = [];
+    completion = async (...args) => {
+        requests.push(args);
+        return { content: "管理员回答", toolCalls: [], finishReason: "stop" };
+    };
+    const runtime = createBrainstormAgentRuntime({ projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } });
+
+    await runtime.run(runtimeInput(), { signal: new AbortController().signal, onEvent: () => undefined });
+    publicSettings = {
+        modelChannel: {
+            availableModels: ["admin-xvanai-model"],
+            defaultTextModel: "admin-xvanai-model",
+            textModels: ["admin-xvanai-model"],
+            textModelProtocols: { "admin-xvanai-model": "xvanai" },
+        },
+    };
+    await runtime.run(runtimeInput("project-1", "conversation-2"), { signal: new AbortController().signal, onEvent: () => undefined });
+
+    assert.equal(publicSettingsReads, 2);
+    assert.deepEqual(requests.map((args) => ({ model: args[0].model, textModel: args[0].textModel, apiFormat: args[0].apiFormat, channelMode: args[0].channelMode, baseUrl: args[0].baseUrl, apiKey: args[0].apiKey, channels: args[0].channels })), [
+        { model: "admin-text-model", textModel: "admin-text-model", apiFormat: "openai", channelMode: "remote", baseUrl: "", apiKey: "", channels: [] },
+        { model: "admin-xvanai-model", textModel: "admin-xvanai-model", apiFormat: "xvanai", channelMode: "remote", baseUrl: "", apiKey: "", channels: [] },
+    ]);
+
+    for (const invalid of [
+        { defaultTextModel: "", availableModels: ["admin-text-model"], textModels: ["admin-text-model"], textModelProtocols: { "admin-text-model": "openai" } },
+        { availableModels: [], textModels: ["admin-text-model"], textModelProtocols: { "admin-text-model": "openai" } },
+        { availableModels: ["admin-text-model"], textModels: [], textModelProtocols: { "admin-text-model": "openai" } },
+        { availableModels: ["admin-text-model"], textModels: ["admin-text-model"], textModelProtocols: { "admin-text-model": "local" } },
+    ]) {
+        publicSettings = { modelChannel: { defaultTextModel: "admin-text-model", ...invalid } };
+        await assert.rejects(() => runtime.run(runtimeInput(), { signal: new AbortController().signal, onEvent: () => undefined }), /管理员|defaultTextModel|协议/);
+    }
+    assert.equal(requests.length, 2);
+    resetPublicSettings();
+});
+
+test("Runtime 的主回复、Summary、Tool follow-up 和重试共享同一份管理员快照，并标记 Brainstorm 来源", async () => {
+    resetPublicSettings();
+    const root = user("runtime-summary-root", "", "旧".repeat(85_000));
+    const rootAnswer = assistant("runtime-summary-answer", root.id, [{ type: "text", text: "答".repeat(9_000) }]);
+    const current = user("runtime-summary-current", rootAnswer.id, "继续");
+    const pending = assistant("runtime-summary-pending", current.id, [], "pending");
+    const seen = [];
+    let mainCalls = 0;
+    completion = async (...args) => {
+        seen.push(args);
+        if (!args[2].length) return { content: "摘要", toolCalls: [], finishReason: "stop" };
+        mainCalls += 1;
+        if (mainCalls === 1) throw new Error("Request failed: 503");
+        if (mainCalls === 2) return { content: "", toolCalls: [{ id: "call-overview", type: "function", function: { name: "storyboard_get_overview", arguments: '{"projectId":"project-1"}' } }], finishReason: "tool_calls" };
+        return { content: "完成", toolCalls: [], finishReason: "stop" };
+    };
+
+    const result = await createBrainstormAgentRuntime({ projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } }).run(
+        {
+            mode: "append",
+            projectId: "project-1",
+            conversation: { id: "conversation-snapshot", projectId: "project-1", title: "测试", currentMessageId: pending.id, createdAt: "", updatedAt: "" },
+            messages: [root, rootAnswer, current, pending],
+            assistantMessage: pending,
+        },
+        { signal: new AbortController().signal, onEvent: () => undefined },
+    );
+
+    assert.equal(result.status, "completed");
+    assert.equal(seen.length, 4);
+    assert.deepEqual(seen.map((args) => [args[0].model, args[0].apiFormat, args[0].channelMode, args[0].baseUrl, args[0].apiKey, args[0].channels]), [
+        ["admin-text-model", "openai", "remote", "", "", []],
+        ["admin-text-model", "openai", "remote", "", "", []],
+        ["admin-text-model", "openai", "remote", "", "", []],
+        ["admin-text-model", "openai", "remote", "", "", []],
+    ]);
+    assert.deepEqual(seen.map((args) => args[5].source), ["brainstorm_agent", "brainstorm_agent", "brainstorm_agent", "brainstorm_agent"]);
+});
+
+test("Runtime 使用用户选择的管理员文本模型，而不是强制回退到默认模型", async () => {
+    resetPublicSettings();
+    publicSettings = {
+        modelChannel: {
+            availableModels: ["admin-text-model", "admin-alt-model"],
+            defaultTextModel: "admin-text-model",
+            textModels: ["admin-text-model", "admin-alt-model"],
+            textModelProtocols: { "admin-text-model": "openai", "admin-alt-model": "xvanai" },
+        },
+    };
+    const requests = [];
+    completion = async (...args) => {
+        requests.push(args);
+        return { content: "已使用所选模型", toolCalls: [], finishReason: "stop" };
+    };
+
+    await createBrainstormAgentRuntime({ projectId: "project-1", model: "admin-alt-model", config, skillId: "divergent_ideation", focus: { kind: "project" } }).run(runtimeInput(), {
+        signal: new AbortController().signal,
+        onEvent: () => undefined,
+    });
+
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0][0].model, "admin-alt-model");
+    assert.equal(requests[0][0].textModel, "admin-alt-model");
+    assert.equal(requests[0][0].apiFormat, "xvanai");
+});
+
+test("审批恢复沿用原 Turn 的管理员模型快照", async () => {
+    resetPublicSettings();
+    publicSettings = {
+        modelChannel: {
+            availableModels: ["admin-text-model", "admin-alt-model"],
+            defaultTextModel: "admin-text-model",
+            textModels: ["admin-text-model", "admin-alt-model"],
+            textModelProtocols: { "admin-text-model": "openai", "admin-alt-model": "xvanai" },
+        },
+    };
+    const seen = [];
+    let callCount = 0;
+    completion = async (...args) => {
+        seen.push(args);
+        callCount += 1;
+        if (callCount === 1) {
+            return { content: "", toolCalls: [{ id: "call-memory", type: "function", function: { name: "storyboard_remember", arguments: JSON.stringify({ projectId: "project-1", kind: "constraint", scope: "project", content: "沿用模型", tags: [] }) } }], finishReason: "tool_calls" };
+        }
+        return { content: "已继续", toolCalls: [], finishReason: "stop" };
+    };
+    const runtime = createBrainstormAgentRuntime({ projectId: "project-1", model: "admin-text-model", config, skillId: "divergent_ideation", focus: { kind: "project" } });
+    const input = runtimeInput();
+    const awaiting = await runtime.run(input, { signal: new AbortController().signal, onEvent: () => undefined });
+    assert.equal(awaiting.status, "awaiting_approval");
+    assert.deepEqual(awaiting.continuation.modelSnapshot, { model: "admin-text-model", apiFormat: "openai" });
+
+    publicSettings = {
+        modelChannel: {
+            availableModels: ["admin-text-model", "admin-alt-model"],
+            defaultTextModel: "admin-alt-model",
+            textModels: ["admin-text-model", "admin-alt-model"],
+            textModelProtocols: { "admin-text-model": "openai", "admin-alt-model": "xvanai" },
+        },
+    };
+    const resumed = await runtime.run({ ...input, mode: "approval", decision: "rejected", continuation: awaiting.continuation }, { signal: new AbortController().signal, onEvent: () => undefined });
+    assert.equal(resumed.status, "completed");
+    assert.deepEqual(seen.map((args) => [args[0].model, args[0].apiFormat]), [["admin-text-model", "openai"], ["admin-text-model", "openai"]]);
+    resetPublicSettings();
+});
+
+test("standalone Runtime 在构造时拒绝非固定 scope ID", () => {
+    assert.throws(
+        () => createBrainstormAgentRuntime({ scope: "standalone", projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } }),
+        new RegExp(`standalone.*${STANDALONE_BRAINSTORM_SCOPE_ID}`),
+    );
+});
+
+test("standalone Runtime 跳过 Storyboard 快照并只暴露脑暴工作区 Memory 工具", async () => {
+    projectReads = 0;
+    memoryReads.length = 0;
+    let request;
+    completion = async (...args) => {
+        request = args;
+        return { content: "独立脑暴回答", toolCalls: [], finishReason: "stop" };
+    };
+    const standaloneProjectId = "__brainstorm__";
+    const standaloneConversationId = "conversation-standalone";
+    const standaloneUser = { ...user("standalone-user", "", "独立创意问题"), projectId: standaloneProjectId, conversationId: standaloneConversationId };
+    const standaloneAssistant = { ...assistant("standalone-assistant", standaloneUser.id, [], "pending"), projectId: standaloneProjectId, conversationId: standaloneConversationId };
+    const result = await createBrainstormAgentRuntime({
+        scope: "standalone",
+        projectId: standaloneProjectId,
+        config,
+        skillId: "divergent_ideation",
+        focus: { kind: "project" },
+    }).run(
+        {
+            mode: "append",
+            projectId: standaloneProjectId,
+            conversation: { id: standaloneConversationId, projectId: standaloneProjectId, title: "独立脑暴", currentMessageId: standaloneAssistant.id, createdAt: "", updatedAt: "" },
+            messages: [standaloneUser, standaloneAssistant],
+            assistantMessage: standaloneAssistant,
+        },
+        { signal: new AbortController().signal, onEvent: () => undefined },
+    );
+
+    assert.equal(result.status, "completed");
+    assert.equal(projectReads, 0);
+    assert.equal(memoryReads[0].pageSize, 500);
+    assert.deepEqual(request[2].map((tool) => tool.function.name), ["storyboard_list_memories", "storyboard_remember", "storyboard_forget_memory"]);
+    const standaloneTools = Object.fromEntries(request[2].map((tool) => [tool.function.name, tool.function]));
+    for (const tool of Object.values(standaloneTools)) assert.equal(tool.parameters.properties.projectId, undefined);
+    assert.deepEqual(standaloneTools.storyboard_list_memories.parameters.required, []);
+    assert.deepEqual(standaloneTools.storyboard_forget_memory.parameters.required, ["memoryId"]);
+    assert.deepEqual(standaloneTools.storyboard_remember.parameters.properties.scope, { type: "string", enum: ["project"] });
+    assert.deepEqual(standaloneTools.storyboard_remember.parameters.required, ["kind", "scope", "content", "tags"]);
+    assert.match(standaloneTools.storyboard_remember.description, /无需提供 projectId/);
+    const prompt = request[1].map((item) => item.content || "").join("\n");
+    assert.match(prompt, /独立创意脑暴/);
+    assert.doesNotMatch(prompt, /Storyboard 项目概览|Storyboard 当前焦点/);
+    assert.equal(result.diagnostics.items.some((item) => item.kind === "storyboard"), false);
+});
 
 test("append 每次读取最新 Storyboard/全部 Memory，并把当前分支 Context 与增量事件接到文本模型流", async () => {
     projectReads = 0;
@@ -190,8 +429,9 @@ test("append 每次读取最新 Storyboard/全部 Memory，并把当前分支 Co
         { page: 1, pageSize: 500 },
         { page: 2, pageSize: 500 },
     ]);
-    assert.equal(request[0].model, config.textModel);
+    assert.equal(request[0].model, "admin-text-model");
     assert.equal(request[0].systemPrompt, "");
+    assert.equal(request[5].source, "brainstorm_agent");
     assert.equal(request[3], "auto");
     assert.equal(request[4], undefined);
     assert.equal(request[5].includeUsage, true);

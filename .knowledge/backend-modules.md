@@ -151,22 +151,23 @@
 
 ## Storyboard Workspace 与 Brainstorm 持久化
 
-- **职责**：持久化可变 Storyboard Project 聚合根、私有 JSON artifact、Brainstorm Conversation/Message 图、Project Memory、revision CAS 和删除清理。
-- **输入**：当前用户、Project ID、workspace 字段、Conversation/Turn/Assistant/Memory 命令及各自的 `expectedRevision`、`clientRequestId` 或 `operationId`。
-- **输出**：Storyboard 摘要/详情、分页 Conversation/Project Memory 列表、平铺分页 Message 图、Turn 创建结果和 Assistant 当前版本。冲突返回 HTTP 409，存在当前记录时放在 `data.current`。
+- **职责**：持久化可变 Storyboard Project 聚合根、私有 JSON artifact，以及独立 Brainstorm Workspace 的 Conversation/Message 图、Brainstorm Memory、revision CAS 和删除清理。独立脑暴不要求或创建真实 Storyboard Project。
+- **输入**：当前用户、Brainstorm scope、兼容保留的 `project_id` 查询维度、workspace 字段、Conversation/Turn/Assistant/Memory 命令及各自的 `expectedRevision`、`clientRequestId` 或 `operationId`。
+- **输出**：Storyboard 摘要/详情、分页 Conversation/Brainstorm Memory 列表、平铺分页 Message 图、Turn 创建结果和 Assistant 当前版本。冲突返回 HTTP 409，存在当前记录时放在 `data.current`。
 - **核心文件**：Workspace 使用 `handler/storyboard_projects.go`、`service/storyboard_project.go`、`repository/storyboard_project.go`、`model/storyboard_project.go`；Brainstorm 使用同层级的 `storyboard_brainstorm.go` 文件并在 `router/router.go` 注册认证路由。
 - **数据流**：
   - Workspace create/update 继续负责 artifact 规范化、稳定 Scene/Segment/Shot ID、S3 补偿和项目级 CAS。
   - append Turn 在锁定 Conversation 的单个数据库事务中创建 User Message 与 pending Assistant Placeholder，并更新 `currentMessageId`；相同 Message ID 的同语义重放返回原 Turn；regenerate 创建同一 User Message 下的新 Assistant sibling，保留旧 Assistant。
   - Assistant 更新以 `expectedRevision` 替换完整有序 output JSON 并推进生命周期；continue 对原 terminal Assistant 做 CAS，保留 ID/output 后重置为 pending，不创建 sibling。
-  - Project Memory 只保存已确认记录；`project/scene/shot` scope、稳定 path、tags、`sourceMessageId` 和 `operationId` 由 service 校验。
-- **依赖关系**：依赖 auth、PostgreSQL、S3 和个人 `user_files`；Storyboard Workspace API 已有消费方，Brainstorm UI、模型调用和 Canvas 集成不在本次后端持久化范围。
+  - Brainstorm Memory 只保存已确认记录；旧 project 模式的 scope/path、tags、`sourceMessageId` 和 `operationId` 由 service 校验，独立脑暴不借此建立 Storyboard 实体关联。
+- **依赖关系**：Storyboard Workspace 依赖 auth、PostgreSQL、S3 和个人 `user_files`；独立 Brainstorm Workspace 复用认证数据库持久化，但不依赖真实 Storyboard Project。模型调用、独立脑暴 UI 和 Canvas 集成由上层负责。
+- **模型与计费边界**：Brainstorm 模型调用不在本模块维护独立配置或扣费；上层 Runtime 读取管理员公开文本模型配置后强制进入现有 compatibility proxy，由生成平台按渠道、`modelCosts`、`generation_tasks`、`generation_payloads` 和 `credit_logs` 统一处理，Token usage 写入现有任务 `metadata.usage`。
 - **关键不变量**：
   - status 只使用 `draft/ready`，validation outcome 继续保存在 `validationStatus`。
   - Project ID、`createdAt` 和已匹配实体 ID 在保存/重新生成后保持稳定；Workspace 更新是整体 CAS，不做字段级 merge。
-  - 所有 Brainstorm 子资源按 `user_id + project_id` 限定，Message 额外限定 `conversation_id`；越权与不存在都返回 404。
+  - 独立 Brainstorm 子资源按当前用户、保留的 `__brainstorm__` scope 和旧 `project_id` 查询维度作为隔离键，Message 额外限定 `conversation_id`；这些键不对应真实 Storyboard Project，越权与不存在都返回 404。旧 project 模式仍兼容真实项目 scope。
   - 同一 Conversation 最多一个 active Assistant Turn，不同 Conversation 可并行；删除 Conversation 使用同一行锁，删除 Project 先锁 Project 与全部 Conversation 后再清理，避免并发写入留下孤儿记录；数据库事务不跨越模型或浏览器流式处理。
-  - 当前范围不包含模型调用、Summary、Context Builder、Tool Executor、前端 UI、Canvas 关联或真实浏览器验证。
+  - 持久化层不负责模型调用或浏览器流式处理；独立入口只允许 Brainstorm Memory 工具，不提供 Storyboard 读取/修改或自动写回。Canvas 关联和真实浏览器验证仍是独立事项。
 
 ## Canvas 项目与增量同步
 

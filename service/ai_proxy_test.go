@@ -20,6 +20,10 @@ import (
 const aiProxyTestAPIKey = "compatibility-channel-api-key-secret"
 
 func setupAIProxyHTTPTest(t *testing.T, upstreamURL string) (string, string) {
+	return setupAIProxyHTTPTestWithProtocol(t, upstreamURL, "openai")
+}
+
+func setupAIProxyHTTPTestWithProtocol(t *testing.T, upstreamURL, protocol string) (string, string) {
 	t.Helper()
 	previousSettings, err := repository.GetSettings()
 	if err != nil {
@@ -33,10 +37,11 @@ func setupAIProxyHTTPTest(t *testing.T, upstreamURL string) (string, string) {
 	modelName := "stream-test-model-" + key
 	settings := previousSettings
 	settings.Private.Channels = append(settings.Private.Channels, model.ModelChannel{
-		Name: "stream-test-channel-" + key, Protocol: "openai", BaseURL: upstreamURL, APIKey: aiProxyTestAPIKey,
+		Name: "stream-test-channel-" + key, Protocol: protocol, BaseURL: upstreamURL, APIKey: aiProxyTestAPIKey,
 		Enabled: true, Weight: 1, Models: []string{modelName},
 	})
 	settings.Public.ModelChannel.TextModels = append(settings.Public.ModelChannel.TextModels, modelName)
+	settings.Public.ModelChannel.DefaultTextModel = modelName
 	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: modelName, Credits: credit(2)})
 	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		t.Fatalf("save settings: %v", err)
@@ -48,6 +53,49 @@ func setupAIProxyHTTPTest(t *testing.T, upstreamURL string) (string, string) {
 		t.Fatalf("save user: %v", err)
 	}
 	return modelName, userID
+}
+
+func assertAIProxyChatTask(t *testing.T, taskID, userID, modelName string, wantUsage map[string]int) {
+	t.Helper()
+	task, err := repository.GetGenerationTaskByID(taskID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if task.TaskType != model.TaskTypeChat || task.Source != "brainstorm_agent" || task.Model != modelName || task.Status != model.TaskStatusSuccess || !task.Credits.Equal(credit(2)) {
+		t.Fatalf("task = %#v", task)
+	}
+	var metadata struct {
+		Usage map[string]int `json:"usage"`
+	}
+	if err := json.Unmarshal([]byte(task.Metadata), &metadata); err != nil || len(metadata.Usage) != len(wantUsage) {
+		t.Fatalf("metadata = %q, err = %v", task.Metadata, err)
+	}
+	for key, want := range wantUsage {
+		if metadata.Usage[key] != want {
+			t.Errorf("usage[%s] = %d; want %d", key, metadata.Usage[key], want)
+		}
+	}
+
+	user, ok, err := repository.GetUserByID(userID)
+	if err != nil || !ok || !user.Credits.Equal(credit(8)) {
+		t.Fatalf("user = %#v, ok = %v, err = %v; want 8 credits", user, ok, err)
+	}
+	logs, _, err := repository.ListCreditLogsByUserID(userID, model.Query{PageSize: 20})
+	consumeCount, refundCount := 0, 0
+	for _, log := range logs {
+		if log.TaskID != taskID {
+			continue
+		}
+		switch log.Type {
+		case model.CreditLogTypeAIConsume:
+			consumeCount++
+		case model.CreditLogTypeAIRefund:
+			refundCount++
+		}
+	}
+	if err != nil || consumeCount != 1 || refundCount != 0 {
+		t.Fatalf("credit logs = consume %d refund %d, err = %v; want one consume and no refund", consumeCount, refundCount, err)
+	}
 }
 
 func newAIProxyHTTPServer(t *testing.T, userID string) *httptest.Server {
@@ -89,6 +137,214 @@ func TestProxyAIRequestPreservesNonStreamingJSONResponse(t *testing.T) {
 
 	if response.StatusCode != http.StatusAccepted || response.Header.Get("Content-Type") != "application/json" || response.Header.Get("X-Upstream-Request-Id") != "request-123" || string(body) != wantBody {
 		t.Fatalf("response = status %d content-type %q request-id %q body %q", response.StatusCode, response.Header.Get("Content-Type"), response.Header.Get("X-Upstream-Request-Id"), body)
+	}
+}
+
+func TestProxyAIRequestRejectsUnmappedBrainstormTextModel(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Errorf("upstream should not receive an unmapped brainstorm model")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"unexpected"}}]}`))
+	}))
+	defer upstream.Close()
+
+	modelName, userID := setupAIProxyHTTPTest(t, upstream.URL)
+	settings, err := repository.GetSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	unmapped := modelName + "-unmapped"
+	settings.Public.ModelChannel.TextModels = append(settings.Public.ModelChannel.TextModels, unmapped)
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: unmapped, Credits: credit(2)})
+	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+
+	proxy := newAIProxyHTTPServer(t, userID)
+	request, err := http.NewRequest(http.MethodPost, proxy.URL, strings.NewReader(`{"model":"`+unmapped+`","messages":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Source", "brainstorm_agent")
+	response, err := proxy.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "管理员文本模型不可用") {
+		t.Fatalf("response body = %q", body)
+	}
+}
+
+func TestProxyAIRequestAllowsConfiguredBrainstormTextModel(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"selected model"}}]}`))
+	}))
+	defer upstream.Close()
+
+	modelName, userID := setupAIProxyHTTPTest(t, upstream.URL)
+	settings, err := repository.GetSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	alternateModel := modelName + "-alternate"
+	settings.Private.Channels = append(settings.Private.Channels, model.ModelChannel{
+		Name: "alternate-channel", Protocol: "openai", BaseURL: upstream.URL, APIKey: aiProxyTestAPIKey, Enabled: true, Weight: 1, Models: []string{alternateModel},
+	})
+	settings.Public.ModelChannel.TextModels = append(settings.Public.ModelChannel.TextModels, alternateModel)
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: alternateModel, Credits: credit(2)})
+	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+
+	proxy := newAIProxyHTTPServer(t, userID)
+	request, err := http.NewRequest(http.MethodPost, proxy.URL, strings.NewReader(`{"model":"`+alternateModel+`","messages":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Source", "brainstorm_agent")
+	response, err := proxy.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "管理员文本模型已更新") || !strings.Contains(string(body), "selected model") {
+		t.Fatalf("response body = %q", body)
+	}
+}
+
+func TestProxyAIRequestPersistsJSONUsageAndBrainstormSource(t *testing.T) {
+	for _, testCase := range []struct {
+		name         string
+		protocol     string
+		responseBody string
+		wantUsage    map[string]int
+	}{
+		{
+			name:         "openai",
+			protocol:     "openai",
+			responseBody: `{"id":"chatcmpl-usage","choices":[{"message":{"content":"private generated text"}}],"usage":{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18}}`,
+			wantUsage:    map[string]int{"inputTokens": 11, "outputTokens": 7, "totalTokens": 18},
+		},
+		{
+			name:         "gemini",
+			protocol:     "gemini",
+			responseBody: `{"candidates":[{"content":{"parts":[{"text":"private generated text"}]}}],"usageMetadata":{"promptTokenCount":13,"candidatesTokenCount":5,"totalTokenCount":18}}`,
+			wantUsage:    map[string]int{"inputTokens": 13, "outputTokens": 5, "totalTokens": 18},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(testCase.responseBody))
+			}))
+			defer upstream.Close()
+
+			modelName, userID := setupAIProxyHTTPTestWithProtocol(t, upstream.URL, testCase.protocol)
+			proxy := newAIProxyHTTPServer(t, userID)
+			request, err := http.NewRequest(http.MethodPost, proxy.URL, strings.NewReader(`{"model":"`+modelName+`","messages":[{"role":"user","content":"private request text"}]}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("X-Source", "brainstorm_agent")
+			response, err := proxy.Client().Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			if err != nil || string(body) != testCase.responseBody {
+				t.Fatalf("response body = %q, err = %v", body, err)
+			}
+
+			taskID := response.Header.Get("X-Generation-Task-Id")
+			if taskID == "" {
+				t.Fatal("missing X-Generation-Task-Id")
+			}
+			assertAIProxyChatTask(t, taskID, userID, modelName, testCase.wantUsage)
+			payload, err := repository.GetGenerationPayloadByTaskID(taskID)
+			if err != nil || strings.Contains(payload.RequestBody+payload.ResponseBody, "private") || !strings.Contains(payload.RequestBody, "omitted") || !strings.Contains(payload.ResponseBody, "omitted") {
+				t.Fatalf("payload = %#v, err = %v", payload, err)
+			}
+		})
+	}
+}
+
+func TestProxyAIRequestPersistsOpenAIStreamUsageWithoutDelayingFirstChunk(t *testing.T) {
+	firstChunk := "data: {\"choices\":[{\"delta\":{\"content\":\"private streamed text\"}}]}\n\n"
+	usageChunk := "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":17,\"completion_tokens\":9,\"total_tokens\":26}}\n\ndata: [DONE]\n\n"
+	releaseUsage := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(firstChunk))
+		w.(http.Flusher).Flush()
+		<-releaseUsage
+		_, _ = w.Write([]byte(usageChunk))
+	}))
+	defer upstream.Close()
+
+	modelName, userID := setupAIProxyHTTPTest(t, upstream.URL)
+	proxy := newAIProxyHTTPServer(t, userID)
+	request, err := http.NewRequest(http.MethodPost, proxy.URL, strings.NewReader(`{"model":"`+modelName+`","stream":true,"stream_options":{"include_usage":true},"messages":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Source", "brainstorm_agent")
+
+	type firstChunkResult struct {
+		response *http.Response
+		chunk    []byte
+		err      error
+	}
+	result := make(chan firstChunkResult, 1)
+	go func() {
+		response, err := proxy.Client().Do(request)
+		if err != nil {
+			result <- firstChunkResult{err: err}
+			return
+		}
+		chunk := make([]byte, len(firstChunk))
+		_, err = io.ReadFull(response.Body, chunk)
+		result <- firstChunkResult{response: response, chunk: chunk, err: err}
+	}()
+
+	var response *http.Response
+	select {
+	case got := <-result:
+		if got.err != nil || string(got.chunk) != firstChunk {
+			t.Fatalf("first chunk = %q, err = %v", got.chunk, got.err)
+		}
+		response = got.response
+	case <-time.After(time.Second):
+		t.Fatal("first chunk did not reach the client before usage chunk")
+	}
+	defer response.Body.Close()
+	close(releaseUsage)
+	if rest, err := io.ReadAll(response.Body); err != nil || string(rest) != usageChunk {
+		t.Fatalf("remaining response = %q, err = %v", rest, err)
+	}
+
+	taskID := response.Header.Get("X-Generation-Task-Id")
+	if taskID == "" {
+		t.Fatal("missing X-Generation-Task-Id")
+	}
+	assertAIProxyChatTask(t, taskID, userID, modelName, map[string]int{"inputTokens": 17, "outputTokens": 9, "totalTokens": 26})
+	payload, err := repository.GetGenerationPayloadByTaskID(taskID)
+	if err != nil || strings.Contains(payload.ResponseBody, "private streamed text") || !strings.Contains(payload.ResponseBody, "omitted") {
+		t.Fatalf("payload = %#v, err = %v", payload, err)
 	}
 }
 
@@ -754,6 +1010,18 @@ func TestReadAIRequestMultipart(t *testing.T) {
 	}
 	if got := readAIRequestCount(gotBody, gotContentType); got != 2 {
 		t.Fatalf("count = %d, want 2", got)
+	}
+}
+
+func TestParseCompatibilityUsageDerivesMissingTotalTokens(t *testing.T) {
+	for _, body := range []string{
+		`{"usage":{"prompt_tokens":11,"completion_tokens":7}}`,
+		`{"usageMetadata":{"promptTokenCount":13,"candidatesTokenCount":5}}`,
+	} {
+		usage := parseCompatibilityUsage([]byte(body))
+		if usage == nil || usage.TotalTokens != usage.InputTokens+usage.OutputTokens {
+			t.Fatalf("usage = %#v; want derived total", usage)
+		}
 	}
 }
 
