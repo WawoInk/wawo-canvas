@@ -29,9 +29,9 @@ var aiProxyHTTPClient = func() *http.Client {
 	return &http.Client{Transport: transport}
 }()
 
-func brainstormAdminModelAllowed(public model.PublicSetting, modelName string) bool {
+func brainstormAdminTextModelAllowed(public model.PublicSetting, modelName string) bool {
 	modelName = strings.TrimSpace(modelName)
-	if modelName == "" || modelName != strings.TrimSpace(public.ModelChannel.DefaultTextModel) {
+	if !publicModelAllowed(public, model.TaskTypeChat, modelName) {
 		return false
 	}
 	protocol, ok := public.ModelChannel.TextModelProtocols[modelName]
@@ -73,9 +73,9 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		proxyFail(w, "模型不可用")
 		return
 	}
-	if source == "brainstorm_agent" && !brainstormAdminModelAllowed(public, modelName) {
-		proxyAILogf("Brainstorm model is not the current admin default: model=%s default=%s", modelName, public.ModelChannel.DefaultTextModel)
-		proxyFail(w, "管理员文本模型已更新，请刷新后重试")
+	if source == "brainstorm_agent" && !brainstormAdminTextModelAllowed(public, modelName) {
+		proxyAILogf("Brainstorm model is not an admin-configured text model: model=%s", modelName)
+		proxyFail(w, "管理员文本模型不可用，请重新选择")
 		return
 	}
 	credits, err := ModelCost(modelName)

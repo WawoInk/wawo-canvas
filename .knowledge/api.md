@@ -31,7 +31,7 @@
 - OAuth 是重定向。
 - `/content`、公开 reference media 是文件流。
 - AI compatibility proxy 大多透传上游 status/header/body；平台预检错误可能返回平台信封。
-- Brainstorm Agent 的远程文本请求统一通过 `/api/v1/chat/completions` 或 `/api/v1/xvanai/chat/completions`，带 `X-Source: brainstorm_agent`；服务端按管理员当前公开文本配置校验模型并复用既有计费、任务审计和 usage 落库。
+- Brainstorm Agent 的远程文本请求统一通过 `/api/v1/chat/completions` 或 `/api/v1/xvanai/chat/completions`，带 `X-Source: brainstorm_agent`；服务端按管理员当前公开文本配置校验所选文本模型，并复用既有计费、任务审计和 usage 落库。
 - SSE/Canvas Agent 不在 Go 主 API 内。
 
 通用列表参数：
@@ -252,7 +252,7 @@ Assistant `output` 只校验为有界 JSON 数组，并按原顺序整体保存�
 
 同一 Conversation 同时只能存在一个 active Turn；同一 `clientRequestId` 或相同 Message ID 的相同语义输入幂等返回已有结果，不同语义复用返回 HTTP 409。旧 Message revision、非法生命周期转换和 active Turn 冲突也返回 409，存在当前 Message 时放在 `data.current`。Memory 的 `scope/path` 校验继续兼容旧 project 模式；独立入口固定使用 Brainstorm Workspace scope，只提供 Brainstorm Memory，不暴露 Storyboard/Scene/Shot 读取或修改工具，`operationId` 仍按内部用户与 `project_id` 隔离键保证唯一。没有单独的 active Conversation 切换接口。
 
-当前 Brainstorm JSON 接口只提供持久化与并发边界，不执行模型调用；独立 Brainstorm UI 及其 Memory 工具在上层使用 `__brainstorm__` scope 和旧 `project_id` 维度，但这不代表真实 Storyboard Project。Brainstorm 成果不会由这些接口自动写回分镜或剧本，Canvas 集成和真实浏览器验证仍是独立事项。模型请求另走平台 compatibility proxy：Runtime 每轮读取管理员公开文本配置并强制 remote，发送 `X-Source: brainstorm_agent`；proxy 的 `generation_tasks` 任务中保存实际模型、计费和 `metadata.usage`，不新增脑暴专用调用接口。
+当前 Brainstorm JSON 接口只提供持久化与并发边界，不执行模型调用；独立 Brainstorm UI 及其 Memory 工具在上层使用 `__brainstorm__` scope 和旧 `project_id` 维度，但这不代表真实 Storyboard Project。Brainstorm 成果不会由这些接口自动写回分镜或剧本，Canvas 集成和真实浏览器验证仍是独立事项。模型请求另走平台 compatibility proxy：Runtime 从管理员公开 `textModels` 列表使用用户所选模型并强制 remote，发送 `X-Source: brainstorm_agent`；proxy 的 `generation_tasks` 任务中保存实际模型、计费和 `metadata.usage`，不新增脑暴专用调用接口。
 
 ## Canvas 与增量同步
 

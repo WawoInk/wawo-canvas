@@ -12,6 +12,8 @@ export type ImageRequestFormatSetting = {
     resolutions: ImageResolutionOption[];
 };
 
+export type PublicTextModelProtocol = "openai" | "xvanai" | "gemini";
+
 export type PublicModelChannelSettings = {
     availableModels: string[];
     modelCosts: { model: string; displayName?: string; credits: DecimalValue; resolutionCredits?: Record<string, DecimalValue> }[];
@@ -24,7 +26,7 @@ export type PublicModelChannelSettings = {
     imageModels: string[];
     videoModels: string[];
     textModels: string[];
-    textModelProtocols: Record<string, string>;
+    textModelProtocols: Record<string, PublicTextModelProtocol>;
     audioModels: string[];
     systemPrompt: string;
     allowCustomChannel: boolean;

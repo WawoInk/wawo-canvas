@@ -51,10 +51,34 @@ let listRecords: () => Promise<StoryboardRecordSummary[]> = async () => [summary
 let loadRecord: (id: string) => Promise<StoryboardRecord> = async (id) => record(id, id === "project-1" ? "项目一详情" : "项目二详情");
 const calls: string[] = [];
 const panelProjects: Array<StoryboardRecord | null> = [];
+const adminTextSettings = {
+    modelChannel: {
+        availableModels: ["admin-text-model", "admin-alt-model"],
+        modelCosts: [
+            { model: "admin-text-model", displayName: "管理员文本" },
+            { model: "admin-alt-model", displayName: "管理员备选" },
+        ],
+        imageRequestFormats: [],
+        defaultModel: "admin-text-model",
+        defaultImageModel: "",
+        defaultVideoModel: "",
+        defaultTextModel: "admin-text-model",
+        defaultAudioModel: "",
+        imageModels: [],
+        videoModels: [],
+        textModels: ["admin-text-model", "admin-alt-model"],
+        textModelProtocols: { "admin-text-model": "openai", "admin-alt-model": "xvanai" },
+        audioModels: [],
+        systemPrompt: "",
+        allowCustomChannel: false,
+    },
+    auth: { allowRegister: true, linuxDo: { enabled: false } },
+};
 
 // @ts-expect-error Bun provides module mocking at test runtime.
 const { mock } = await import("bun:test");
 mock.module("@/stores/use-user-store", () => ({ useUserStore: (selector: (state: unknown) => unknown) => selector({ user: { id: accountId } }) }));
+mock.module("@/services/api/settings", () => ({ fetchPublicSettings: async () => structuredClone(adminTextSettings) }));
 mock.module("./storyboard-storage", () => ({
     listStoryboardRecords: async () => {
         calls.push(`list:${accountId}`);
@@ -66,10 +90,10 @@ mock.module("./storyboard-storage", () => ({
     },
 }));
 mock.module("./brainstorm-agent-panel", () => ({
-    BrainstormAgentPanel: ({ project, disabled = false, onActiveChange, onProjectUpdated }: { project: StoryboardRecord | null; disabled?: boolean; onActiveChange?: (active: boolean) => void; onProjectUpdated?: () => void }) => {
+    BrainstormAgentPanel: ({ project, model, disabled = false, onActiveChange, onProjectUpdated }: { project: StoryboardRecord | null; model?: string; disabled?: boolean; onActiveChange?: (active: boolean) => void; onProjectUpdated?: () => void }) => {
         panelProjects.push(project);
         return (
-            <div data-testid="brainstorm-agent-panel" data-disabled={String(disabled)}>
+            <div data-testid="brainstorm-agent-panel" data-disabled={String(disabled)} data-model={model || ""}>
                 脑暴 Agent · {project?.title || "独立脑暴工作区"}
                 <button type="button" onClick={() => onActiveChange?.(true)}>
                     开始运行
@@ -103,6 +127,17 @@ async function mount() {
     return { container, root };
 }
 
+async function selectModel(container: ParentNode, value: string) {
+    const select = container.querySelector<HTMLSelectElement>('select[aria-label="脑暴模型"]');
+    assert.ok(select);
+    await act(async () => {
+        select.value = value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await flush();
+    return select;
+}
+
 async function selectProject(container: ParentNode, value: string) {
     const select = container.querySelector<HTMLSelectElement>('select[aria-label="脑暴项目"]');
     assert.ok(select);
@@ -124,6 +159,29 @@ async function cleanup(container: HTMLElement, root: ReturnType<typeof createRoo
     await act(async () => root.unmount());
     container.remove();
 }
+
+test("Studio 展示管理员文本模型并将用户选择传给 Brainstorm Panel", async () => {
+    calls.length = 0;
+    panelProjects.length = 0;
+    accountId = "user-1";
+    listRecords = async () => [];
+
+    const { container, root } = await mount();
+    const select = container.querySelector<HTMLSelectElement>('select[aria-label="脑暴模型"]');
+    assert.ok(select);
+    assert.equal(select.value, "admin-text-model");
+    assert.match(select.querySelector('option[value="admin-text-model"]')?.textContent || "", /管理员文本/);
+    assert.match(select.querySelector('option[value="admin-alt-model"]')?.textContent || "", /管理员备选/);
+    assert.equal(container.querySelector('[data-testid="brainstorm-agent-panel"]')?.getAttribute("data-model"), "admin-text-model");
+
+    await selectModel(container, "admin-alt-model");
+    assert.equal(select.value, "admin-alt-model");
+    assert.equal(container.querySelector('[data-testid="brainstorm-agent-panel"]')?.getAttribute("data-model"), "admin-alt-model");
+
+    await act(async () => button(container, "开始运行").click());
+    assert.equal(select.disabled, true);
+    await cleanup(container, root);
+});
 
 test("Studio 默认展示独立脑暴并异步加载可选项目摘要，不自动加载项目", async () => {
     calls.length = 0;

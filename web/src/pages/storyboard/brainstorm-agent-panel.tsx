@@ -222,7 +222,7 @@ function MessageCard({
     );
 }
 
-export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange, disabled = false }: { project: StoryboardRecord | null; onProjectUpdated?: () => void; onActiveChange?: (active: boolean) => void; disabled?: boolean }) {
+export function BrainstormAgentPanel({ project, model, onProjectUpdated, onActiveChange, disabled = false }: { project: StoryboardRecord | null; model?: string; onProjectUpdated?: () => void; onActiveChange?: (active: boolean) => void; disabled?: boolean }) {
     const { message } = App.useApp();
     const user = useUserStore((state) => state.user);
     const [skillId, setSkillId] = useState(skills[0].id);
@@ -242,6 +242,7 @@ export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange
     const runtime = useMemo(() => {
         const runtimeOptions = {
             projectId,
+            model,
             skillId,
             focus: selectedFocus,
             onProjectChanged: project ? onProjectUpdated : undefined,
@@ -249,7 +250,7 @@ export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange
             ...(project ? {} : { scope: "standalone" as const }),
         };
         return createBrainstormAgentRuntime(runtimeOptions);
-    }, [onProjectUpdated, project, projectId, selectedFocus, skillId]);
+    }, [model, onProjectUpdated, project, projectId, selectedFocus, skillId]);
     const agent = useBrainstormAgent(projectId, runtime);
     const currentConversation = agent.conversations.find((item) => item.id === agent.currentConversationId);
     const branch = useMemo(() => currentBranch(agent.messages, currentConversation?.currentMessageId || ""), [agent.messages, currentConversation?.currentMessageId]);

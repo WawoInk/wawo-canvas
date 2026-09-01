@@ -2,6 +2,7 @@ import type {
     BrainstormCompletionResult,
     BrainstormContextResult,
     BrainstormModelMessage,
+    BrainstormModelSnapshot,
     BrainstormOutputItem,
     BrainstormTokenUsage,
     BrainstormToolApprovalDecision,
@@ -19,6 +20,7 @@ type TurnState = {
     output: BrainstormOutputItem[];
     toolRounds: number;
     usage?: BrainstormTokenUsage;
+    modelSnapshot?: BrainstormModelSnapshot;
     producedOutput: boolean;
     wrote: boolean;
     retried: boolean;
@@ -70,6 +72,7 @@ function continuation(state: TurnState, pendingCalls: BrainstormToolCall[]): Bra
         pendingCalls: [...pendingCalls],
         toolRounds: state.toolRounds,
         ...(state.usage ? { usage: state.usage } : {}),
+        ...(state.modelSnapshot ? { modelSnapshot: state.modelSnapshot } : {}),
     };
 }
 
@@ -83,7 +86,7 @@ function pauseForApproval(state: TurnState, call: BrainstormToolCall, pendingCal
             status: "awaiting_approval",
             content,
             sideEffect: "none",
-            continuation: { pendingCalls: [...pendingCalls], toolRounds: state.toolRounds },
+            continuation: { pendingCalls: [...pendingCalls], toolRounds: state.toolRounds, ...(state.modelSnapshot ? { modelSnapshot: state.modelSnapshot } : {}) },
         },
         options,
     );
@@ -258,7 +261,7 @@ async function continueTurn(state: TurnState, dependencies: BrainstormTurnDepend
 
 export function runBrainstormTurn(context: BrainstormContextResult, dependencies: BrainstormTurnDependencies, options: BrainstormTurnOptions = {}): Promise<BrainstormTurnResult> {
     options.onEvent?.({ type: "status", status: "streaming" });
-    return continueTurn({ context, messages: [...context.messages], output: [], toolRounds: 0, producedOutput: false, wrote: false, retried: false }, dependencies, options);
+    return continueTurn({ context, messages: [...context.messages], output: [], toolRounds: 0, modelSnapshot: options.modelSnapshot, producedOutput: false, wrote: false, retried: false }, dependencies, options);
 }
 
 export async function resumeBrainstormTurn(pending: BrainstormTurnContinuation, decision: BrainstormToolApprovalDecision, dependencies: BrainstormTurnDependencies, options: BrainstormTurnOptions = {}): Promise<BrainstormTurnResult> {
@@ -273,6 +276,7 @@ export async function resumeBrainstormTurn(pending: BrainstormTurnContinuation, 
         output,
         toolRounds: pending.toolRounds,
         usage: pending.usage,
+        modelSnapshot: pending.modelSnapshot,
         producedOutput: true,
         wrote: false,
         retried: true,
