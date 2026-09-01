@@ -41,6 +41,7 @@ func setupAIProxyHTTPTestWithProtocol(t *testing.T, upstreamURL, protocol string
 		Enabled: true, Weight: 1, Models: []string{modelName},
 	})
 	settings.Public.ModelChannel.TextModels = append(settings.Public.ModelChannel.TextModels, modelName)
+	settings.Public.ModelChannel.DefaultTextModel = modelName
 	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: modelName, Credits: credit(2)})
 	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		t.Fatalf("save settings: %v", err)
@@ -136,6 +137,49 @@ func TestProxyAIRequestPreservesNonStreamingJSONResponse(t *testing.T) {
 
 	if response.StatusCode != http.StatusAccepted || response.Header.Get("Content-Type") != "application/json" || response.Header.Get("X-Upstream-Request-Id") != "request-123" || string(body) != wantBody {
 		t.Fatalf("response = status %d content-type %q request-id %q body %q", response.StatusCode, response.Header.Get("Content-Type"), response.Header.Get("X-Upstream-Request-Id"), body)
+	}
+}
+
+func TestProxyAIRequestRejectsBrainstormModelOutsideAdminDefault(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"should not be called"}}]}`))
+	}))
+	defer upstream.Close()
+
+	modelName, userID := setupAIProxyHTTPTest(t, upstream.URL)
+	settings, err := repository.GetSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	alternateModel := modelName + "-alternate"
+	settings.Private.Channels = append(settings.Private.Channels, model.ModelChannel{
+		Name: "alternate-channel", Protocol: "openai", BaseURL: upstream.URL, APIKey: aiProxyTestAPIKey, Enabled: true, Weight: 1, Models: []string{alternateModel},
+	})
+	settings.Public.ModelChannel.TextModels = append(settings.Public.ModelChannel.TextModels, alternateModel)
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: alternateModel, Credits: credit(2)})
+	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+
+	proxy := newAIProxyHTTPServer(t, userID)
+	request, err := http.NewRequest(http.MethodPost, proxy.URL, strings.NewReader(`{"model":"`+alternateModel+`","messages":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Source", "brainstorm_agent")
+	response, err := proxy.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "管理员文本模型已更新") {
+		t.Fatalf("response body = %q", body)
 	}
 }
 
@@ -925,6 +969,18 @@ func TestReadAIRequestMultipart(t *testing.T) {
 	}
 	if got := readAIRequestCount(gotBody, gotContentType); got != 2 {
 		t.Fatalf("count = %d, want 2", got)
+	}
+}
+
+func TestParseCompatibilityUsageDerivesMissingTotalTokens(t *testing.T) {
+	for _, body := range []string{
+		`{"usage":{"prompt_tokens":11,"completion_tokens":7}}`,
+		`{"usageMetadata":{"promptTokenCount":13,"candidatesTokenCount":5}}`,
+	} {
+		usage := parseCompatibilityUsage([]byte(body))
+		if usage == nil || usage.TotalTokens != usage.InputTokens+usage.OutputTokens {
+			t.Fatalf("usage = %#v; want derived total", usage)
+		}
 	}
 }
 

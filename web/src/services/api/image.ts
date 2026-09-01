@@ -145,7 +145,8 @@ type ChatCompletionPayload = {
 };
 
 type ChatStreamState = { buffer: string; text: string; toolCalls: Map<number, { id: string; name: string; args: string }>; usage?: ModelUsage; finishReason?: ModelFinishReason; done?: boolean };
-export type RequestOptions = { signal?: AbortSignal; onEvent?: (event: ModelStreamEvent) => void; includeUsage?: boolean; source?: string };
+export type RequestSource = "brainstorm_agent";
+export type RequestOptions = { signal?: AbortSignal; onEvent?: (event: ModelStreamEvent) => void; includeUsage?: boolean; source?: RequestSource };
 
 function normalizeFinishReason(reason?: string | null): ModelFinishReason | undefined {
     switch (reason?.trim().toLowerCase()) {

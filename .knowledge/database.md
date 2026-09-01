@@ -197,7 +197,7 @@ private value 包含：
 - 上游：`upstream_task_id/callback_token/trace_id`。
 - 幂等：`client_request_id/command_hash/command_version`。
 - 第一方快照：`intent_kind/model_profile_id/profile_version/adapter_key/channel_id/upstream_model`。
-- 结果/摘要：`metadata/result_json`。
+- 结果/摘要：`metadata/result_json`。兼容 Chat 的上游 usage（`inputTokens`、`outputTokens`、`totalTokens`）写入现有 `metadata.usage`；聊天正文仍只在 `generation_payloads` 中保存 omission marker。
 - 队列：`queue_available_at/worker_lease_owner/worker_lease_expires_at`。
 - 时间：`created_at/updated_at`。
 

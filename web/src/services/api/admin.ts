@@ -349,6 +349,7 @@ export type AdminPublicModelChannelSettings = {
     imageModels: string[];
     videoModels: string[];
     textModels: string[];
+    textModelProtocols: Record<string, string>;
     audioModels: string[];
     systemPrompt: string;
     allowCustomChannel: boolean;

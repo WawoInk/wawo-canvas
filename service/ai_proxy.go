@@ -29,6 +29,23 @@ var aiProxyHTTPClient = func() *http.Client {
 	return &http.Client{Transport: transport}
 }()
 
+func brainstormAdminModelAllowed(public model.PublicSetting, modelName string) bool {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" || modelName != strings.TrimSpace(public.ModelChannel.DefaultTextModel) {
+		return false
+	}
+	protocol, ok := public.ModelChannel.TextModelProtocols[modelName]
+	if !ok {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(protocol)) {
+	case "openai", "xvanai", "gemini":
+		return true
+	default:
+		return false
+	}
+}
+
 // ProxyAIRequest 处理 POST 类 AI 代理请求：选渠道、扣算力点、转发上游、失败返还。
 func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 	body, contentType, modelName, err := readAIRequest(r)
@@ -43,6 +60,7 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		return
 	}
 	taskType := DetermineTaskType(path)
+	source := DetermineSource(r)
 	auditBody := func(body []byte) []byte {
 		if taskType == model.TaskTypeChat {
 			return []byte(`{"omitted":"chat content"}`)
@@ -53,6 +71,11 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 	if err != nil || !publicModelAllowed(public, taskType, modelName) {
 		proxyAILogf("AI proxy model not exposed: model=%s taskType=%s err=%v", modelName, taskType, err)
 		proxyFail(w, "模型不可用")
+		return
+	}
+	if source == "brainstorm_agent" && !brainstormAdminModelAllowed(public, modelName) {
+		proxyAILogf("Brainstorm model is not the current admin default: model=%s default=%s", modelName, public.ModelChannel.DefaultTextModel)
+		proxyFail(w, "管理员文本模型已更新，请刷新后重试")
 		return
 	}
 	credits, err := ModelCost(modelName)
@@ -87,7 +110,6 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 
 	// ── 生成任务日志：开始 ──
 	provider := DetermineProvider(channel)
-	source := DetermineSource(r)
 	auditRequestBody := auditBody(requestAuditBody(body, contentType))
 	auditRequestHeaders := sanitizeGenerationAuditJSON(sanitizeGenerationAuditHeaders(resolved.Headers))
 	genTaskID, err := LogTaskStart(user, taskType, provider, modelName, auditRequestBody, auditRequestHeaders, source, "")
@@ -196,12 +218,19 @@ func parseCompatibilityUsage(body []byte) *compatibilityUsage {
 		return nil
 	}
 	if payload.Usage != nil {
-		return &compatibilityUsage{InputTokens: payload.Usage.PromptTokens, OutputTokens: payload.Usage.CompletionTokens, TotalTokens: payload.Usage.TotalTokens}
+		return normalizedCompatibilityUsage(payload.Usage.PromptTokens, payload.Usage.CompletionTokens, payload.Usage.TotalTokens)
 	}
 	if payload.UsageMetadata != nil {
-		return &compatibilityUsage{InputTokens: payload.UsageMetadata.PromptTokenCount, OutputTokens: payload.UsageMetadata.CandidatesTokenCount, TotalTokens: payload.UsageMetadata.TotalTokenCount}
+		return normalizedCompatibilityUsage(payload.UsageMetadata.PromptTokenCount, payload.UsageMetadata.CandidatesTokenCount, payload.UsageMetadata.TotalTokenCount)
 	}
 	return nil
+}
+
+func normalizedCompatibilityUsage(inputTokens, outputTokens, totalTokens int) *compatibilityUsage {
+	if totalTokens == 0 {
+		totalTokens = inputTokens + outputTokens
+	}
+	return &compatibilityUsage{InputTokens: inputTokens, OutputTokens: outputTokens, TotalTokens: totalTokens}
 }
 
 func mergeCompatibilityUsage(current, next *compatibilityUsage) *compatibilityUsage {
@@ -219,6 +248,8 @@ func mergeCompatibilityUsage(current, next *compatibilityUsage) *compatibilityUs
 	}
 	if next.TotalTokens != 0 {
 		current.TotalTokens = next.TotalTokens
+	} else {
+		current.TotalTokens = current.InputTokens + current.OutputTokens
 	}
 	return current
 }
@@ -231,7 +262,7 @@ func updateCompatibilityTaskMetadata(taskID string, usage *compatibilityUsage) e
 	metadata := map[string]any{}
 	if strings.TrimSpace(task.Metadata) != "" {
 		if err := json.Unmarshal([]byte(task.Metadata), &metadata); err != nil {
-			metadata = map[string]any{}
+			return fmt.Errorf("parse generation task metadata: %w", err)
 		}
 	}
 	metadata["usage"] = usage
@@ -639,7 +670,11 @@ func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure
 	var streamUsage *compatibilityUsage
 	var streamLine strings.Builder
 	collectStreamLine := func(line string) {
-		if usage := parseCompatibilityUsage([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:")))); usage != nil {
+		line = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if !strings.Contains(line, `"usage"`) && !strings.Contains(line, `"usageMetadata"`) {
+			return
+		}
+		if usage := parseCompatibilityUsage([]byte(line)); usage != nil {
 			streamUsage = mergeCompatibilityUsage(streamUsage, usage)
 		}
 	}

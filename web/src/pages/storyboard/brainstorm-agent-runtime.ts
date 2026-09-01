@@ -141,7 +141,7 @@ function adminRemoteConfig(baseConfig: AiConfig | undefined, settings: PublicSet
     const model = typeof channel?.defaultTextModel === "string" ? channel.defaultTextModel.trim() : "";
     const availableModels = Array.isArray(channel?.availableModels) ? channel.availableModels : [];
     const textModels = Array.isArray(channel?.textModels) ? channel.textModels : [];
-    const protocol = typeof channel?.textModelProtocols?.[model] === "string" ? channel.textModelProtocols[model] : "";
+    const protocol = typeof channel?.textModelProtocols?.[model] === "string" ? channel.textModelProtocols[model].trim().toLowerCase() : "";
     if (!model || !availableModels.includes(model) || !textModels.includes(model) || !["openai", "xvanai", "gemini"].includes(protocol)) {
         throw new Error("Brainstorm Agent 未配置有效的管理员文本模型：defaultTextModel 必须同时存在于 availableModels、textModels，且 textModelProtocols 必须为 openai、xvanai 或 gemini。");
     }

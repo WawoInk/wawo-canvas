@@ -335,6 +335,8 @@ Workbench/Canvas
 - **依赖**：settings/channels、credits、generation tasks。
 - **常见修改位置**：新供应商兼容字段放 request builder，不放 Canvas。
 
+Brainstorm Agent 的文本调用是该兼容链路的强制 remote 使用方：Runtime 每轮读取管理员公开文本模型和协议，拒绝本地配置或缺少有效映射的请求；`X-Source: brainstorm_agent` 仅用于现有任务来源归类，不创建新的扣费或日志机制。
+
 ## 第一方视频 Generation Run
 
 ```text
