@@ -68,6 +68,7 @@ export const router = createBrowserRouter([
                     { path: "login", element: <LoginPage /> },
                     { path: "image", element: <ImagePage /> },
                     { path: "storyboard", element: <StoryboardPage /> },
+                    { path: "storyboard/brainstorm-agent", element: <StoryboardPage /> },
                     { path: "storyboard/script-agent", element: <StoryboardPage /> },
                     { path: "storyboard/script-agent/:projectId", element: <StoryboardPage /> },
                     { path: "canvas", element: <CanvasListPage /> },

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
++ [调整] 分镜创作室将 Brainstorm Agent 从原分镜工作区内嵌 Drawer 拆分为位于“分镜创作室”左侧的独立 Tab；脑暴模块自行选择已保存项目，原分镜生成、历史、校验和导出流程恢复为接入前的独立状态。
 + [新增] 分镜创作室新增 Brainstorm Agent 工作区，支持多 Conversation 与分支恢复、Local/Remote Provider 增量 Turn、Stop/Regenerate/Continue/Retry、五种版本化 Skill、稳定 Storyboard Focus、显式 Project/Scene/Shot Memory 和响应式侧栏。
 + [新增] Brainstorm Agent 提供有界 Context、页内分支 Summary、十项白名单 Tool、只读自动执行与写操作审批、最多四轮 Tool Loop、首输出前受控重试，以及同 Conversation 单活动 Turn、Assistant revision CAS、幂等和账号/Project 隔离。
 + [修复] 远程 AI Compatibility 文本流支持 SSE/NDJSON 实时透传、取消传播、余额刷新和中断退款；Chat 审计仅持久化省略标记与规范错误，不保存请求/响应正文或原始错误，客户端即时响应保持原合同。

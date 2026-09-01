@@ -134,7 +134,7 @@ export function seoPage(pathname: string) {
     if (pathname === "/canvas" || pathname.startsWith("/canvas/")) return "canvas";
     if (pathname === "/image") return "image";
     if (pathname === "/storyboard/script-agent" || pathname.startsWith("/storyboard/script-agent/")) return "scriptAgent";
-    if (pathname === "/storyboard") return "storyboard";
+    if (pathname === "/storyboard" || pathname === "/storyboard/brainstorm-agent") return "storyboard";
     if (pathname === "/video") return "video";
     if (pathname === "/prompts") return "prompts";
     if (pathname === "/assets") return "assets";

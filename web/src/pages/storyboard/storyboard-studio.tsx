@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, ChevronRight, Download, FileJson, FileText, History, LoaderCircle, MessagesSquare, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronRight, Download, FileJson, FileText, History, LoaderCircle, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { saveAs } from "file-saver";
-import { Alert, App, Button, Collapse, Drawer, Empty, Grid, Input, InputNumber, Popconfirm, Progress, Select, Switch, Table, Tag } from "antd";
+import { Alert, App, Button, Collapse, Drawer, Empty, Input, InputNumber, Popconfirm, Progress, Select, Switch, Table, Tag } from "antd";
 import type { TableProps } from "antd";
 
 import { ModelPicker } from "@/components/model-picker";
@@ -12,7 +12,6 @@ import { generateStoryboard } from "@/services/api/storyboard";
 import { useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 import { deleteStoryboardRecord, listStoryboardRecords, loadStoryboardRecord, saveStoryboardRecord, storyboardConflictRecord, type StoryboardRecordSummary } from "./storyboard-storage";
-import { BrainstormAgentPanel } from "./brainstorm-agent-panel";
 import { defaultStoryboardOptions, normalizeStoryboardDocument, storyboardToMarkdown, type StoryboardAspectRatio, type StoryboardRecord, type StoryboardScene, type StoryboardShot, type StoryboardStage } from "./storyboard";
 
 type ShotRow = StoryboardShot & {
@@ -36,7 +35,6 @@ const aspectRatios: StoryboardAspectRatio[] = ["16:9", "9:16", "1:1", "4:3", "3:
 export function StoryboardStudio() {
     const { t, i18n } = useTranslation();
     const { message } = App.useApp();
-    const screens = Grid.useBreakpoint();
     const effectiveConfig = useEffectiveConfig();
     const updateConfig = useConfigStore((state) => state.updateConfig);
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
@@ -52,17 +50,13 @@ export function StoryboardStudio() {
     const [options, setOptions] = useState({ ...defaultStoryboardOptions });
     const [records, setRecords] = useState<StoryboardRecordSummary[]>([]);
     const [record, setRecord] = useState<StoryboardRecord | null>(null);
-    const [recordPersisted, setRecordPersisted] = useState(false);
     const [stage, setStage] = useState<StoryboardStage | null>(null);
     const [running, setRunning] = useState(false);
     const [error, setError] = useState("");
     const [historyOpen, setHistoryOpen] = useState(false);
-    const [brainstormOpen, setBrainstormOpen] = useState(false);
-    const [brainstormActive, setBrainstormActive] = useState(false);
     const text = (key: string, fallback: string) => t(`storyboardStudio.${key}`, { defaultValue: fallback });
     const model = effectiveConfig.textModel || effectiveConfig.model;
-    const canGenerate = Boolean(title.trim() && source.trim() && model && !brainstormActive);
-    const workspaceBusy = running || brainstormActive;
+    const canGenerate = Boolean(title.trim() && source.trim() && model);
 
     useEffect(() => {
         let active = true;
@@ -107,7 +101,6 @@ export function StoryboardStudio() {
 
     function applyRecord(next: StoryboardRecord) {
         setRecord(next);
-        setRecordPersisted(true);
         setTitle(next.title);
         setSource(next.source);
         setOptions(next.options);
@@ -131,8 +124,6 @@ export function StoryboardStudio() {
     function resetStudio() {
         detailRequestRef.current += 1;
         setRecord(null);
-        setRecordPersisted(false);
-        setBrainstormOpen(false);
         setTitle("");
         setSource("");
         setOptions({ ...defaultStoryboardOptions });
@@ -158,10 +149,6 @@ export function StoryboardStudio() {
     }
 
     async function runGeneration() {
-        if (brainstormActive) {
-            message.warning(text("messages.brainstormRunning", "请先停止 Brainstorm Agent，再重新生成分镜"));
-            return;
-        }
         if (!title.trim()) {
             message.warning(text("messages.titleRequired", "请输入作品标题"));
             return;
@@ -205,12 +192,10 @@ export function StoryboardStudio() {
                 updatedAt: now,
             };
             setRecord(nextRecord);
-            setRecordPersisted(false);
             try {
                 const saved = await saveStoryboardRecord(nextRecord);
                 if (accountIdRef.current !== generationAccountId) return;
                 setRecord(saved);
-                setRecordPersisted(true);
                 setRecords((items) => [storyboardSummary(saved), ...items.filter((item) => item.id !== saved.id)]);
             } catch (saveError) {
                 if (accountIdRef.current !== generationAccountId) return;
@@ -276,7 +261,7 @@ export function StoryboardStudio() {
                     <h2 className="font-semibold">{text("history.title", "历史记录")}</h2>
                     <Tag className="m-0">{records.length}</Tag>
                 </div>
-                <Button type="text" size="small" icon={<Plus className="size-4" />} disabled={workspaceBusy} onClick={resetStudio}>
+                <Button type="text" size="small" icon={<Plus className="size-4" />} disabled={running} onClick={resetStudio}>
                     {text("history.new", "新建")}
                 </Button>
             </div>
@@ -284,7 +269,7 @@ export function StoryboardStudio() {
                 <div className="thin-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto">
                     {records.map((item) => (
                         <div key={item.id} className={`group flex w-full items-start gap-1 rounded-lg border p-1 transition-colors ${record?.id === item.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}>
-                            <button type="button" className="min-w-0 flex-1 p-2 text-left" disabled={workspaceBusy} onClick={() => void selectRecord(item)}>
+                            <button type="button" className="min-w-0 flex-1 p-2 text-left" disabled={running} onClick={() => void selectRecord(item)}>
                                 <div className="truncate text-sm font-medium">{item.title}</div>
                                 <div className="mt-1 text-xs text-muted-foreground">
                                     {formatTimestamp(item.updatedAt, i18n.language)} · {item.sceneCount} {text("units.scenes", "场")}
@@ -295,7 +280,7 @@ export function StoryboardStudio() {
                                     type="text"
                                     size="small"
                                     aria-label={text("actions.delete", "删除")}
-                                    disabled={workspaceBusy}
+                                    disabled={running}
                                     className="mt-1 shrink-0 text-muted-foreground sm:opacity-0 sm:group-hover:opacity-100"
                                     icon={<Trash2 className="size-3.5" />}
                                 />
@@ -360,14 +345,9 @@ export function StoryboardStudio() {
                             <h1 className="text-2xl font-semibold">{text("title", "分镜创作室")}</h1>
                             <p className="mt-1 text-sm text-muted-foreground">{text("description", "将剧本转成可校验、可导出的结构化分镜文档")}</p>
                         </div>
-                        <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                            <Button icon={<MessagesSquare className="size-4" />} disabled={running || !record || !recordPersisted} onClick={() => setBrainstormOpen(true)}>
-                                {text("brainstorm.title", "脑暴 Agent")}
-                            </Button>
-                            <Button className="lg:hidden" icon={<History className="size-4" />} onClick={() => setHistoryOpen(true)}>
-                                {text("history.title", "历史记录")}
-                            </Button>
-                        </div>
+                        <Button className="lg:hidden" icon={<History className="size-4" />} onClick={() => setHistoryOpen(true)}>
+                            {text("history.title", "历史记录")}
+                        </Button>
                     </div>
 
                     <div className="mt-6 space-y-5">
@@ -582,9 +562,6 @@ export function StoryboardStudio() {
             />
             <Drawer title={text("history.title", "历史记录")} placement="bottom" size="large" open={historyOpen} onClose={() => setHistoryOpen(false)}>
                 {historyContent}
-            </Drawer>
-            <Drawer title={text("brainstorm.title", "脑暴 Agent")} placement="right" size={screens.lg ? 760 : "100%"} open={brainstormOpen} getContainer={false} onClose={() => setBrainstormOpen(false)} styles={{ body: { padding: 12 } }}>
-                <BrainstormAgentPanel project={recordPersisted ? record : null} disabled={running} onActiveChange={setBrainstormActive} onProjectUpdated={() => record && void selectRecord(storyboardSummary(record))} />
             </Drawer>
         </>
     );

@@ -8,6 +8,7 @@ if (typeof window === "undefined") GlobalRegistrator.register();
 // @ts-expect-error Bun provides module mocking at test runtime.
 const { mock } = await import("bun:test");
 mock.module("./storyboard-studio", () => ({ StoryboardStudio: () => <div data-testid="storyboard-studio" /> }));
+mock.module("./brainstorm-agent-studio", () => ({ BrainstormAgentStudio: () => <div data-testid="brainstorm-agent-studio" /> }));
 mock.module("./script-agent-page", () => ({ ScriptAgentPage: ({ projectId }: { projectId?: string }) => <div data-testid="script-agent-page">{projectId || "space"}</div> }));
 
 const { act } = await import("react");
@@ -40,6 +41,15 @@ test("进入剧本 Agent 时首先显示剧本空间", async () => {
 test("具体剧本路径把项目 ID 绑定到 Agent 页面", async () => {
     const { container, root } = await render("/storyboard/script-agent/project-1");
     assert.equal(container.querySelector('[data-testid="script-agent-page"]')?.textContent, "project-1");
+    await act(async () => root.unmount());
+    container.remove();
+});
+
+test("脑暴 Agent 路径显示独立模块", async () => {
+    const { container, root } = await render("/storyboard/brainstorm-agent");
+    assert.ok(container.querySelector('[data-testid="brainstorm-agent-studio"]'));
+    assert.equal(container.querySelector('[data-testid="storyboard-studio"]'), null);
+    assert.equal(container.querySelector('[data-testid="script-agent-page"]'), null);
     await act(async () => root.unmount());
     container.remove();
 });
