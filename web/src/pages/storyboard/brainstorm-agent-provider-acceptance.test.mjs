@@ -54,7 +54,7 @@ function sseResponse(payloads) {
     return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } });
 }
 
-function completion(config) {
+function completion(config, source) {
     return async (request, options) => {
         const result = await requestToolResponse(
             { ...config, model: config.textModel || config.model, systemPrompt: "" },
@@ -65,6 +65,7 @@ function completion(config) {
             {
                 signal: options.signal,
                 includeUsage: true,
+                ...(source ? { source } : {}),
                 onEvent: (event) => {
                     if (event.type === "text_delta") options.onEvent({ type: "text_delta", delta: event.delta });
                     else if (event.type === "usage") options.onEvent({ type: "usage", usage: { inputTokens: event.inputTokens, outputTokens: event.outputTokens, totalTokens: event.totalTokens } });
@@ -109,6 +110,7 @@ test("Local Provider completes one streamed Brainstorm Turn with only the provid
         async (input, init) => {
             assert.equal(input, "https://local-provider.test/v1/chat/completions");
             assert.equal(new Headers(init.headers).get("Authorization"), `Bearer ${localProviderKey}`);
+            assert.equal(new Headers(init.headers).get("X-Source"), null);
             assert.equal(`${input}\n${JSON.stringify(init)}`.includes(platformToken), false);
             assert.deepEqual(JSON.parse(init.body), {
                 model: "local-brainstorm-model",
@@ -167,6 +169,7 @@ test("Remote Provider completes one streamed Brainstorm Turn with the platform s
         async (input, init) => {
             assert.equal(input, "/api/v1/chat/completions");
             assert.equal(new Headers(init.headers).get("Authorization"), `Bearer ${platformToken}`);
+            assert.equal(new Headers(init.headers).get("X-Source"), "brainstorm_agent");
             assert.equal(`${input}\n${JSON.stringify(init)}`.includes(localProviderKey), false);
             assert.deepEqual(JSON.parse(init.body), {
                 model: "remote-brainstorm-model",
@@ -186,7 +189,7 @@ test("Remote Provider completes one streamed Brainstorm Turn with the platform s
                 "[DONE]",
             ]);
         },
-        () => runBrainstormTurn(context, { complete: completion(config), executeTool: unexpectedTool }, { onEvent: (event) => events.push(event) }),
+        () => runBrainstormTurn(context, { complete: completion(config, "brainstorm_agent"), executeTool: unexpectedTool }, { onEvent: (event) => events.push(event) }),
     );
 
     assert.equal(fetchCalls, 1);

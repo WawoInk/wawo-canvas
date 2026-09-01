@@ -145,7 +145,7 @@ type ChatCompletionPayload = {
 };
 
 type ChatStreamState = { buffer: string; text: string; toolCalls: Map<number, { id: string; name: string; args: string }>; usage?: ModelUsage; finishReason?: ModelFinishReason; done?: boolean };
-export type RequestOptions = { signal?: AbortSignal; onEvent?: (event: ModelStreamEvent) => void; includeUsage?: boolean };
+export type RequestOptions = { signal?: AbortSignal; onEvent?: (event: ModelStreamEvent) => void; includeUsage?: boolean; source?: string };
 
 function normalizeFinishReason(reason?: string | null): ModelFinishReason | undefined {
     switch (reason?.trim().toLowerCase()) {
@@ -407,12 +407,13 @@ function aiApiUrl(config: AiConfig, path: string) {
     return config.channelMode === "remote" ? `/api/v1${path}` : buildApiUrl(config.baseUrl, path);
 }
 
-function aiHeaders(config: AiConfig, contentType?: string) {
+function aiHeaders(config: AiConfig, contentType?: string, source?: string) {
     const token = useUserStore.getState().token;
     return config.channelMode === "remote"
         ? {
               ...(token ? { Authorization: `Bearer ${token}` } : {}),
               ...(contentType ? { "Content-Type": contentType } : {}),
+              ...(source ? { "X-Source": source } : {}),
           }
         : {
               Authorization: `Bearer ${config.apiKey}`,
@@ -608,7 +609,7 @@ function consumeResponseStreamText(state: ResponseStreamState, text: string, onD
 async function requestStreamingResponse(config: AiConfig, body: Record<string, unknown>, onDelta?: (text: string) => void, options?: RequestOptions): Promise<ToolResponseResult> {
     const response = await fetch(aiApiUrl(config, "/responses"), {
         method: "POST",
-        headers: { ...aiHeaders(config, "application/json"), Accept: "text/event-stream" },
+        headers: { ...aiHeaders(config, "application/json", options?.source), Accept: "text/event-stream" },
         body: JSON.stringify({ ...body, stream: true }),
         signal: options?.signal,
     });
@@ -673,7 +674,7 @@ async function requestChatCompletions(config: AiConfig, messages: ResponseInputM
     }
     const response = await fetch(chatCompletionsUrl(config), {
         method: "POST",
-        headers: { ...aiHeaders(config, "application/json"), Accept: "text/event-stream" },
+        headers: { ...aiHeaders(config, "application/json", options?.source), Accept: "text/event-stream" },
         body: JSON.stringify(body),
         signal: options?.signal,
     });
@@ -901,7 +902,7 @@ async function requestGeminiStreamingResponse(config: AiConfig, body: Record<str
     const remote = config.channelMode === "remote";
     const response = await fetch(remote ? aiApiUrl(config, "/chat/completions") : `${geminiApiUrl(config, "streamGenerateContent")}?alt=sse`, {
         method: "POST",
-        headers: remote ? { ...aiHeaders(config, "application/json"), Accept: "text/event-stream" } : { ...geminiHeaders(config), Accept: "text/event-stream" },
+        headers: remote ? { ...aiHeaders(config, "application/json", options?.source), Accept: "text/event-stream" } : { ...geminiHeaders(config), Accept: "text/event-stream" },
         body: JSON.stringify(remote ? { model: config.model, ...body, stream: true } : body),
         signal: options?.signal,
     });

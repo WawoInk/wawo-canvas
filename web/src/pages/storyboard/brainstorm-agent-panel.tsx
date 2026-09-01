@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { Alert, App, Button, Drawer, Empty, Input, Select, Spin, Tag } from "antd";
 import { Bot, BrainCircuit, Check, CircleAlert, History, Pause, RefreshCw, Send, UserRound, Wrench, X } from "lucide-react";
 
-import { useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 
 import { listBrainstormSkills } from "./brainstorm-agent-skills";
@@ -225,9 +224,6 @@ function MessageCard({
 
 export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange, disabled = false }: { project: StoryboardRecord | null; onProjectUpdated?: () => void; onActiveChange?: (active: boolean) => void; disabled?: boolean }) {
     const { message } = App.useApp();
-    const effectiveConfig = useEffectiveConfig();
-    const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
-    const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const user = useUserStore((state) => state.user);
     const [skillId, setSkillId] = useState(skills[0].id);
     const [focusKey, setFocusKey] = useState("project");
@@ -237,8 +233,6 @@ export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange
     const [submitting, setSubmitting] = useState(false);
     const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const model = effectiveConfig.textModel || effectiveConfig.model;
-    const requestConfig = useMemo(() => (model ? { ...effectiveConfig, model, textModel: model } : effectiveConfig), [effectiveConfig, model]);
     const projectId = project?.id || STANDALONE_BRAINSTORM_SCOPE_ID;
     const options = useMemo(() => (project ? focusOptions(project) : []), [project]);
     const selectedFocus = project ? options.find((option) => option.value === focusKey)?.focus || standaloneFocus : standaloneFocus;
@@ -248,7 +242,6 @@ export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange
     const runtime = useMemo(() => {
         const runtimeOptions = {
             projectId,
-            config: requestConfig,
             skillId,
             focus: selectedFocus,
             onProjectChanged: project ? onProjectUpdated : undefined,
@@ -256,7 +249,7 @@ export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange
             ...(project ? {} : { scope: "standalone" as const }),
         };
         return createBrainstormAgentRuntime(runtimeOptions);
-    }, [onProjectUpdated, project, projectId, requestConfig, selectedFocus, skillId]);
+    }, [onProjectUpdated, project, projectId, selectedFocus, skillId]);
     const agent = useBrainstormAgent(projectId, runtime);
     const currentConversation = agent.conversations.find((item) => item.id === agent.currentConversationId);
     const branch = useMemo(() => currentBranch(agent.messages, currentConversation?.currentMessageId || ""), [agent.messages, currentConversation?.currentMessageId]);
@@ -266,7 +259,6 @@ export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange
     const visibleError = currentRun?.error || (hasForeignRunError ? "" : agent.error);
     const awaitingApproval = branch.some((item) => item.role === "assistant" && item.status === "awaiting_approval");
     const busy = disabled || submitting || Boolean(currentRun?.active);
-    const modelReady = Boolean(model && isAiConfigReady(requestConfig, model));
 
     useEffect(() => {
         onActiveChange?.(anyActive);
@@ -292,7 +284,7 @@ export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange
 
     async function send() {
         const content = composer.trim();
-        if (!content || busy || awaitingApproval || !modelReady) return;
+        if (!content || busy || awaitingApproval) return;
         await run(async () => {
             await agent.send(content);
             setComposer("");
@@ -366,20 +358,6 @@ export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange
             {tab === "memory" ? (
                 <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
                     <BrainstormMemoryManager projectId={projectId} standalone={!project} refreshKey={memoryRefreshKey} disabled={busy} />
-                </div>
-            ) : !modelReady ? (
-                <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-                    <Alert
-                        type="warning"
-                        showIcon
-                        title="请先配置文本模型"
-                        description="Brainstorm Agent 使用全局文本模型配置。"
-                        action={
-                            <Button size="small" onClick={() => openConfigDialog(false)}>
-                                打开模型配置
-                            </Button>
-                        }
-                    />
                 </div>
             ) : agent.isLoading ? (
                 <div className="flex min-h-0 flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">

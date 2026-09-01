@@ -402,14 +402,20 @@ test("Memory 标签集成刷新，Project 写入通知 Studio", async () => {
     mounted.container.remove();
 });
 
-test("无模型、加载、错误和空对话都有可操作状态", async () => {
+test("浏览器本地模型/API Key 缺失不阻塞 Brainstorm Agent，也不打开本地配置", async () => {
     reset();
     model = "";
     configReady = false;
     let mounted = await mount(project);
-    assert.match(mounted.container.textContent || "", /请先配置文本模型/);
-    await act(async () => click(button("打开模型配置")));
-    assert.equal(openConfigCount, 1);
+    assert.doesNotMatch(mounted.container.textContent || "", /请先配置文本模型/);
+    assert.ok(mounted.container.querySelector('textarea[aria-label="脑暴消息"]'));
+    assert.equal(openConfigCount, 0);
+    const composer = mounted.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="脑暴消息"]');
+    assert.ok(composer);
+    await act(async () => setInput(composer, "管理员模型仍可用"));
+    await act(async () => composer.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true, cancelable: true })));
+    await flush();
+    assert.deepEqual(calls.send, ["管理员模型仍可用"]);
     await act(async () => mounted.root.unmount());
     mounted.container.remove();
 
