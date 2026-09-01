@@ -384,6 +384,9 @@ func normalizeStoryboardMemory(projectID, userID, memoryID string, input Storybo
 	}
 	scope := strings.TrimSpace(input.Scope)
 	path := strings.TrimSpace(input.Path)
+	if projectID == model.StoryboardBrainstormStandaloneScopeID && scope != model.StoryboardMemoryScopeProject {
+		return model.StoryboardMemory{}, safeMessageError{message: "独立 Brainstorm Workspace 只支持 project scope"}
+	}
 	switch scope {
 	case model.StoryboardMemoryScopeProject:
 		if path != "" {
@@ -482,6 +485,9 @@ func validateBrainstormID(value, name string) (string, error) {
 }
 
 func ensureStoryboardProject(projectID, userID string) error {
+	if projectID == model.StoryboardBrainstormStandaloneScopeID {
+		return nil
+	}
 	_, err := repository.GetStoryboardProject(projectID, userID)
 	return brainstormError(err)
 }

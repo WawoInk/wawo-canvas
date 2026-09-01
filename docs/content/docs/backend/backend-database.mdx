@@ -59,7 +59,7 @@ description: 核心数据表、Storyboard Brainstorm 和第一方生成事务约
 
 artifact 变化时，服务端先上传新对象，再在同一 PostgreSQL 事务中创建新的 `user_files`、按 `id + user_id + expectedRevision` CAS 更新项目引用/摘要/revision，并删除旧文件记录。事务或 CAS 失败时补偿删除新对象，旧可用 artifact 始终保持引用；事务成功后再 best-effort 删除旧对象。规范化后的 artifact 未变化时可复用旧文件，只更新元数据和 revision。删除项目时同步清理项目与文件记录，再 best-effort 删除对象。
 
-所有列表、详情、更新和删除查询都使用当前认证账号限定 `user_id`，API 不返回原始 S3 Key、公开 URL 或可长期复用的预签名地址。同账号可通过服务端 API 在不同会话或设备恢复并继续编辑分镜项目；Brainstorm Conversation、Message 和 Project Memory 使用下述独立表与 API 持久化，但 Canvas 关联、我的素材或其他浏览器本地数据不因此统一云同步。
+所有列表、详情、更新和删除查询都使用当前认证账号限定 `user_id`，API 不返回原始 S3 Key、公开 URL 或可长期复用的预签名地址。同账号可通过服务端 API 在不同会话或设备恢复并继续编辑分镜项目；Brainstorm Conversation、Message 和 Brainstorm Memory 使用下述独立表与 API 持久化，但 Canvas 关联、我的素材或其他浏览器本地数据不因此统一云同步。
 
 ## Storyboard Brainstorm 持久化表
 
@@ -70,19 +70,19 @@ Storyboard Brainstorm 使用且只使用三张持久化子表，不新增 Conver
 | 字段 | 说明 |
 | --- | --- |
 | `id` | 客户端提供的稳定非空 Conversation ID |
-| `user_id`、`project_id` | 当前账号与父 Storyboard Project；所有读写同时限定 |
+| `user_id`、`project_id` | 当前账号与 Brainstorm scope；standalone 使用保留的 `__brainstorm__`，不对应真实 Storyboard Project |
 | `title` | 会话标题；空标题默认“新对话” |
 | `current_message_id` | append、regenerate 或 continue 最近选中的 Message |
 | `created_at`、`updated_at` | 创建与更新时间 |
 
-Conversation 不保存独立 revision。Turn 写入通过 PostgreSQL `FOR UPDATE` 锁定当前账号、Project 和 Conversation 的这一行，因此只串行同一 Conversation；同一 Project 下的其他 Conversation 可以独立推进。
+Conversation 不保存独立 revision。Turn 写入通过 PostgreSQL `FOR UPDATE` 锁定当前账号、scope 和 Conversation 的这一行，因此只串行同一 Conversation；同一 scope 下的其他 Conversation 可以独立推进。
 
 ### storyboard_brainstorm_messages
 
 | 字段 | 说明 |
 | --- | --- |
 | `id` | 客户端提供的稳定非空 Message ID |
-| `user_id`、`project_id`、`conversation_id` | 完整 owner 与父级 scope |
+| `user_id`、`project_id`、`conversation_id` | 完整 owner 与 Brainstorm scope；standalone 的 `project_id` 只是内部隔离键 |
 | `parent_id` | 平铺图的父 Message；第一个 User root 可为空 |
 | `role` | `user` 或 `assistant` |
 | `content` | User Message 的唯一正文事实 |
@@ -93,7 +93,7 @@ Conversation 不保存独立 revision。Turn 写入通过 PostgreSQL `FOR UPDATE
 | `continue_request_id`、`continue_request_hash` | 最近一次 continue 的独立幂等键与规范语义输入 SHA-256 |
 | `created_at`、`updated_at` | 消息创建与更新时间 |
 
-User Message 正文只使用 `content`；Assistant 正文只使用 `output`，避免双重事实。后端只校验 output 为有界 JSON 数组并按原顺序保存；当前前端合同识别 `text`、`tool_call` 和 `tool_result`，待审批状态与页内续跑所需的 pending calls/tool rounds 元数据随 `tool_result` 保存，不使用独立 Tool 表。Conversation 和 Project Memory 列表使用 `page/pageSize` 返回 `{items,total}`；Message 列表按 `created_at ASC, id ASC` 分页返回平铺图，单页可能不包含祖先，客户端需要继续请求其他页。
+User Message 正文只使用 `content`；Assistant 正文只使用 `output`，避免双重事实。后端只校验 output 为有界 JSON 数组并按原顺序保存；当前前端合同识别 `text`、`tool_call` 和 `tool_result`，待审批状态与页内续跑所需的 pending calls/tool rounds 元数据随 `tool_result` 保存，不使用独立 Tool 表。Conversation 和 Brainstorm Memory 列表使用 `page/pageSize` 返回 `{items,total}`；Message 列表按 `created_at ASC, id ASC` 分页返回平铺图，单页可能不包含祖先，客户端需要继续请求其他页。
 
 数据库为 active Assistant 建立 `(user_id, project_id, conversation_id)` 部分唯一索引，只覆盖 `role='assistant' AND status IN ('pending','streaming','awaiting_approval')`，保证同一 Conversation 最多一个 active Turn。非空 `client_request_id` 与 `continue_request_id` 分别建立 Conversation scope 的部分唯一索引，查询同时检查两个命名空间。原始 Turn key/hash 保持不可变，continue 只更新独立字段；相同 key 会比较对应 hash，语义相同返回已有结果，语义不同返回 HTTP 409。相同 Message ID 与相同规范语义输入也返回原 Turn；复用 ID 但输入不同返回 409。
 
@@ -106,22 +106,22 @@ append Turn 在一个数据库事务内依次锁定 Conversation、先判断幂�
 | 字段 | 说明 |
 | --- | --- |
 | `id` | 客户端提供的稳定 Memory ID |
-| `user_id`、`project_id` | owner 与父 Storyboard Project scope |
+| `user_id`、`project_id` | owner 与 Brainstorm scope；standalone 使用保留的 `__brainstorm__`，不对应真实 Storyboard Project |
 | `kind` | 必填的有界类型字符串 |
-| `scope`、`path` | `project/scene/shot`；project 要求空 path，scene/shot 使用稳定实体 ID |
+| `scope`、`path` | 旧 project scope 支持 `project/scene/shot`；standalone 只支持工作区 `project` scope 且 path 为空 |
 | `content` | 用户已确认的 Memory 正文 |
 | `tags` | 有界字符串数组 |
-| `source_message_id` | 可选的同 Project 来源 Message |
+| `source_message_id` | 可选的同 scope 来源 Message |
 | `operation_id` | 当前 `user_id + project_id` 内必填且唯一的操作 ID |
 | `created_at`、`updated_at` | 创建与更新时间 |
 
-Memory 表只保存已确认记录；候选 Memory 和运行时 Context 不属于持久事实。Summary 由浏览器 Runtime 按当前 Conversation 分支派生，使用 20k token trigger 和 8k token retain，在同一页面内按 Conversation 缓存；boundary 不属于当前 sibling 分支时重新构建，刷新后从持久 Message 历史重新生成。Summary 作为非可信上下文使用，不新增数据库字段、数据表或 API。`source_message_id` 存在时必须属于同一账号和 Project，不能借引用读取其他账号或项目的 Message。
+Memory 表只保存已确认记录；候选 Memory 和运行时 Context 不属于持久事实。Summary 由浏览器 Runtime 按当前 Conversation 分支派生，使用 20k token trigger 和 8k token retain，在同一页面内按 Conversation 缓存；boundary 不属于当前 sibling 分支时重新构建，刷新后从持久 Message 历史重新生成。Summary 作为非可信上下文使用，不新增数据库字段、数据表或 API。`source_message_id` 存在时必须属于同一账号和 Brainstorm scope，不能借引用读取其他账号或 scope 的 Message。
 
 ### 所有权与删除
 
-每个 Conversation、Message 和 Memory 读写都先限定当前 `user_id + project_id`，Message 再限定 `conversation_id`。子资源不存在和越权统一返回 404，不能通过猜测子资源 ID 扩大范围。
+每个 Conversation、Message 和 Memory 读写都先限定当前 `user_id + project_id` Brainstorm scope，Message 再限定 `conversation_id`。standalone 使用保留的 `__brainstorm__` scope，不对应真实 Storyboard Project；子资源不存在和越权统一返回 404，不能通过猜测子资源 ID 扩大范围。
 
-这些逻辑关系不依赖数据库外键级联。删除 Conversation 时先获取与 Turn 相同的 Conversation 行锁，再删除其 Messages；删除 Storyboard Project 时先锁 Project 与全部 scoped Conversation，再按 owner scope 清理 Brainstorm Messages、Conversations 和 Memories，最后执行既有 Project 与 `user_files` 删除流程。Conversation/Memory 创建先锁 Project，避免并发删除时留下孤儿记录。Project artifact 的对象存储补偿和 best-effort 旧对象清理语义保持不变。
+这些逻辑关系不依赖数据库外键级联。删除 Conversation 时先获取与 Turn 相同的 Conversation 行锁，再删除其 Messages；删除 Storyboard Project 时只清理该真实 Project scope 的 Brainstorm Messages、Conversations 和 Memories；standalone Workspace 不参与该删除级联。Conversation/Memory 创建先锁真实 Project，standalone 则使用 PostgreSQL transaction advisory lock，避免并发写入互相覆盖。Project artifact 的对象存储补偿和 best-effort 旧对象清理语义保持不变。
 
 ## script_projects、script_conversations 与 script_messages
 
@@ -160,7 +160,7 @@ Memory 表只保存已确认记录；候选 Memory 和运行时 Context 不属�
 
 `upstream_credits` 保存供应商响应中的可空 credits。Vidu 未返回该字段时写入 `NULL`；响应审计 JSON 仍显式保留 `"credits": null`，便于使用日志与调用日志区分字段缺失和数值消耗。
 
-模型展示名保存在 `settings` 的公开 `modelChannel.modelCosts[].displayName` 配置中，不写入 `generation_tasks`。任务 API 在读取时按模型配置动态投影 `modelDisplayName`，未配置时回退实际 `model`；实际模型名继续用于渠道路由和上游请求。新写入的 AI 消费、退款流水备注使用同一展示名规则。
+模型展示名保存在 `settings` 的公开 `modelChannel.modelCosts[].displayName` 配置中，不写入 `generation_tasks`。任务 API 在读取时按模型配置动态投影 `modelDisplayName`，未配置时回退实际 `model`；实际模型名继续用于渠道路由和上游请求。新写入的 AI 消费、退款流水备注使用同一展示名规则。Brainstorm Agent 不维护独立模型、计费或日志表：每个远程文本 HTTP 调用继续写入本表，`source` 为 `brainstorm_agent` 时可识别其来源；兼容 Chat 上游返回的 usage 归一化后写入已有 `metadata.usage`，结构为 `{inputTokens, outputTokens, totalTokens}`。
 
 ## generation_payloads
 

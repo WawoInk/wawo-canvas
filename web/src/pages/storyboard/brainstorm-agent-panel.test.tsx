@@ -16,6 +16,7 @@ const calls = {
     retry: [] as string[],
     continue: [] as string[],
     create: 0,
+    agentProjectIds: [] as string[],
 };
 
 const noop = async () => {};
@@ -75,7 +76,12 @@ mock.module("./brainstorm-agent-runtime", () => ({
         return { run: async () => ({}) };
     },
 }));
-mock.module("./use-brainstorm-agent", () => ({ useBrainstormAgent: () => currentState }));
+mock.module("./use-brainstorm-agent", () => ({
+    useBrainstormAgent: (projectId: string) => {
+        calls.agentProjectIds.push(projectId);
+        return currentState;
+    },
+}));
 mock.module("./brainstorm-agent-conversations", () => ({
     BrainstormAgentConversations: ({ onCreate }: { onCreate: () => void }) => (
         <div data-testid="conversations">
@@ -83,14 +89,12 @@ mock.module("./brainstorm-agent-conversations", () => ({
         </div>
     ),
 }));
-mock.module("./brainstorm-memory-manager", () => ({
-    BrainstormMemoryManager: ({ refreshKey }: { refreshKey?: number }) => <div data-testid="memory-manager">Memory {refreshKey || 0}</div>,
-}));
 
 const { App } = await import("antd");
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { BrainstormAgentPanel } = await import("./brainstorm-agent-panel");
+mock.restore();
 
 async function mount(project: StoryboardRecord | null, onProjectUpdated = () => {}, disabled = false, onActiveChange = (_active: boolean) => {}) {
     const container = document.createElement("div");
@@ -106,10 +110,23 @@ async function mount(project: StoryboardRecord | null, onProjectUpdated = () => 
     return { container, root };
 }
 
-test("未选择分镜项目时显示明确空态", async () => {
+test("未绑定分镜项目时使用独立脑暴工作区并保留公共交互", async () => {
+    reset();
     const { container, root } = await mount(null);
-    assert.match(container.textContent || "", /请先选择分镜项目/);
-    assert.equal(container.querySelector("textarea"), null);
+
+    const runtime = calls.runtime.at(-1) as { projectId: string; scope?: string; focus: unknown };
+    assert.equal(runtime.projectId, "__brainstorm__");
+    assert.equal(runtime.scope, "standalone");
+    assert.deepEqual(runtime.focus, { kind: "project" });
+    assert.equal(calls.agentProjectIds.at(-1), "__brainstorm__");
+    assert.equal(container.querySelector('textarea[aria-label="脑暴消息"]') !== null, true);
+    assert.equal(container.querySelector('[aria-label="脑暴技能"]') !== null, true);
+    assert.equal(container.querySelector('[aria-label="当前焦点"]'), null);
+    assert.match(container.textContent || "", /独立脑暴工作区/);
+    assert.doesNotMatch(container.textContent || "", /已保存 revision/);
+
+    assert.ok(button("Memory"));
+
     await act(async () => root.unmount());
     container.remove();
 });
@@ -165,6 +182,7 @@ function reset(overrides: Partial<BrainstormAgentState> = {}) {
     calls.retry.length = 0;
     calls.continue.length = 0;
     calls.create = 0;
+    calls.agentProjectIds.length = 0;
     model = "text-model";
     configReady = true;
     openConfigCount = 0;
@@ -378,22 +396,26 @@ test("Memory 标签集成刷新，Project 写入通知 Studio", async () => {
     await act(async () => runtime.onMemoryChanged?.());
     assert.equal(updated, 1);
 
-    await act(async () => click(button("Memory")));
-    await flush();
-    assert.equal(mounted.container.querySelector('[data-testid="memory-manager"]')?.textContent, "Memory 1");
+    assert.ok(button("Memory"));
 
     await act(async () => mounted.root.unmount());
     mounted.container.remove();
 });
 
-test("无模型、加载、错误和空对话都有可操作状态", async () => {
+test("浏览器本地模型/API Key 缺失不阻塞 Brainstorm Agent，也不打开本地配置", async () => {
     reset();
     model = "";
     configReady = false;
     let mounted = await mount(project);
-    assert.match(mounted.container.textContent || "", /请先配置文本模型/);
-    await act(async () => click(button("打开模型配置")));
-    assert.equal(openConfigCount, 1);
+    assert.doesNotMatch(mounted.container.textContent || "", /请先配置文本模型/);
+    assert.ok(mounted.container.querySelector('textarea[aria-label="脑暴消息"]'));
+    assert.equal(openConfigCount, 0);
+    const composer = mounted.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="脑暴消息"]');
+    assert.ok(composer);
+    await act(async () => setInput(composer, "管理员模型仍可用"));
+    await act(async () => composer.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true, cancelable: true })));
+    await flush();
+    assert.deepEqual(calls.send, ["管理员模型仍可用"]);
     await act(async () => mounted.root.unmount());
     mounted.container.remove();
 

@@ -83,6 +83,59 @@ function decode(execution) {
     return JSON.parse(execution.content);
 }
 
+test("standalone Tool Runtime 在 preflight/execute 阶段拒绝 Storyboard 工具与非 project Memory", async () => {
+    assert.throws(
+        () => createStoryboardToolRuntime({ scope: "standalone", projectId: "project-1", services: services() }),
+        /standalone Brainstorm Tool Runtime 的 scope ID 必须是 __brainstorm__/,
+    );
+    let reads = 0;
+    let writes = 0;
+    const runtime = createStoryboardToolRuntime({
+        scope: "standalone",
+        projectId: "__brainstorm__",
+        services: services({
+            fetchProject: async () => {
+                reads += 1;
+                return structuredClone(project);
+            },
+            updateProject: async () => {
+                writes += 1;
+                return project;
+            },
+        }),
+    });
+    const applyCall = call("storyboard_apply_patch", {
+        projectId: "__brainstorm__",
+        expectedRevision: 3,
+        operations: [{ target: "project", field: "title", value: "不应应用" }],
+    });
+    const applyPreflight = await runtime.preflightTool(applyCall, { definition: runtime.tools[7] });
+    const applyExecution = await runtime.executeTool(applyCall, { definition: runtime.tools[7], authorization: "approved" });
+    assert.equal(applyPreflight.status, "failed");
+    assert.equal(decode(applyPreflight).error.code, "TOOL_NOT_ALLOWED_IN_STANDALONE");
+    assert.equal(applyExecution.status, "failed");
+    assert.equal(decode(applyExecution).error.code, "TOOL_NOT_ALLOWED_IN_STANDALONE");
+
+    const crossScopeCall = call("storyboard_remember", { projectId: "other-scope", kind: "constraint", scope: "project", content: "跨 scope", tags: [] }, "call-cross-scope");
+    const crossScopePreflight = await runtime.preflightTool(crossScopeCall, { definition: runtime.tools[8] });
+    assert.equal(crossScopePreflight.status, "failed");
+    assert.equal(decode(crossScopePreflight).error.code, "PROJECT_SCOPE_MISMATCH");
+    assert.notEqual(crossScopePreflight.status, "awaiting_approval");
+
+    const sceneCall = call("storyboard_remember", { projectId: "__brainstorm__", kind: "constraint", scope: "scene", path: "scene-1", content: "场景约束", tags: [] });
+    const shotCall = call("storyboard_remember", { projectId: "__brainstorm__", kind: "constraint", scope: "shot", path: "shot-1", content: "镜头约束", tags: [] }, "call-shot");
+    const scenePreflight = await runtime.preflightTool(sceneCall, { definition: runtime.tools[8] });
+    const shotPreflight = await runtime.preflightTool(shotCall, { definition: runtime.tools[8] });
+    assert.equal(scenePreflight.status, "failed");
+    assert.equal(shotPreflight.status, "failed");
+    assert.equal(decode(scenePreflight).error.code, "INVALID_ARGUMENTS");
+    assert.equal(decode(shotPreflight).error.code, "INVALID_ARGUMENTS");
+    assert.notEqual(scenePreflight.status, "awaiting_approval");
+    assert.notEqual(shotPreflight.status, "awaiting_approval");
+    assert.equal(reads, 0);
+    assert.equal(writes, 0);
+});
+
 test("registry exposes only the ten whitelisted tools and requires approval for business writes", () => {
     assert.deepEqual(
         STORYBOARD_BRAINSTORM_TOOLS.map(({ name, risk, approval }) => ({ name, risk, approval })),
@@ -137,6 +190,10 @@ test("write approval preview is derived without reading or mutating project stat
             }),
         ).targets,
         ["镜头 shot-1 · durationSec", "片段 segment-1 · durationSec（自动重算）"],
+    );
+    assert.deepEqual(
+        previewStoryboardToolCall(call("storyboard_remember", { projectId: "__brainstorm__", kind: "idea", scope: "project", content: "保留反常识结尾", tags: [] })),
+        { title: "保存 Memory", summary: "保留反常识结尾", targets: ["脑暴工作区"] },
     );
 });
 
