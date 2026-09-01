@@ -70,20 +70,27 @@ const STANDALONE_MEMORY_TOOLS = new Set(["storyboard_list_memories", "storyboard
 
 function standaloneMemoryTools(tools: readonly BrainstormToolDefinition[]) {
     return tools.filter((tool) => STANDALONE_MEMORY_TOOLS.has(tool.name)).map((tool) => {
-        if (tool.name === "storyboard_list_memories") return { ...tool, description: "读取当前脑暴工作区已确认的 Memory。" };
-        if (tool.name === "storyboard_forget_memory") return { ...tool, description: "在用户确认后删除当前脑暴工作区的一条 Memory。" };
         const parameters = { ...tool.parameters };
-        delete parameters.oneOf;
+        const properties = { ...(parameters.properties as Record<string, unknown>) };
+        delete properties.projectId;
+        const required = Array.isArray(parameters.required) ? parameters.required.filter((key) => key !== "projectId") : undefined;
+        if (tool.name === "storyboard_remember") {
+            delete parameters.oneOf;
+            properties.scope = { type: "string", enum: ["project"] };
+            properties.path = { type: "string", maxLength: 0 };
+        }
         return {
             ...tool,
-            description: "在用户确认后保存一条脑暴工作区 Memory。",
+            description:
+                tool.name === "storyboard_list_memories"
+                    ? "读取当前脑暴工作区已确认的 Memory，无需提供 projectId。"
+                    : tool.name === "storyboard_forget_memory"
+                      ? "在用户确认后删除当前脑暴工作区的一条 Memory，无需提供 projectId。"
+                      : "在用户确认后保存一条脑暴工作区 Memory，无需提供 projectId。",
             parameters: {
                 ...parameters,
-                properties: {
-                    ...(parameters.properties as Record<string, unknown>),
-                    scope: { type: "string", enum: ["project"] },
-                    path: { type: "string", maxLength: 0 },
-                },
+                properties,
+                ...(required ? { required } : {}),
             },
         };
     });

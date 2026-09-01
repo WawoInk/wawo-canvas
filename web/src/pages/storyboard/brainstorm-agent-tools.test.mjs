@@ -136,6 +136,30 @@ test("standalone Tool Runtime 在 preflight/execute 阶段拒绝 Storyboard 工�
     assert.equal(writes, 0);
 });
 
+test("standalone Memory 不需要 projectId，并由 Runtime 注入固定脑暴 scope", async () => {
+    let createdProjectId = "";
+    const runtime = createStoryboardToolRuntime({
+        scope: "standalone",
+        projectId: "__brainstorm__",
+        memoryIdentity: () => ({ id: "memory-1", operationId: "operation-1", sourceMessageId: "message-1" }),
+        services: services({
+            fetchProject: async () => ({ ...structuredClone(project), id: "__brainstorm__" }),
+            createMemory: async (projectId, input) => {
+                createdProjectId = projectId;
+                return { ...input, projectId, createdAt: "", updatedAt: "" };
+            },
+        }),
+    });
+    const memoryCall = call("storyboard_remember", { kind: "character", scope: "project", content: "主角叫沈舟，是一名失去记忆的记者。", tags: [] });
+    const preview = await runtime.preflightTool(memoryCall, { definition: runtime.tools[8] });
+    assert.equal(preview.status, "succeeded");
+    assert.deepEqual(decode(preview).data.targets, ["脑暴工作区"]);
+
+    const execution = await runtime.executeTool(memoryCall, { definition: runtime.tools[8], authorization: "approved" });
+    assert.equal(execution.status, "succeeded");
+    assert.equal(createdProjectId, "__brainstorm__");
+});
+
 test("registry exposes only the ten whitelisted tools and requires approval for business writes", () => {
     assert.deepEqual(
         STORYBOARD_BRAINSTORM_TOOLS.map(({ name, risk, approval }) => ({ name, risk, approval })),

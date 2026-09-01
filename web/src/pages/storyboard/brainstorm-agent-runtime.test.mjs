@@ -374,9 +374,13 @@ test("standalone Runtime 跳过 Storyboard 快照并只暴露脑暴工作区 Mem
     assert.equal(projectReads, 0);
     assert.equal(memoryReads[0].pageSize, 500);
     assert.deepEqual(request[2].map((tool) => tool.function.name), ["storyboard_list_memories", "storyboard_remember", "storyboard_forget_memory"]);
-    const rememberTool = request[2].find((tool) => tool.function.name === "storyboard_remember");
-    assert.deepEqual(rememberTool.function.parameters.properties.scope, { type: "string", enum: ["project"] });
-    assert.match(rememberTool.function.description, /脑暴工作区 Memory/);
+    const standaloneTools = Object.fromEntries(request[2].map((tool) => [tool.function.name, tool.function]));
+    for (const tool of Object.values(standaloneTools)) assert.equal(tool.parameters.properties.projectId, undefined);
+    assert.deepEqual(standaloneTools.storyboard_list_memories.parameters.required, []);
+    assert.deepEqual(standaloneTools.storyboard_forget_memory.parameters.required, ["memoryId"]);
+    assert.deepEqual(standaloneTools.storyboard_remember.parameters.properties.scope, { type: "string", enum: ["project"] });
+    assert.deepEqual(standaloneTools.storyboard_remember.parameters.required, ["kind", "scope", "content", "tags"]);
+    assert.match(standaloneTools.storyboard_remember.description, /无需提供 projectId/);
     const prompt = request[1].map((item) => item.content || "").join("\n");
     assert.match(prompt, /独立创意脑暴/);
     assert.doesNotMatch(prompt, /Storyboard 项目概览|Storyboard 当前焦点/);
