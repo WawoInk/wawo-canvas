@@ -338,8 +338,8 @@ export function StoryboardStudio() {
         <>
             <aside className="thin-scrollbar hidden min-h-0 overflow-y-auto rounded-lg border bg-card p-4 shadow-sm lg:block">{historyContent}</aside>
 
-            <section className="grid gap-3 lg:min-h-0 lg:overflow-hidden xl:grid-cols-[420px_minmax(0,1fr)]">
-                <div className="thin-scrollbar flex flex-col rounded-lg border bg-card p-4 shadow-sm lg:min-h-0 lg:overflow-y-auto">
+            <section className="grid min-w-0 gap-3 xl:h-full xl:min-h-0 xl:overflow-hidden xl:grid-cols-[420px_minmax(0,1fr)]">
+                <div className="thin-scrollbar flex min-w-0 flex-col rounded-lg border bg-card p-4 shadow-sm xl:min-h-0 xl:overflow-y-auto">
                     <div className="flex items-start justify-between gap-3">
                         <div>
                             <h1 className="text-2xl font-semibold">{text("title", "分镜创作室")}</h1>
@@ -462,7 +462,7 @@ export function StoryboardStudio() {
                     </div>
                 </div>
 
-                <div className="thin-scrollbar rounded-lg border bg-card p-4 shadow-sm lg:min-h-0 lg:overflow-y-auto lg:p-5">
+                <div className="thin-scrollbar min-w-0 rounded-lg border bg-card p-4 shadow-sm xl:min-h-0 xl:overflow-y-auto lg:p-5">
                     <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <h2 className="text-xl font-semibold">{text("output.title", "分镜文档")}</h2>
