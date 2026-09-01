@@ -389,7 +389,10 @@ test("standalone Runtime 跳过 Storyboard 快照并只暴露脑暴工作区 Mem
     assert.equal(result.status, "completed");
     assert.equal(projectReads, 0);
     assert.equal(memoryReads[0].pageSize, 500);
-    assert.deepEqual(request[2].map((tool) => tool.function.name), ["storyboard_list_memories", "storyboard_remember", "storyboard_forget_memory"]);
+    assert.deepEqual(
+        request[2].map((tool) => tool.function.name),
+        ["storyboard_list_memories", "storyboard_remember", "storyboard_forget_memory"],
+    );
     const standaloneTools = Object.fromEntries(request[2].map((tool) => [tool.function.name, tool.function]));
     for (const tool of Object.values(standaloneTools)) assert.equal(tool.parameters.properties.projectId, undefined);
     assert.deepEqual(standaloneTools.storyboard_list_memories.parameters.required, []);
