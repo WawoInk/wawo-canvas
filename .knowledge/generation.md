@@ -29,6 +29,8 @@
 | remote compatibility | 浏览器请求 `/api/v1/images/*`、`chat/completions`、`audio/speech`、`contents/generations/tasks` 等 | Go 代理选渠道、扣费、记录任务/payload | 使用统一 `generation_tasks`，异步视频另有兼容生命周期 | 图片、文本、音频、旧视频协议 |
 | remote first-party | `POST /api/v1/generations` | 完整平台校验、幂等、计费、事件和结果物化 | PostgreSQL 队列 + worker lease | Canvas 与视频工作台的视频/短剧 |
 
+Brainstorm Agent 虽然保持浏览器流式交互，但不再使用 local channel 或用户 API Key。每次 Turn 开始读取 `GET /api/settings`，只使用管理员 `defaultTextModel`、`textModels`、`availableModels` 和 `textModelProtocols` 的交集；配置缺失或协议冲突时 fail closed。有效请求统一带 `X-Source: brainstorm_agent` 进入 `/api/v1/chat/completions` 或 `/api/v1/xvanai/chat/completions`，由既有 compatibility proxy 选渠道、按 `modelCosts` 扣费、记录 `generation_tasks`/`generation_payloads`/`credit_logs`，并把上游 usage 写入任务 `metadata.usage`。主回复、Summary、Tool follow-up 和重试共享同一 Turn 配置快照，不新增 Brainstorm 专用模型、计费或日志体系。
+
 第一方和兼容入口共享任务、积分和审计基础设施，但不能把未知供应商扩展字段强制转换为第一方意图。
 
 ## 第一方合同

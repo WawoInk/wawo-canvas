@@ -1,4 +1,5 @@
 import { requestToolResponse, type ModelStreamEvent, type ResponseFunctionTool, type ResponseInputMessage } from "@/services/api/image";
+import { fetchPublicSettings, type PublicSettings } from "@/services/api/settings";
 import { createStoryboardMemory, deleteStoryboardMemory, fetchStoryboardMemories } from "@/services/api/storyboard-brainstorm";
 import { fetchStoryboardRecord, updateStoryboardRecord, type StoryboardRecordDetail } from "@/services/api/storyboards";
 import type { AiConfig } from "@/stores/use-config-store";
@@ -20,7 +21,7 @@ const SUMMARY_RETAIN_TOKENS = 8_000;
 type RuntimeOptions = {
     scope?: "storyboard" | "standalone";
     projectId: string;
-    config: AiConfig;
+    config?: AiConfig;
     skillId: BrainstormSkillId;
     focus: BrainstormFocus;
     onProjectChanged?: () => void;
@@ -135,11 +136,41 @@ function responseTool(tool: { name: string; description: string; parameters: Rec
     return { type: "function", function: { name: tool.name, description: tool.description, parameters: tool.parameters, strict: true } };
 }
 
+function adminRemoteConfig(baseConfig: AiConfig | undefined, settings: PublicSettings) {
+    const channel = settings?.modelChannel;
+    const model = typeof channel?.defaultTextModel === "string" ? channel.defaultTextModel.trim() : "";
+    const availableModels = Array.isArray(channel?.availableModels) ? channel.availableModels : [];
+    const textModels = Array.isArray(channel?.textModels) ? channel.textModels : [];
+    const protocol = typeof channel?.textModelProtocols?.[model] === "string" ? channel.textModelProtocols[model].trim().toLowerCase() : "";
+    if (!model || !availableModels.includes(model) || !textModels.includes(model) || !["openai", "xvanai", "gemini"].includes(protocol)) {
+        throw new Error("Brainstorm Agent 未配置有效的管理员文本模型：defaultTextModel 必须同时存在于 availableModels、textModels，且 textModelProtocols 必须为 openai、xvanai 或 gemini。");
+    }
+    return {
+        model,
+        config: {
+            ...baseConfig,
+            channelMode: "remote",
+            baseUrl: "",
+            apiKey: "",
+            apiFormat: protocol as AiConfig["apiFormat"],
+            channels: [],
+            model,
+            textModel: model,
+            models: [model],
+            imageModels: [],
+            videoModels: [],
+            textModels: [model],
+            audioModels: [],
+        } as AiConfig,
+    };
+}
+
 function complete(config: AiConfig): BrainstormComplete {
     return async (request, options) => {
         const result = await requestToolResponse({ ...config, model: config.textModel || config.model, systemPrompt: "" }, request.messages.map(responseMessage), request.tools.map(responseTool), "auto", undefined, {
             signal: options.signal,
             includeUsage: true,
+            source: "brainstorm_agent",
             onEvent: (event: ModelStreamEvent) => {
                 if (event.type === "text_delta") options.onEvent({ type: "text_delta", delta: event.delta });
                 else if (event.type === "tool_call_delta") options.onEvent({ type: "tool_call_delta", ...(event.id ? { callId: event.id } : {}), ...(event.name ? { name: event.name } : {}), argumentsDelta: event.argumentsDelta });
@@ -249,11 +280,11 @@ export function createBrainstormAgentRuntime(options: RuntimeOptions): Brainstor
     const projectId = options.projectId.trim();
     if (!projectId) throw new Error("脑暴 Runtime 缺少范围 ID");
     if (scope === "standalone" && projectId !== STANDALONE_BRAINSTORM_SCOPE_ID) throw new Error(`standalone Brainstorm Runtime 的 scope ID 必须是 ${STANDALONE_BRAINSTORM_SCOPE_ID}`);
-    const model = options.config.textModel || options.config.model;
-    const completion = complete(options.config);
     const summaries = new Map<string, BrainstormSummaryCheckpoint[]>();
     return {
         async run(input, runOptions) {
+            const { config, model } = adminRemoteConfig(options.config, await fetchPublicSettings());
+            const completion = complete(config);
             if (input.projectId !== projectId || input.conversation.projectId !== projectId) throw new Error("脑暴 Runtime 的项目范围不一致");
             abort(runOptions.signal);
             const [storyboard, memories] = await Promise.all([scope === "standalone" ? Promise.resolve(undefined) : fetchStoryboardRecord(projectId), allMemories(projectId, runOptions.signal)]);

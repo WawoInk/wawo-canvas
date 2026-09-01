@@ -160,7 +160,7 @@ Memory 表只保存已确认记录；候选 Memory 和运行时 Context 不属�
 
 `upstream_credits` 保存供应商响应中的可空 credits。Vidu 未返回该字段时写入 `NULL`；响应审计 JSON 仍显式保留 `"credits": null`，便于使用日志与调用日志区分字段缺失和数值消耗。
 
-模型展示名保存在 `settings` 的公开 `modelChannel.modelCosts[].displayName` 配置中，不写入 `generation_tasks`。任务 API 在读取时按模型配置动态投影 `modelDisplayName`，未配置时回退实际 `model`；实际模型名继续用于渠道路由和上游请求。新写入的 AI 消费、退款流水备注使用同一展示名规则。
+模型展示名保存在 `settings` 的公开 `modelChannel.modelCosts[].displayName` 配置中，不写入 `generation_tasks`。任务 API 在读取时按模型配置动态投影 `modelDisplayName`，未配置时回退实际 `model`；实际模型名继续用于渠道路由和上游请求。新写入的 AI 消费、退款流水备注使用同一展示名规则。Brainstorm Agent 不维护独立模型、计费或日志表：每个远程文本 HTTP 调用继续写入本表，`source` 为 `brainstorm_agent` 时可识别其来源；兼容 Chat 上游返回的 usage 归一化后写入已有 `metadata.usage`，结构为 `{inputTokens, outputTokens, totalTokens}`。
 
 ## generation_payloads
 

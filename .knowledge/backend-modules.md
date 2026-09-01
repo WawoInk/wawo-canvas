@@ -161,6 +161,7 @@
   - Assistant 更新以 `expectedRevision` 替换完整有序 output JSON 并推进生命周期；continue 对原 terminal Assistant 做 CAS，保留 ID/output 后重置为 pending，不创建 sibling。
   - Brainstorm Memory 只保存已确认记录；旧 project 模式的 scope/path、tags、`sourceMessageId` 和 `operationId` 由 service 校验，独立脑暴不借此建立 Storyboard 实体关联。
 - **依赖关系**：Storyboard Workspace 依赖 auth、PostgreSQL、S3 和个人 `user_files`；独立 Brainstorm Workspace 复用认证数据库持久化，但不依赖真实 Storyboard Project。模型调用、独立脑暴 UI 和 Canvas 集成由上层负责。
+- **模型与计费边界**：Brainstorm 模型调用不在本模块维护独立配置或扣费；上层 Runtime 读取管理员公开文本模型配置后强制进入现有 compatibility proxy，由生成平台按渠道、`modelCosts`、`generation_tasks`、`generation_payloads` 和 `credit_logs` 统一处理，Token usage 写入现有任务 `metadata.usage`。
 - **关键不变量**：
   - status 只使用 `draft/ready`，validation outcome 继续保存在 `validationStatus`。
   - Project ID、`createdAt` 和已匹配实体 ID 在保存/重新生成后保持稳定；Workspace 更新是整体 CAS，不做字段级 merge。

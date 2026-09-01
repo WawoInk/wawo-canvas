@@ -43,6 +43,7 @@ const emptySettings: AdminSettings = {
             imageModels: [],
             videoModels: [],
             textModels: [],
+            textModelProtocols: {},
             audioModels: [],
             systemPrompt: "",
             allowCustomChannel: true,

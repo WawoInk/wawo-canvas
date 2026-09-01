@@ -29,6 +29,23 @@ var aiProxyHTTPClient = func() *http.Client {
 	return &http.Client{Transport: transport}
 }()
 
+func brainstormAdminModelAllowed(public model.PublicSetting, modelName string) bool {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" || modelName != strings.TrimSpace(public.ModelChannel.DefaultTextModel) {
+		return false
+	}
+	protocol, ok := public.ModelChannel.TextModelProtocols[modelName]
+	if !ok {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(protocol)) {
+	case "openai", "xvanai", "gemini":
+		return true
+	default:
+		return false
+	}
+}
+
 // ProxyAIRequest 处理 POST 类 AI 代理请求：选渠道、扣算力点、转发上游、失败返还。
 func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 	body, contentType, modelName, err := readAIRequest(r)
@@ -43,6 +60,7 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		return
 	}
 	taskType := DetermineTaskType(path)
+	source := DetermineSource(r)
 	auditBody := func(body []byte) []byte {
 		if taskType == model.TaskTypeChat {
 			return []byte(`{"omitted":"chat content"}`)
@@ -53,6 +71,11 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 	if err != nil || !publicModelAllowed(public, taskType, modelName) {
 		proxyAILogf("AI proxy model not exposed: model=%s taskType=%s err=%v", modelName, taskType, err)
 		proxyFail(w, "模型不可用")
+		return
+	}
+	if source == "brainstorm_agent" && !brainstormAdminModelAllowed(public, modelName) {
+		proxyAILogf("Brainstorm model is not the current admin default: model=%s default=%s", modelName, public.ModelChannel.DefaultTextModel)
+		proxyFail(w, "管理员文本模型已更新，请刷新后重试")
 		return
 	}
 	credits, err := ModelCost(modelName)
@@ -87,7 +110,6 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 
 	// ── 生成任务日志：开始 ──
 	provider := DetermineProvider(channel)
-	source := DetermineSource(r)
 	auditRequestBody := auditBody(requestAuditBody(body, contentType))
 	auditRequestHeaders := sanitizeGenerationAuditJSON(sanitizeGenerationAuditHeaders(resolved.Headers))
 	genTaskID, err := LogTaskStart(user, taskType, provider, modelName, auditRequestBody, auditRequestHeaders, source, "")
@@ -116,6 +138,11 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 			latencyMs := time.Since(startTime).Milliseconds()
 			upstreamTaskID := ExtractUpstreamTaskID(respBody)
 			auditResponseBody := auditBody(respBody)
+			if usage := collectCompatibilityUsage(respBody, taskType); usage != nil {
+				if err := updateCompatibilityTaskMetadata(genTaskID, usage); err != nil {
+					proxyAILogf("AI proxy update usage metadata failed: task=%s err=%v", genTaskID, err)
+				}
+			}
 			if strings.HasPrefix(path, "/async/images/") {
 				task, err := repository.GetGenerationTaskByID(genTaskID)
 				if err == nil {
@@ -150,7 +177,100 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 			}
 			LogTaskFailure(genTaskID, errCode, errMsg, rawError, latencyMs, credits)
 		},
+		func(usage *compatibilityUsage) {
+			if taskType != model.TaskTypeChat {
+				return
+			}
+			if err := updateCompatibilityTaskMetadata(genTaskID, usage); err != nil {
+				proxyAILogf("AI proxy update usage metadata failed: task=%s err=%v", genTaskID, err)
+			}
+		},
 	)
+}
+
+type compatibilityUsage struct {
+	InputTokens  int `json:"inputTokens"`
+	OutputTokens int `json:"outputTokens"`
+	TotalTokens  int `json:"totalTokens"`
+}
+
+func collectCompatibilityUsage(body []byte, taskType model.TaskType) *compatibilityUsage {
+	if taskType != model.TaskTypeChat || len(body) == 0 {
+		return nil
+	}
+	return parseCompatibilityUsage(body)
+}
+
+func parseCompatibilityUsage(body []byte) *compatibilityUsage {
+	var payload struct {
+		Usage *struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+			TotalTokens      int `json:"total_tokens"`
+		} `json:"usage"`
+		UsageMetadata *struct {
+			PromptTokenCount     int `json:"promptTokenCount"`
+			CandidatesTokenCount int `json:"candidatesTokenCount"`
+			TotalTokenCount      int `json:"totalTokenCount"`
+		} `json:"usageMetadata"`
+	}
+	if json.Unmarshal(body, &payload) != nil {
+		return nil
+	}
+	if payload.Usage != nil {
+		return normalizedCompatibilityUsage(payload.Usage.PromptTokens, payload.Usage.CompletionTokens, payload.Usage.TotalTokens)
+	}
+	if payload.UsageMetadata != nil {
+		return normalizedCompatibilityUsage(payload.UsageMetadata.PromptTokenCount, payload.UsageMetadata.CandidatesTokenCount, payload.UsageMetadata.TotalTokenCount)
+	}
+	return nil
+}
+
+func normalizedCompatibilityUsage(inputTokens, outputTokens, totalTokens int) *compatibilityUsage {
+	if totalTokens == 0 {
+		totalTokens = inputTokens + outputTokens
+	}
+	return &compatibilityUsage{InputTokens: inputTokens, OutputTokens: outputTokens, TotalTokens: totalTokens}
+}
+
+func mergeCompatibilityUsage(current, next *compatibilityUsage) *compatibilityUsage {
+	if next == nil {
+		return current
+	}
+	if current == nil {
+		return next
+	}
+	if next.InputTokens != 0 {
+		current.InputTokens = next.InputTokens
+	}
+	if next.OutputTokens != 0 {
+		current.OutputTokens = next.OutputTokens
+	}
+	if next.TotalTokens != 0 {
+		current.TotalTokens = next.TotalTokens
+	} else {
+		current.TotalTokens = current.InputTokens + current.OutputTokens
+	}
+	return current
+}
+
+func updateCompatibilityTaskMetadata(taskID string, usage *compatibilityUsage) error {
+	task, err := repository.GetGenerationTaskByID(taskID)
+	if err != nil {
+		return err
+	}
+	metadata := map[string]any{}
+	if strings.TrimSpace(task.Metadata) != "" {
+		if err := json.Unmarshal([]byte(task.Metadata), &metadata); err != nil {
+			return fmt.Errorf("parse generation task metadata: %w", err)
+		}
+	}
+	metadata["usage"] = usage
+	updated, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+	return repository.UpdateGenerationTask(taskID, map[string]any{"metadata": string(updated), "updated_at": time.Now().UTC().Format(time.RFC3339Nano)})
 }
 
 // ProxyAIGetRequest 处理 GET 类 AI 代理请求（视频查询/内容）。
@@ -191,7 +311,7 @@ func ProxyAIGetRequest(w http.ResponseWriter, r *http.Request, path string) {
 			}
 		}
 	}
-	proxyCopyAIResponse(w, request, nil, onSuccess, nil)
+	proxyCopyAIResponse(w, request, nil, onSuccess, nil, nil)
 }
 
 type upstreamRequest struct {
@@ -484,7 +604,7 @@ func redactUpstreamURL(rawURL string) string {
 // onFailure — 上游返回错误或网络异常时调用（退款回调）。
 // onSuccess — 上游成功时调用，流式响应不传入响应体。
 // onFailureDetail — 上游失败时调用，传入错误码与脱敏错误信息。
-func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func(), onSuccess func(respBody []byte, respHeaders string), onFailureDetail func(errCode string, errMsg string, rawError string)) {
+func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func(), onSuccess func(respBody []byte, respHeaders string), onFailureDetail func(errCode string, errMsg string, rawError string), onStreamUsage func(*compatibilityUsage)) {
 	response, err := aiProxyHTTPClient.Do(request)
 	if err != nil {
 		safeURL := redactGenerationAuditString(request.URL.String())
@@ -547,6 +667,30 @@ func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure
 			return
 		}
 	}
+	var streamUsage *compatibilityUsage
+	var streamLine strings.Builder
+	collectStreamLine := func(line string) {
+		line = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if !strings.Contains(line, `"usage"`) && !strings.Contains(line, `"usageMetadata"`) {
+			return
+		}
+		if usage := parseCompatibilityUsage([]byte(line)); usage != nil {
+			streamUsage = mergeCompatibilityUsage(streamUsage, usage)
+		}
+	}
+	collectStreamChunk := func(chunk []byte) {
+		streamLine.Write(chunk)
+		for {
+			value := streamLine.String()
+			index := strings.IndexByte(value, '\n')
+			if index < 0 {
+				return
+			}
+			collectStreamLine(value[:index])
+			streamLine.Reset()
+			streamLine.WriteString(value[index+1:])
+		}
+	}
 
 	for key, values := range response.Header {
 		if strings.EqualFold(key, "Content-Length") {
@@ -564,6 +708,7 @@ func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure
 			n, readErr := response.Body.Read(buffer)
 			if n > 0 {
 				chunk := buffer[:n]
+				collectStreamChunk(chunk)
 				if _, writeErr := w.Write(chunk); writeErr != nil {
 					failStream(writeErr)
 					return
@@ -571,9 +716,13 @@ func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure
 				flusher.Flush()
 			}
 			if readErr == io.EOF {
+				collectStreamLine(streamLine.String())
 				if contextErr := request.Context().Err(); contextErr != nil {
 					failStream(contextErr)
 					return
+				}
+				if onStreamUsage != nil && streamUsage != nil {
+					onStreamUsage(streamUsage)
 				}
 				if onSuccess != nil {
 					onSuccess(nil, respHeaders)
@@ -936,6 +1085,7 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 			latencyMs := time.Since(startTime).Milliseconds()
 			LogTaskFailure(genTaskID, errCode, errMsg, rawError, latencyMs, credits)
 		},
+		nil,
 	)
 }
 
@@ -1004,6 +1154,7 @@ func ProxyVideoTaskDelete(w http.ResponseWriter, r *http.Request, path string) {
 				CancelTaskSync(genTaskID)
 			}
 		},
+		nil,
 		nil,
 	)
 }
