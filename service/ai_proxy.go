@@ -116,6 +116,11 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 			latencyMs := time.Since(startTime).Milliseconds()
 			upstreamTaskID := ExtractUpstreamTaskID(respBody)
 			auditResponseBody := auditBody(respBody)
+			if usage := collectCompatibilityUsage(respBody, taskType); usage != nil {
+				if err := updateCompatibilityTaskMetadata(genTaskID, usage); err != nil {
+					proxyAILogf("AI proxy update usage metadata failed: task=%s err=%v", genTaskID, err)
+				}
+			}
 			if strings.HasPrefix(path, "/async/images/") {
 				task, err := repository.GetGenerationTaskByID(genTaskID)
 				if err == nil {
@@ -150,7 +155,91 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 			}
 			LogTaskFailure(genTaskID, errCode, errMsg, rawError, latencyMs, credits)
 		},
+		func(usage *compatibilityUsage) {
+			if taskType != model.TaskTypeChat {
+				return
+			}
+			if err := updateCompatibilityTaskMetadata(genTaskID, usage); err != nil {
+				proxyAILogf("AI proxy update usage metadata failed: task=%s err=%v", genTaskID, err)
+			}
+		},
 	)
+}
+
+type compatibilityUsage struct {
+	InputTokens  int `json:"inputTokens"`
+	OutputTokens int `json:"outputTokens"`
+	TotalTokens  int `json:"totalTokens"`
+}
+
+func collectCompatibilityUsage(body []byte, taskType model.TaskType) *compatibilityUsage {
+	if taskType != model.TaskTypeChat || len(body) == 0 {
+		return nil
+	}
+	return parseCompatibilityUsage(body)
+}
+
+func parseCompatibilityUsage(body []byte) *compatibilityUsage {
+	var payload struct {
+		Usage *struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+			TotalTokens      int `json:"total_tokens"`
+		} `json:"usage"`
+		UsageMetadata *struct {
+			PromptTokenCount     int `json:"promptTokenCount"`
+			CandidatesTokenCount int `json:"candidatesTokenCount"`
+			TotalTokenCount      int `json:"totalTokenCount"`
+		} `json:"usageMetadata"`
+	}
+	if json.Unmarshal(body, &payload) != nil {
+		return nil
+	}
+	if payload.Usage != nil {
+		return &compatibilityUsage{InputTokens: payload.Usage.PromptTokens, OutputTokens: payload.Usage.CompletionTokens, TotalTokens: payload.Usage.TotalTokens}
+	}
+	if payload.UsageMetadata != nil {
+		return &compatibilityUsage{InputTokens: payload.UsageMetadata.PromptTokenCount, OutputTokens: payload.UsageMetadata.CandidatesTokenCount, TotalTokens: payload.UsageMetadata.TotalTokenCount}
+	}
+	return nil
+}
+
+func mergeCompatibilityUsage(current, next *compatibilityUsage) *compatibilityUsage {
+	if next == nil {
+		return current
+	}
+	if current == nil {
+		return next
+	}
+	if next.InputTokens != 0 {
+		current.InputTokens = next.InputTokens
+	}
+	if next.OutputTokens != 0 {
+		current.OutputTokens = next.OutputTokens
+	}
+	if next.TotalTokens != 0 {
+		current.TotalTokens = next.TotalTokens
+	}
+	return current
+}
+
+func updateCompatibilityTaskMetadata(taskID string, usage *compatibilityUsage) error {
+	task, err := repository.GetGenerationTaskByID(taskID)
+	if err != nil {
+		return err
+	}
+	metadata := map[string]any{}
+	if strings.TrimSpace(task.Metadata) != "" {
+		if err := json.Unmarshal([]byte(task.Metadata), &metadata); err != nil {
+			metadata = map[string]any{}
+		}
+	}
+	metadata["usage"] = usage
+	updated, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+	return repository.UpdateGenerationTask(taskID, map[string]any{"metadata": string(updated), "updated_at": time.Now().UTC().Format(time.RFC3339Nano)})
 }
 
 // ProxyAIGetRequest 处理 GET 类 AI 代理请求（视频查询/内容）。
@@ -191,7 +280,7 @@ func ProxyAIGetRequest(w http.ResponseWriter, r *http.Request, path string) {
 			}
 		}
 	}
-	proxyCopyAIResponse(w, request, nil, onSuccess, nil)
+	proxyCopyAIResponse(w, request, nil, onSuccess, nil, nil)
 }
 
 type upstreamRequest struct {
@@ -484,7 +573,7 @@ func redactUpstreamURL(rawURL string) string {
 // onFailure — 上游返回错误或网络异常时调用（退款回调）。
 // onSuccess — 上游成功时调用，流式响应不传入响应体。
 // onFailureDetail — 上游失败时调用，传入错误码与脱敏错误信息。
-func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func(), onSuccess func(respBody []byte, respHeaders string), onFailureDetail func(errCode string, errMsg string, rawError string)) {
+func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func(), onSuccess func(respBody []byte, respHeaders string), onFailureDetail func(errCode string, errMsg string, rawError string), onStreamUsage func(*compatibilityUsage)) {
 	response, err := aiProxyHTTPClient.Do(request)
 	if err != nil {
 		safeURL := redactGenerationAuditString(request.URL.String())
@@ -547,6 +636,26 @@ func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure
 			return
 		}
 	}
+	var streamUsage *compatibilityUsage
+	var streamLine strings.Builder
+	collectStreamLine := func(line string) {
+		if usage := parseCompatibilityUsage([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:")))); usage != nil {
+			streamUsage = mergeCompatibilityUsage(streamUsage, usage)
+		}
+	}
+	collectStreamChunk := func(chunk []byte) {
+		streamLine.Write(chunk)
+		for {
+			value := streamLine.String()
+			index := strings.IndexByte(value, '\n')
+			if index < 0 {
+				return
+			}
+			collectStreamLine(value[:index])
+			streamLine.Reset()
+			streamLine.WriteString(value[index+1:])
+		}
+	}
 
 	for key, values := range response.Header {
 		if strings.EqualFold(key, "Content-Length") {
@@ -564,6 +673,7 @@ func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure
 			n, readErr := response.Body.Read(buffer)
 			if n > 0 {
 				chunk := buffer[:n]
+				collectStreamChunk(chunk)
 				if _, writeErr := w.Write(chunk); writeErr != nil {
 					failStream(writeErr)
 					return
@@ -571,9 +681,13 @@ func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure
 				flusher.Flush()
 			}
 			if readErr == io.EOF {
+				collectStreamLine(streamLine.String())
 				if contextErr := request.Context().Err(); contextErr != nil {
 					failStream(contextErr)
 					return
+				}
+				if onStreamUsage != nil && streamUsage != nil {
+					onStreamUsage(streamUsage)
 				}
 				if onSuccess != nil {
 					onSuccess(nil, respHeaders)
@@ -936,6 +1050,7 @@ func proxyVideoTaskPost(w http.ResponseWriter, r *http.Request, path string) {
 			latencyMs := time.Since(startTime).Milliseconds()
 			LogTaskFailure(genTaskID, errCode, errMsg, rawError, latencyMs, credits)
 		},
+		nil,
 	)
 }
 
@@ -1004,6 +1119,7 @@ func ProxyVideoTaskDelete(w http.ResponseWriter, r *http.Request, path string) {
 				CancelTaskSync(genTaskID)
 			}
 		},
+		nil,
 		nil,
 	)
 }
