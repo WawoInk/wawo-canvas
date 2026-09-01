@@ -319,7 +319,11 @@ test("审批恢复沿用原 Turn 的管理员模型快照", async () => {
         seen.push(args);
         callCount += 1;
         if (callCount === 1) {
-            return { content: "", toolCalls: [{ id: "call-memory", type: "function", function: { name: "storyboard_remember", arguments: JSON.stringify({ projectId: "project-1", kind: "constraint", scope: "project", content: "沿用模型", tags: [] }) } }], finishReason: "tool_calls" };
+            return {
+                content: "",
+                toolCalls: [{ id: "call-memory", type: "function", function: { name: "storyboard_remember", arguments: JSON.stringify({ projectId: "project-1", kind: "constraint", scope: "project", content: "沿用模型", tags: [] }) } }],
+                finishReason: "tool_calls",
+            };
         }
         return { content: "已继续", toolCalls: [], finishReason: "stop" };
     };
@@ -339,7 +343,13 @@ test("审批恢复沿用原 Turn 的管理员模型快照", async () => {
     };
     const resumed = await runtime.run({ ...input, mode: "approval", decision: "rejected", continuation: awaiting.continuation }, { signal: new AbortController().signal, onEvent: () => undefined });
     assert.equal(resumed.status, "completed");
-    assert.deepEqual(seen.map((args) => [args[0].model, args[0].apiFormat]), [["admin-text-model", "openai"], ["admin-text-model", "openai"]]);
+    assert.deepEqual(
+        seen.map((args) => [args[0].model, args[0].apiFormat]),
+        [
+            ["admin-text-model", "openai"],
+            ["admin-text-model", "openai"],
+        ],
+    );
     resetPublicSettings();
 });
 

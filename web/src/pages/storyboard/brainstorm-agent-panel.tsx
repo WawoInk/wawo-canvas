@@ -222,7 +222,19 @@ function MessageCard({
     );
 }
 
-export function BrainstormAgentPanel({ project, model, onProjectUpdated, onActiveChange, disabled = false }: { project: StoryboardRecord | null; model?: string; onProjectUpdated?: () => void; onActiveChange?: (active: boolean) => void; disabled?: boolean }) {
+export function BrainstormAgentPanel({
+    project,
+    model,
+    onProjectUpdated,
+    onActiveChange,
+    disabled = false,
+}: {
+    project: StoryboardRecord | null;
+    model?: string;
+    onProjectUpdated?: () => void;
+    onActiveChange?: (active: boolean) => void;
+    disabled?: boolean;
+}) {
     const { message } = App.useApp();
     const user = useUserStore((state) => state.user);
     const [skillId, setSkillId] = useState(skills[0].id);
