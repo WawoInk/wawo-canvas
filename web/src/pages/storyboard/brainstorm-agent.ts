@@ -9,6 +9,11 @@ export type BrainstormTokenUsage = {
     totalTokens?: number;
 };
 
+export type BrainstormModelSnapshot = {
+    model: string;
+    apiFormat: "openai" | "xvanai" | "gemini";
+};
+
 export type BrainstormToolCall = {
     type: "tool_call";
     callId: string;
@@ -26,7 +31,7 @@ export type BrainstormToolResult = {
     status: BrainstormToolResultStatus;
     content: string;
     sideEffect?: "none" | "write";
-    continuation?: { pendingCalls: BrainstormToolCall[]; toolRounds: number };
+    continuation?: { pendingCalls: BrainstormToolCall[]; toolRounds: number; modelSnapshot?: BrainstormModelSnapshot };
 };
 
 export type BrainstormOutputItem = { type: "text"; text: string } | BrainstormToolCall | BrainstormToolResult;
@@ -225,6 +230,7 @@ export type BrainstormTurnContinuation = {
     pendingCalls: BrainstormToolCall[];
     toolRounds: number;
     usage?: BrainstormTokenUsage;
+    modelSnapshot?: BrainstormModelSnapshot;
 };
 
 export type BrainstormToolApprovalDecision = "approved" | "rejected";
@@ -244,4 +250,5 @@ export type BrainstormTurnDependencies = {
 export type BrainstormTurnOptions = {
     signal?: AbortSignal;
     onEvent?: (event: BrainstormTurnEvent) => void;
+    modelSnapshot?: BrainstormModelSnapshot;
 };
