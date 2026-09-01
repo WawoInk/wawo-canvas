@@ -106,6 +106,65 @@ func TestNormalizeSettingsPublishesEnabledChannelModelsAndRepairsDefaults(t *tes
 	}
 }
 
+func TestNormalizeSettingsPublishesTextModelProtocolsFromEnabledChannels(t *testing.T) {
+	settings := normalizeSettings(model.Settings{
+		Public: model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{
+			DefaultTextModel: "brainstorm-gemini",
+			TextModels:       []string{"brainstorm-gemini", "default-openai", "brainstorm-xvanai", "missing-model"},
+		}},
+		Private: model.PrivateSetting{Channels: []model.ModelChannel{
+			{Enabled: true, Protocol: "gemini", Models: []string{"brainstorm-gemini"}},
+			{Enabled: true, Models: []string{"default-openai"}},
+			{Enabled: true, Protocol: "xvanai", Models: []string{"brainstorm-xvanai"}},
+			{Enabled: false, Protocol: "openai", Models: []string{"brainstorm-gemini"}},
+		}},
+	})
+
+	body, err := json.Marshal(settings.Public.ModelChannel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var publicContract struct {
+		TextModelProtocols map[string]string `json:"textModelProtocols"`
+	}
+	if err := json.Unmarshal(body, &publicContract); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"brainstorm-gemini": "gemini",
+		"default-openai":    "openai",
+		"brainstorm-xvanai": "xvanai",
+	}
+	if !reflect.DeepEqual(publicContract.TextModelProtocols, want) {
+		t.Fatalf("text model protocols = %#v, want %#v", publicContract.TextModelProtocols, want)
+	}
+}
+
+func TestNormalizeSettingsOmitsConflictingTextModelProtocols(t *testing.T) {
+	settings := normalizeSettings(model.Settings{
+		Public: model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{
+			DefaultTextModel: "conflicted-model",
+			TextModels:       []string{"conflicted-model", "consistent-model", "mixed-protocol-model"},
+		}},
+		Private: model.PrivateSetting{Channels: []model.ModelChannel{
+			{Enabled: true, Protocol: "openai", Models: []string{"conflicted-model", "consistent-model"}},
+			{Enabled: true, Protocol: "gemini", Models: []string{"conflicted-model"}},
+			{Enabled: true, Protocol: "openai", Models: []string{"consistent-model"}},
+			{Enabled: true, Protocol: "openai", Models: []string{"mixed-protocol-model"}},
+			{Enabled: true, Protocol: "aidrama", Models: []string{"mixed-protocol-model"}},
+		}},
+	})
+
+	channel := settings.Public.ModelChannel
+	wantProtocols := map[string]string{"consistent-model": "openai"}
+	if !reflect.DeepEqual(channel.TextModelProtocols, wantProtocols) {
+		t.Fatalf("text model protocols = %#v, want %#v", channel.TextModelProtocols, wantProtocols)
+	}
+	if channel.DefaultTextModel != "conflicted-model" || !reflect.DeepEqual(channel.TextModels, []string{"conflicted-model", "consistent-model", "mixed-protocol-model"}) {
+		t.Fatalf("default/allowlist changed while failing closed: %#v", channel)
+	}
+}
+
 func TestNormalizeSettingsDropsCostsForUnselectedChannelModels(t *testing.T) {
 	settings := normalizeSettings(model.Settings{
 		Public: model.PublicSetting{ModelChannel: model.PublicModelChannelSetting{
