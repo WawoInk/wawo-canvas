@@ -210,10 +210,13 @@ test("Runtime 每次 run 都读取最新管理员文本模型，并拒绝非法�
     await runtime.run(runtimeInput("project-1", "conversation-2"), { signal: new AbortController().signal, onEvent: () => undefined });
 
     assert.equal(publicSettingsReads, 2);
-    assert.deepEqual(requests.map((args) => ({ model: args[0].model, textModel: args[0].textModel, apiFormat: args[0].apiFormat, channelMode: args[0].channelMode, baseUrl: args[0].baseUrl, apiKey: args[0].apiKey, channels: args[0].channels })), [
-        { model: "admin-text-model", textModel: "admin-text-model", apiFormat: "openai", channelMode: "remote", baseUrl: "", apiKey: "", channels: [] },
-        { model: "admin-xvanai-model", textModel: "admin-xvanai-model", apiFormat: "xvanai", channelMode: "remote", baseUrl: "", apiKey: "", channels: [] },
-    ]);
+    assert.deepEqual(
+        requests.map((args) => ({ model: args[0].model, textModel: args[0].textModel, apiFormat: args[0].apiFormat, channelMode: args[0].channelMode, baseUrl: args[0].baseUrl, apiKey: args[0].apiKey, channels: args[0].channels })),
+        [
+            { model: "admin-text-model", textModel: "admin-text-model", apiFormat: "openai", channelMode: "remote", baseUrl: "", apiKey: "", channels: [] },
+            { model: "admin-xvanai-model", textModel: "admin-xvanai-model", apiFormat: "xvanai", channelMode: "remote", baseUrl: "", apiKey: "", channels: [] },
+        ],
+    );
 
     for (const invalid of [
         { defaultTextModel: "", availableModels: ["admin-text-model"], textModels: ["admin-text-model"], textModelProtocols: { "admin-text-model": "openai" } },
@@ -258,20 +261,23 @@ test("Runtime 的主回复、Summary、Tool follow-up 和重试共享同一份�
 
     assert.equal(result.status, "completed");
     assert.equal(seen.length, 4);
-    assert.deepEqual(seen.map((args) => [args[0].model, args[0].apiFormat, args[0].channelMode, args[0].baseUrl, args[0].apiKey, args[0].channels]), [
-        ["admin-text-model", "openai", "remote", "", "", []],
-        ["admin-text-model", "openai", "remote", "", "", []],
-        ["admin-text-model", "openai", "remote", "", "", []],
-        ["admin-text-model", "openai", "remote", "", "", []],
-    ]);
-    assert.deepEqual(seen.map((args) => args[5].source), ["brainstorm_agent", "brainstorm_agent", "brainstorm_agent", "brainstorm_agent"]);
+    assert.deepEqual(
+        seen.map((args) => [args[0].model, args[0].apiFormat, args[0].channelMode, args[0].baseUrl, args[0].apiKey, args[0].channels]),
+        [
+            ["admin-text-model", "openai", "remote", "", "", []],
+            ["admin-text-model", "openai", "remote", "", "", []],
+            ["admin-text-model", "openai", "remote", "", "", []],
+            ["admin-text-model", "openai", "remote", "", "", []],
+        ],
+    );
+    assert.deepEqual(
+        seen.map((args) => args[5].source),
+        ["brainstorm_agent", "brainstorm_agent", "brainstorm_agent", "brainstorm_agent"],
+    );
 });
 
 test("standalone Runtime 在构造时拒绝非固定 scope ID", () => {
-    assert.throws(
-        () => createBrainstormAgentRuntime({ scope: "standalone", projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } }),
-        new RegExp(`standalone.*${STANDALONE_BRAINSTORM_SCOPE_ID}`),
-    );
+    assert.throws(() => createBrainstormAgentRuntime({ scope: "standalone", projectId: "project-1", config, skillId: "divergent_ideation", focus: { kind: "project" } }), new RegExp(`standalone.*${STANDALONE_BRAINSTORM_SCOPE_ID}`));
 });
 
 test("standalone Runtime 跳过 Storyboard 快照并只暴露脑暴工作区 Memory 工具", async () => {
@@ -306,14 +312,20 @@ test("standalone Runtime 跳过 Storyboard 快照并只暴露脑暴工作区 Mem
     assert.equal(result.status, "completed");
     assert.equal(projectReads, 0);
     assert.equal(memoryReads[0].pageSize, 500);
-    assert.deepEqual(request[2].map((tool) => tool.function.name), ["storyboard_list_memories", "storyboard_remember", "storyboard_forget_memory"]);
+    assert.deepEqual(
+        request[2].map((tool) => tool.function.name),
+        ["storyboard_list_memories", "storyboard_remember", "storyboard_forget_memory"],
+    );
     const rememberTool = request[2].find((tool) => tool.function.name === "storyboard_remember");
     assert.deepEqual(rememberTool.function.parameters.properties.scope, { type: "string", enum: ["project"] });
     assert.match(rememberTool.function.description, /脑暴工作区 Memory/);
     const prompt = request[1].map((item) => item.content || "").join("\n");
     assert.match(prompt, /独立创意脑暴/);
     assert.doesNotMatch(prompt, /Storyboard 项目概览|Storyboard 当前焦点/);
-    assert.equal(result.diagnostics.items.some((item) => item.kind === "storyboard"), false);
+    assert.equal(
+        result.diagnostics.items.some((item) => item.kind === "storyboard"),
+        false,
+    );
 });
 
 test("append 每次读取最新 Storyboard/全部 Memory，并把当前分支 Context 与增量事件接到文本模型流", async () => {

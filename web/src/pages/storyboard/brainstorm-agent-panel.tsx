@@ -326,9 +326,7 @@ export function BrainstormAgentPanel({ project, onProjectUpdated, onActiveChange
                             <BrainCircuit className="size-4 text-muted-foreground" />
                             <h2 className="truncate font-semibold">Brainstorm Agent</h2>
                         </div>
-                        <p className="mt-1 truncate text-xs text-muted-foreground">
-                            {project ? `${project.title} · 基于已保存 revision ${project.revision}` : "独立脑暴工作区 · 不依赖已保存分镜项目"}
-                        </p>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">{project ? `${project.title} · 基于已保存 revision ${project.revision}` : "独立脑暴工作区 · 不依赖已保存分镜项目"}</p>
                     </div>
                     <Button type="text" size="small" icon={<History className="size-4" />} onClick={() => setConversationOpen(true)}>
                         对话

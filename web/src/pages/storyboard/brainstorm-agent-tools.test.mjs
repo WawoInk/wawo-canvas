@@ -84,10 +84,7 @@ function decode(execution) {
 }
 
 test("standalone Tool Runtime 在 preflight/execute 阶段拒绝 Storyboard 工具与非 project Memory", async () => {
-    assert.throws(
-        () => createStoryboardToolRuntime({ scope: "standalone", projectId: "project-1", services: services() }),
-        /standalone Brainstorm Tool Runtime 的 scope ID 必须是 __brainstorm__/,
-    );
+    assert.throws(() => createStoryboardToolRuntime({ scope: "standalone", projectId: "project-1", services: services() }), /standalone Brainstorm Tool Runtime 的 scope ID 必须是 __brainstorm__/);
     let reads = 0;
     let writes = 0;
     const runtime = createStoryboardToolRuntime({
@@ -191,10 +188,11 @@ test("write approval preview is derived without reading or mutating project stat
         ).targets,
         ["镜头 shot-1 · durationSec", "片段 segment-1 · durationSec（自动重算）"],
     );
-    assert.deepEqual(
-        previewStoryboardToolCall(call("storyboard_remember", { projectId: "__brainstorm__", kind: "idea", scope: "project", content: "保留反常识结尾", tags: [] })),
-        { title: "保存 Memory", summary: "保留反常识结尾", targets: ["脑暴工作区"] },
-    );
+    assert.deepEqual(previewStoryboardToolCall(call("storyboard_remember", { projectId: "__brainstorm__", kind: "idea", scope: "project", content: "保留反常识结尾", tags: [] })), {
+        title: "保存 Memory",
+        summary: "保留反常识结尾",
+        targets: ["脑暴工作区"],
+    });
 });
 
 test("a read tool executes automatically and its untrusted normalized result enters the next model call", async () => {
