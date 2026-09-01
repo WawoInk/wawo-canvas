@@ -2,6 +2,7 @@
 
 ## Unreleased
 
++ [修复] 独立 Brainstorm Memory 工具不再要求模型或用户提供 Storyboard `projectId`，由 Runtime 自动绑定脑暴工作区 scope。
 + [调整] Brainstorm Agent 按管理员公开文本模型列表提供模型选择，后续对话使用用户所选模型和协议，强制复用远程 Compatibility、既有积分扣费与任务审计；不再使用浏览器本地模型或 API Key。
 + [新增] 远程 Chat Compatibility 复用现有 `generation_tasks.metadata.usage` 记录归一化 Token usage，并以 `brainstorm_agent` 来源标记脑暴模型调用，保持聊天正文审计脱敏。
 + [调整] 分镜创作室将 Brainstorm Agent 从原分镜工作区内嵌 Drawer 拆分为位于“分镜创作室”左侧的独立 Tab；脑暴 Tab 进入独立脑暴工作区，无需加载或选择 Storyboard Project，成果不会自动写回分镜或剧本，用户按需复制；原分镜生成、历史、校验和导出流程恢复为接入前的独立状态。

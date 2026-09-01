@@ -384,24 +384,22 @@ export function createStoryboardToolRuntime(options: { scope?: "storyboard" | "s
     const activeProjectId = options.projectId.trim();
     if (!activeProjectId) throw new Error("Storyboard Tool Runtime requires a projectId.");
     if (options.scope === "standalone" && activeProjectId !== STANDALONE_BRAINSTORM_SCOPE_ID) throw new Error(`standalone Brainstorm Tool Runtime 的 scope ID 必须是 ${STANDALONE_BRAINSTORM_SCOPE_ID}`);
-    const ensureStandaloneCall = (call: BrainstormToolCall) => {
-        if (options.scope !== "standalone") return;
+    const ensureStandaloneCall = (call: BrainstormToolCall): BrainstormToolCall => {
+        if (options.scope !== "standalone") return call;
         if (!STANDALONE_MEMORY_TOOLS.has(call.name)) throw new ToolError("TOOL_NOT_ALLOWED_IN_STANDALONE", "This tool is not available in standalone Brainstorm Runtime.");
+        let args: Args;
         if (call.name === "storyboard_list_memories") {
-            const args = parseArgs(call, ["projectId", "page", "pageSize"], ["projectId"]);
-            projectId(args, activeProjectId);
-            return;
+            args = parseArgs(call, ["projectId", "page", "pageSize"], []);
+        } else if (call.name === "storyboard_forget_memory") {
+            args = parseArgs(call, ["projectId", "memoryId"], ["memoryId"]);
+        } else {
+            args = parseArgs(call, ["projectId", "kind", "scope", "path", "content", "tags"], ["kind", "scope", "content", "tags"]);
+            const scope = text(args, "scope", false, 16);
+            const path = memoryText(args, "path", 128, true);
+            if (scope !== "project" || path) throw new ToolError("INVALID_ARGUMENTS", "Standalone Brainstorm Memory must use project scope with an empty path.");
         }
-        if (call.name === "storyboard_forget_memory") {
-            const args = parseArgs(call, ["projectId", "memoryId"]);
-            projectId(args, activeProjectId);
-            return;
-        }
-        const args = parseArgs(call, ["projectId", "kind", "scope", "path", "content", "tags"], ["projectId", "kind", "scope", "content", "tags"]);
-        projectId(args, activeProjectId);
-        const scope = text(args, "scope", false, 16);
-        const path = memoryText(args, "path", 128, true);
-        if (scope !== "project" || path) throw new ToolError("INVALID_ARGUMENTS", "Standalone Brainstorm Memory must use project scope with an empty path.");
+        if ("projectId" in args) projectId(args, activeProjectId);
+        return { ...call, arguments: JSON.stringify({ ...args, projectId: activeProjectId }) };
     };
     const limit = Math.max(256, Math.min(32000, options.resultLimit ?? 12000));
     const success = (tool: string, data: unknown, sideEffect: "none" | "write" = "none"): BrainstormToolExecution => ({ status: "succeeded", content: resultContent(tool, { ok: true, data }, limit), sideEffect });
@@ -436,7 +434,7 @@ export function createStoryboardToolRuntime(options: { scope?: "storyboard" | "s
     const preflightTool: BrainstormPreflightTool = async (call, { signal, definition }) => {
         try {
             throwIfAborted(signal);
-            ensureStandaloneCall(call);
+            call = ensureStandaloneCall(call);
             const canonical = canonicalDefinition(call, definition);
             if (canonical.approval !== "required") throw new ToolError("INVALID_ARGUMENTS", "Tool does not require approval preflight.");
             return success(call.name, previewStoryboardToolCall(call));
@@ -449,7 +447,7 @@ export function createStoryboardToolRuntime(options: { scope?: "storyboard" | "s
     const executeTool: BrainstormExecuteTool = async (call, { signal, definition, authorization }) => {
         try {
             throwIfAborted(signal);
-            ensureStandaloneCall(call);
+            call = ensureStandaloneCall(call);
             const canonical = canonicalDefinition(call, definition);
             if (canonical.approval === "required" && authorization !== "approved") throw new ToolError("APPROVAL_REQUIRED", "Tool requires confirmed user approval before execution.");
             switch (call.name) {

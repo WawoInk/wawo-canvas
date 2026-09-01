@@ -86,7 +86,8 @@
 - **职责**：提供与 Storyboard Workspace 分离的脑暴工作区、Conversation/Message 恢复和 Brainstorm Memory 管理；不要求 Storyboard Project，成果不会自动写入分镜或剧本，用户按需复制。
 - **关键不变量**：
   - Brainstorm Core 已提供纯 `Context Builder -> Turn Runner` 合同：最终预算同时计算固定 System、代码内 Skill、Brainstorm Workspace 上下文、Brainstorm Memory、Summary、历史和 Tool Schema；Tool Pair 按 `callId` 原子清理，Runner 通过可注入 Completion/Executor 测试四轮 Tool Loop、审批续跑与首输出前单次重试。
-  - 旧 project 模式的 Storyboard Tools 保持兼容；独立脑暴入口不暴露 Storyboard 读取/修改工具，只保留 Brainstorm Memory 工具。
+  - Brainstorm Context 已提供 Project/Scene/Shot Memory 选择、分支级 Summary Checkpoint、长历史压缩和可读预算诊断；未确认或无关 Memory 不进入请求，Summary 只在 User Turn 边界切分，Tool Call/Result 保持原子。
+  - 旧 project 模式的 Storyboard Tools 保持兼容；独立脑暴入口不暴露 Storyboard 读取/修改工具，只保留 Brainstorm Memory 工具。独立 Memory 工具自动绑定当前 `__brainstorm__` scope，模型调用时无需向用户索取 `projectId`。
   - Brainstorm 前端已提供认证 API Client 和页面私有 `useBrainstormAgent`：完整分页恢复 Conversation/Message，服务端确认 User/Assistant Placeholder 后才启动浏览器 Runtime；不同 Conversation 可独立运行，Tool 边界与终态使用 revision CAS 持久化，刷新遗留 active Message 转为 interrupted，审批先 CAS 占用后续跑。
   - `BrainstormAgentStudio` 默认进入独立 Brainstorm Workspace，不自动选择或加载 Storyboard Project；用户可按需选择项目上下文以兼容旧 project 模式，无项目时也可直接新建或恢复 Conversation。独立 Tab 只管理 Brainstorm Memory，Tab 切换保留已挂载的临时交互状态；内部 API 仍复用 `__brainstorm__` scope 和旧 `project_id` 查询维度作为隔离键，但它们不对应真实 Storyboard Project；Canvas 关联仍未实现。
   - 模型与计费：Runtime 读取管理员公开 `textModels` 列表供用户选择，默认选中 `defaultTextModel`；每轮校验所选模型对应的管理员 remote compatibility channel，不使用浏览器本地模型/API Key。主回复、Summary、Tool follow-up 和重试复用 `requestToolResponse`，请求标记 `X-Source: brainstorm_agent`，由服务端统一计费与任务审计。
