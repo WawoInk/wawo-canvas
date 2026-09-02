@@ -16,7 +16,7 @@ const { createRoot } = await import("react-dom/client");
 const { MemoryRouter } = await import("react-router-dom");
 const { default: StoryboardPage } = await import("./index");
 
-test("分镜创作室保留内容边界并提供页面级纵向滚动", async () => {
+test("分镜创作室二级导航和内容对齐顶部品牌容器并提供页面级纵向滚动", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -39,12 +39,16 @@ test("分镜创作室保留内容边界并提供页面级纵向滚动", async ()
     const tabClasses = new Set(tabs.className.split(/\s+/));
     assert.ok(tabClasses.has("mx-auto"));
     assert.ok(tabClasses.has("max-w-[2400px]"));
-    assert.ok(tabClasses.has("[&_.ant-tabs-nav-wrap]:mx-auto"));
-    assert.ok(tabClasses.has("[&_.ant-tabs-nav-wrap]:max-w-7xl"));
-    assert.ok(tabClasses.has("[&_.ant-tabs-nav-wrap]:px-6"));
-    assert.ok(tabClasses.has("[&>.ant-tabs-content-holder]:px-4"));
-    assert.ok(tabClasses.has("sm:[&>.ant-tabs-content-holder]:px-6"));
-    assert.equal(tabClasses.has("px-4"), false);
+
+    const tabHeader = container.querySelector(".ant-tabs-nav");
+    assert.ok(tabHeader);
+    const headerClasses = new Set(tabHeader.className.split(/\s+/));
+    assert.ok(headerClasses.has("mx-auto"));
+    assert.ok(headerClasses.has("w-full"));
+    assert.ok(headerClasses.has("max-w-7xl"));
+    assert.ok(headerClasses.has("px-6"));
+
+    assertAlignedContent(container, "storyboard-studio");
 
     const storyboardPane = container.querySelector("main");
     assert.ok(storyboardPane);
@@ -58,6 +62,16 @@ function tab(container: ParentNode, label: string) {
     const item = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find((element) => element.textContent?.trim() === label);
     assert.ok(item, `未找到 Tab：${label}`);
     return item;
+}
+
+function assertAlignedContent(container: ParentNode, testId: string) {
+    const content = container.querySelector(`[data-testid="${testId}"]`)?.parentElement;
+    assert.ok(content);
+    const classes = new Set(content.className.split(/\s+/));
+    assert.ok(classes.has("mx-auto"));
+    assert.ok(classes.has("w-full"));
+    assert.ok(classes.has("max-w-7xl"));
+    assert.ok(classes.has("px-6"));
 }
 
 test("脑暴 Agent 位于分镜创作室左侧并可独立切换", async () => {
@@ -81,9 +95,15 @@ test("脑暴 Agent 位于分镜创作室左侧并可独立切换", async () => {
     await act(async () => tab(container, "脑暴 Agent").click());
     assert.equal(tab(container, "脑暴 Agent").getAttribute("aria-selected"), "true");
     assert.ok(container.querySelector('[data-testid="brainstorm-agent-studio"]'));
+    assertAlignedContent(container, "brainstorm-agent-studio");
 
     await act(async () => tab(container, "分镜创作室").click());
     assert.equal(tab(container, "分镜创作室").getAttribute("aria-selected"), "true");
+    assertAlignedContent(container, "storyboard-studio");
+
+    await act(async () => tab(container, "剧本 Agent").click());
+    assert.equal(tab(container, "剧本 Agent").getAttribute("aria-selected"), "true");
+    assertAlignedContent(container, "script-agent-page");
 
     await act(async () => root.unmount());
     container.remove();

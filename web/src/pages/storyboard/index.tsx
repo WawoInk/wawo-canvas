@@ -16,6 +16,7 @@ export default function StoryboardPage() {
         <div className="thin-scrollbar h-full overflow-y-auto bg-background text-foreground">
             <Tabs
                 className="mx-auto flex h-full min-h-0 w-full max-w-[2400px] flex-col [&_.ant-tabs-content]:h-full [&_.ant-tabs-content]:min-w-0 [&_.ant-tabs-tabpane]:h-full [&_.ant-tabs-tabpane]:min-h-0 [&_.ant-tabs-tabpane]:min-w-0 [&_.ant-tabs-nav-wrap]:mx-auto [&_.ant-tabs-nav-wrap]:w-full [&_.ant-tabs-nav-wrap]:max-w-7xl [&_.ant-tabs-nav-wrap]:px-6 [&>.ant-tabs-content-holder]:flex-1 [&>.ant-tabs-content-holder]:min-h-0 [&>.ant-tabs-content-holder]:min-w-0 [&>.ant-tabs-content-holder]:w-full"
+                classNames={{ header: "mx-auto w-full max-w-7xl px-6" }}
                 activeKey={activeKey}
                 onChange={(key) => navigate(key === "brainstorm-agent" ? "/storyboard/brainstorm-agent" : key === "script-agent" ? "/storyboard/script-agent" : "/storyboard")}
                 destroyOnHidden={false}
