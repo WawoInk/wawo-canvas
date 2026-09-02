@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { test } from "node:test";
 
+import { APP_CONTENT_STYLE } from "@/lib/layout";
+
 if (typeof window === "undefined") GlobalRegistrator.register();
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -42,10 +44,11 @@ test("分镜创作室二级导航和内容对齐顶部品牌容器并提供页�
     assert.ok(tabClasses.has("flex"));
     assert.ok(tabClasses.has("h-full"));
     assert.ok(tabClasses.has("min-h-0"));
-    assert.ok(tabClasses.has("[&_.ant-tabs-nav-wrap]:mx-auto"));
-    assert.ok(tabClasses.has("[&_.ant-tabs-nav-wrap]:w-full"));
-    assert.ok(tabClasses.has("[&_.ant-tabs-nav-wrap]:max-w-7xl"));
-    assert.ok(tabClasses.has("[&_.ant-tabs-nav-wrap]:px-6"));
+    assert.ok(tabClasses.has("storyboard-tabs"));
+
+    const tabHeader = container.querySelector(".ant-tabs-nav");
+    assert.ok(tabHeader);
+    assert.equal(tabHeader.getAttribute("role"), "tablist");
 
     assertAlignedContent(container, "storyboard-studio");
 
@@ -67,10 +70,11 @@ function assertAlignedContent(container: ParentNode, testId: string) {
     const content = container.querySelector(`[data-testid="${testId}"]`)?.parentElement;
     assert.ok(content);
     const classes = new Set(content.className.split(/\s+/));
-    assert.ok(classes.has("mx-auto"));
     assert.ok(classes.has("w-full"));
-    assert.ok(classes.has("max-w-7xl"));
-    assert.ok(classes.has("px-6"));
+    assert.equal(content.style.boxSizing, APP_CONTENT_STYLE.boxSizing);
+    assert.equal(content.style.maxWidth, APP_CONTENT_STYLE.maxWidth);
+    assert.equal(content.style.marginInline, APP_CONTENT_STYLE.marginInline);
+    assert.equal(content.style.paddingInline, APP_CONTENT_STYLE.paddingInline);
 }
 
 test("脑暴 Agent 位于分镜创作室左侧并可独立切换", async () => {

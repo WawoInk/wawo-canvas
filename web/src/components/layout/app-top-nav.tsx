@@ -11,6 +11,7 @@ import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
 import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { appPathname } from "@/i18n";
 import { cn } from "@/lib/utils";
+import { APP_CONTENT_STYLE } from "@/lib/layout";
 import { useUserStore } from "@/stores/use-user-store";
 import { useState } from "react";
 
@@ -30,7 +31,7 @@ export function AppTopNav() {
         <>
             {!hideHeader ? (
                 <header className="sticky top-0 z-20 h-16 shrink-0 border-b border-border bg-background/90 backdrop-blur-xl">
-                    <div className="mx-auto flex h-full max-w-7xl items-stretch justify-between gap-5 px-6">
+                    <div className="flex h-full items-stretch justify-between gap-5" style={APP_CONTENT_STYLE}>
                         <div className="flex min-w-0 items-center">
                             <Link to="/" className="flex h-full shrink-0 items-center gap-2 transition" aria-label={t("navigation.brandHome")}>
                                 <BrandLogo height={64} />

@@ -120,7 +120,7 @@ export function BrainstormAgentStudio() {
     const modelOptions = useMemo(() => brainstormAdminTextModelOptions(modelSettings), [modelSettings]);
 
     return (
-        <section className="grid min-h-0 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <section className="brainstorm-agent-layout grid min-h-0 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
             <aside className="thin-scrollbar min-h-0 overflow-y-auto rounded-lg border bg-card p-4 shadow-sm">
                 <h1 className="text-2xl font-semibold">脑暴 Agent</h1>
                 <p className="mt-1 text-sm text-muted-foreground">独立脑暴工作区，不依赖已保存分镜项目，可自由讨论和完善创意。</p>
