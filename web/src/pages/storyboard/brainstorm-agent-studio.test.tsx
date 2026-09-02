@@ -167,6 +167,8 @@ test("Studio 展示管理员文本模型并将用户选择传给 Brainstorm Pane
     listRecords = async () => [];
 
     const { container, root } = await mount();
+    const layout = container.querySelector(".brainstorm-agent-layout");
+    assert.ok(layout);
     const select = container.querySelector<HTMLSelectElement>('select[aria-label="脑暴模型"]');
     assert.ok(select);
     assert.equal(select.value, "admin-text-model");
