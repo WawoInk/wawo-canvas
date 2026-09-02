@@ -39,14 +39,13 @@ test("分镜创作室二级导航和内容对齐顶部品牌容器并提供页�
     const tabClasses = new Set(tabs.className.split(/\s+/));
     assert.ok(tabClasses.has("mx-auto"));
     assert.ok(tabClasses.has("max-w-[2400px]"));
-
-    const tabHeader = container.querySelector(".ant-tabs-nav");
-    assert.ok(tabHeader);
-    const headerClasses = new Set(tabHeader.className.split(/\s+/));
-    assert.ok(headerClasses.has("mx-auto"));
-    assert.ok(headerClasses.has("w-full"));
-    assert.ok(headerClasses.has("max-w-7xl"));
-    assert.ok(headerClasses.has("px-6"));
+    assert.ok(tabClasses.has("flex"));
+    assert.ok(tabClasses.has("h-full"));
+    assert.ok(tabClasses.has("min-h-0"));
+    assert.ok(tabClasses.has("[&_.ant-tabs-nav-wrap]:mx-auto"));
+    assert.ok(tabClasses.has("[&_.ant-tabs-nav-wrap]:w-full"));
+    assert.ok(tabClasses.has("[&_.ant-tabs-nav-wrap]:max-w-7xl"));
+    assert.ok(tabClasses.has("[&_.ant-tabs-nav-wrap]:px-6"));
 
     assertAlignedContent(container, "storyboard-studio");
 
