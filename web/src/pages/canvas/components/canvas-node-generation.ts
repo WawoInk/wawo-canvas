@@ -43,6 +43,7 @@ export type VideoGenerationIntent = {
 export function buildVideoGenerationIntent(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[], prompt: string, settings: VideoGenerationSettings, negativePrompt = ""): VideoGenerationIntent {
     const references = { images: [] as PlatformMediaReference[], videos: [] as PlatformMediaReference[], audios: [] as PlatformMediaReference[] };
     for (const node of getGenerationResourceNodes(nodeId, nodes, connections)) {
+        if (node.type !== CanvasNodeType.Image && node.type !== CanvasNodeType.Video && node.type !== CanvasNodeType.Audio) continue;
         const reference = platformMediaReference(node, "canvas.generation.errors.resourceNotUploaded");
         if (node.type === CanvasNodeType.Image) references.images.push(reference);
         if (node.type === CanvasNodeType.Video) references.videos.push(reference);
