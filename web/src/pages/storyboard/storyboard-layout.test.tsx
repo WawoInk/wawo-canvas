@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { test } from "node:test";
 
-import { APP_CONTENT_STYLE } from "@/lib/layout";
-
 if (typeof window === "undefined") GlobalRegistrator.register();
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -18,7 +16,7 @@ const { createRoot } = await import("react-dom/client");
 const { MemoryRouter } = await import("react-router-dom");
 const { default: StoryboardPage } = await import("./index");
 
-test("分镜创作室二级导航和内容对齐顶部品牌容器并提供页面级纵向滚动", async () => {
+test("分镜创作室沿用画布和素材页的页面外壳与滚动内容区", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -33,17 +31,36 @@ test("分镜创作室二级导航和内容对齐顶部品牌容器并提供页�
 
     const page = container.firstElementChild;
     assert.ok(page);
-    assert.match(page.className, /overflow-y-auto/);
-    assert.doesNotMatch(page.className, /overflow-hidden/);
+    for (const className of ["flex", "h-full", "flex-col", "overflow-hidden", "bg-background", "text-foreground"]) {
+        assert.ok(page.className.split(/\s+/).includes(className), `缺少页面外壳 class：${className}`);
+    }
+    assert.doesNotMatch(page.className, /overflow-y-auto/);
+
+    const contentShell = page.firstElementChild;
+    assert.ok(contentShell);
+    assert.equal(contentShell.tagName, "MAIN");
+    for (const className of ["thin-scrollbar", "min-h-0", "flex-1", "overflow-y-auto", "px-6", "py-8"]) {
+        assert.ok(contentShell.className.split(/\s+/).includes(className), `缺少滚动内容区 class：${className}`);
+    }
 
     const tabs = container.querySelector(".ant-tabs");
     assert.ok(tabs);
+    const centeredLayout = tabs.parentElement;
+    assert.ok(centeredLayout);
+    assert.ok(centeredLayout.parentElement === contentShell, "Tabs 必须放在独立的原生居中容器内");
+    const layoutClasses = new Set(centeredLayout.className.split(/\s+/));
+    for (const className of ["mx-auto", "h-full", "min-h-0", "w-full", "max-w-7xl"]) {
+        assert.ok(layoutClasses.has(className), `缺少原生居中容器 class：${className}`);
+    }
+
     const tabClasses = new Set(tabs.className.split(/\s+/));
-    assert.ok(tabClasses.has("mx-auto"));
-    assert.ok(tabClasses.has("max-w-[2400px]"));
+    assert.ok(!tabClasses.has("mx-auto"));
+    assert.ok(!tabClasses.has("max-w-7xl"));
+    assert.ok(!tabClasses.has("max-w-[2400px]"));
     assert.ok(tabClasses.has("flex"));
     assert.ok(tabClasses.has("h-full"));
     assert.ok(tabClasses.has("min-h-0"));
+    assert.ok(tabClasses.has("w-full"));
     assert.ok(tabClasses.has("storyboard-tabs"));
 
     const tabHeader = container.querySelector(".ant-tabs-nav");
@@ -52,7 +69,7 @@ test("分镜创作室二级导航和内容对齐顶部品牌容器并提供页�
 
     assertAlignedContent(container, "storyboard-studio");
 
-    const storyboardPane = container.querySelector("main");
+    const storyboardPane = container.querySelector('[data-testid="storyboard-studio"]')?.parentElement;
     assert.ok(storyboardPane);
     assert.doesNotMatch(storyboardPane.className, /lg:overflow-hidden/);
 
@@ -71,10 +88,10 @@ function assertAlignedContent(container: ParentNode, testId: string) {
     assert.ok(content);
     const classes = new Set(content.className.split(/\s+/));
     assert.ok(classes.has("w-full"));
-    assert.equal(content.style.boxSizing, APP_CONTENT_STYLE.boxSizing);
-    assert.equal(content.style.maxWidth, APP_CONTENT_STYLE.maxWidth);
-    assert.equal(content.style.marginInline, APP_CONTENT_STYLE.marginInline);
-    assert.equal(content.style.paddingInline, APP_CONTENT_STYLE.paddingInline);
+    assert.ok(!content.style.maxWidth);
+    assert.ok(!content.style.marginInline);
+    assert.ok(!content.style.paddingInline);
+    assert.ok(content.closest(".storyboard-tabs"));
 }
 
 test("脑暴 Agent 位于分镜创作室左侧并可独立切换", async () => {
