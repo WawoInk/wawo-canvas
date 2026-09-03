@@ -2,7 +2,7 @@ type OverviewNode = {
     id: string;
     type: string;
     title: string;
-    metadata?: { content?: string; prompt?: string; batchRootId?: string; groupId?: string };
+    metadata?: { content?: string; prompt?: string; batchRootId?: string; batchChildIds?: string[]; groupId?: string };
 };
 
 export type OverviewTreeRow<T extends OverviewNode> = {
@@ -33,6 +33,17 @@ export function buildOverviewTree<T extends OverviewNode>(nodes: T[], keyword: s
         if (!filteredIds.has(node.id) && !groupChildren.length) return [];
         return [{ node, depth: 0, hasChildren: groupChildren.length > 0 }, ...(collapsedGroupIds.has(node.id) ? [] : groupChildren.map((child) => ({ node: child, depth: 1 as const, hasChildren: false })))];
     });
+}
+
+export function expandOverviewSelection<T extends OverviewNode>(nodes: T[], selectedIds: ReadonlySet<string>) {
+    const expanded = new Set(selectedIds);
+    nodes.forEach((node) => {
+        if (node.metadata?.groupId && selectedIds.has(node.metadata.groupId)) expanded.add(node.id);
+    });
+    nodes.forEach((node) => {
+        if (expanded.has(node.id)) node.metadata?.batchChildIds?.forEach((id) => expanded.add(id));
+    });
+    return nodes.filter((node) => expanded.has(node.id));
 }
 
 export function overviewPreviewKind(node: Pick<OverviewNode, "type" | "metadata">) {

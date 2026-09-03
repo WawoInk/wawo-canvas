@@ -69,3 +69,17 @@ test("uses the first video frame for overview previews", () => {
     assert.equal(overviewPreviewKind({ type: "video", metadata: { content: "https://example.com/video.mp4" } }), "video");
     assert.equal(overviewPreviewKind({ type: "video", metadata: {} }), "icon");
 });
+
+test("expands a selected Group to its child nodes for export", async () => {
+    const { expandOverviewSelection } = await import("./canvas-overview.ts");
+    const grouped = [
+        { id: "group", type: "group", title: "组" },
+        { id: "child", type: "image", title: "组内图片", metadata: { groupId: "group", batchChildIds: ["result"] } },
+        { id: "result", type: "image", title: "批次结果", metadata: { batchRootId: "child" } },
+        { id: "outside", type: "text", title: "组外文本" },
+    ];
+    assert.deepEqual(
+        expandOverviewSelection(grouped, new Set(["group"])).map((node) => node.id),
+        ["group", "child", "result"],
+    );
+});

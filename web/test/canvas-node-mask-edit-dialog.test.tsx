@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import "./register-dom";
 
-GlobalRegistrator.register({ url: "http://localhost" });
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const { mock } = await import("bun:test");
 mock.module("@/lib/image-utils", () => ({
     readImageMeta: async () => ({ width: 4, height: 3, mimeType: "image/png" }),
+    formatBytes: () => "",
+    getDataUrlByteSize: () => 0,
 }));
 
 const canvasStates = new WeakMap<HTMLCanvasElement, CanvasState>();
@@ -111,13 +112,18 @@ Object.defineProperty(HTMLCanvasElement.prototype, "getBoundingClientRect", {
 Object.defineProperties(HTMLCanvasElement.prototype, {
     setPointerCapture: { configurable: true, value() {} },
     releasePointerCapture: { configurable: true, value() {} },
-    hasPointerCapture: { configurable: true, value() { return false; } },
+    hasPointerCapture: {
+        configurable: true,
+        value() {
+            return false;
+        },
+    },
 });
 
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { default: i18n } = await import("@/i18n");
-const { CanvasNodeMaskEditDialog } = await import("./canvas-node-mask-edit-dialog");
+const { CanvasNodeMaskEditDialog } = await import("../src/pages/canvas/components/canvas-node-mask-edit-dialog");
 await i18n.changeLanguage("zh-CN");
 
 test("exports the origin edit mask and visible blue reference with an explicit generate flag", async () => {
@@ -130,10 +136,13 @@ test("exports the origin edit mask and visible blue reference with an explicit g
         await click(button("立即生成"));
 
         assert.equal(payloads.length, 2);
-        assert.deepEqual(payloads.map(({ prompt, generate }) => ({ prompt, generate })), [
-            { prompt: "把选区改成金属", generate: false },
-            { prompt: "把选区改成金属", generate: true },
-        ]);
+        assert.deepEqual(
+            payloads.map(({ prompt, generate }) => ({ prompt, generate })),
+            [
+                { prompt: "把选区改成金属", generate: false },
+                { prompt: "把选区改成金属", generate: true },
+            ],
+        );
         for (const payload of payloads) {
             assert.ok(payload.referenceDataUrl);
             assert.notEqual(payload.maskDataUrl, payload.referenceDataUrl);

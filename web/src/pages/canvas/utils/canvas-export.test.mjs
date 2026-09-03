@@ -9,11 +9,11 @@ const imageBlobs = new Map([
     ["image:two", new Blob(["two"], { type: "image/png" })],
 ]);
 const mediaBlobs = new Map([["media:video", new Blob(["video"], { type: "video/mp4" })]]);
+const platformBlobs = new Map([["file-1", new Blob(["remote-video"], { type: "video/mp4" })]]);
 const zipBlob = new Blob(["zip"], { type: "application/zip" });
 let zipFiles = [];
 let saved = [];
 
-mock.module("@/i18n", () => ({ default: { t: (_key, options) => options?.defaultValue || "无限画布" } }));
 mock.module("@/lib/zip", () => ({
     createZip: async (files) => {
         zipFiles = files;
@@ -23,7 +23,10 @@ mock.module("@/lib/zip", () => ({
 mock.module("@/services/blob-storage", () => ({
     getImageBlob: async (storageKey) => imageBlobs.get(storageKey) || null,
     getMediaBlob: async (storageKey) => mediaBlobs.get(storageKey) || null,
+    setImageBlob: async () => "blob:image",
+    setMediaBlob: async () => "blob:media",
 }));
+mock.module("@/services/api/files", () => ({ readPlatformFileBlob: async (fileId) => platformBlobs.get(fileId) || null }));
 mock.module("file-saver", () => ({
     saveAs: (...args) => {
         saved = args;
@@ -50,7 +53,7 @@ test("exports selected text, local media blobs, data URLs, and JSON fallbacks wi
     assert.equal(saved[1], "节点_导出.zip");
     assert.deepEqual(
         zipFiles.map((file) => file.name),
-        ["说明_稿.txt", "主图__.png", "主图__-1.png", "片段.mp4", "旁白.mp3", "远程视频.json"],
+        ["说明_稿.txt", "主图__.png", "主图__-1.png", "片段.mp4", "旁白.mp3", "远程视频.mp4"],
     );
     assert.equal(zipFiles[0].data, "你好");
     assert.strictEqual(zipFiles[1].data, imageBlobs.get("image:one"));
@@ -58,13 +61,13 @@ test("exports selected text, local media blobs, data URLs, and JSON fallbacks wi
     assert.strictEqual(zipFiles[3].data, mediaBlobs.get("media:video"));
     assert.ok(zipFiles[4].data instanceof Blob);
     assert.equal(zipFiles[4].data.type, "audio/mpeg");
-    assert.deepEqual(JSON.parse(zipFiles[5].data), nodes[5]);
+    assert.strictEqual(zipFiles[5].data, platformBlobs.get("file-1"));
 });
 
 test("preserves the current Canvas project archive export", async () => {
     zipFiles = [];
     saved = [];
-    const project = { id: "project-1", nodes: [{ metadata: { storageKey: "image:one" } }] };
+    const project = { id: "project-1", nodes: [{ metadata: { storageKey: "image:one" } }, { metadata: { fileId: "file-1" } }] };
 
     const { exportCanvasProjects } = await import("./canvas-export.ts");
     await exportCanvasProjects([project], "当前/项目");
@@ -73,10 +76,11 @@ test("preserves the current Canvas project archive export", async () => {
     assert.equal(saved[1], "当前_项目.zip");
     assert.deepEqual(
         zipFiles.map((file) => file.name),
-        ["projects.json", "projects/project-1/files/image_one.png"],
+        ["projects.json", "projects/project-1/files/image_one.png", "projects/project-1/files/platform-file-1.mp4"],
     );
     const exported = JSON.parse(zipFiles[0].data);
     assert.equal(exported.version, 3);
     assert.equal(exported.projects[0].project.id, "project-1");
     assert.strictEqual(zipFiles[1].data, imageBlobs.get("image:one"));
+    assert.strictEqual(zipFiles[2].data, platformBlobs.get("file-1"));
 });

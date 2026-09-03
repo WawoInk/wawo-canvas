@@ -71,7 +71,8 @@ export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasA
         }
         if (op.type === "delete_node") {
             const ids = new Set(op.ids || (op.id ? [op.id] : op.nodeType ? nodes.filter((node) => node.type === op.nodeType).map((node) => node.id) : []));
-            nodes = nodes.filter((node) => !ids.has(node.id));
+            const groupIds = new Set(nodes.filter((node) => ids.has(node.id) && node.type === CanvasNodeType.Group).map((node) => node.id));
+            nodes = nodes.filter((node) => !ids.has(node.id)).map((node) => (node.metadata?.groupId && groupIds.has(node.metadata.groupId) ? { ...node, metadata: { ...node.metadata, groupId: undefined } } : node));
             connections = connections.filter((conn) => !ids.has(conn.fromNodeId) && !ids.has(conn.toNodeId));
             selectedNodeIds = selectedNodeIds.filter((id) => !ids.has(id));
         }
@@ -81,9 +82,11 @@ export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasA
         }
         if (op.type === "connect_nodes") {
             if (!op.fromNodeId || !op.toNodeId) return;
+            const from = nodes.find((node) => node.id === op.fromNodeId);
+            const to = nodes.find((node) => node.id === op.toNodeId);
             const exists = connections.some((conn) => conn.fromNodeId === op.fromNodeId && conn.toNodeId === op.toNodeId);
-            const hasNodes = nodes.some((node) => node.id === op.fromNodeId) && nodes.some((node) => node.id === op.toNodeId);
-            if (!exists && hasNodes) connections = [...connections, { id: op.id || nanoid(), fromNodeId: op.fromNodeId, toNodeId: op.toNodeId }];
+            const valid = from && to && to.type !== CanvasNodeType.Group && !(from.type === CanvasNodeType.Config && to.type === CanvasNodeType.Config);
+            if (!exists && valid) connections = [...connections, { id: op.id || nanoid(), fromNodeId: op.fromNodeId, toNodeId: op.toNodeId }];
         }
         if (op.type === "set_viewport" && op.viewport) viewport = op.viewport;
         if (op.type === "select_nodes") selectedNodeIds = (op.ids || []).filter((id) => nodes.some((node) => node.id === id));

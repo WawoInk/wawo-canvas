@@ -13,7 +13,7 @@ type InfiniteCanvasProps = {
     tool?: CanvasTool;
     backgroundMode?: CanvasBackgroundMode;
     onViewportChange: (viewport: ViewportTransform) => void;
-    onCanvasMouseDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
+    onCanvasMouseDown?: (event: React.PointerEvent<HTMLDivElement>, tool: CanvasTool) => void;
     onCanvasDeselect?: () => void;
     onCanvasDoubleClick?: (event: React.MouseEvent<HTMLDivElement>) => void;
     onContextMenu?: (event: React.MouseEvent) => void;
@@ -139,10 +139,9 @@ export function InfiniteCanvas({ containerRef, viewport, tool = "pan", backgroun
         if (event.button === 0 && isBackgroundClick) {
             event.preventDefault();
             event.currentTarget.setPointerCapture(event.pointerId);
-            onCanvasMouseDown?.(event);
+            onCanvasMouseDown?.(event, activeTool);
         }
     };
-
 
     const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
         const target = event.target instanceof Element ? event.target : null;

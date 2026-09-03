@@ -11,7 +11,7 @@ import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasNodeType, type CanvasNodeData } from "../types";
 import { exportCanvasNodes } from "../utils/canvas-export";
 import { MyAssetsPanel, type InsertAssetPayload } from "./asset-picker-modal";
-import { buildOverviewTree, filterOverviewNodes, overviewPreviewKind } from "./canvas-overview";
+import { buildOverviewTree, expandOverviewSelection, filterOverviewNodes, overviewPreviewKind } from "./canvas-overview";
 
 type Props = {
     nodes: CanvasNodeData[];
@@ -64,7 +64,7 @@ export function CanvasOverviewSidebar({ nodes, selectedNodeIds, collapsed, onCol
             return next;
         });
     const handleExport = async () => {
-        const targets = nodes.filter((node) => checkedNodeIds.has(node.id));
+        const targets = expandOverviewSelection(nodes, checkedNodeIds);
         if (!targets.length) return;
         setExporting(true);
         const hide = message.loading(t("canvas.overview.exporting", { defaultValue: "正在导出选中元素…" }), 0);
@@ -200,7 +200,7 @@ export function CanvasOverviewSidebar({ nodes, selectedNodeIds, collapsed, onCol
                     {selectMode ? (
                         <div className="flex shrink-0 items-center gap-2 border-t px-3 py-2.5" style={{ borderColor: theme.toolbar.border }}>
                             <button type="button" className="text-xs font-medium transition hover:opacity-70" onClick={toggleAll}>
-                                {allChecked ? t("image.actions.deselectAll", { defaultValue: "取消全选" }) : t("image.actions.selectAll", { defaultValue: "全选" })}
+                                {allChecked ? t("canvas.overview.deselectAll") : t("canvas.overview.selectAll")}
                             </button>
                             <span className="text-xs" style={{ color: theme.node.muted }}>
                                 {t("canvas.overview.selected", { count: checkedNodeIds.size, defaultValue: "已选 {{count}}" })}

@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useRef, useState } from "react";
 import { Button, Segmented, Switch } from "antd";
-import { CircleDot, Eraser, FolderOpen, Grid2x2, Hand, Image as ImageIcon, Info, Moon, MousePointer2, Music2, Palette, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
+import { CircleDot, Eraser, FolderOpen, Grid2x2, Group, Hand, Image as ImageIcon, Info, Moon, MousePointer2, Music2, Palette, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes, type CanvasBackgroundMode, type CanvasColorTheme, type CanvasTheme } from "@/lib/canvas-theme";
@@ -21,6 +21,7 @@ export function CanvasToolbar({
     onAddAudio,
     onAddText,
     onAddConfig,
+    onAddGroup,
     onUndo,
     onRedo,
     onUpload,
@@ -43,6 +44,7 @@ export function CanvasToolbar({
     onAddAudio: () => void;
     onAddText: () => void;
     onAddConfig: () => void;
+    onAddGroup: () => void;
     onUndo: () => void;
     onRedo: () => void;
     onUpload: () => void;
@@ -76,6 +78,7 @@ export function CanvasToolbar({
         "tool-video": t("canvas.toolbar.tools.video"),
         "tool-audio": t("canvas.toolbar.tools.audio"),
         "tool-config": t("canvas.toolbar.tools.config"),
+        "tool-group": t("canvas.nodeTypes.group"),
         "tool-upload": t("canvas.toolbar.tools.upload"),
         "tool-assets": t("canvas.toolbar.tools.assets"),
         "tool-style": t("canvas.toolbar.tools.appearance"),
@@ -98,7 +101,10 @@ export function CanvasToolbar({
                     wrapRef={wrapRef}
                     onTipX={setTipX}
                     onHover={setHovered}
-                    onClick={() => (onCanvasToolChange ? onCanvasToolChange(canvasTool === "select" ? "pan" : "select") : onDeselect())}
+                    onClick={() => {
+                        onDeselect();
+                        onCanvasToolChange?.(canvasTool === "select" ? "pan" : "select");
+                    }}
                 >
                     {canvasTool === "select" ? <MousePointer2 className="size-4.5" /> : <Hand className="size-4.5" />}
                 </ToolbarButton>
@@ -123,6 +129,9 @@ export function CanvasToolbar({
                 </ToolbarButton>
                 <ToolbarButton id="tool-config" label={toolLabels["tool-config"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddConfig}>
                     <Settings2 className="size-4.5" />
+                </ToolbarButton>
+                <ToolbarButton id="tool-group" label={toolLabels["tool-group"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddGroup}>
+                    <Group className="size-4.5" />
                 </ToolbarButton>
                 <ToolbarButton id="tool-upload" label={toolLabels["tool-upload"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onUpload}>
                     <Upload className="size-4.5" />

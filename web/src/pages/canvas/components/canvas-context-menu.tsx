@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import type { ReactNode } from "react";
-import { BetweenHorizontalStart, GalleryHorizontal, GalleryHorizontalEnd, Plus, Trash2 } from "lucide-react";
+import { BetweenHorizontalStart, GalleryHorizontal, GalleryHorizontalEnd, Group, Plus, Trash2, Ungroup } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
@@ -13,15 +13,23 @@ import type { VideoFramePosition } from "../utils/canvas-video-frame";
 export function CanvasNodeContextMenu({
     menu,
     canCaptureVideoFrame = false,
+    canGroup = false,
+    canUngroup = false,
     onClose,
     onCaptureVideoFrame,
+    onGroup,
+    onUngroup,
     onDuplicate,
     onDelete,
 }: {
     menu: ContextMenuState;
     canCaptureVideoFrame?: boolean;
+    canGroup?: boolean;
+    canUngroup?: boolean;
     onClose: () => void;
     onCaptureVideoFrame?: (position: VideoFramePosition) => void;
+    onGroup?: () => void;
+    onUngroup?: () => void;
     onDuplicate: () => void;
     onDelete: () => void;
 }) {
@@ -52,6 +60,8 @@ export function CanvasNodeContextMenu({
                     <div className="my-1 border-t" style={{ borderColor: theme.toolbar.border }} />
                 </>
             ) : null}
+            {menu.type === "node" && canGroup && onGroup ? <MenuButton icon={<Group className="size-4" />} label={t("canvas.nodeToolbar.group")} onClick={onGroup} /> : null}
+            {menu.type === "node" && canUngroup && onUngroup ? <MenuButton icon={<Ungroup className="size-4" />} label={t("canvas.nodeToolbar.ungroup")} onClick={onUngroup} /> : null}
             {menu.type === "node" ? <MenuButton icon={<Plus className="size-4" />} label={t("canvas.contextMenu.duplicate")} onClick={onDuplicate} /> : null}
             <MenuButton icon={<Trash2 className="size-4" />} label={t("canvas.contextMenu.delete")} onClick={onDelete} danger />
         </div>

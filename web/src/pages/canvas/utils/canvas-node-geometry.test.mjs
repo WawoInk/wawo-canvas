@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import {
-    applyGroupSelection,
-    applyUngroupSelection,
-    findGroupDropTarget,
-    snapNodesIntoGroup,
-} from "./canvas-node-geometry.ts";
+import { applyGroupSelection, applyUngroupSelection, findGroupDropTarget, snapNodesIntoGroup } from "./canvas-node-geometry.ts";
 
 const node = (id, x, y, metadata = {}, type = "image") => ({ id, type, title: id, position: { x, y }, width: 100, height: 80, metadata });
 
@@ -36,11 +31,20 @@ test("ungroups members without moving or deleting them and removes group connect
 
     const result = applyUngroupSelection(new Set(["group"]), [group, a, b], connections);
 
-    assert.deepEqual(result?.nodes.map((item) => item.id), ["a", "b"]);
-    assert.deepEqual(result?.nodes.map((item) => item.position), [a.position, b.position]);
+    assert.deepEqual(
+        result?.nodes.map((item) => item.id),
+        ["a", "b"],
+    );
+    assert.deepEqual(
+        result?.nodes.map((item) => item.position),
+        [a.position, b.position],
+    );
     assert.equal(result?.nodes[0].metadata.fileId, "file-a");
     assert.equal(result?.nodes[0].metadata.groupId, undefined);
-    assert.deepEqual(result?.connections.map((item) => item.id), ["keep"]);
+    assert.deepEqual(
+        result?.connections.map((item) => item.id),
+        ["keep"],
+    );
 });
 
 test("uses the visually topmost group as the drop target and keeps relative node positions", () => {

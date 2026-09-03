@@ -63,8 +63,18 @@ export function CanvasSelectionToolbar({
                     onMouseDown={(event) => event.stopPropagation()}
                     onPointerDown={(event) => event.stopPropagation()}
                 >
-                    {canGroup ? <SelectionAction action="group" title={t("canvas.nodeToolbar.groupTitle", { defaultValue: "将选中节点分组" })} label={t("canvas.nodeToolbar.group", { defaultValue: "组合" })} icon={<Group className="size-4" />} onClick={onGroup} /> : null}
-                    {canUngroup ? <SelectionAction action="ungroup" title={t("canvas.nodeToolbar.ungroupTitle", { defaultValue: "取消选中节点的分组" })} label={t("canvas.nodeToolbar.ungroup", { defaultValue: "取消组合" })} icon={<Ungroup className="size-4" />} onClick={onUngroup} /> : null}
+                    {canGroup ? (
+                        <SelectionAction action="group" title={t("canvas.nodeToolbar.groupTitle", { defaultValue: "将选中节点分组" })} label={t("canvas.nodeToolbar.group", { defaultValue: "组合" })} icon={<Group className="size-4" />} onClick={onGroup} />
+                    ) : null}
+                    {canUngroup ? (
+                        <SelectionAction
+                            action="ungroup"
+                            title={t("canvas.nodeToolbar.ungroupTitle", { defaultValue: "取消选中节点的分组" })}
+                            label={t("canvas.nodeToolbar.ungroup", { defaultValue: "取消组合" })}
+                            icon={<Ungroup className="size-4" />}
+                            onClick={onUngroup}
+                        />
+                    ) : null}
                 </div>
             ) : null}
         </>

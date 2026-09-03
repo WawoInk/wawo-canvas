@@ -145,7 +145,7 @@ export function CanvasNodeHoverToolbar({
         { id: "delete", title: t("canvas.toolbar.actions.delete.title"), label: t("canvas.toolbar.actions.delete.label"), icon: <Trash2 className="size-4" />, onClick: () => onDelete(node), danger: true },
     ];
     const nodeToolbarTools: ToolbarTool[] = [
-        ...(isGroup && onUngroup ? [{ id: "ungroup", title: "解散分组", label: "解散分组", icon: <Ungroup className="size-4" />, onClick: () => onUngroup(node) }] : []),
+        ...(isGroup && onUngroup ? [{ id: "ungroup", title: t("canvas.nodeToolbar.ungroupTitle"), label: t("canvas.nodeToolbar.ungroup"), icon: <Ungroup className="size-4" />, onClick: () => onUngroup(node) }] : []),
         ...(canRetry ? [{ id: "retry", title: t("canvas.toolbar.actions.retry.title"), label: t("canvas.toolbar.actions.retry.label"), icon: <RefreshCw className="size-4" />, onClick: () => onRetry(node) }] : []),
         ...(hasImage || hasVideo || isText ? [{ id: "saveAsset", title: t("canvas.toolbar.actions.saveAsset.title"), label: t("canvas.toolbar.actions.saveAsset.label"), icon: <FolderPlus className="size-4" />, onClick: () => onSaveAsset(node) }] : []),
         ...(hasImage || hasVideo || hasAudio

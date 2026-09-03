@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import "../../../../test/register-dom";
 
 import { CanvasNodeType, type CanvasNodeData } from "../types";
 
-GlobalRegistrator.register({ url: "http://localhost" });
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const { act } = await import("react");
@@ -28,7 +27,13 @@ test("expands group previews and reports the original connection when removing a
     try {
         await act(async () =>
             root.render(
-                <CanvasNodeReferenceBar nodeId="target-1" nodes={nodes} connectedNodes={[nodes[0], nodes[3]]} onDisconnect={(fromNodeId, toNodeId) => disconnected.push([fromNodeId, toNodeId])} onStartSelection={(nodeId) => selected.push(nodeId)} />,
+                <CanvasNodeReferenceBar
+                    nodeId="target-1"
+                    nodes={nodes}
+                    connectedNodes={[nodes[0], nodes[1], nodes[3]]}
+                    onDisconnect={(fromNodeId, toNodeId) => disconnected.push([fromNodeId, toNodeId])}
+                    onStartSelection={(nodeId) => selected.push(nodeId)}
+                />,
             ),
         );
 
@@ -52,7 +57,6 @@ test("expands group previews and reports the original connection when removing a
     } finally {
         await act(async () => root.unmount());
         container.remove();
-        await GlobalRegistrator.unregister();
     }
 });
 

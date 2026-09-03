@@ -51,11 +51,7 @@ export function snapNodesIntoGroup(movedIds: Set<string>, nodes: CanvasNodeData[
     const bottom = group.position.y + group.height - GROUP_WRAP_PADDING;
     const dx = bounds.right - bounds.left > right - left ? left - bounds.left : bounds.left < left ? left - bounds.left : bounds.right > right ? right - bounds.right : 0;
     const dy = bounds.bottom - bounds.top > bottom - top ? top - bounds.top : bounds.top < top ? top - bounds.top : bounds.bottom > bottom ? bottom - bounds.bottom : 0;
-    return nodes.map((node) =>
-        movedIds.has(node.id) && node.type !== CanvasNodeType.Group
-            ? { ...node, position: { x: node.position.x + dx, y: node.position.y + dy }, metadata: { ...node.metadata, groupId: group.id } }
-            : node,
-    );
+    return nodes.map((node) => (movedIds.has(node.id) && node.type !== CanvasNodeType.Group ? { ...node, position: { x: node.position.x + dx, y: node.position.y + dy }, metadata: { ...node.metadata, groupId: group.id } } : node));
 }
 
 function selectedGroupIds(selectedIds: Set<string>, nodes: CanvasNodeData[]) {

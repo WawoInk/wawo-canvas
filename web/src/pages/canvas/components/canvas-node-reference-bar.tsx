@@ -18,7 +18,9 @@ type CanvasNodeReferenceBarProps = {
 export function CanvasNodeReferenceBar({ nodeId, nodes, connectedNodes, onDisconnect, onStartSelection }: CanvasNodeReferenceBarProps) {
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
-    const references = connectedNodes.flatMap((sourceNode) => (sourceNode.type === CanvasNodeType.Group ? getGroupResourceNodes(sourceNode.id, nodes) : [sourceNode]).map((node) => ({ node, sourceNodeId: sourceNode.id })));
+    const references = connectedNodes
+        .flatMap((sourceNode) => (sourceNode.type === CanvasNodeType.Group ? getGroupResourceNodes(sourceNode.id, nodes) : [sourceNode]).map((node) => ({ node, sourceNodeId: sourceNode.id })))
+        .filter((reference, index, all) => all.findIndex((item) => item.node.id === reference.node.id) === index);
     if (!references.length && !onStartSelection) return null;
 
     return (

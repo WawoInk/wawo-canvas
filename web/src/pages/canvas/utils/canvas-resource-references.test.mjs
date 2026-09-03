@@ -13,8 +13,14 @@ const nodes = [
 ];
 
 test("expands a group into supported origin resources in canvas order", () => {
-    assert.deepEqual(getGroupResourceNodes("group", nodes).map((node) => node.id), ["image", "video"]);
-    assert.deepEqual(getGenerationResourceNodes("target", nodes, [{ id: "group-target", fromNodeId: "group", toNodeId: "target" }]).map((node) => node.id), ["image", "video"]);
+    assert.deepEqual(
+        getGroupResourceNodes("group", nodes).map((node) => node.id),
+        ["image", "video"],
+    );
+    assert.deepEqual(
+        getGenerationResourceNodes("target", nodes, [{ id: "group-target", fromNodeId: "group", toNodeId: "target" }]).map((node) => node.id),
+        ["image", "video"],
+    );
 });
 
 test("deduplicates group and direct references while preserving origin resource fields", () => {
@@ -27,7 +33,10 @@ test("deduplicates group and direct references while preserving origin resource 
         ],
         t,
     );
-    assert.deepEqual(references.map((item) => item.nodeId), ["image", "video"]);
+    assert.deepEqual(
+        references.map((item) => item.nodeId),
+        ["image", "video"],
+    );
     assert.equal(nodes[1].metadata.fileId, "file-image");
     assert.equal(nodes[2].metadata.volcengineAssetId, "asset-video");
 });

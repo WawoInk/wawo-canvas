@@ -48,6 +48,8 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
 
     useEffect(() => {
         if (!open) return;
+        let cancelled = false;
+        setImage(null);
         setPrompt("");
         setBrushSize(defaultBrushSize);
         setMode("paint");
@@ -59,7 +61,12 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
         redoRef.current = [];
         brushAdjustRef.current = null;
         drawingRef.current = { active: false, stroke: null };
-        void readImageMeta(dataUrl).then(setImage);
+        void readImageMeta(dataUrl).then((next) => {
+            if (!cancelled) setImage(next);
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [dataUrl, open]);
 
     useEffect(() => {
@@ -469,7 +476,6 @@ function buildMaskOverlay(image: HTMLImageElement, selectionCanvas: HTMLCanvasEl
     context.drawImage(overlay, 0, 0);
     return canvas.toDataURL("image/png");
 }
-
 
 function buildEditMask(selectionCanvas: HTMLCanvasElement) {
     const canvas = document.createElement("canvas");

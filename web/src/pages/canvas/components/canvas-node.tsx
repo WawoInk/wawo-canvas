@@ -35,6 +35,7 @@ type CanvasNodeProps = {
     renderNodeContent?: (node: CanvasNodeData) => ReactNode;
     groupChildCount?: number;
     batchCount?: number;
+    batchDisplayCount?: number;
     batchExpanded?: boolean;
     batchClosing?: boolean;
     batchOpening?: boolean;
@@ -68,6 +69,7 @@ type NodeContentRendererProps = {
     groupChildCount: number;
     isBatchRoot: boolean;
     batchCount: number;
+    batchDisplayCount: number;
     batchExpanded: boolean;
     batchOpening: boolean;
     batchRecovering: boolean;
@@ -97,6 +99,7 @@ export const CanvasNode = React.memo(function CanvasNode({
     renderNodeContent,
     groupChildCount = 0,
     batchCount = 0,
+    batchDisplayCount = batchCount,
     batchExpanded = false,
     batchClosing = false,
     batchOpening = false,
@@ -129,6 +132,7 @@ export const CanvasNode = React.memo(function CanvasNode({
     const isGroup = data.type === CanvasNodeType.Group;
     const isBatchRoot = (data.type === CanvasNodeType.Image || data.type === CanvasNodeType.Text) && Boolean(data.metadata?.isBatchRoot) && batchCount > 1;
     const isBatchChild = Boolean(data.metadata?.batchRootId);
+    const isImageBatchChild = data.type === CanvasNodeType.Image && isBatchChild;
     const isActive = isConnectionTarget || isSelected || isFocusRelated;
     const isVolcengineAsset = data.metadata?.materialSource === "volcengine";
     const volcengineAccent = { background: theme.toolbar.activeBg, border: theme.node.activeStroke, text: theme.toolbar.activeText };
@@ -235,6 +239,7 @@ export const CanvasNode = React.memo(function CanvasNode({
     const handleResizeMouseDown = (event: React.MouseEvent, corner: ResizeCorner) => {
         event.stopPropagation();
         event.preventDefault();
+        if (isBatchRoot && batchExpanded) onToggleBatch?.(data.id);
         resizeRef.current = {
             isResizing: true,
             corner,
@@ -282,18 +287,13 @@ export const CanvasNode = React.memo(function CanvasNode({
             <div
                 className="relative h-full w-full overflow-visible rounded-3xl border-2"
                 style={{
-                    background: isGroup || isBatchChild || hasImageContent || hasVideoContent ? "transparent" : theme.node.fill,
+                    background: isGroup || isImageBatchChild || hasImageContent || hasVideoContent ? "transparent" : theme.node.fill,
                     borderColor: nodeBorderColor,
                     borderStyle: isGroup ? "dashed" : undefined,
                     boxShadow: isActive ? `0 0 0 1px ${selectionBlue}55` : isRelated && !isBatchChild ? `0 0 0 1px ${theme.node.muted}55, 0 18px 48px rgba(0,0,0,.14)` : isVolcengineAsset ? `0 0 0 1px ${volcengineAccent.border}44` : undefined,
                 }}
                 onMouseDown={(event) => onMouseDown(event, data.id)}
                 onDoubleClick={(event) => {
-                    if (isBatchRoot) {
-                        event.stopPropagation();
-                        onToggleBatch?.(data.id);
-                        return;
-                    }
                     if (data.type === CanvasNodeType.Image && hasImageContent) {
                         event.stopPropagation();
                         onViewImage?.(data);
@@ -308,7 +308,7 @@ export const CanvasNode = React.memo(function CanvasNode({
                     className={`relative flex h-full w-full items-center justify-center rounded-[inherit] ${isBatchRoot || isGroup ? "overflow-visible" : "overflow-hidden"}`}
                     style={
                         {
-                            background: isGroup || isBatchChild || hasImageContent || hasVideoContent ? "transparent" : theme.node.fill,
+                            background: isGroup || isImageBatchChild || hasImageContent || hasVideoContent ? "transparent" : theme.node.fill,
                             "--batch-from-x": `${batchMotion?.x || 0}px`,
                             "--batch-from-y": `${batchMotion?.y || 0}px`,
                             "--batch-from-rotate": `${6 + (batchMotion?.index || 0) * 4}deg`,
@@ -326,6 +326,7 @@ export const CanvasNode = React.memo(function CanvasNode({
                         groupChildCount={groupChildCount}
                         isBatchRoot={isBatchRoot}
                         batchCount={batchCount}
+                        batchDisplayCount={batchDisplayCount}
                         batchExpanded={batchExpanded}
                         batchOpening={batchOpening}
                         batchRecovering={batchRecovering}
@@ -345,7 +346,9 @@ export const CanvasNode = React.memo(function CanvasNode({
                 {isVolcengineAsset ? <VolcengineSourceBadge libraryName={data.metadata?.volcengineAssetOutboundName} accent={volcengineAccent} t={t} /> : null}
                 {resourceLabel ? <ResourceLabelBadge reference={resourceLabel} /> : null}
 
-                {!isGroup && !isBatchChild && !hasImageContent && !hasVideoContent && !hasAudioContent ? <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12" style={{ background: `linear-gradient(to top, ${theme.canvas.background}66, transparent)` }} /> : null}
+                {!isGroup && !isBatchChild && !hasImageContent && !hasVideoContent && !hasAudioContent ? (
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12" style={{ background: `linear-gradient(to top, ${theme.canvas.background}66, transparent)` }} />
+                ) : null}
 
                 <ResizeHandle corner="top-left" onMouseDown={handleResizeMouseDown} />
                 <ResizeHandle corner="top-right" onMouseDown={handleResizeMouseDown} />
@@ -354,7 +357,7 @@ export const CanvasNode = React.memo(function CanvasNode({
             </div>
 
             {!isGroup ? <ConnectionHandleDot side="left" visible={hovered || isSelected || isConnecting} onMouseDown={(event) => onConnectStart(event, data.id, "target")} /> : null}
-            {!isGroup && data.type !== CanvasNodeType.Config ? <ConnectionHandleDot side="right" visible={hovered || isSelected || isConnecting} onMouseDown={(event) => onConnectStart(event, data.id, "source")} /> : null}
+            {data.type !== CanvasNodeType.Config ? <ConnectionHandleDot side="right" visible={hovered || isSelected || isConnecting} onMouseDown={(event) => onConnectStart(event, data.id, "source")} /> : null}
 
             {showPanel && renderPanel ? <div className="absolute left-1/2 top-full z-[70] w-[500px] -translate-x-1/2 pt-4">{renderPanel(data)}</div> : null}
         </div>
@@ -363,7 +366,7 @@ export const CanvasNode = React.memo(function CanvasNode({
 
 function NodeContent(props: NodeContentRendererProps) {
     const { node, theme } = props;
-    if (node.type === CanvasNodeType.Group) return <GroupContent node={node} theme={theme} childCount={props.groupChildCount} />;
+    if (node.type === CanvasNodeType.Group) return <GroupContent node={node} theme={theme} childCount={props.groupChildCount} t={props.t} />;
     if (node.type === CanvasNodeType.Config && props.renderNodeContent) return props.renderNodeContent(node);
     if (node.metadata?.status === "loading") return <LoadingContent node={node} theme={theme} />;
     if (node.metadata?.status === "error") return <ErrorContent node={node} theme={theme} t={props.t} onRetry={props.onRetry} />;
@@ -388,10 +391,10 @@ type TranslatedThemeRendererProps = Pick<NodeContentRendererProps, "theme" | "t"
 type MediaRendererProps = Pick<NodeContentRendererProps, "node" | "theme" | "t">;
 type TextContentProps = Pick<NodeContentRendererProps, "node" | "theme" | "t" | "isEditingContent" | "textareaRef" | "mentionReferences" | "onContentChange" | "onStopEditing" | "onGenerateImage">;
 
-function GroupContent({ node, theme, childCount }: { node: CanvasNodeData; theme: Theme; childCount: number }) {
+function GroupContent({ node, theme, childCount, t }: { node: CanvasNodeData; theme: Theme; childCount: number; t: TFunction }) {
     return (
         <div className="pointer-events-none absolute inset-0 flex items-start justify-between gap-3 p-4" style={{ color: theme.node.text }}>
-            <span className="truncate text-sm font-semibold">{node.title || "分组"}</span>
+            <span className="truncate text-sm font-semibold">{node.title || t("canvas.nodeTypes.group")}</span>
             <span className="rounded-md px-2 py-0.5 text-xs font-semibold" style={{ background: theme.toolbar.panel, color: theme.node.muted }}>
                 {childCount}
             </span>
@@ -456,7 +459,7 @@ function TextNodeContent(props: NodeContentRendererProps) {
     return (
         <BatchFrame batchCount={props.batchCount} batchExpanded={props.batchExpanded} batchOpening={props.batchOpening} batchRecovering={props.batchRecovering} onToggleBatch={props.onToggleBatch}>
             {content}
-            <BatchToggleButton batchCount={props.batchCount} batchExpanded={props.batchExpanded} onToggleBatch={props.onToggleBatch} t={props.t} />
+            <BatchToggleButton batchCount={props.batchDisplayCount} batchExpanded={props.batchExpanded} onToggleBatch={props.onToggleBatch} t={props.t} />
         </BatchFrame>
     );
 }
@@ -585,7 +588,7 @@ function VideoNodeContent({ node, theme, t }: MediaRendererProps) {
                 <span className="text-sm">{t("canvas.node.placeholders.emptyVideo")}</span>
             </div>
         );
-    return <video src={node.metadata.content} controls className="h-full w-full rounded-[18px] bg-black object-contain" data-canvas-no-zoom />;
+    return <video src={node.metadata.content} controls className="h-full w-full rounded-[18px] bg-black object-contain" data-canvas-video={node.id} data-canvas-no-zoom />;
 }
 
 function AudioNodeContent({ node, theme, t }: MediaRendererProps) {
@@ -683,13 +686,16 @@ function BatchResultActions({
     const isReady = node.metadata?.status !== "error" && node.metadata?.status !== "loading";
     const actions = [
         ...(isReady && onSetPrimary ? [{ id: "set-primary", label: t("canvas.node.actions.setPrimary"), icon: <Star className="size-3.5" />, run: onSetPrimary }] : []),
-        ...(isReady && onCopy ? [{ id: "copy", label: "复制", icon: <Copy className="size-3.5" />, run: onCopy }] : []),
+        ...(isReady && onCopy ? [{ id: "copy", label: t("canvas.node.actions.copy"), icon: <Copy className="size-3.5" />, run: onCopy }] : []),
         ...(isReady && node.type === CanvasNodeType.Image && node.metadata?.content && onDownload ? [{ id: "download", label: t("canvas.toolbar.actions.download.label"), icon: <Download className="size-3.5" />, run: onDownload }] : []),
         ...(onDelete ? [{ id: "delete", label: t("canvas.toolbar.actions.delete.label"), icon: <Trash2 className="size-3.5" />, run: onDelete }] : []),
     ];
     if (!actions.length) return null;
     return (
-        <div className="absolute right-3 top-3 z-40 flex items-center gap-1 rounded-lg border p-1 opacity-0 shadow-[0_8px_20px_rgba(68,64,60,.13)] backdrop-blur-md transition group-hover/node:opacity-100" style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}>
+        <div
+            className={`absolute right-3 ${node.type === CanvasNodeType.Text ? "top-14" : "top-3"} z-40 flex items-center gap-1 rounded-lg border p-1 opacity-0 shadow-[0_8px_20px_rgba(68,64,60,.13)] backdrop-blur-md transition group-hover/node:opacity-100`}
+            style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
+        >
             {actions.map((action) => (
                 <button
                     key={action.id}
@@ -730,17 +736,7 @@ function BatchFrame({ batchCount, batchExpanded, batchOpening, batchRecovering, 
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const isBatchRoot = batchCount > 1;
     return (
-        <div
-            className="group/batch relative h-full w-full overflow-visible"
-            onDoubleClick={
-                isBatchRoot
-                    ? (event) => {
-                          event.stopPropagation();
-                          onToggleBatch?.();
-                      }
-                    : undefined
-            }
-        >
+        <div className="group/batch relative h-full w-full overflow-visible">
             {isBatchRoot ? (
                 <div className="pointer-events-none absolute inset-0 overflow-visible">
                     {Array.from({ length: Math.min(batchCount - 1, 5) }).map((_, index) => (

@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import "../../../../test/register-dom";
 
-GlobalRegistrator.register({ url: "http://localhost" });
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const { act, createRef } = await import("react");
@@ -14,7 +13,7 @@ const { CanvasNodeContextMenu } = await import("./canvas-context-menu");
 const { CanvasNodeType } = await import("../types");
 await i18n.changeLanguage("zh-CN");
 
-if (!("setPointerCapture" in HTMLElement.prototype)) HTMLElement.prototype.setPointerCapture = () => {};
+Object.defineProperty(HTMLElement.prototype, "setPointerCapture", { configurable: true, value() {} });
 
 test("infinite canvas starts marquee or pan from the explicit tool", async () => {
     const host = document.createElement("div");
@@ -25,13 +24,7 @@ test("infinite canvas starts marquee or pan from the explicit tool", async () =>
     let viewportChanges = 0;
     const render = (tool: "select" | "pan") =>
         root.render(
-            <InfiniteCanvas
-                containerRef={containerRef}
-                viewport={{ x: 0, y: 0, k: 1 }}
-                tool={tool}
-                onViewportChange={() => viewportChanges++}
-                onCanvasMouseDown={() => marqueeStarts++}
-            >
+            <InfiniteCanvas containerRef={containerRef} viewport={{ x: 0, y: 0, k: 1 }} tool={tool} onViewportChange={() => viewportChanges++} onCanvasMouseDown={() => marqueeStarts++}>
                 <div data-node-id="node-1" />
             </InfiniteCanvas>,
         );
@@ -129,7 +122,6 @@ test("blank-canvas double-click ignores nodes and canvas controls", async () => 
     }
 });
 
-
 test("canvas toolbar exposes the current tool and requests explicit tool changes", async () => {
     const host = document.createElement("div");
     document.body.append(host);
@@ -147,6 +139,7 @@ test("canvas toolbar exposes the current tool and requests explicit tool changes
         onAddAudio: () => {},
         onAddText: () => {},
         onAddConfig: () => {},
+        onAddGroup: () => {},
         onUndo: () => {},
         onRedo: () => {},
         onUpload: () => {},
@@ -162,7 +155,7 @@ test("canvas toolbar exposes the current tool and requests explicit tool changes
         await act(async () => root.render(<CanvasToolbar {...baseProps} canvasTool="select" onCanvasToolChange={(tool) => requested.push(tool)} />));
         await act(async () => click(required(host.querySelector<HTMLButtonElement>('[data-canvas-tool="select"]'))));
         assert.deepEqual(requested, ["pan"]);
-        assert.equal(deselects, 0);
+        assert.equal(deselects, 1);
 
         await act(async () => root.render(<CanvasToolbar {...baseProps} canvasTool="pan" onCanvasToolChange={(tool) => requested.push(tool)} />));
         await act(async () => click(required(host.querySelector<HTMLButtonElement>('[data-canvas-tool="pan"]'))));
@@ -177,7 +170,6 @@ function click(button: HTMLButtonElement) {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 }
 
-
 test("selection toolbar exposes group and ungroup callbacks for multi-selection", async () => {
     const { CanvasSelectionToolbar } = await import("./canvas-selection-toolbar");
     const host = document.createElement("div");
@@ -191,19 +183,7 @@ test("selection toolbar exposes group and ungroup callbacks for multi-selection"
     ];
 
     try {
-        await act(async () =>
-            root.render(
-                <CanvasSelectionToolbar
-                    nodes={nodes}
-                    viewport={{ x: 5, y: 10, k: 1 }}
-                    showToolbar
-                    canGroup
-                    canUngroup
-                    onGroup={() => groups++}
-                    onUngroup={() => ungroups++}
-                />,
-            ),
-        );
+        await act(async () => root.render(<CanvasSelectionToolbar nodes={nodes} viewport={{ x: 5, y: 10, k: 1 }} showToolbar canGroup canUngroup onGroup={() => groups++} onUngroup={() => ungroups++} />));
         await act(async () => click(required(host.querySelector<HTMLButtonElement>('[data-canvas-selection-action="group"]'))));
         await act(async () => click(required(host.querySelector<HTMLButtonElement>('[data-canvas-selection-action="ungroup"]'))));
         assert.equal(groups, 1);
@@ -214,7 +194,6 @@ test("selection toolbar exposes group and ungroup callbacks for multi-selection"
     }
 });
 
-
 test("node context menu exposes first, last, and current video-frame callbacks", async () => {
     const host = document.createElement("div");
     document.body.append(host);
@@ -223,16 +202,7 @@ test("node context menu exposes first, last, and current video-frame callbacks",
 
     try {
         await act(async () =>
-            root.render(
-                <CanvasNodeContextMenu
-                    menu={{ type: "node", nodeId: "video-1", x: 20, y: 30 }}
-                    canCaptureVideoFrame
-                    onCaptureVideoFrame={(position) => captured.push(position)}
-                    onClose={() => {}}
-                    onDuplicate={() => {}}
-                    onDelete={() => {}}
-                />,
-            ),
+            root.render(<CanvasNodeContextMenu menu={{ type: "node", nodeId: "video-1", x: 20, y: 30 }} canCaptureVideoFrame onCaptureVideoFrame={(position) => captured.push(position)} onClose={() => {}} onDuplicate={() => {}} onDelete={() => {}} />),
         );
         for (const position of ["first", "last", "current"] as const) {
             await act(async () => click(required(host.querySelector<HTMLButtonElement>(`[data-video-frame-position="${position}"]`))));
@@ -243,7 +213,6 @@ test("node context menu exposes first, last, and current video-frame callbacks",
         host.remove();
     }
 });
-
 
 test("canvas wheel handling leaves menus and overlays scrollable", async () => {
     const host = document.createElement("div");

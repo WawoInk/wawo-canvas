@@ -38,6 +38,7 @@ type CanvasNodePromptPanelProps = {
     mentionReferences?: CanvasResourceReference[];
     nodes?: CanvasNodeData[];
     connectedNodes?: CanvasNodeData[];
+    referenceTargetNodeId?: string;
     onDisconnectReference?: (fromNodeId: string, toNodeId: string) => void;
     onStartReferenceSelection?: (nodeId: string) => void;
     onImageSettingsOpenChange?: (open: boolean) => void;
@@ -56,6 +57,7 @@ export function CanvasNodePromptPanel({
     onCancel,
     mentionReferences = [],
     connectedNodes = [],
+    referenceTargetNodeId,
     onDisconnectReference,
     onStartReferenceSelection,
     onImageSettingsOpenChange,
@@ -125,7 +127,7 @@ export function CanvasNodePromptPanel({
             onPointerDown={(event) => event.stopPropagation()}
             onWheel={(event) => event.stopPropagation()}
         >
-            <CanvasNodeReferenceBar nodeId={node.id} nodes={nodes} connectedNodes={connectedNodes} onDisconnect={onDisconnectReference} onStartSelection={onStartReferenceSelection} />
+            <CanvasNodeReferenceBar nodeId={referenceTargetNodeId || node.id} nodes={nodes} connectedNodes={connectedNodes} onDisconnect={onDisconnectReference} onStartSelection={onStartReferenceSelection} />
             <CanvasPromptChipEditor
                 value={prompt}
                 references={mentionReferences}
