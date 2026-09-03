@@ -45,13 +45,22 @@ test("分镜创作室沿用画布和素材页的页面外壳与滚动内容区",
 
     const tabs = container.querySelector(".ant-tabs");
     assert.ok(tabs);
+    const centeredLayout = tabs.parentElement;
+    assert.ok(centeredLayout);
+    assert.ok(centeredLayout.parentElement === contentShell, "Tabs 必须放在独立的原生居中容器内");
+    const layoutClasses = new Set(centeredLayout.className.split(/\s+/));
+    for (const className of ["mx-auto", "h-full", "min-h-0", "w-full", "max-w-7xl"]) {
+        assert.ok(layoutClasses.has(className), `缺少原生居中容器 class：${className}`);
+    }
+
     const tabClasses = new Set(tabs.className.split(/\s+/));
-    assert.ok(tabClasses.has("mx-auto"));
-    assert.ok(tabClasses.has("max-w-7xl"));
+    assert.ok(!tabClasses.has("mx-auto"));
+    assert.ok(!tabClasses.has("max-w-7xl"));
     assert.ok(!tabClasses.has("max-w-[2400px]"));
     assert.ok(tabClasses.has("flex"));
     assert.ok(tabClasses.has("h-full"));
     assert.ok(tabClasses.has("min-h-0"));
+    assert.ok(tabClasses.has("w-full"));
     assert.ok(tabClasses.has("storyboard-tabs"));
 
     const tabHeader = container.querySelector(".ant-tabs-nav");
