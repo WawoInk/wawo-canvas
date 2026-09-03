@@ -146,25 +146,6 @@
     }
 }
 
-@layer components {
-    .storyboard-tabs .ant-tabs-nav-wrap {
-        box-sizing: border-box;
-        width: 100%;
-        max-width: 1280px;
-        margin-inline: auto;
-        padding-inline: 24px;
-    }
-
-    @media (min-width: 1024px) {
-        /* Keep the selector rail visible while placing the chat card under the brand anchor on wide screens. */
-        .brainstorm-agent-layout {
-            --brainstorm-layout-shift: min(276px, max(24px, calc((100vw - 1280px) / 2 + 24px)));
-            width: calc(100% + var(--brainstorm-layout-shift));
-            margin-left: calc(0px - var(--brainstorm-layout-shift));
-        }
-    }
-}
-
 @layer utilities {
     .ai-title-aurora {
         background: linear-gradient(90deg, #c26b3e 0%, #d4894a 45%, #c26b3e 55%, #a85a32 100%);
