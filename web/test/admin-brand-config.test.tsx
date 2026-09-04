@@ -4,7 +4,7 @@ import { test } from "bun:test";
 
 let act: typeof import("react").act;
 
-test("品牌配置只更新入口展示配置并保留关闭父项下的子项值", async () => {
+test("分镜创作室关闭时子项归零、禁用并在父项内弱化展示", async () => {
     const registeredHere = typeof document === "undefined";
     if (registeredHere) GlobalRegistrator.register({ url: "http://localhost" });
     (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -67,7 +67,12 @@ test("品牌配置只更新入口展示配置并保留关闭父项下的子项�
         const canvas = getSwitch(container, i18n.t("admin.brandConfig.fields.canvas"));
         const storyboard = getSwitch(container, i18n.t("admin.brandConfig.fields.storyboard"));
         const video = getSwitch(container, i18n.t("admin.brandConfig.fields.video"));
-        const brainstormAgent = getSwitch(container, i18n.t("admin.brandConfig.storyboardItems.brainstormAgent"));
+        const storyboardItem = required(container.querySelector<HTMLElement>('[data-navigation-item="storyboard"]'));
+        const storyboardItemsGroup = required(container.querySelector<HTMLElement>(`[role="group"][aria-label="${i18n.t("admin.brandConfig.sections.storyboardItems")}"]`));
+        const brainstormAgent = getSwitch(storyboardItemsGroup, i18n.t("admin.brandConfig.storyboardItems.brainstormAgent"));
+        const storyboardStudio = getSwitch(storyboardItemsGroup, i18n.t("admin.brandConfig.storyboardItems.storyboard"));
+        const scriptAgent = getSwitch(storyboardItemsGroup, i18n.t("admin.brandConfig.storyboardItems.scriptAgent"));
+        assert.ok(storyboardItem.contains(storyboardItemsGroup));
 
         await act(async () => click(enabled));
         await waitFor(() => enabled.getAttribute("aria-checked") === "false" && canvas.hasAttribute("disabled"));
@@ -78,8 +83,12 @@ test("品牌配置只更新入口展示配置并保留关闭父项下的子项�
         await act(async () => click(enabled));
         await waitFor(() => !storyboard.hasAttribute("disabled"));
         await act(async () => click(storyboard));
-        await waitFor(() => storyboard.getAttribute("aria-checked") === "false" && brainstormAgent.hasAttribute("disabled"));
-        assert.equal(brainstormAgent.getAttribute("aria-checked"), "true");
+        await waitFor(
+            () =>
+                storyboard.getAttribute("aria-checked") === "false" &&
+                [brainstormAgent, storyboardStudio, scriptAgent].every((item) => item.getAttribute("aria-checked") === "false" && item.hasAttribute("disabled")) &&
+                storyboardItemsGroup.style.opacity === "0.45",
+        );
 
         await act(async () => click(video));
         const saveButton = required(Array.from(container.querySelectorAll("button")).find((item) => item.textContent?.includes(i18n.t("admin.brandConfig.actions.save"))) || null);
@@ -94,6 +103,7 @@ test("品牌配置只更新入口展示配置并保留关闭父项下的子项�
                     ...loadedSettings.public.navigation,
                     storyboard: false,
                     video: true,
+                    storyboardItems: { brainstormAgent: false, storyboard: false, scriptAgent: false },
                 },
             },
         });

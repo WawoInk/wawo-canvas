@@ -2013,7 +2013,7 @@
                 "navigation": "顶部导航",
                 "mainItems": "主导航项",
                 "storyboardItems": "分镜创作室子项",
-                "storyboardItemsDescription": "“分镜创作室”入口开启时，可分别控制其中三个子入口的展示。"
+                "storyboardItemsDescription": "三个子入口直接跟随“分镜创作室”管理；关闭父项后会同步关闭并锁定子项。"
             },
             "fields": {
                 "enabled": "显示顶部导航",

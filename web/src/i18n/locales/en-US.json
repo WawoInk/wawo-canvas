@@ -2013,7 +2013,7 @@
                 "navigation": "Top navigation",
                 "mainItems": "Main navigation items",
                 "storyboardItems": "Storyboard Studio items",
-                "storyboardItemsDescription": "When Storyboard Studio is shown, its three child entries can be controlled separately."
+                "storyboardItemsDescription": "Manage the three child entries directly under Storyboard Studio. Turning off the parent also turns off and locks every child."
             },
             "fields": {
                 "enabled": "Show top navigation",

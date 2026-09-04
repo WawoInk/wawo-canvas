@@ -23,13 +23,16 @@ const defaultNavigation: PublicNavigationSettings = {
 
 const mainItems = ["canvas", "storyboard", "image", "video", "assets", "volcengineAssets", "prompts"] as const;
 const storyboardItems = ["brainstormAgent", "storyboard", "scriptAgent"] as const;
+const hiddenStoryboardItems = { brainstormAgent: false, storyboard: false, scriptAgent: false };
 
 function normalizeNavigation(navigation?: PublicNavigationSettings): PublicNavigationSettings {
-    return {
+    const normalized = {
         ...defaultNavigation,
         ...navigation,
         storyboardItems: { ...defaultNavigation.storyboardItems, ...navigation?.storyboardItems },
     };
+    if (!normalized.storyboard) normalized.storyboardItems = hiddenStoryboardItems;
+    return normalized;
 }
 
 export default function AdminBrandConfigPage() {
@@ -131,7 +134,13 @@ export default function AdminBrandConfigPage() {
                 ) : !token ? (
                     <Alert showIcon type="warning" title={t("admin.brandConfig.states.loginRequired")} />
                 ) : settings ? (
-                    <Form form={form} initialValues={defaultNavigation}>
+                    <Form
+                        form={form}
+                        initialValues={defaultNavigation}
+                        onValuesChange={(changed) => {
+                            if (changed.storyboard === false) form.setFieldsValue({ storyboardItems: { ...hiddenStoryboardItems } });
+                        }}
+                    >
                         <Flex vertical gap={16}>
                             <Card title={t("admin.brandConfig.sections.navigation")} variant="borderless">
                                 <Flex align="center" justify="space-between" gap={24}>
@@ -147,28 +156,61 @@ export default function AdminBrandConfigPage() {
 
                             <Card title={t("admin.brandConfig.sections.mainItems")} variant="borderless">
                                 <Flex vertical>
-                                    {mainItems.map((item, index) => (
-                                        <Flex key={item} align="center" justify="space-between" gap={24} style={{ padding: "14px 0", borderBottom: index === mainItems.length - 1 ? undefined : "1px solid var(--ant-color-border-secondary)" }}>
-                                            <Typography.Text>{t(`admin.brandConfig.fields.${item}`)}</Typography.Text>
-                                            <Form.Item name={item} valuePropName="checked" noStyle>
-                                                <Switch aria-label={t(`admin.brandConfig.fields.${item}`)} disabled={!navigationEnabled} />
-                                            </Form.Item>
-                                        </Flex>
-                                    ))}
-                                </Flex>
-                            </Card>
+                                    {mainItems.map((item, index) => {
+                                        const isStoryboard = item === "storyboard";
+                                        return (
+                                            <section
+                                                key={item}
+                                                data-navigation-item={item}
+                                                style={{
+                                                    padding: isStoryboard ? "14px 16px 12px" : "14px 0",
+                                                    margin: isStoryboard ? "8px 0" : undefined,
+                                                    border: isStoryboard ? "1px solid var(--ant-color-border-secondary)" : undefined,
+                                                    borderBottom: !isStoryboard && index !== mainItems.length - 1 ? "1px solid var(--ant-color-border-secondary)" : undefined,
+                                                    borderRadius: isStoryboard ? 12 : undefined,
+                                                }}
+                                            >
+                                                <Flex align="center" justify="space-between" gap={24}>
+                                                    <Typography.Text>{t(`admin.brandConfig.fields.${item}`)}</Typography.Text>
+                                                    <Form.Item name={item} valuePropName="checked" noStyle>
+                                                        <Switch aria-label={t(`admin.brandConfig.fields.${item}`)} disabled={!navigationEnabled} />
+                                                    </Form.Item>
+                                                </Flex>
 
-                            <Card title={t("admin.brandConfig.sections.storyboardItems")} variant="borderless">
-                                <Typography.Paragraph type="secondary">{t("admin.brandConfig.sections.storyboardItemsDescription")}</Typography.Paragraph>
-                                <Flex vertical>
-                                    {storyboardItems.map((item, index) => (
-                                        <Flex key={item} align="center" justify="space-between" gap={24} style={{ padding: "14px 0", borderBottom: index === storyboardItems.length - 1 ? undefined : "1px solid var(--ant-color-border-secondary)" }}>
-                                            <Typography.Text>{t(`admin.brandConfig.storyboardItems.${item}`)}</Typography.Text>
-                                            <Form.Item name={["storyboardItems", item]} valuePropName="checked" noStyle>
-                                                <Switch aria-label={t(`admin.brandConfig.storyboardItems.${item}`)} disabled={!navigationEnabled || !storyboardEnabled} />
-                                            </Form.Item>
-                                        </Flex>
-                                    ))}
+                                                {isStoryboard ? (
+                                                    <div
+                                                        role="group"
+                                                        aria-label={t("admin.brandConfig.sections.storyboardItems")}
+                                                        style={{
+                                                            marginTop: 12,
+                                                            padding: "12px 0 0 16px",
+                                                            borderTop: "1px solid var(--ant-color-border-secondary)",
+                                                            opacity: navigationEnabled && storyboardEnabled ? 1 : 0.45,
+                                                            transition: "opacity 160ms ease",
+                                                        }}
+                                                    >
+                                                        <Typography.Paragraph type="secondary" style={{ marginBottom: 4 }}>
+                                                            {t("admin.brandConfig.sections.storyboardItemsDescription")}
+                                                        </Typography.Paragraph>
+                                                        {storyboardItems.map((child, childIndex) => (
+                                                            <Flex
+                                                                key={child}
+                                                                align="center"
+                                                                justify="space-between"
+                                                                gap={24}
+                                                                style={{ padding: "12px 0", borderBottom: childIndex === storyboardItems.length - 1 ? undefined : "1px solid var(--ant-color-border-secondary)" }}
+                                                            >
+                                                                <Typography.Text>{t(`admin.brandConfig.storyboardItems.${child}`)}</Typography.Text>
+                                                                <Form.Item name={["storyboardItems", child]} valuePropName="checked" noStyle>
+                                                                    <Switch aria-label={t(`admin.brandConfig.storyboardItems.${child}`)} disabled={!navigationEnabled || !storyboardEnabled} />
+                                                                </Form.Item>
+                                                            </Flex>
+                                                        ))}
+                                                    </div>
+                                                ) : null}
+                                            </section>
+                                        );
+                                    })}
                                 </Flex>
                             </Card>
                         </Flex>
