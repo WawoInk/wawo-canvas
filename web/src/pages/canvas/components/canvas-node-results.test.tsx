@@ -13,7 +13,7 @@ const { CanvasNodeHoverToolbar } = await import("./canvas-node-hover-toolbar");
 const { CanvasNodeType } = await import("../types");
 await i18n.changeLanguage("zh-CN");
 
-test("group nodes render behind their children and expose ungroup", async () => {
+test("group nodes render as non-generating containers and expose ungroup", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -24,7 +24,7 @@ test("group nodes render behind their children and expose ungroup", async () => 
         position: { x: 20, y: 30 },
         width: 760,
         height: 480,
-        metadata: {},
+        metadata: { status: "error" as const, prompt: "不应生成" },
     };
     let ungrouped = "";
 
@@ -40,9 +40,10 @@ test("group nodes render behind their children and expose ungroup", async () => 
                         isFocusRelated={false}
                         isConnectionTarget={false}
                         isConnecting={false}
-                        showPanel={false}
+                        showPanel
                         showImageInfo={false}
                         groupChildCount={3}
+                        renderPanel={() => <div data-generation-panel>生成面板</div>}
                         onMouseDown={() => {}}
                         onHoverStart={() => {}}
                         onHoverEnd={() => {}}
@@ -91,9 +92,38 @@ test("group nodes render behind their children and expose ungroup", async () => 
         assert.equal(shell.style.borderStyle, "dashed");
         assert.match(element.textContent || "", /镜头参考/);
         assert.match(element.textContent || "", /3/);
+        assert.equal(container.querySelector("[data-generation-panel]"), null);
+        assert.equal(container.querySelector('[data-toolbar-action="retry"]'), null);
 
         await act(async () => click(required(container.querySelector<HTMLButtonElement>('[data-toolbar-action="ungroup"]'))));
         assert.equal(ungrouped, node.id);
+
+        await act(async () =>
+            root.render(
+                <App>
+                    <CanvasNode
+                        data={{ ...node, id: "image-1", type: CanvasNodeType.Image }}
+                        scale={1}
+                        isSelected
+                        isRelated={false}
+                        isFocusRelated={false}
+                        isConnectionTarget={false}
+                        isConnecting={false}
+                        showPanel
+                        showImageInfo={false}
+                        renderPanel={() => <div data-generation-panel>生成面板</div>}
+                        onMouseDown={() => {}}
+                        onHoverStart={() => {}}
+                        onHoverEnd={() => {}}
+                        onConnectStart={() => {}}
+                        onResize={() => {}}
+                        onContentChange={() => {}}
+                        onContextMenu={() => {}}
+                    />
+                </App>,
+            ),
+        );
+        assert.ok(container.querySelector("[data-generation-panel]"));
     } finally {
         await act(async () => root.unmount());
         container.remove();
