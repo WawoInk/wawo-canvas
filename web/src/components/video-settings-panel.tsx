@@ -54,21 +54,22 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
         };
     }, [profileID]);
 
+    const definitions = profile?.capabilities.settings;
+    const durationDefinition = definitions?.durationSeconds;
     const provided: Partial<VideoGenerationSettings> = {
         aspectRatio: normalizeSeedanceRatio(config.size) as VideoGenerationSettings["aspectRatio"],
         resolution: normalizeSeedanceResolution(config.vquality) as VideoGenerationSettings["resolution"],
-        durationSeconds: normalizeSeedanceDuration(config.videoSeconds),
+        durationSeconds: normalizeSeedanceDuration(config.videoSeconds, durationDefinition),
         generateAudio: boolConfig(config.videoGenerateAudio, true),
         watermark: boolConfig(config.videoWatermark, false),
     };
-    const definitions = profile?.capabilities.settings;
     const isDrama = profile?.intents.includes("video.short-drama") === true;
     const dramaSettings =
         profile && isDrama
             ? buildShortDramaGenerationSettings(profile, {
                   aspectRatio: normalizeSeedanceRatio(config.size) as ShortDramaGenerationSettings["aspectRatio"],
                   resolution: normalizeSeedanceResolution(config.vquality) as ShortDramaGenerationSettings["resolution"],
-                  durationSeconds: String(config.videoSeconds) === "-1" ? "auto" : normalizeSeedanceDuration(config.videoSeconds),
+                  durationSeconds: String(config.videoSeconds) === "-1" ? "auto" : normalizeSeedanceDuration(config.videoSeconds, durationDefinition),
                   quality: config.quality as ShortDramaGenerationSettings["quality"],
               })
             : null;
@@ -76,7 +77,6 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
     const settings = dramaSettings || videoSettings;
     const supportedResolutions = definitions?.resolution.values ? new Set(definitions.resolution.values) : null;
     const ratioOptions = (definitions?.aspectRatio.values || seedanceRatioOptions.map((item) => item.value)).map((value) => ({ value, label: seedanceRatioLabel(value) }));
-    const durationDefinition = definitions?.durationSeconds;
     const durationValue = settings.durationSeconds;
     const durationOptions = seedanceDurationOptions.filter((value) =>
         value === -1 ? allowAutoDuration && durationDefinition?.allowAuto !== false : !durationDefinition || (value >= (durationDefinition.min ?? value) && value <= (durationDefinition.max ?? value)),
