@@ -1020,7 +1020,6 @@ export default function AdminSettingsPage() {
                                                                                 <Form.Item label={t("admin.settings.generationProfiles.form.maxDuration")}>
                                                                                     <InputNumber
                                                                                         min={profileOption.durationRange.min}
-                                                                                        max={profileOption.durationRange.max}
                                                                                         step={1}
                                                                                         precision={0}
                                                                                         className="!w-full"

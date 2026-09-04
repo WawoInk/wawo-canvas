@@ -142,17 +142,18 @@ test("prepares a durable first-party Canvas video run", () => {
             settings: {
                 aspectRatio: { type: "enum", values: ["9:16"], default: "9:16" },
                 resolution: { type: "enum", values: ["1080p"], default: "1080p" },
-                durationSeconds: { type: "duration", min: 4, max: 12, default: 10 },
+                durationSeconds: { type: "duration", min: 4, max: 30, default: 10 },
                 generateAudio: { type: "boolean", default: true },
                 watermark: { type: "boolean", default: false },
             },
         },
     };
-    const config = { model: profile.id, size: "9:16", vquality: "1080p", videoSeconds: "10", videoGenerateAudio: "true", videoWatermark: "false", videoNegativePrompt: "  低质量，模糊  ", quality: "high" };
+    const config = { model: profile.id, size: "9:16", vquality: "1080p", videoSeconds: "24", videoGenerateAudio: "true", videoWatermark: "false", videoNegativePrompt: "  低质量，模糊  ", quality: "high" };
     const run = prepareFirstPartyCanvasVideoRun({ nodeId: "video-1", nodes: [image, videoTarget], connections: [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], prompt: "prompt", config, profile, clientRequestId: "request-stable" });
     assert.equal(run.command.clientRequestId, "request-stable");
     assert.equal(run.command.modelProfileId, "stable-profile");
     assert.equal(run.command.intent.negativePrompt, "低质量，模糊");
+    assert.equal(run.command.intent.settings.durationSeconds, 24);
     const serialized = JSON.stringify(run.command);
     for (const providerField of ["negative_prompt", "extra_params", "metadata"]) assert.equal(serialized.includes(`"${providerField}"`), false);
     assert.deepEqual(run.metadata, { generationClientRequestId: "request-stable", generationProfileId: "stable-profile", generationCancellation: false });
@@ -167,6 +168,54 @@ test("prepares a durable first-party Canvas video run", () => {
         clientRequestId: "request-empty",
     });
     assert.equal("negativePrompt" in emptyRun.command.intent, false);
+
+    const cappedRun = prepareFirstPartyCanvasVideoRun({
+        nodeId: "video-1",
+        nodes: [image, videoTarget],
+        connections: [],
+        prompt: "prompt",
+        config,
+        profile: { ...profile, capabilities: { ...profile.capabilities, settings: { ...profile.capabilities.settings, durationSeconds: { ...profile.capabilities.settings.durationSeconds, max: 20 } } } },
+        clientRequestId: "request-capped",
+    });
+    assert.equal(cappedRun.command.intent.settings.durationSeconds, 20);
+});
+
+test("compiles profile-bounded duration for first-party Canvas Drama runs", () => {
+    const target = { ...videoTarget, title: "典当行退婚", metadata: { dramaAssetRoles: { "image-1": "character" } } };
+    const profile = {
+        id: "drama-profile",
+        intents: ["video.short-drama"],
+        capabilities: {
+            cancellation: true,
+            settings: {
+                aspectRatio: { type: "enum", values: ["9:16"], default: "9:16" },
+                resolution: { type: "enum", values: ["1080p"], default: "1080p" },
+                durationSeconds: { type: "duration", min: 4, max: 30, default: 10, allowAuto: true },
+                quality: { type: "enum", values: ["high"], default: "high" },
+            },
+        },
+    };
+    const input = {
+        nodeId: "video-1",
+        nodes: [image, target],
+        connections: [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }],
+        prompt: "人物：林尘。分镜1-1：林尘在典当行擦拭柜台。",
+        config: { model: profile.id, size: "9:16", vquality: "1080p", videoSeconds: "24", quality: "high" },
+        profile,
+        clientRequestId: "drama-24",
+    };
+
+    const run = prepareFirstPartyCanvasVideoRun(input);
+    assert.equal(run.command.intent.kind, "video.short-drama");
+    assert.equal(run.command.intent.settings.durationSeconds, 24);
+
+    const cappedRun = prepareFirstPartyCanvasVideoRun({
+        ...input,
+        profile: { ...profile, capabilities: { ...profile.capabilities, settings: { ...profile.capabilities.settings, durationSeconds: { ...profile.capabilities.settings.durationSeconds, max: 20 } } } },
+        clientRequestId: "drama-capped",
+    });
+    assert.equal(cappedRun.command.intent.settings.durationSeconds, 20);
 });
 
 test("compiles connected Drama assets with roles stored on each target node", () => {

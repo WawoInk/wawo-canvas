@@ -137,7 +137,7 @@ export function buildVideoWorkbenchGenerationCommand(input: {
                 settings: buildShortDramaGenerationSettings(input.profile, {
                     aspectRatio: normalizeSeedanceRatio(input.config.size) as "16:9" | "9:16",
                     resolution: normalizeSeedanceResolution(input.config.vquality) as "1080p",
-                    durationSeconds: String(input.config.videoSeconds) === "-1" ? "auto" : normalizeSeedanceDuration(input.config.videoSeconds),
+                    durationSeconds: String(input.config.videoSeconds) === "-1" ? "auto" : normalizeSeedanceDuration(input.config.videoSeconds, input.profile.capabilities.settings.durationSeconds),
                     quality: input.config.quality as "standard" | "high",
                 }),
             },
@@ -160,7 +160,7 @@ export function buildVideoWorkbenchGenerationCommand(input: {
             settings: buildVideoGenerationSettings(input.profile, {
                 aspectRatio: normalizeSeedanceRatio(input.config.size) as VideoGenerationSettings["aspectRatio"],
                 resolution: normalizeSeedanceResolution(input.config.vquality) as VideoGenerationSettings["resolution"],
-                durationSeconds: normalizeSeedanceDuration(input.config.videoSeconds),
+                durationSeconds: normalizeSeedanceDuration(input.config.videoSeconds, input.profile.capabilities.settings.durationSeconds),
                 generateAudio: boolConfig(input.config.videoGenerateAudio, true),
                 watermark: boolConfig(input.config.videoWatermark, false),
             }),
