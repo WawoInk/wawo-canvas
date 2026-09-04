@@ -2,6 +2,9 @@
 
 ## Unreleased
 
++ [新增] Canvas 补齐节点分组与层级树、组资源引用和参考栏、选择/移动工具、空白双击创建、视频截帧、节点导出、批次文本结果及遮罩双参考流程，并保留现有平台文件、生成任务、Agent、素材和同步逻辑。
++ [优化] 多图批次默认以单节点收起展示，支持四列展开、主结果切换及单项重试、删除、复制和下载；画布项目导出同步包含平台文件内容。
+
 + [修复] 独立 Brainstorm Memory 工具不再要求模型或用户提供 Storyboard `projectId`，由 Runtime 自动绑定脑暴工作区 scope。
 + [调整] Brainstorm Agent 按管理员公开文本模型列表提供模型选择，后续对话使用用户所选模型和协议，强制复用远程 Compatibility、既有积分扣费与任务审计；不再使用浏览器本地模型或 API Key。
 + [新增] 远程 Chat Compatibility 复用现有 `generation_tasks.metadata.usage` 记录归一化 Token usage，并以 `brainstorm_agent` 来源标记脑暴模型调用，保持聊天正文审计脱敏。

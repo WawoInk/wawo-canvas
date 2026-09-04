@@ -13,7 +13,8 @@ export type CanvasProjectExportItem = {
 };
 
 export type CanvasExportAsset = {
-    storageKey: string;
+    storageKey?: string;
+    fileId?: string;
     path: string;
     mimeType: string;
     bytes: number;

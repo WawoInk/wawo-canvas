@@ -8,13 +8,13 @@ import { useTranslation } from "react-i18next";
 
 import { formatNumber } from "@/i18n/formatters";
 import { readZip } from "@/lib/zip";
-import { setMediaBlob, setImageBlob } from "@/services/blob-storage";
 import { CanvasDeleteProjectsDialog } from "./components/canvas-delete-projects-dialog";
 import { CanvasProjectCard } from "./components/canvas-project-card";
 import type { CanvasExportFile } from "./export-types";
 import { useCanvasStore } from "./stores/use-canvas-store";
 import { useCanvasUiStore } from "./stores/use-canvas-ui-store";
 import { exportCanvasProjects } from "./utils/canvas-export";
+import { restoreCanvasExportFiles } from "./utils/canvas-import";
 import { useUserStore } from "@/stores/use-user-store";
 
 export default function Page() {
@@ -57,16 +57,7 @@ function CanvasPage() {
             const projectFile = zip.get("projects.json");
             if (!projectFile) throw new Error("missing projects.json");
             const data = JSON.parse(await projectFile.text()) as CanvasExportFile;
-            await Promise.all(
-                data.projects.flatMap((project) =>
-                    project.files.map(async (item) => {
-                        const blob = zip.get(item.path);
-                        if (!blob) return;
-                        const typedBlob = blob.type ? blob : blob.slice(0, blob.size, item.mimeType);
-                        await (item.storageKey.startsWith("image:") ? setImageBlob(item.storageKey, typedBlob) : setMediaBlob(item.storageKey, typedBlob));
-                    }),
-                ),
-            );
+            await restoreCanvasExportFiles(data, zip);
             data.projects.forEach((item) => importProject(item.project));
             message.success(t("canvas.library.messages.importSuccess", { count: data.projects.length, value: formatNumber(data.projects.length) }));
         } catch {

@@ -2285,7 +2285,8 @@
             "text": "文本",
             "config": "配置",
             "video": "视频",
-            "audio": "音频"
+            "audio": "音频",
+            "group": "分组"
         },
         "library": {
             "states": {
@@ -2355,7 +2356,9 @@
                 "assets": "我的素材",
                 "appearance": "画布外观",
                 "deleteSelected": "删除选中",
-                "clear": "清空画布"
+                "clear": "清空画布",
+                "select": "选择",
+                "pan": "移动"
             },
             "appearance": {
                 "title": "画布外观",
@@ -2554,7 +2557,17 @@
                 "failed": "失败",
                 "completed": "已完成",
                 "ready": "就绪"
-            }
+            },
+            "select": "选择",
+            "exporting": "正在导出选中元素…",
+            "exportName": "画布元素-{{count}}个",
+            "exported": "已导出 {{count}} 个元素",
+            "exportFailed": "导出失败，请重试",
+            "exportSelected": "导出选中",
+            "selected": "已选 {{count}}",
+            "toggleGroup": "展开或折叠{{title}}",
+            "selectAll": "全选",
+            "deselectAll": "取消全选"
         },
         "editor": {
             "project": {
@@ -2640,14 +2653,16 @@
                 "generatedVideo": "生成视频",
                 "generatedAudio": "生成音频",
                 "generatedText": "生成文本",
-                "assistantText": "助手文本"
+                "assistantText": "助手文本",
+                "maskAnnotation": "遮罩标注"
             },
             "prompts": {
                 "reverseImage": "请根据参考图片反推一段适合用于 AI 生图的提示词。\n\n要求：\n1. 只输出提示词正文，不要解释。\n2. 覆盖主体、构图、风格、光线、色彩、材质、镜头和氛围。\n3. 尽量写成可直接用于生图模型的完整提示词。",
                 "reverseComposer": "参考图片：@[node:{{imageNodeId}}]\n任务说明：@[node:{{instructionNodeId}}]",
                 "maskEdit": "只修改蒙版透明区域，其他区域保持不变。{{prompt}}",
                 "editText": "请根据要求修改以下文本。\n\n原文：\n{{sourceText}}\n\n修改要求：\n{{prompt}}",
-                "angle": "基于参考图重新生成同一主体的新视角，保持主体、颜色、材质和画面风格一致，不要只做透视变形。{{angle}}。"
+                "angle": "基于参考图重新生成同一主体的新视角，保持主体、颜色、材质和画面风格一致，不要只做透视变形。{{angle}}。",
+                "maskEditReference": "第一张图片是原图，第二张图片是蓝色遮罩标注图。请仅修改蓝色标注区域，结果中不要保留蓝色标记。{{prompt}}"
             },
             "modals": {
                 "superResolution": {
@@ -2676,7 +2691,8 @@
                     "delete": "删除当前画布",
                     "import": "导入素材",
                     "undo": "撤销",
-                    "redo": "重做"
+                    "redo": "重做",
+                    "export": "导出当前画布"
                 }
             },
             "agent": {
@@ -2869,7 +2885,8 @@
                 "collapsed": "图片组已收起"
             },
             "actions": {
-                "setPrimary": "设为主图"
+                "setPrimary": "设为主结果",
+                "copy": "复制"
             },
             "types": {
                 "text": "文本",
@@ -2939,7 +2956,17 @@
             "errors": {
                 "promptRequired": "请输入修改要求",
                 "maskRequired": "请先涂抹局部区域"
-            }
+            },
+            "export": "导出到画布",
+            "generate": "立即生成",
+            "exported": "已创建遮罩参考流程",
+            "hint": "在图片上涂抹需要修改的区域，可用空格拖动画布、滚轮缩放。",
+            "undo": "撤销",
+            "undoHint": "撤销上一步涂抹",
+            "redo": "重做",
+            "redoHint": "重做上一步涂抹",
+            "zoomOut": "缩小",
+            "zoomIn": "放大"
         },
         "split": {
             "title": "切分图片",
@@ -2990,7 +3017,9 @@
             }
         },
         "export": {
-            "defaultFileName": "无限画布"
+            "defaultFileName": "无限画布",
+            "defaultNodesName": "画布元素",
+            "item": "元素"
         },
         "agent": {
             "title": "Agent",
@@ -3381,6 +3410,28 @@
             "tabs": {
                 "setup": "连接配置"
             }
+        },
+        "nodeToolbar": {
+            "group": "组合",
+            "groupTitle": "将选中节点分组",
+            "ungroup": "取消组合",
+            "ungroupTitle": "取消选中节点的分组"
+        },
+        "videoFrames": {
+            "first": "提取首帧",
+            "last": "提取尾帧",
+            "current": "提取当前帧",
+            "firstNode": "首帧",
+            "lastNode": "尾帧",
+            "currentNode": "当前帧",
+            "failed": "视频截帧失败"
+        },
+        "references": {
+            "title": "参考",
+            "select": "选择参考节点",
+            "disconnect": "移除参考连接",
+            "empty": "暂无内容",
+            "picking": "正在选择参考节点，点击此处或按 Esc 退出"
         }
     }
 }

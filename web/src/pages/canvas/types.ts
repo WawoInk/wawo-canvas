@@ -15,6 +15,7 @@ export enum CanvasNodeType {
     Config = "config",
     Video = "video",
     Audio = "audio",
+    Group = "group",
 }
 
 export type CanvasNodeStatus = "idle" | "success" | "loading" | "error";
@@ -57,7 +58,9 @@ export type CanvasNodeMetadata = {
     batchChildIds?: string[];
     batchUsesReferenceImages?: boolean;
     primaryImageId?: string;
+    primaryTextId?: string;
     imageBatchExpanded?: boolean;
+    groupId?: string;
     storageKey?: string;
     mimeType?: string;
     fileId?: string;

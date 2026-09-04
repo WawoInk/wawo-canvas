@@ -28,33 +28,45 @@ export function buildNodeMentionReferences(node: CanvasNodeData, nodes: CanvasNo
 }
 
 export function getMentionResourceNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
-    const configInputs = getConnectedConfigResourceNodes(nodeId, nodes, connections);
-    if (configInputs.length) return configInputs;
-    const ownInputs = getContextResourceNodes(nodeId, nodes, connections);
-    if (ownInputs.length) return ownInputs;
+    const configInputs = getConnectedConfigInputNodes(nodeId, nodes, connections);
+    if (configInputs.length) return expandResourceNodes(configInputs, nodes);
+    const ownInputs = getContextInputNodes(nodeId, nodes, connections);
+    if (ownInputs.length) return expandResourceNodes(ownInputs, nodes);
     const node = nodes.find((item) => item.id === nodeId);
     return node && isResourceNode(node) ? [node] : [];
 }
 
 export function getGenerationResourceNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
-    const configInputs = getConnectedConfigResourceNodes(nodeId, nodes, connections);
-    if (configInputs.length) return configInputs;
-    const ownInputs = getContextResourceNodes(nodeId, nodes, connections);
-    if (ownInputs.length) return ownInputs;
-    return [];
+    const configInputs = getConnectedConfigInputNodes(nodeId, nodes, connections);
+    if (configInputs.length) return expandResourceNodes(configInputs, nodes);
+    const ownInputs = getContextInputNodes(nodeId, nodes, connections);
+    return expandResourceNodes(ownInputs, nodes);
 }
 
-function getContextResourceNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
+function getContextInputNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
     return connections
         .filter((connection) => connection.toNodeId === nodeId)
         .map((connection) => nodes.find((node) => node.id === connection.fromNodeId))
-        .filter((node): node is CanvasNodeData => Boolean(node && isResourceNode(node)));
+        .filter((node): node is CanvasNodeData => Boolean(node && isCanvasReferenceNode(node, nodes)));
 }
 
-function getConnectedConfigResourceNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
+function getConnectedConfigInputNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
     const configConnection = connections.find((connection) => connection.fromNodeId === nodeId && nodes.find((node) => node.id === connection.toNodeId)?.type === CanvasNodeType.Config);
     if (!configConnection) return [];
-    return getContextResourceNodes(configConnection.toNodeId, nodes, connections).filter((node) => node.id !== nodeId);
+    return getContextInputNodes(configConnection.toNodeId, nodes, connections).filter((node) => node.id !== nodeId);
+}
+
+function expandResourceNodes(inputNodes: CanvasNodeData[], nodes: CanvasNodeData[]) {
+    const resources = inputNodes.flatMap((node) => (node.type === CanvasNodeType.Group ? getGroupResourceNodes(node.id, nodes) : [node]));
+    return [...new Map(resources.map((node) => [node.id, node])).values()];
+}
+
+export function getGroupResourceNodes(groupId: string, nodes: CanvasNodeData[]) {
+    return nodes.filter((node) => node.metadata?.groupId === groupId && isResourceNode(node));
+}
+
+export function isCanvasReferenceNode(node: CanvasNodeData, nodes: CanvasNodeData[]) {
+    return isResourceNode(node) || (node.type === CanvasNodeType.Group && getGroupResourceNodes(node.id, nodes).length > 0);
 }
 
 function labelResourceNodes(nodes: CanvasNodeData[], active: boolean, t: TFunction) {
@@ -64,18 +76,7 @@ function labelResourceNodes(nodes: CanvasNodeData[], active: boolean, t: TFuncti
         if (!kind) return [];
         const index = counts[kind]++;
         const label = t(`canvas.resources.labels.${kind}`, { index: formatNumber(index + 1, { useGrouping: false }) });
-        return [
-            {
-                id: node.id,
-                nodeId: node.id,
-                kind,
-                label,
-                title: node.title || label,
-                previewUrl: node.metadata?.content,
-                text: node.type === CanvasNodeType.Text ? node.metadata?.content || node.metadata?.prompt : undefined,
-                active,
-            },
-        ];
+        return [{ id: node.id, nodeId: node.id, kind, label, title: node.title || label, previewUrl: node.metadata?.content, text: node.type === CanvasNodeType.Text ? node.metadata?.content || node.metadata?.prompt : undefined, active }];
     });
 }
 

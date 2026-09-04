@@ -1,15 +1,17 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useRef, useState } from "react";
 import { Button, Segmented, Switch } from "antd";
-import { CircleDot, Eraser, FolderOpen, Grid2x2, Hand, Image as ImageIcon, Info, Moon, Music2, Palette, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
+import { CircleDot, Eraser, FolderOpen, Grid2x2, Group, Hand, Image as ImageIcon, Info, Moon, MousePointer2, Music2, Palette, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes, type CanvasBackgroundMode, type CanvasColorTheme, type CanvasTheme } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
+import type { CanvasTool } from "../utils/canvas-interaction-mode";
 
 export function CanvasToolbar({
     selectedCount,
+    canvasTool = "pan",
     canUndo,
     canRedo,
     backgroundMode,
@@ -19,17 +21,20 @@ export function CanvasToolbar({
     onAddAudio,
     onAddText,
     onAddConfig,
+    onAddGroup,
     onUndo,
     onRedo,
     onUpload,
     onDelete,
     onClear,
     onDeselect,
+    onCanvasToolChange,
     onBackgroundModeChange,
     onShowImageInfoChange,
     onOpenMyAssets,
 }: {
     selectedCount: number;
+    canvasTool?: CanvasTool;
     canUndo: boolean;
     canRedo: boolean;
     backgroundMode: CanvasBackgroundMode;
@@ -39,12 +44,14 @@ export function CanvasToolbar({
     onAddAudio: () => void;
     onAddText: () => void;
     onAddConfig: () => void;
+    onAddGroup: () => void;
     onUndo: () => void;
     onRedo: () => void;
     onUpload: () => void;
     onDelete: () => void;
     onClear: () => void;
     onDeselect: () => void;
+    onCanvasToolChange?: (tool: CanvasTool) => void;
     onBackgroundModeChange: (mode: CanvasBackgroundMode) => void;
     onShowImageInfoChange: (show: boolean) => void;
     onOpenMyAssets: () => void;
@@ -62,7 +69,8 @@ export function CanvasToolbar({
     const hoverStyle = { background: theme.toolbar.itemHover, color: theme.toolbar.activeText };
     const activeStyle = { background: theme.toolbar.activeBg, color: theme.toolbar.activeText };
     const toolLabels: Record<string, string> = {
-        "tool-hand": t("canvas.toolbar.tools.hand"),
+        "tool-select": t("canvas.toolbar.tools.select", { defaultValue: "选择" }),
+        "tool-pan": t("canvas.toolbar.tools.pan", { defaultValue: "移动" }),
         "tool-undo": t("canvas.toolbar.tools.undo"),
         "tool-redo": t("canvas.toolbar.tools.redo"),
         "tool-text": t("canvas.toolbar.tools.text"),
@@ -70,6 +78,7 @@ export function CanvasToolbar({
         "tool-video": t("canvas.toolbar.tools.video"),
         "tool-audio": t("canvas.toolbar.tools.audio"),
         "tool-config": t("canvas.toolbar.tools.config"),
+        "tool-group": t("canvas.nodeTypes.group"),
         "tool-upload": t("canvas.toolbar.tools.upload"),
         "tool-assets": t("canvas.toolbar.tools.assets"),
         "tool-style": t("canvas.toolbar.tools.appearance"),
@@ -82,8 +91,22 @@ export function CanvasToolbar({
         <div className="pointer-events-none absolute bottom-5 z-50 flex justify-center" style={{ left: 300, right: 16 }}>
             {tip ? <DockTip label={tip} x={tipX} theme={theme} /> : null}
             <div ref={wrapRef} className="thin-scrollbar pointer-events-auto flex h-14 max-w-full items-center gap-1 overflow-x-auto rounded-xl border px-2 shadow-lg backdrop-blur [&>*]:shrink-0" style={dockStyle}>
-                <ToolbarButton id="tool-hand" label={toolLabels["tool-hand"]} active={!selectedCount} hovered={hovered} activeStyle={activeStyle} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onDeselect}>
-                    <Hand className="size-4.5" />
+                <ToolbarButton
+                    id={`tool-${canvasTool}`}
+                    label={toolLabels[`tool-${canvasTool}`]}
+                    active
+                    hovered={hovered}
+                    activeStyle={activeStyle}
+                    hoverStyle={hoverStyle}
+                    wrapRef={wrapRef}
+                    onTipX={setTipX}
+                    onHover={setHovered}
+                    onClick={() => {
+                        onDeselect();
+                        onCanvasToolChange?.(canvasTool === "select" ? "pan" : "select");
+                    }}
+                >
+                    {canvasTool === "select" ? <MousePointer2 className="size-4.5" /> : <Hand className="size-4.5" />}
                 </ToolbarButton>
                 <ToolbarButton id="tool-undo" label={toolLabels["tool-undo"]} disabled={!canUndo} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onUndo}>
                     <Undo2 className="size-4.5" />
@@ -106,6 +129,9 @@ export function CanvasToolbar({
                 </ToolbarButton>
                 <ToolbarButton id="tool-config" label={toolLabels["tool-config"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddConfig}>
                     <Settings2 className="size-4.5" />
+                </ToolbarButton>
+                <ToolbarButton id="tool-group" label={toolLabels["tool-group"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddGroup}>
+                    <Group className="size-4.5" />
                 </ToolbarButton>
                 <ToolbarButton id="tool-upload" label={toolLabels["tool-upload"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onUpload}>
                     <Upload className="size-4.5" />
@@ -245,6 +271,7 @@ function ToolbarButton({
         <Button
             type="text"
             aria-label={label}
+            data-canvas-tool={id === "tool-select" ? "select" : id === "tool-pan" ? "pan" : undefined}
             className="!h-8 !w-8 !min-w-8 !p-0"
             disabled={disabled}
             style={active ? activeStyle : hovered === id && !disabled ? hoverStyle : { color: danger ? "#f87171" : theme.toolbar.item, opacity: disabled ? 0.35 : 1 }}

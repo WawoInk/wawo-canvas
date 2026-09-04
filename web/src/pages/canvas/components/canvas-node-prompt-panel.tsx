@@ -18,6 +18,7 @@ import { CanvasPromptLibrary } from "./canvas-prompt-library";
 import { CanvasAudioSettingsPopover } from "./canvas-audio-settings-popover";
 import { audioConfigPatch, buildNodeConfig, videoConfigPatch } from "./canvas-node-config";
 import { CanvasPromptChipEditor } from "./canvas-prompt-chip-editor";
+import { CanvasNodeReferenceBar } from "./canvas-node-reference-bar";
 import { CanvasVideoSettingsPopover } from "./canvas-video-settings-popover";
 import { CanvasNodeType, type CanvasGenerationMode, type CanvasNodeData } from "../types";
 import type { CanvasResourceReference } from "../utils/canvas-resource-references";
@@ -35,10 +36,32 @@ type CanvasNodePromptPanelProps = {
     onResume?: (nodeId: string) => void;
     onCancel?: (nodeId: string) => void;
     mentionReferences?: CanvasResourceReference[];
+    nodes?: CanvasNodeData[];
+    connectedNodes?: CanvasNodeData[];
+    referenceTargetNodeId?: string;
+    onDisconnectReference?: (fromNodeId: string, toNodeId: string) => void;
+    onStartReferenceSelection?: (nodeId: string) => void;
     onImageSettingsOpenChange?: (open: boolean) => void;
 };
 
-export function CanvasNodePromptPanel({ node, isRunning, canResume = false, onPromptChange, onConfigChange, onGenerate, onStop, onResume, onCancel, mentionReferences = [], onImageSettingsOpenChange }: CanvasNodePromptPanelProps) {
+export function CanvasNodePromptPanel({
+    node,
+    nodes = [],
+    isRunning,
+    canResume = false,
+    onPromptChange,
+    onConfigChange,
+    onGenerate,
+    onStop,
+    onResume,
+    onCancel,
+    mentionReferences = [],
+    connectedNodes = [],
+    referenceTargetNodeId,
+    onDisconnectReference,
+    onStartReferenceSelection,
+    onImageSettingsOpenChange,
+}: CanvasNodePromptPanelProps) {
     const { t } = useTranslation();
     const globalConfig = useEffectiveConfig();
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
@@ -104,6 +127,7 @@ export function CanvasNodePromptPanel({ node, isRunning, canResume = false, onPr
             onPointerDown={(event) => event.stopPropagation()}
             onWheel={(event) => event.stopPropagation()}
         >
+            <CanvasNodeReferenceBar nodeId={referenceTargetNodeId || node.id} nodes={nodes} connectedNodes={connectedNodes} onDisconnect={onDisconnectReference} onStartSelection={onStartReferenceSelection} />
             <CanvasPromptChipEditor
                 value={prompt}
                 references={mentionReferences}

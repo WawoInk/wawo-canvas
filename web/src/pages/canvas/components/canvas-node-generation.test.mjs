@@ -41,6 +41,28 @@ test("compiles Canvas media and settings as a first-party intent", () => {
     for (const providerField of ["dataUrl", "storageKey", "image_url", "generate_audio", "ratio"]) assert.equal(serialized.includes(`"${providerField}":`), false);
 });
 
+test("expands mixed Group connections through origin and Generation Run compilers", () => {
+    const group = { id: "group-1", type: "group", title: "参考组", metadata: {} };
+    const groupedImage = { ...image, id: "group-image", metadata: { ...image.metadata, groupId: "group-1" } };
+    const groupedVideo = { id: "group-video", type: "video", title: "动作参考", metadata: { groupId: "group-1", materialSource: "volcengine", volcengineAssetId: "asset-group-video" } };
+    const groupedText = { id: "group-text", type: "text", title: "文案参考", metadata: { groupId: "group-1", content: "保持人物服装一致" } };
+    const config = { id: "config-1", type: "config", title: "配置", metadata: { composerContent: "使用参考" } };
+    const nodes = [group, groupedImage, groupedVideo, groupedText, config, videoTarget];
+
+    const context = buildNodeGenerationContext("config-1", nodes, [{ id: "group-config", fromNodeId: "group-1", toNodeId: "config-1" }], "@[node:group-image] @[node:group-video] @[node:group-text]");
+    assert.equal(context.referenceImages[0].fileId, "file-image-1");
+    assert.equal(context.referenceVideos[0].url, "asset://asset-group-video");
+    assert.match(context.prompt, /保持人物服装一致/);
+
+    const settings = { aspectRatio: "9:16", resolution: "1080p", durationSeconds: 10, generateAudio: false, watermark: true };
+    const intent = buildVideoGenerationIntent("video-1", nodes, [{ id: "group-video-target", fromNodeId: "group-1", toNodeId: "video-1" }], "人物走进雨夜街道", settings);
+    assert.deepEqual(intent.references, {
+        images: [{ fileId: "file-image-1", sourceNodeId: "group-image", name: "人物参考" }],
+        videos: [{ assetId: "asset-group-video", sourceNodeId: "group-video", name: "动作参考" }],
+        audios: [],
+    });
+});
+
 test("compiles Volcengine Canvas media as asset references", () => {
     const volcengineImage = { ...image, metadata: { ...image.metadata, materialSource: "volcengine", volcengineAssetId: "asset-image-1" } };
     const volcengineVideo = { id: "video-asset-1", type: "video", title: "动作参考", metadata: { materialSource: "volcengine", volcengineAssetId: "asset-video-1" } };

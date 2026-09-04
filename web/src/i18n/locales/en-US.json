@@ -2285,7 +2285,8 @@
             "text": "Text",
             "config": "Configuration",
             "video": "Video",
-            "audio": "Audio"
+            "audio": "Audio",
+            "group": "Group"
         },
         "library": {
             "states": {
@@ -2355,7 +2356,9 @@
                 "assets": "My assets",
                 "appearance": "Canvas appearance",
                 "deleteSelected": "Delete selected",
-                "clear": "Clear canvas"
+                "clear": "Clear canvas",
+                "select": "Select",
+                "pan": "Move"
             },
             "appearance": {
                 "title": "Canvas appearance",
@@ -2554,7 +2557,17 @@
                 "failed": "Failed",
                 "completed": "Completed",
                 "ready": "Ready"
-            }
+            },
+            "select": "Select",
+            "exporting": "Exporting selected elements…",
+            "exportName": "canvas-elements-{{count}}",
+            "exported": "Exported {{count}} elements",
+            "exportFailed": "Export failed, please try again",
+            "exportSelected": "Export selected",
+            "selected": "{{count}} selected",
+            "toggleGroup": "Expand or collapse {{title}}",
+            "selectAll": "Select all",
+            "deselectAll": "Deselect all"
         },
         "editor": {
             "project": {
@@ -2640,14 +2653,16 @@
                 "generatedVideo": "Generated video",
                 "generatedAudio": "Generated audio",
                 "generatedText": "Generated text",
-                "assistantText": "Assistant text"
+                "assistantText": "Assistant text",
+                "maskAnnotation": "Mask annotation"
             },
             "prompts": {
                 "reverseImage": "Analyze the reference image and produce a prompt suitable for AI image generation.\n\nRequirements:\n1. Output only the prompt, with no explanation.\n2. Cover the subject, composition, style, lighting, color, materials, camera, and atmosphere.\n3. Write a complete prompt that can be used directly with an image generation model.",
                 "reverseComposer": "Reference image: @[node:{{imageNodeId}}]\nTask instructions: @[node:{{instructionNodeId}}]",
                 "maskEdit": "Modify only the transparent area of the mask and keep every other area unchanged. {{prompt}}",
                 "editText": "Revise the following text according to the instructions.\n\nOriginal text:\n{{sourceText}}\n\nRevision instructions:\n{{prompt}}",
-                "angle": "Generate a new view of the same subject from the reference image. Keep the subject, colors, materials, and visual style consistent instead of applying only a perspective transform. {{angle}}."
+                "angle": "Generate a new view of the same subject from the reference image. Keep the subject, colors, materials, and visual style consistent instead of applying only a perspective transform. {{angle}}.",
+                "maskEditReference": "The first image is the original and the second is the blue mask annotation. Modify only the blue-marked area and do not keep the blue mark in the result. {{prompt}}"
             },
             "modals": {
                 "superResolution": {
@@ -2676,7 +2691,8 @@
                     "delete": "Delete current canvas",
                     "import": "Import media",
                     "undo": "Undo",
-                    "redo": "Redo"
+                    "redo": "Redo",
+                    "export": "Export current canvas"
                 }
             },
             "agent": {
@@ -2869,7 +2885,8 @@
                 "collapsed": "Image group collapsed"
             },
             "actions": {
-                "setPrimary": "Set as Primary"
+                "setPrimary": "Set as primary",
+                "copy": "Copy"
             },
             "types": {
                 "text": "Text",
@@ -2939,7 +2956,17 @@
             "errors": {
                 "promptRequired": "Enter an edit request",
                 "maskRequired": "Paint the area you want to edit first"
-            }
+            },
+            "export": "Export to canvas",
+            "generate": "Generate now",
+            "exported": "Mask reference flow created",
+            "hint": "Paint the area to edit. Hold Space to pan and use the wheel to zoom.",
+            "undo": "Undo",
+            "undoHint": "Undo the previous stroke",
+            "redo": "Redo",
+            "redoHint": "Redo the previous stroke",
+            "zoomOut": "Zoom out",
+            "zoomIn": "Zoom in"
         },
         "split": {
             "title": "Split Image",
@@ -2990,7 +3017,9 @@
             }
         },
         "export": {
-            "defaultFileName": "Infinite Canvas"
+            "defaultFileName": "Infinite Canvas",
+            "defaultNodesName": "Canvas elements",
+            "item": "Item"
         },
         "agent": {
             "title": "Agent",
@@ -3381,6 +3410,28 @@
             "tabs": {
                 "setup": "Connection"
             }
+        },
+        "nodeToolbar": {
+            "group": "Group",
+            "groupTitle": "Group selected nodes",
+            "ungroup": "Ungroup",
+            "ungroupTitle": "Ungroup selected nodes"
+        },
+        "videoFrames": {
+            "first": "Extract first frame",
+            "last": "Extract last frame",
+            "current": "Extract current frame",
+            "firstNode": "First frame",
+            "lastNode": "Last frame",
+            "currentNode": "Current frame",
+            "failed": "Failed to capture video frame"
+        },
+        "references": {
+            "title": "References",
+            "select": "Select reference nodes",
+            "disconnect": "Remove reference connection",
+            "empty": "No content",
+            "picking": "Selecting reference nodes. Click here or press Esc to exit."
         }
     }
 }
