@@ -127,7 +127,26 @@ func normalizePublicSetting(setting model.PublicSetting) model.PublicSetting {
 	return normalizePublicSettingWithChannels(setting, nil)
 }
 
+func visibleByDefault(value *bool) *bool {
+	if value != nil {
+		return value
+	}
+	visible := true
+	return &visible
+}
+
 func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []model.ModelChannel) model.PublicSetting {
+	setting.Navigation.Enabled = visibleByDefault(setting.Navigation.Enabled)
+	setting.Navigation.Canvas = visibleByDefault(setting.Navigation.Canvas)
+	setting.Navigation.Storyboard = visibleByDefault(setting.Navigation.Storyboard)
+	setting.Navigation.Image = visibleByDefault(setting.Navigation.Image)
+	setting.Navigation.Video = visibleByDefault(setting.Navigation.Video)
+	setting.Navigation.Assets = visibleByDefault(setting.Navigation.Assets)
+	setting.Navigation.VolcengineAssets = visibleByDefault(setting.Navigation.VolcengineAssets)
+	setting.Navigation.Prompts = visibleByDefault(setting.Navigation.Prompts)
+	setting.Navigation.StoryboardItems.BrainstormAgent = visibleByDefault(setting.Navigation.StoryboardItems.BrainstormAgent)
+	setting.Navigation.StoryboardItems.Storyboard = visibleByDefault(setting.Navigation.StoryboardItems.Storyboard)
+	setting.Navigation.StoryboardItems.ScriptAgent = visibleByDefault(setting.Navigation.StoryboardItems.ScriptAgent)
 	if setting.ModelChannel.AvailableModels == nil {
 		setting.ModelChannel.AvailableModels = []string{}
 	}

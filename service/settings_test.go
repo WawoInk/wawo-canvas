@@ -62,6 +62,31 @@ func TestBuildModelChannelURLNormalizesArkPlanTaskPath(t *testing.T) {
 	}
 }
 
+func TestNormalizePublicSettingDefaultsNavigationVisibleAndPreservesHiddenItems(t *testing.T) {
+	hidden := false
+	setting := normalizePublicSetting(model.PublicSetting{
+		Navigation: model.PublicNavigationSetting{
+			Video: &hidden,
+			StoryboardItems: model.PublicStoryboardNavigationSetting{
+				ScriptAgent: &hidden,
+			},
+		},
+	})
+
+	if setting.Navigation.Enabled == nil || !*setting.Navigation.Enabled || setting.Navigation.Canvas == nil || !*setting.Navigation.Canvas {
+		t.Fatal("navigation and unspecified items should default to visible")
+	}
+	if setting.Navigation.Video == nil || *setting.Navigation.Video {
+		t.Fatal("explicitly hidden navigation item should stay hidden")
+	}
+	if setting.Navigation.StoryboardItems.BrainstormAgent == nil || !*setting.Navigation.StoryboardItems.BrainstormAgent {
+		t.Fatal("unspecified storyboard item should default to visible")
+	}
+	if setting.Navigation.StoryboardItems.ScriptAgent == nil || *setting.Navigation.StoryboardItems.ScriptAgent {
+		t.Fatal("explicitly hidden storyboard item should stay hidden")
+	}
+}
+
 func TestNormalizeSettingsPublishesEnabledChannelModelsAndRepairsDefaults(t *testing.T) {
 	settings := normalizeSettings(model.Settings{
 		Public: model.PublicSetting{

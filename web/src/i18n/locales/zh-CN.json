@@ -1199,7 +1199,9 @@
             "assets": "素材库",
             "assetsManagement": "素材库管理",
             "volcengineAssets": "火山引擎资产",
-            "settings": "系统设置"
+            "settings": "系统设置",
+            "siteManagement": "站点管理",
+            "brandConfig": "品牌配置"
         },
         "volcengineAssets": {
             "title": "火山引擎资产",
@@ -1993,6 +1995,50 @@
                     "success": "成功"
                 },
                 "duration": "请求时长：{{value}} 秒"
+            }
+        },
+        "brandConfig": {
+            "title": "品牌配置",
+            "description": "配置用户端顶部导航中展示的产品入口。",
+            "notice": {
+                "title": "仅控制入口展示",
+                "description": "关闭开关只会隐藏对应的前端导航入口，不会禁用路由或功能；用户仍可通过已知地址访问。"
+            },
+            "actions": {
+                "refresh": "刷新",
+                "retry": "重试",
+                "save": "保存配置"
+            },
+            "sections": {
+                "navigation": "顶部导航",
+                "mainItems": "主导航项",
+                "storyboardItems": "分镜创作室子项",
+                "storyboardItemsDescription": "“分镜创作室”入口开启时，可分别控制其中三个子入口的展示。"
+            },
+            "fields": {
+                "enabled": "显示顶部导航",
+                "enabledDescription": "关闭后隐藏全部顶部导航入口，并保留各项开关的当前值。",
+                "canvas": "我的画布",
+                "storyboard": "分镜创作室",
+                "image": "生图工作台",
+                "video": "视频创作台",
+                "assets": "我的素材",
+                "volcengineAssets": "火山素材库",
+                "prompts": "提示词库"
+            },
+            "storyboardItems": {
+                "brainstormAgent": "脑暴 Agent",
+                "storyboard": "分镜创作室",
+                "scriptAgent": "剧本 Agent"
+            },
+            "states": {
+                "loading": "正在读取品牌配置…",
+                "loadFailed": "读取品牌配置失败",
+                "loginRequired": "请使用管理员账号登录后管理品牌配置。"
+            },
+            "messages": {
+                "saved": "品牌配置已保存",
+                "saveFailed": "保存品牌配置失败"
             }
         }
     },

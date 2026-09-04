@@ -150,6 +150,17 @@ test("保存图片请求格式时过滤非法分辨率并去重", async () => {
                             imageModels: ["image-model"],
                             imageRequestFormats: [{ model: "image-model", format: "default", canvasRequestMode: "split", resolutions: ["2k", "8k", "1k", "2k"] }],
                         },
+                        navigation: {
+                            enabled: true,
+                            canvas: true,
+                            storyboard: true,
+                            image: true,
+                            video: false,
+                            assets: true,
+                            volcengineAssets: true,
+                            prompts: true,
+                            storyboardItems: { brainstormAgent: true, storyboard: false, scriptAgent: true },
+                        },
                     },
                     private: { channels: [] },
                 },
@@ -173,6 +184,17 @@ test("保存图片请求格式时过滤非法分辨率并去重", async () => {
         await waitFor(() => Boolean(postedSettings));
 
         assert.deepEqual(postedSettings.public.modelChannel.imageRequestFormats[0].resolutions, ["1k", "2k"]);
+        assert.deepEqual(postedSettings.public.navigation, {
+            enabled: true,
+            canvas: true,
+            storyboard: true,
+            image: true,
+            video: false,
+            assets: true,
+            volcengineAssets: true,
+            prompts: true,
+            storyboardItems: { brainstormAgent: true, storyboard: false, scriptAgent: true },
+        });
     } finally {
         await act(async () => root.unmount());
         container.remove();

@@ -1,6 +1,7 @@
 import { Tabs } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import { useConfigStore } from "@/stores/use-config-store";
 import { BrainstormAgentStudio } from "./brainstorm-agent-studio";
 import { ScriptAgentPage } from "./script-agent-page";
 import { StoryboardStudio } from "./storyboard-studio";
@@ -11,6 +12,8 @@ export default function StoryboardPage() {
     const scriptMatch = pathname.match(/\/storyboard\/script-agent(?:\/([^/]+))?\/?$/);
     const activeKey = scriptMatch ? "script-agent" : /\/storyboard\/brainstorm-agent\/?$/.test(pathname) ? "brainstorm-agent" : "storyboard";
     const projectId = scriptMatch?.[1] ? decodeURIComponent(scriptMatch[1]) : undefined;
+    const visibility = useConfigStore((state) => state.publicSettings?.navigation?.storyboardItems);
+    const hiddenTabKeys = new Set([visibility?.brainstormAgent === false ? "brainstorm-agent" : "", visibility?.storyboard === false ? "storyboard" : "", visibility?.scriptAgent === false ? "script-agent" : ""]);
 
     return (
         <div className="flex h-full flex-col overflow-hidden bg-background text-foreground">
@@ -21,6 +24,7 @@ export default function StoryboardPage() {
                         activeKey={activeKey}
                         onChange={(key) => navigate(key === "brainstorm-agent" ? "/storyboard/brainstorm-agent" : key === "script-agent" ? "/storyboard/script-agent" : "/storyboard")}
                         destroyOnHidden={false}
+                        renderTabBar={(props, DefaultTabBar) => <DefaultTabBar {...props}>{(node) => (hiddenTabKeys.has(String(node.key)) ? <span key={node.key} hidden /> : node)}</DefaultTabBar>}
                         items={[
                             {
                                 key: "brainstorm-agent",
