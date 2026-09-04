@@ -249,6 +249,24 @@ function SettingGroup({ title, color, children }: { title: string; color: string
 }
 
 function NumberInput({ value, min, max, theme, onChange }: { value: string; min: number; max: number; theme: CanvasTheme; onChange: (value: string) => void }) {
+    const [draft, setDraft] = useState(value);
+    useEffect(() => setDraft(value), [value]);
+
+    const commit = () => {
+        if (!draft.trim()) {
+            onChange("");
+            return;
+        }
+        const number = Math.floor(Number(draft));
+        if (!Number.isFinite(number)) {
+            setDraft(value);
+            return;
+        }
+        const next = String(Math.max(min, Math.min(max, number)));
+        setDraft(next);
+        onChange(next);
+    };
+
     return (
         <input
             type="number"
@@ -256,8 +274,12 @@ function NumberInput({ value, min, max, theme, onChange }: { value: string; min:
             max={max}
             className="h-9 rounded-full border bg-transparent px-3 text-center text-sm outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             style={{ borderColor: theme.node.stroke, color: theme.node.text, WebkitTextFillColor: theme.node.text }}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+            }}
             onMouseDown={(event) => event.stopPropagation()}
         />
     );

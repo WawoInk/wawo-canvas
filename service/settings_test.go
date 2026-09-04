@@ -707,11 +707,46 @@ func TestResolveGenerationProfilesDoesNotShareLimitOverrides(t *testing.T) {
 	}
 }
 
+func TestResolveGenerationProfilesAllowsAdministratorDurationMaxAboveTemplate(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		profileID string
+		model     string
+	}{
+		{name: "seedance", profileID: "seedance-1-5-pro", model: "upstream-seedance"},
+		{name: "sora", profileID: "sora-2", model: "upstream-sora"},
+		{name: "vidu drama", profileID: "vidu-q3-drama", model: "upstream-vidu"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			maxDuration := 30
+			profiles, err := resolveGenerationProfiles(GenerationProfiles(), normalizePrivateSetting(model.PrivateSetting{
+				Channels: []model.ModelChannel{{Name: "video", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{test.model}}},
+				GenerationProfiles: []model.GenerationProfileBinding{{
+					ID: test.name, ProfileID: test.profileID, UpstreamModel: test.model, ChannelName: "video", Enabled: true,
+					LimitOverrides: model.GenerationLimitOverrides{DurationSecondsMax: &maxDuration},
+				}},
+			}), model.PublicSetting{})
+			if err != nil {
+				t.Fatalf("resolveGenerationProfiles: %v", err)
+			}
+			if got := *profiles[0].Capabilities.Settings["durationSeconds"].Max; got != 30 {
+				t.Fatalf("duration max = %d, want 30", got)
+			}
+			if _, err = normalizeGenerationSettings(profiles[0], model.ScalarSettings{"durationSeconds": 30}); err != nil {
+				t.Fatalf("administrator duration max rejected: %v", err)
+			}
+			if _, err = normalizeGenerationSettings(profiles[0], model.ScalarSettings{"durationSeconds": 31}); err == nil {
+				t.Fatal("duration above administrator max accepted")
+			}
+		})
+	}
+}
+
 func TestResolveGenerationProfilesRejectsUnsafeOrUnroutableBindings(t *testing.T) {
-	unsafeMax := 16
+	unsafeMax := 3
 	for name, binding := range map[string]model.GenerationProfileBinding{
-		"unsafe limit":    {ProfileID: "seedance-1-5-pro", UpstreamModel: "upstream-seedance", Enabled: true, LimitOverrides: model.GenerationLimitOverrides{DurationSecondsMax: &unsafeMax}},
-		"missing channel": {ProfileID: "seedance-1-5-pro", UpstreamModel: "missing-model", Enabled: true},
+		"below minimum duration": {ProfileID: "seedance-1-5-pro", UpstreamModel: "upstream-seedance", Enabled: true, LimitOverrides: model.GenerationLimitOverrides{DurationSecondsMax: &unsafeMax}},
+		"missing channel":        {ProfileID: "seedance-1-5-pro", UpstreamModel: "missing-model", Enabled: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := resolveGenerationProfiles(GenerationProfiles(), normalizePrivateSetting(model.PrivateSetting{

@@ -22,6 +22,28 @@ const standardProfile = {
     },
 };
 
+test("video workbench compiles ordinary video duration from the configured Profile", () => {
+    const profile = { ...standardProfile, capabilities: { ...standardProfile.capabilities, settings: { ...standardProfile.capabilities.settings, durationSeconds: { ...standardProfile.capabilities.settings.durationSeconds, max: 30 } } } };
+    const input = {
+        clientRequestId: "video-duration-24",
+        profile,
+        config: { ...defaultConfig, channelMode: "remote", model: profile.id, videoModel: profile.id, videoSeconds: "24" },
+        prompt: "make a launch film",
+        references: [],
+        videoReferences: [],
+        audioReferences: [],
+    };
+
+    assert.equal(buildVideoWorkbenchGenerationCommand(input).intent.settings.durationSeconds, 24);
+    assert.equal(
+        buildVideoWorkbenchGenerationCommand({
+            ...input,
+            profile: { ...profile, capabilities: { ...profile.capabilities, settings: { ...profile.capabilities.settings, durationSeconds: { ...profile.capabilities.settings.durationSeconds, max: 20 } } } },
+        }).intent.settings.durationSeconds,
+        20,
+    );
+});
+
 test("remote video workbench submits its configured Profile to the first-party route", async () => {
     const previousAdapter = axios.defaults.adapter;
     const requests = [];
@@ -119,7 +141,7 @@ test("builds a short-drama command with platform files and explicit image roles"
             settings: {
                 aspectRatio: { type: "enum", values: ["9:16"], default: "9:16" },
                 resolution: { type: "enum", values: ["1080p"], default: "1080p" },
-                durationSeconds: { type: "duration", min: 8, max: 12, allowAuto: true, default: "auto" },
+                durationSeconds: { type: "duration", min: 8, max: 30, allowAuto: true, default: "auto" },
                 quality: { type: "enum", values: ["standard", "high"], default: "high" },
             },
             title: { required: true, minLength: 1, maxLength: 20 },
@@ -132,7 +154,7 @@ test("builds a short-drama command with platform files and explicit image roles"
     const command = buildVideoWorkbenchGenerationCommand({
         clientRequestId: "drama-request-1",
         profile,
-        config: { ...defaultConfig, channelMode: "remote", model: profile.id, videoModel: profile.id, size: "9:16", vquality: "1080p", videoSeconds: "-1", quality: "high" },
+        config: { ...defaultConfig, channelMode: "remote", model: profile.id, videoModel: profile.id, size: "9:16", vquality: "1080p", videoSeconds: "24", quality: "high" },
         prompt: "人物：林尘。分镜一：林尘在典当行擦拭柜台，神情淡然。",
         title: "典当行退婚",
         references: [{ id: "asset-1", name: "林尘", type: "image/png", dataUrl: "https://files.test/asset-1", fileId: "file-asset-1" }],
@@ -151,7 +173,7 @@ test("builds a short-drama command with platform files and explicit image roles"
             title: "典当行退婚",
             script: "人物：林尘。分镜一：林尘在典当行擦拭柜台，神情淡然。",
             assets: [{ sourceNodeId: "asset-1", role: "character", name: "林尘", reference: { fileId: "file-asset-1", sourceNodeId: "asset-1", name: "林尘" } }],
-            settings: { aspectRatio: "9:16", resolution: "1080p", durationSeconds: "auto", quality: "high" },
+            settings: { aspectRatio: "9:16", resolution: "1080p", durationSeconds: 24, quality: "high" },
         },
     });
 });
