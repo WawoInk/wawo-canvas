@@ -39,9 +39,28 @@ export type PublicAuthSettings = {
     };
 };
 
+export type PublicStoryboardNavigationSettings = {
+    brainstormAgent: boolean;
+    storyboard: boolean;
+    scriptAgent: boolean;
+};
+
+export type PublicNavigationSettings = {
+    enabled: boolean;
+    canvas: boolean;
+    storyboard: boolean;
+    image: boolean;
+    video: boolean;
+    assets: boolean;
+    volcengineAssets: boolean;
+    prompts: boolean;
+    storyboardItems: PublicStoryboardNavigationSettings;
+};
+
 export type PublicSettings = {
     modelChannel: PublicModelChannelSettings;
     auth: PublicAuthSettings;
+    navigation?: PublicNavigationSettings;
 };
 
 export async function fetchPublicSettings() {

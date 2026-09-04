@@ -1,7 +1,7 @@
 import { apiDelete, apiGet, apiPost, compactApiParams } from "@/services/api/request";
 import type { DecimalValue } from "@/lib/decimal";
 import type { Prompt, PromptListResponse } from "@/services/api/prompts";
-import type { ImageResolutionOption } from "@/services/api/settings";
+import type { ImageResolutionOption, PublicNavigationSettings } from "@/services/api/settings";
 
 export type AdminPromptCategory = {
     category: string;
@@ -377,6 +377,7 @@ export type AdminPublicSettings = {
             enabled: boolean;
         };
     };
+    navigation: PublicNavigationSettings;
 };
 
 export type AdminGenerationProfileBinding = {

@@ -1199,7 +1199,9 @@
             "assets": "Asset library",
             "assetsManagement": "Asset management",
             "volcengineAssets": "Volcengine assets",
-            "settings": "System settings"
+            "settings": "System settings",
+            "siteManagement": "Site management",
+            "brandConfig": "Brand configuration"
         },
         "volcengineAssets": {
             "title": "Volcengine assets",
@@ -1993,6 +1995,50 @@
                     "success": "Succeeded"
                 },
                 "duration": "Request duration: {{value}} sec"
+            }
+        },
+        "brandConfig": {
+            "title": "Brand configuration",
+            "description": "Configure which product entries appear in the user-facing top navigation.",
+            "notice": {
+                "title": "Controls entry visibility only",
+                "description": "Turning an item off only hides its frontend navigation entry. It does not disable the route or feature, which remains accessible through a known URL."
+            },
+            "actions": {
+                "refresh": "Refresh",
+                "retry": "Retry",
+                "save": "Save configuration"
+            },
+            "sections": {
+                "navigation": "Top navigation",
+                "mainItems": "Main navigation items",
+                "storyboardItems": "Storyboard Studio items",
+                "storyboardItemsDescription": "Manage the three child entries directly under Storyboard Studio. Turning off the parent also turns off and locks every child."
+            },
+            "fields": {
+                "enabled": "Show top navigation",
+                "enabledDescription": "Turning this off hides all top navigation entries while preserving every item setting.",
+                "canvas": "Canvas",
+                "storyboard": "Storyboard Studio",
+                "image": "Image generation",
+                "video": "Video generation",
+                "assets": "My assets",
+                "volcengineAssets": "Volcengine assets",
+                "prompts": "Prompts"
+            },
+            "storyboardItems": {
+                "brainstormAgent": "Brainstorm Agent",
+                "storyboard": "Storyboard",
+                "scriptAgent": "Script Agent"
+            },
+            "states": {
+                "loading": "Loading brand configuration…",
+                "loadFailed": "Failed to load brand configuration",
+                "loginRequired": "Sign in with an administrator account to manage brand configuration."
+            },
+            "messages": {
+                "saved": "Brand configuration saved",
+                "saveFailed": "Failed to save brand configuration"
             }
         }
     },

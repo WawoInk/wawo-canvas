@@ -150,6 +150,17 @@ test("保存图片请求格式时过滤非法分辨率并去重", async () => {
                             imageModels: ["image-model"],
                             imageRequestFormats: [{ model: "image-model", format: "default", canvasRequestMode: "split", resolutions: ["2k", "8k", "1k", "2k"] }],
                         },
+                        navigation: {
+                            enabled: true,
+                            canvas: true,
+                            storyboard: true,
+                            image: true,
+                            video: false,
+                            assets: true,
+                            volcengineAssets: true,
+                            prompts: true,
+                            storyboardItems: { brainstormAgent: true, storyboard: false, scriptAgent: true },
+                        },
                     },
                     private: { channels: [] },
                 },
@@ -173,6 +184,17 @@ test("保存图片请求格式时过滤非法分辨率并去重", async () => {
         await waitFor(() => Boolean(postedSettings));
 
         assert.deepEqual(postedSettings.public.modelChannel.imageRequestFormats[0].resolutions, ["1k", "2k"]);
+        assert.deepEqual(postedSettings.public.navigation, {
+            enabled: true,
+            canvas: true,
+            storyboard: true,
+            image: true,
+            video: false,
+            assets: true,
+            volcengineAssets: true,
+            prompts: true,
+            storyboardItems: { brainstormAgent: true, storyboard: false, scriptAgent: true },
+        });
     } finally {
         await act(async () => root.unmount());
         container.remove();
@@ -236,6 +258,125 @@ test("图片请求格式显示对齐的列标题并保留分辨率值", async ()
         useUserStore.setState(previousUserState);
     }
 });
+
+test("Seedance、Sora 和 Vidu Drama 的最大时长可超过默认上限并原样保存", async () => {
+    const previousRequest = axios.request;
+    const previousUserState = useUserStore.getState();
+    const expectedDurations = [
+        { id: "seedance-binding", profileId: "seedance-1-5-pro", upstreamModel: "seedance-model", durationSecondsMax: 60 },
+        { id: "sora-binding", profileId: "sora-2", upstreamModel: "sora-model", durationSecondsMax: 61 },
+        { id: "vidu-binding", profileId: "vidu-q3-drama", upstreamModel: "vidu-model", durationSecondsMax: 62 },
+    ];
+    let settingsLoaded = false;
+    let postedSettings: any;
+    axios.request = (async (config: { url?: string; method?: string; data?: any }) => {
+        if (config.url !== "/api/admin/settings") throw new Error(`unexpected admin request: ${config.url}`);
+        if (config.method === "POST") {
+            postedSettings = config.data;
+            return {
+                status: 200,
+                statusText: "OK",
+                headers: {},
+                config: {},
+                data: { code: 0, msg: "", data: config.data },
+            };
+        }
+        settingsLoaded = true;
+        return {
+            status: 200,
+            statusText: "OK",
+            headers: {},
+            config: {},
+            data: {
+                code: 0,
+                msg: "",
+                data: {
+                    public: {
+                        modelChannel: {
+                            availableModels: expectedDurations.map((item) => item.id),
+                            modelCosts: [],
+                            imageRequestFormats: [],
+                            defaultModel: "",
+                            defaultImageModel: "",
+                            defaultVideoModel: "seedance-binding",
+                            defaultTextModel: "",
+                            defaultAudioModel: "",
+                            imageModels: [],
+                            videoModels: expectedDurations.map((item) => item.id),
+                            textModels: [],
+                            audioModels: [],
+                            systemPrompt: "",
+                            allowCustomChannel: false,
+                        },
+                        auth: { allowRegister: true, linuxDo: { enabled: false } },
+                    },
+                    private: {
+                        channels: [{ protocol: "openai", name: "video", baseUrl: "https://api.example.com", apiKey: "", models: expectedDurations.map((item) => item.upstreamModel), weight: 1, enabled: true, remark: "" }],
+                        generationProfiles: expectedDurations.map((item) => ({
+                            id: item.id,
+                            profileId: item.profileId,
+                            upstreamModel: item.upstreamModel,
+                            channelName: "video",
+                            billingMode: "per_call",
+                            enabled: true,
+                            limitOverrides: {},
+                            metadata: {},
+                        })),
+                        promptSync: { enabled: true, cron: "*/5 * * * *" },
+                        auth: { linuxDo: { clientId: "", clientSecret: "" } },
+                        fileSizeLimits: { image: 1, video: 1, audio: 1, prompt: 1 },
+                    },
+                },
+            },
+        };
+    }) as typeof axios.request;
+    useUserStore.setState({ ...previousUserState, token: "admin-settings-token", isReady: true, isLoading: false });
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    try {
+        await act(async () => {
+            root.render(createElement(ConfigProvider, null, createElement(App, null, createElement(AdminSettingsPage))));
+        });
+        await waitFor(() => settingsLoaded);
+
+        const privateTab = required(Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find((item) => item.textContent?.includes(i18n.t("admin.settings.tabs.private"))) || null);
+        await act(async () => click(privateTab));
+        await waitFor(() => expectedDurations.every((item) => container.textContent?.includes(item.id)));
+
+        for (const expected of expectedDurations) {
+            const binding = required(Array.from(container.querySelectorAll<HTMLElement>("section")).find((item) => item.textContent?.includes(expected.id)) || null);
+            const durationField = required(Array.from(binding.querySelectorAll<HTMLElement>(".ant-form-item")).find((item) => item.textContent?.includes(i18n.t("admin.settings.generationProfiles.form.maxDuration"))) || null);
+            await inputAndBlur(required(durationField.querySelector<HTMLInputElement>("input")), String(expected.durationSecondsMax));
+        }
+
+        const saveButton = required(Array.from(container.querySelectorAll("button")).find((item) => item.textContent?.includes(i18n.t("admin.settings.actions.saveSettings"))) || null);
+        await act(async () => click(saveButton));
+        await waitFor(() => Boolean(postedSettings));
+
+        assert.deepEqual(
+            postedSettings.private.generationProfiles.map((item: any) => ({ profileId: item.profileId, durationSecondsMax: item.limitOverrides?.durationSecondsMax })),
+            expectedDurations.map((item) => ({ profileId: item.profileId, durationSecondsMax: item.durationSecondsMax })),
+        );
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        axios.request = previousRequest;
+        useUserStore.setState(previousUserState);
+    }
+});
+
+async function inputAndBlur(element: HTMLInputElement, value: string) {
+    await act(async () => {
+        element.focus();
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(element, value);
+        element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+        element.blur();
+    });
+}
 
 async function waitFor(check: () => boolean, timeoutMs = 2000) {
     const deadline = Date.now() + timeoutMs;

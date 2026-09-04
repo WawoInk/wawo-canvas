@@ -66,6 +66,25 @@ type PublicModelChannelSetting struct {
 type PublicSetting struct {
 	ModelChannel PublicModelChannelSetting `json:"modelChannel"`
 	Auth         PublicAuthSetting         `json:"auth"`
+	Navigation   PublicNavigationSetting   `json:"navigation"`
+}
+
+type PublicNavigationSetting struct {
+	Enabled          *bool                             `json:"enabled"`
+	Canvas           *bool                             `json:"canvas"`
+	Storyboard       *bool                             `json:"storyboard"`
+	Image            *bool                             `json:"image"`
+	Video            *bool                             `json:"video"`
+	Assets           *bool                             `json:"assets"`
+	VolcengineAssets *bool                             `json:"volcengineAssets"`
+	Prompts          *bool                             `json:"prompts"`
+	StoryboardItems  PublicStoryboardNavigationSetting `json:"storyboardItems"`
+}
+
+type PublicStoryboardNavigationSetting struct {
+	BrainstormAgent *bool `json:"brainstormAgent"`
+	Storyboard      *bool `json:"storyboard"`
+	ScriptAgent     *bool `json:"scriptAgent"`
 }
 
 type PublicAuthSetting struct {

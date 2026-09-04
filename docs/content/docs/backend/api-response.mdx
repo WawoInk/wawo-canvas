@@ -20,6 +20,30 @@ description: 后端统一响应信封与结构化生成错误
 - `msg` 是可以展示给用户的安全消息；未声明为安全的内部错误统一显示“操作失败”。
 - 乐观锁冲突使用 HTTP 409 和 `code: -1`。
 
+## 公开 Settings 响应
+
+`GET /api/settings` 的统一响应信封中，`data.navigation` 控制前端导航入口展示：
+
+```json
+{
+  "enabled": true,
+  "canvas": true,
+  "storyboard": true,
+  "image": true,
+  "video": true,
+  "assets": true,
+  "volcengineAssets": true,
+  "prompts": true,
+  "storyboardItems": {
+    "brainstormAgent": true,
+    "storyboard": true,
+    "scriptAgent": true
+  }
+}
+```
+
+`enabled` 是主导航总开关；其余七个同级字段分别控制对应主导航项，`storyboardItems` 控制分镜页面的三个子入口。字段未配置时默认可见。该配置仅用于隐藏前端入口，不参与鉴权，也不表示路由或功能已禁用；服务端权限仍由各业务接口独立校验。
+
 ## AI Compatibility 流式响应
 
 AI Compatibility Proxy 的成功响应保留上游响应格式。响应 `Content-Type` 为 `text/event-stream`、`application/x-ndjson` 或 `application/ndjson` 时，服务端逐块转发并及时 Flush，不发送 `Content-Length`；客户端取消或断开连接时，同一个请求的取消信号会传播到上游。

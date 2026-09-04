@@ -64,6 +64,7 @@ export type FirstPartyCanvasVideoRun = {
 export function prepareFirstPartyCanvasVideoRun(input: { nodeId: string; nodes: CanvasNodeData[]; connections: CanvasConnection[]; prompt: string; config: AiConfig; profile: GenerationProfile; clientRequestId: string }): FirstPartyCanvasVideoRun {
     const { profile, config } = input;
     const isShortDrama = profile.intents.includes("video.short-drama");
+    const durationBounds = profile.capabilities.settings.durationSeconds;
     const intent = isShortDrama
         ? buildShortDramaGenerationIntent(
               input.nodeId,
@@ -73,7 +74,7 @@ export function prepareFirstPartyCanvasVideoRun(input: { nodeId: string; nodes: 
               buildShortDramaGenerationSettings(profile, {
                   aspectRatio: normalizeSeedanceRatio(config.size) as ShortDramaGenerationSettings["aspectRatio"],
                   resolution: normalizeSeedanceResolution(config.vquality) as ShortDramaGenerationSettings["resolution"],
-                  durationSeconds: String(config.videoSeconds) === "-1" ? "auto" : normalizeSeedanceDuration(config.videoSeconds),
+                  durationSeconds: String(config.videoSeconds) === "-1" ? "auto" : normalizeSeedanceDuration(config.videoSeconds, durationBounds),
                   quality: config.quality as ShortDramaGenerationSettings["quality"],
               }),
           )
@@ -85,7 +86,7 @@ export function prepareFirstPartyCanvasVideoRun(input: { nodeId: string; nodes: 
               buildVideoGenerationSettings(profile, {
                   aspectRatio: normalizeSeedanceRatio(config.size) as VideoGenerationSettings["aspectRatio"],
                   resolution: normalizeSeedanceResolution(config.vquality) as VideoGenerationSettings["resolution"],
-                  durationSeconds: normalizeSeedanceDuration(config.videoSeconds),
+                  durationSeconds: normalizeSeedanceDuration(config.videoSeconds, durationBounds),
                   generateAudio: boolConfig(config.videoGenerateAudio, true),
                   watermark: boolConfig(config.videoWatermark, false),
               }),

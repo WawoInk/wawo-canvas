@@ -56,6 +56,7 @@ const translations: Record<string, string> = {
     "common.logout": "退出登录",
     "admin.menus.memberManagement": "成员管理",
     "admin.menus.contentManagement": "内容管理",
+    "admin.menus.siteManagement": "站点管理",
     "admin.menus.operationsManagement": "运维管理",
     "admin.menus.enterprises": "企业管理",
     "admin.menus.users": "用户管理",
@@ -66,6 +67,7 @@ const translations: Record<string, string> = {
     "admin.menus.assets": "素材库",
     "admin.menus.assetsManagement": "素材库管理",
     "admin.menus.volcengineAssets": "火山引擎资产",
+    "admin.menus.brandConfig": "品牌配置",
     "admin.menus.settings": "系统设置",
 };
 
@@ -89,14 +91,16 @@ mock.module("@/stores/use-user-store", () => {
 
 const { default: AdminLayout } = await import("./admin-layout");
 
-test("groups admin navigation into member, content, and operations submenus", () => {
+test("groups admin navigation into member, content, site, and operations submenus", () => {
     const html = renderToStaticMarkup(createElement(AdminLayout, null, createElement("div", null, "page")));
 
     assert.match(html, /成员管理.*企业管理.*用户管理/s);
+    assert.match(html, /成员管理.*内容管理.*站点管理.*运维管理/s);
     assert.match(html, /内容管理.*提示词管理.*素材库.*火山引擎资产/s);
+    assert.match(html, /站点管理.*品牌配置/s);
     assert.match(html, /运维管理.*算力点日志.*使用日志.*画布节点信息.*系统设置/s);
 
-    for (const path of ["/admin/enterprises", "/admin/users", "/admin/prompts", "/admin/assets", "/admin/volcengine-assets", "/admin/credit-logs", "/admin/generation-tasks", "/admin/canvas-nodes", "/admin/settings"]) {
+    for (const path of ["/admin/enterprises", "/admin/users", "/admin/prompts", "/admin/assets", "/admin/volcengine-assets", "/admin/brand-config", "/admin/credit-logs", "/admin/generation-tasks", "/admin/canvas-nodes", "/admin/settings"]) {
         assert.match(html, new RegExp(`href="${path}"`));
     }
 

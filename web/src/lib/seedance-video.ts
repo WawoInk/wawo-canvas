@@ -75,10 +75,10 @@ export function normalizeResolutionToken(value: string) {
     return `${resolution}p`;
 }
 
-export function normalizeSeedanceDuration(value: string) {
+export function normalizeSeedanceDuration(value: string, bounds: { min?: number; max?: number } = {}) {
     if (String(value).trim() === "-1") return -1;
     const seconds = Math.floor(Number(value) || 5);
-    return Math.max(4, Math.min(15, seconds));
+    return Math.max(bounds.min ?? 4, Math.min(bounds.max ?? 15, seconds));
 }
 
 export function normalizeSeedanceRatio(value: string) {

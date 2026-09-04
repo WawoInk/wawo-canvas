@@ -29,6 +29,7 @@ import AdminPrompts from "@/pages/admin/prompts";
 import AdminAssets from "@/pages/admin/assets";
 import AdminSettings from "@/pages/admin/settings";
 import AdminVolcengineAssets from "@/pages/admin/volcengine-assets";
+import AdminBrandConfig from "@/pages/admin/brand-config";
 import NotFound from "@/pages/not-found";
 
 function LocaleBoundary() {
@@ -98,6 +99,7 @@ export const router = createBrowserRouter([
                     { path: "admin/prompts", element: <AdminPrompts /> },
                     { path: "admin/assets", element: <AdminAssets /> },
                     { path: "admin/volcengine-assets", element: <AdminVolcengineAssets /> },
+                    { path: "admin/brand-config", element: <AdminBrandConfig /> },
                     { path: "admin/settings", element: <AdminSettings /> },
                 ],
             },

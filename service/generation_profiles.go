@@ -253,7 +253,7 @@ func resolveGenerationProfiles(templates []model.GenerationProfile, private mode
 		}
 		if max := binding.LimitOverrides.DurationSecondsMax; max != nil {
 			definition := profile.Capabilities.Settings["durationSeconds"]
-			if definition.Min == nil || definition.Max == nil || *max < *definition.Min || *max > *definition.Max {
+			if definition.Min == nil || definition.Max == nil || *max < *definition.Min {
 				return nil, safeMessageError{message: fmt.Sprintf("generation profile %q has an unsafe duration limit override", binding.ID)}
 			}
 			definition.Max = intPtr(*max)

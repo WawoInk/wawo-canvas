@@ -49,6 +49,17 @@ const emptySettings: AdminSettings = {
             allowCustomChannel: true,
         },
         auth: { allowRegister: true, linuxDo: { enabled: false } },
+        navigation: {
+            enabled: true,
+            canvas: true,
+            storyboard: true,
+            image: true,
+            video: true,
+            assets: true,
+            volcengineAssets: true,
+            prompts: true,
+            storyboardItems: { brainstormAgent: true, storyboard: true, scriptAgent: true },
+        },
     },
     private: {
         channels: [],
@@ -1009,7 +1020,6 @@ export default function AdminSettingsPage() {
                                                                                 <Form.Item label={t("admin.settings.generationProfiles.form.maxDuration")}>
                                                                                     <InputNumber
                                                                                         min={profileOption.durationRange.min}
-                                                                                        max={profileOption.durationRange.max}
                                                                                         step={1}
                                                                                         precision={0}
                                                                                         className="!w-full"
@@ -1360,6 +1370,14 @@ function normalizePublicSetting(setting: Partial<AdminSettings["public"]> = {}):
             allowRegister: setting.auth?.allowRegister !== false,
             linuxDo: {
                 enabled: setting.auth?.linuxDo?.enabled === true,
+            },
+        },
+        navigation: {
+            ...emptySettings.public.navigation,
+            ...(setting.navigation || {}),
+            storyboardItems: {
+                ...emptySettings.public.navigation.storyboardItems,
+                ...(setting.navigation?.storyboardItems || {}),
             },
         },
     };
