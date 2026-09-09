@@ -2326,6 +2326,14 @@
         }
     },
     "canvas": {
+        "sync": {
+            "localCopyTitle": "{{title}} (local conflict copy)",
+            "conflict": "Another device updated this canvas. Uploads are paused; your local edits are preserved.",
+            "keepCopy": "Keep a local copy and load cloud version",
+            "resolved": "Local edits are preserved as a separate project in My Canvas.",
+            "failed": "Could not resolve the sync conflict. Please try again.",
+            "badge": "Sync conflict · Local edits preserved"
+        },
         "nodeTypes": {
             "image": "Image",
             "text": "Text",

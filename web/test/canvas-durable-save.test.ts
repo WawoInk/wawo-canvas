@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
 import axios from "axios";
+import i18n from "../src/i18n";
+await i18n.changeLanguage("zh-CN");
 import type { StateStorage } from "zustand/middleware";
 
 const values = new Map<string, string>();
@@ -501,6 +503,123 @@ test("backend retry never sends a project whose local durable write failed", asy
         await useCanvasStore.getState().updateProject(project.id, { title: "本地恢复后再同步" });
         await waitFor(() => putStarted);
     } finally {
+        axios.defaults.adapter = originalAdapter;
+    }
+});
+
+test("restoring unchanged project data does not create an offline dirty replica", async () => {
+    await useCanvasStore.getState().updateProject(project.id, {
+        nodes: [],
+        connections: [],
+        chatSessions: [],
+        activeChatId: null,
+        backgroundMode: "lines",
+        showImageInfo: false,
+    });
+    await useCanvasStore.getState().updateProject(project.id, { viewport: { x: 0, y: 0, k: 1 } });
+    expect(useCanvasStore.getState().openProject(project.id)).toMatchObject({ dirty: false, localVersion: 0 });
+    await useCanvasStore.persist.rehydrate();
+    expect(useCanvasStore.getState().openProject(project.id)).toMatchObject({ dirty: false, localVersion: 0 });
+});
+
+test("a conflicting replica survives refresh without overwriting another device's media", async () => {
+    const originalAdapter = axios.defaults.adapter;
+    let remote = { ...project, revision: 5, nodes: [{ id: "uploaded-image" }, { id: "generated-video" }] };
+    const detail = () => ({ ...remote, name: remote.title, projectJson: JSON.stringify(remote) });
+    axios.defaults.adapter = async (config) => {
+        let data: unknown = config.url?.endsWith(project.id) ? detail() : [detail()];
+        let status = 200;
+        if (config.method === "put") {
+            const input = JSON.parse(config.data);
+            if (input.expectedRevision !== remote.revision) {
+                status = 409;
+                data = { current: detail() };
+            } else {
+                remote = { ...input.project, revision: remote.revision + 1 };
+                data = detail();
+            }
+        }
+        return { config, data: { code: status === 409 ? 1 : 0, data, msg: "" }, headers: {}, status, statusText: "" };
+    };
+    try {
+        useUserStore.setState({ token: "token-a", user: account as never });
+        await useCanvasStore.getState().updateProject(project.id, { title: "本地未同步编辑" });
+        await waitFor(() => Boolean(useCanvasStore.getState().openProject(project.id)?.syncConflict));
+        await useCanvasStore.getState().waitForLocalPersistence();
+        clearSyncTimers();
+        await useCanvasStore.persist.rehydrate();
+        useCanvasStore.getState().flushProjectSync(project.id);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const { fetchCanvasProject } = await import("../src/services/api/canvas-projects");
+        expect(JSON.parse((await fetchCanvasProject(project.id)).projectJson).nodes).toEqual([{ id: "uploaded-image" }, { id: "generated-video" }]);
+        expect(useCanvasStore.getState().openProject(project.id)).toMatchObject({ title: "本地未同步编辑", revision: 1, dirty: true, syncConflict: true });
+        // Explicit resolution preserves local work under a new project ID before loading the remote version.
+        useUserStore.setState({ token: "token-a", user: account as never });
+        const copyId = await useCanvasStore.getState().resolveProjectConflict(project.id);
+        expect(copyId).not.toBe(project.id);
+        expect(useCanvasStore.getState().openProject(copyId!)).toMatchObject({ title: "本地未同步编辑（本地冲突副本）", nodes: [] });
+        expect(useCanvasStore.getState().openProject(project.id)).toMatchObject({ revision: 5, dirty: false, syncConflict: false, nodes: [{ id: "uploaded-image" }, { id: "generated-video" }] });
+    } finally {
+        axios.defaults.adapter = originalAdapter;
+    }
+});
+
+test("an editor snapshot cannot borrow the revision of a remotely replaced replica", async () => {
+    const originalAdapter = axios.defaults.adapter;
+    const remote = { ...project, nodes: [{ id: "uploaded-image" }, { id: "generated-video" }], revision: 5 };
+    axios.defaults.adapter = async (config) => ({ config, headers: {}, status: 200, statusText: "OK", data: { code: 0, data: config.url?.endsWith(project.id) ? { ...remote, projectJson: JSON.stringify(remote) } : [remote], msg: "" } });
+    try {
+        useUserStore.setState({ token: "token-a", user: account as never });
+        await useCanvasStore.getState().syncFromBackend();
+        await useCanvasStore.getState().updateProject(project.id, { nodes: [] }, 0);
+        expect(useCanvasStore.getState().openProject(project.id)).toMatchObject({ revision: 5, dirty: false, nodes: [{ id: "uploaded-image" }, { id: "generated-video" }] });
+    } finally {
+        axios.defaults.adapter = originalAdapter;
+    }
+});
+
+test("a late video result cannot commit an older editor graph over a remote replacement", async () => {
+    const latest = { ...project, remoteRevision: 5, revision: 5, nodes: [{ id: "remote-node", type: "text", title: "远端", position: { x: 0, y: 0 }, width: 100, height: 100 }] };
+    useCanvasStore.setState({ projects: [latest as never] });
+    const { commitCanvasVideoResult } = await import("../src/pages/canvas/stores/canvas-video-result");
+    await commitCanvasVideoResult({
+        projectId: project.id,
+        nodeId: "old-video",
+        expectedRemoteRevision: 0,
+        nodes: [{ id: "old-video", type: "video" as never, title: "旧视频", position: { x: 0, y: 0 }, width: 100, height: 100 }],
+        display: { width: 100, height: 100 },
+        file: { url: "https://fixture.example/video", fileId: "file", mimeType: "video/mp4" },
+    });
+    expect(useCanvasStore.getState().openProject(project.id)).toMatchObject({ nodes: latest.nodes, dirty: false });
+});
+
+test("confirming an unchanged project name does not create a dirty replica", async () => {
+    useCanvasStore.getState().renameProject(project.id, ` ${project.title} `);
+    expect(useCanvasStore.getState().openProject(project.id)).toMatchObject({ localVersion: 0, dirty: false });
+});
+
+test("a delayed project fetch cannot roll back a newer remote replica", async () => {
+    const originalAdapter = axios.defaults.adapter;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let requested = false;
+    axios.defaults.adapter = async (config) => {
+        requested = true;
+        await gate;
+        return { config, headers: {}, status: 200, statusText: "OK", data: { code: 0, data: { ...project, revision: 2, projectJson: JSON.stringify(project) }, msg: "" } };
+    };
+    try {
+        useUserStore.setState({ token: "token-a", user: account as never });
+        const pending = useCanvasStore.getState().fetchProjectFromBackend(project.id);
+        await waitFor(() => requested);
+        useCanvasStore.setState({ projects: [{ ...project, revision: 5, remoteRevision: 5, title: "新设备作品" }] });
+        release();
+        expect(await pending).toMatchObject({ title: "新设备作品", revision: 5 });
+        expect(useCanvasStore.getState().openProject(project.id)).toMatchObject({ title: "新设备作品", revision: 5 });
+    } finally {
+        release();
         axios.defaults.adapter = originalAdapter;
     }
 });

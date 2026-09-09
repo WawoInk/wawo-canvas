@@ -3,6 +3,7 @@ import { useCanvasStore } from "./use-canvas-store";
 
 type CanvasVideoResultCommit = {
     projectId: string;
+    expectedRemoteRevision?: number;
     nodeId: string;
     nodes: CanvasNodeData[];
     display: { width: number; height: number; preserveCenter?: boolean };
@@ -18,9 +19,11 @@ type CanvasVideoResultCommit = {
     generationTaskStatus?: CanvasGenerationTaskStatus;
 };
 
-export async function commitCanvasVideoResult({ projectId, nodeId, nodes, display, file, generationTaskStatus }: CanvasVideoResultCommit) {
+export async function commitCanvasVideoResult({ projectId, expectedRemoteRevision, nodeId, nodes, display, file, generationTaskStatus }: CanvasVideoResultCommit) {
     let sourceNodes = nodes;
     while (true) {
+        const current = useCanvasStore.getState().openProject(projectId);
+        if (!current || (expectedRemoteRevision !== undefined && (current.remoteRevision || 0) !== expectedRemoteRevision)) return current?.nodes || [];
         let changed = false;
         const nextNodes = sourceNodes.map((node) => {
             if (node.id !== nodeId) return node;
@@ -74,7 +77,7 @@ export async function commitCanvasVideoResult({ projectId, nodeId, nodes, displa
             sourceNodes = currentNodes;
             continue;
         }
-        await useCanvasStore.getState().updateProject(projectId, { nodes: nextNodes });
+        await useCanvasStore.getState().updateProject(projectId, { nodes: nextNodes }, expectedRemoteRevision);
         const currentNodes = useCanvasStore.getState().openProject(projectId)?.nodes;
         if (!currentNodes || currentNodes === nextNodes) return nextNodes;
         sourceNodes = currentNodes;

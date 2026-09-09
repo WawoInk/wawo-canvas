@@ -87,6 +87,8 @@ import { CanvasLocalAgentPanel } from "../components/canvas-local-agent-panel";
 import { useCanvasAgentStore } from "../stores/use-canvas-agent-store";
 import { useCanvasStore } from "../stores/use-canvas-store";
 import { commitCanvasVideoResult } from "../stores/canvas-video-result";
+import { useCanvasEditorReplica } from "./use-canvas-editor-replica";
+import { CanvasSyncConflict } from "./canvas-sync-conflict";
 import { applyCanvasAgentOps, type CanvasAgentOp, type CanvasAgentSnapshot } from "../utils/canvas-agent-ops";
 import { buildCanvasResourceReferences, buildNodeMentionReferences, getGenerationResourceNodes, getGroupResourceNodes, isCanvasReferenceNode } from "../utils/canvas-resource-references";
 import { applyGroupSelection, applyUngroupSelection, canGroupSelectedNodes, canUngroupSelectedNodes, collectGroupMemberNodes, findContainingGroupId, findGroupDropTarget, getGroupWrapRect, snapNodesIntoGroup } from "../utils/canvas-node-geometry";
@@ -327,16 +329,10 @@ function InfiniteCanvasPage() {
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const addAsset = useAssetStore((state) => state.addAsset);
     const cleanupAssetImages = useAssetStore((state) => state.cleanupImages);
-    const hydrated = useCanvasStore((state) => state.hydrated);
-    const synced = useCanvasStore((state) => state.synced);
     const createProject = useCanvasStore((state) => state.createProject);
-    const openProject = useCanvasStore((state) => state.openProject);
-    const updateProject = useCanvasStore((state) => state.updateProject);
     const renameProject = useCanvasStore((state) => state.renameProject);
     const deleteProjects = useCanvasStore((state) => state.deleteProjects);
-    const fetchProjectFromBackend = useCanvasStore((state) => state.fetchProjectFromBackend);
     const flushProjectSync = useCanvasStore((state) => state.flushProjectSync);
-    const syncFromBackend = useCanvasStore((state) => state.syncFromBackend);
     const currentProject = useCanvasStore((state) => state.projects.find((project) => project.id === projectId));
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const [nodes, setNodes] = useState<CanvasNodeData[]>([]);
@@ -365,7 +361,6 @@ function InfiniteCanvasPage() {
     const [assetPickerOpen, setAssetPickerOpen] = useState(false);
     const [materialImportOpen, setMaterialImportOpen] = useState(false);
     const [overviewCollapsed, setOverviewCollapsed] = useState(false);
-    const [projectLoaded, setProjectLoaded] = useState(false);
     const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null);
     const [nodeImageSettingsOpen, setNodeImageSettingsOpen] = useState(false);
     const [dialogNodeId, setDialogNodeId] = useState<string | null>(null);
@@ -535,58 +530,38 @@ function InfiniteCanvasPage() {
         [modal, stopGenerationByRunningId, t],
     );
 
-    useEffect(() => {
-        if (!hydrated || !synced) return;
-        setProjectLoaded(false);
-        let project = openProject(projectId);
-        // ponytail: 本地缓存中没有（新设备首次打开），从后端 REST API 拉取
-        if (!project) {
-            // ponytail: async inside useEffect — use a flag to avoid double mount
-            let cancelled = false;
-            fetchProjectFromBackend(projectId).then((fetched) => {
-                if (cancelled || !fetched) {
-                    navigate("/canvas", { replace: true });
-                    return;
-                }
-                // The store has been updated by fetchProjectFromBackend, but we need
-                // to read the freshly set project. Force a consistent state update.
-                restoreProject(fetched);
-            });
-            return () => {
-                cancelled = true;
-            };
-        }
-        restoreProject(project);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [hydrated, synced, projectId]);
-
-    // ponytail: extracted restore function shared by both inline and backend-fetch paths
-    const resumePendingGenerations = (nodes: CanvasNodeData[]) => {
+    const resumePendingGenerations = (nodes: CanvasNodeData[], remoteRevision: number) => {
         for (const node of nodes) {
             const resume = canvasGenerationResume(node);
             if (!resume) continue;
             if (resume.kind === "first-party-video") {
-                void pollFirstPartyCanvasVideoNode(node.id, resume.taskId, undefined, resume.clientRequestId);
+                void pollFirstPartyCanvasVideoNode(node.id, resume.taskId, undefined, resume.clientRequestId, remoteRevision);
                 continue;
             }
             if (node.metadata?.status !== "loading") continue;
             const task = { id: resume.taskId, model: resume.model || effectiveConfig.imageModel || effectiveConfig.model, platformTaskId: resume.platformTaskId };
             if (resume.kind === "image") void pollCanvasImageNode(node.id, task, effectiveConfig);
-            else void pollCanvasVideoNode(node.id, task, effectiveConfig);
+            else void pollCanvasVideoNode(node.id, task, effectiveConfig, undefined, remoteRevision);
         }
     };
 
-    const restoreProject = (project: ReturnType<typeof openProject>) => {
-        if (!project) {
-            navigate("/canvas", { replace: true });
-            return;
-        }
-        const restore = async () => {
-            const restoredNodes = await hydrateCanvasImages(resetInterruptedGeneration(project.nodes));
-            const restoredSessions = await hydrateAssistantImages(project.chatSessions || []);
-            setNodes(restoredNodes);
+    const {
+        ready: projectLoaded,
+        save: saveEditorProject,
+        remoteRevision: editorRemoteRevision,
+    } = useCanvasEditorReplica(projectId, {
+        hydrate: async (project) => ({
+            ...project,
+            nodes: await hydrateCanvasImages(resetInterruptedGeneration(project.nodes)),
+            chatSessions: await hydrateAssistantImages(project.chatSessions || []),
+        }),
+        apply: (project) => {
+            generationRequestsRef.current.forEach((request) => request.controller.abort());
+            generationRequestsRef.current.clear();
+            nodesRef.current = project.nodes;
+            setNodes(project.nodes);
             setConnections(project.connections);
-            setChatSessions(restoredSessions);
+            setChatSessions(project.chatSessions);
             setActiveChatId(project.activeChatId || null);
             setBackgroundMode(project.backgroundMode);
             setShowImageInfo(project.showImageInfo || false);
@@ -597,19 +572,18 @@ function InfiniteCanvasPage() {
                 historyCommitTimerRef.current = null;
             }
             lastHistoryRef.current = {
-                nodes: restoredNodes,
+                nodes: project.nodes,
                 connections: project.connections,
-                chatSessions: restoredSessions,
+                chatSessions: project.chatSessions,
                 activeChatId: project.activeChatId || null,
                 backgroundMode: project.backgroundMode,
                 showImageInfo: project.showImageInfo || false,
             };
             setHistoryState({ canUndo: false, canRedo: false });
-            setProjectLoaded(true);
-            resumePendingGenerations(restoredNodes);
-        };
-        void restore();
-    };
+            resumePendingGenerations(project.nodes, project.remoteRevision || 0);
+        },
+        onMissing: () => navigate("/canvas", { replace: true }),
+    });
 
     useEffect(() => {
         if (!projectLoaded || applyingHistoryRef.current || historyPausedRef.current) return;
@@ -654,8 +628,8 @@ function InfiniteCanvasPage() {
 
     useEffect(() => {
         if (!projectLoaded || historyPausedRef.current) return;
-        updateProject(projectId, { nodes, connections, chatSessions, activeChatId, backgroundMode, showImageInfo });
-    }, [activeChatId, backgroundMode, chatSessions, connections, nodes, projectId, projectLoaded, showImageInfo, updateProject]);
+        void saveEditorProject({ nodes, connections, chatSessions, activeChatId, backgroundMode, showImageInfo }).catch((error) => message.error(error.message));
+    }, [activeChatId, backgroundMode, chatSessions, connections, nodes, projectId, projectLoaded, showImageInfo, saveEditorProject, message]);
 
     useEffect(() => {
         if (!dialogNodeId) setNodeImageSettingsOpen(false);
@@ -663,8 +637,8 @@ function InfiniteCanvasPage() {
 
     useEffect(() => {
         if (!projectLoaded) return;
-        updateProject(projectId, { viewport });
-    }, [projectId, projectLoaded, updateProject, viewport]);
+        void saveEditorProject({ viewport }).catch((error) => message.error(error.message));
+    }, [projectId, projectLoaded, saveEditorProject, viewport, message]);
 
     useLayoutEffect(() => {
         nodesRef.current = nodes;
@@ -3247,7 +3221,8 @@ function InfiniteCanvasPage() {
         }
     };
 
-    const pollFirstPartyCanvasVideoNode = async (nodeId: string, taskId: string, spec?: { width: number; height: number }, clientRequestId = "") => {
+    const pollFirstPartyCanvasVideoNode = async (nodeId: string, taskId: string, spec?: { width: number; height: number }, clientRequestId = "", expectedRemoteRevision = editorRemoteRevision) => {
+        if (expectedRemoteRevision === undefined) return;
         const controller = new AbortController();
         startGenerationRequest(nodeId, nodeId, nodeId, controller);
         try {
@@ -3267,8 +3242,10 @@ function InfiniteCanvasPage() {
             if (!fileUrl) throw new Error(t("canvas.editor.errors.videoFileUnavailable"));
             const defaultSize = spec || NODE_DEFAULT_SIZE[CanvasNodeType.Video];
             const videoSize = fitNodeSize(file.width || defaultSize.width, file.height || defaultSize.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
+            if (controller.signal.aborted) return;
             const committedNodes = await commitCanvasVideoResult({
                 projectId,
+                expectedRemoteRevision,
                 nodeId,
                 nodes: nodesRef.current,
                 display: videoSize,
@@ -3312,7 +3289,8 @@ function InfiniteCanvasPage() {
         }
     };
 
-    const pollCanvasVideoNode = async (nodeId: string, task: { id: string; model: string }, config: AiConfig, spec?: { width: number; height: number }) => {
+    const pollCanvasVideoNode = async (nodeId: string, task: { id: string; model: string }, config: AiConfig, spec?: { width: number; height: number }, expectedRemoteRevision = editorRemoteRevision) => {
+        if (expectedRemoteRevision === undefined) return;
         const controller = new AbortController();
         startGenerationRequest(nodeId, nodeId, nodeId, controller);
         try {
@@ -3329,8 +3307,10 @@ function InfiniteCanvasPage() {
                     }
                     const defaultSize = spec || NODE_DEFAULT_SIZE[CanvasNodeType.Video];
                     const videoSize = fitNodeSize(stored.width || defaultSize.width, stored.height || defaultSize.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
+                    if (controller.signal.aborted) return;
                     const committedNodes = await commitCanvasVideoResult({
                         projectId,
+                        expectedRemoteRevision,
                         nodeId,
                         nodes: nodesRef.current,
                         display: { ...videoSize, preserveCenter: true },
@@ -3535,6 +3515,8 @@ function InfiniteCanvasPage() {
                     compactAgentStatus={codexCompactAgent ? { connected: localAgentConnected, enabled: localAgentEnabled, activity: localAgentActivity } : undefined}
                     onToggleAgent={() => (assistantOpen ? closeAgent() : openAgent())}
                 />
+
+                <CanvasSyncConflict projectId={projectId} />
 
                 <InfiniteCanvas
                     containerRef={containerRef}

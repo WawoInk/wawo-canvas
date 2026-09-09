@@ -8,8 +8,10 @@ export type ReplicaCanvasProject = {
     createdAt: string;
     updatedAt: string;
     revision: number;
+    remoteRevision?: number;
     localVersion: number;
     dirty: boolean;
+    syncConflict?: boolean;
     nodes: CanvasNodeData[];
     connections: CanvasConnection[];
     chatSessions: CanvasAssistantSession[];
@@ -29,8 +31,10 @@ export function normalizeCanvasProject(value: unknown): ReplicaCanvasProject | n
         createdAt: typeof project.createdAt === "string" ? project.createdAt : "",
         updatedAt: typeof project.updatedAt === "string" ? project.updatedAt : "",
         revision: Number.isSafeInteger(project.revision) && Number(project.revision) >= 0 ? Number(project.revision) : 0,
+        remoteRevision: Number.isSafeInteger(project.remoteRevision) && Number(project.remoteRevision) >= 0 ? Number(project.remoteRevision) : 0,
         localVersion: Number.isSafeInteger(project.localVersion) && Number(project.localVersion) >= 0 ? Number(project.localVersion) : 0,
         dirty: project.dirty === true,
+        syncConflict: project.syncConflict === true,
         nodes: Array.isArray(project.nodes) ? project.nodes : [],
         connections: Array.isArray(project.connections) ? project.connections : [],
         chatSessions: Array.isArray(project.chatSessions) ? project.chatSessions : [],

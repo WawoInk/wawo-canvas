@@ -33,28 +33,28 @@ function setProjectRevision(projectId: string, revision: number, updatedAt: stri
     state.replaceProjects(state.projects.map((project) => (project.id === projectId ? { ...project, revision, updatedAt: updatedAt || project.updatedAt, dirty: true } : project)));
 }
 
-function conflictRevision(err: ApiError) {
-    const current = (err.data as { current?: { revision?: unknown; updatedAt?: unknown } } | null)?.current;
-    return {
-        revision: typeof current?.revision === "number" ? current.revision : null,
-        updatedAt: typeof current?.updatedAt === "string" ? current.updatedAt : undefined,
-    };
-}
-
 function retryableSyncError(err: unknown) {
     if (!(err instanceof ApiError)) return true;
     return err.status === 200 || err.status === 408 || err.status === 425 || err.status === 429 || err.status >= 500;
 }
 
-async function recoverProjectRevision(projectId: string, store: StoreAccess, session: { token: string; userId: string }) {
+function pauseProjectConflict(projectId: string, store: StoreAccess): SyncResult {
+    const state = store.getState();
+    state.replaceProjects(state.projects.map((item) => (item.id === projectId ? { ...item, syncConflict: true } : item)));
+    return "pause";
+}
+
+async function recoverProjectRevision(project: CanvasProject, store: StoreAccess, session: { token: string; userId: string }): Promise<SyncResult> {
     try {
-        const current = await fetchCanvasProject(projectId);
+        const current = await fetchCanvasProject(project.id);
         const auth = useUserStore.getState();
-        if (!isCurrentSession(session, { token: auth.token, userId: auth.user?.id })) return false;
-        setProjectRevision(projectId, current.revision, current.updatedAt, store);
-        return true;
+        if (!isCurrentSession(session, { token: auth.token, userId: auth.user?.id })) return "pause";
+        const remote = parseProjectJson(current.projectJson);
+        if (dataFields.some((field) => JSON.stringify(remote[field]) !== JSON.stringify(project[field]))) return pauseProjectConflict(project.id, store);
+        setProjectRevision(project.id, current.revision, current.updatedAt, store);
+        return "again";
     } catch {
-        return false;
+        return "retry";
     }
 }
 
@@ -88,6 +88,7 @@ async function persistProject(projectId: string, store: StoreAccess): Promise<Sy
 
     const project = state.projects.find((item) => item.id === projectId);
     if (!project?.dirty) return "done";
+    if (project.syncConflict) return "pause";
     const localVersion = project.localVersion;
     syncScheduler.markActivity();
     try {
@@ -104,18 +105,15 @@ async function persistProject(projectId: string, store: StoreAccess): Promise<Sy
         return "done";
     } catch (err) {
         if (err instanceof ApiError && err.status === 409) {
-            const current = conflictRevision(err);
-            if (current.revision !== null) {
-                setProjectRevision(projectId, current.revision, current.updatedAt, store);
-                return "again";
-            }
-            return (await recoverProjectRevision(projectId, store, session)) ? "again" : "retry";
+            const current = useUserStore.getState();
+            if (!isCurrentSession(session, { token: current.token, userId: current.user?.id })) return "pause";
+            return pauseProjectConflict(projectId, store);
         }
         if (err instanceof ApiError && err.status === 404 && project.revision > 0) {
             setProjectRevision(projectId, 0, undefined, store);
             return "again";
         }
-        if (project.revision === 0 && (await recoverProjectRevision(projectId, store, session))) return "again";
+        if (project.revision === 0) return recoverProjectRevision(project, store, session);
         if (retryableSyncError(err)) return "retry";
         console.warn("canvas: sync paused after a permanent error", err);
         return "pause";
@@ -219,7 +217,7 @@ export function registerBeforeUnloadFlush(store: StoreAccess) {
         const token = useUserStore.getState().token;
         if (!useUserStore.getState().user?.id || !token) return;
         for (const project of store.getState().projects) {
-            if (!project.dirty || project.revision === 0 || syncRequests.has(project.id)) continue;
+            if (!project.dirty || project.syncConflict || project.revision === 0 || syncRequests.has(project.id)) continue;
             fetch(`/api/v1/canvas/projects/${encodeURIComponent(project.id)}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -239,7 +237,7 @@ export function parseProjectJson(json?: string): Partial<CanvasProject> {
     }
 }
 
-function fromServerProject(item: { id: string; name?: string; projectJson?: string; revision?: number; createdAt?: string; updatedAt?: string }, local: CanvasProject | null): CanvasProject {
+export function fromServerProject(item: { id: string; name?: string; projectJson?: string; revision?: number; createdAt?: string; updatedAt?: string }, local: CanvasProject | null): CanvasProject {
     const parsed = parseProjectJson(item.projectJson);
     return normalizeCanvasProject({
         ...local,
@@ -249,8 +247,10 @@ function fromServerProject(item: { id: string; name?: string; projectJson?: stri
         createdAt: item.createdAt || local?.createdAt,
         updatedAt: item.updatedAt || local?.updatedAt,
         revision: item.revision || local?.revision,
+        remoteRevision: item.revision,
         localVersion: local?.localVersion || 0,
         dirty: false,
+        syncConflict: false,
     })!;
 }
 
