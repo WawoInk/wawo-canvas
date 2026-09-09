@@ -182,21 +182,19 @@ test("an edit made during a save is persisted with the acknowledged revision", a
     expect(state.projects[0]).toMatchObject({ title: "最新", revision: 3, dirty: false });
 });
 
-test("a 409 conflict adopts the server revision and persists the local state", async () => {
+test("a 409 conflict preserves local edits without replacing the server project", async () => {
     const state = createState();
     let attempts = 0;
     updateHandler = async (_id, input) => {
-        attempts += 1;
-        if (attempts === 1) throw new FakeApiError(409, { current: { revision: 5, updatedAt: "2026-07-29T00:00:01.000Z" } });
+        if (++attempts === 1) throw new FakeApiError(409, { current: { revision: 5 } });
         return { revision: input.expectedRevision + 1, updatedAt: "2026-07-29T00:00:02.000Z" };
     };
 
     flushProjectSync("project-1", { getState: () => state } as never);
-    await waitFor(() => attempts === 2 && !state.projects[0].dirty);
+    await waitFor(() => !state.projects[0].dirty || Boolean((state.projects[0] as Project & { syncConflict?: boolean }).syncConflict));
 
-    expect(updateRequests).toEqual([1, 5]);
-    expect(state.projects[0]).toMatchObject({ revision: 6, dirty: false });
-    expect(warnings).not.toHaveBeenCalled();
+    expect(state.projects[0]).toMatchObject({ title: "初始", revision: 1, dirty: true, syncConflict: true });
+    expect(updateRequests).toEqual([1]);
 });
 
 test("a lost create response recovers the remote revision and saves the latest project", async () => {
@@ -207,6 +205,7 @@ test("a lost create response recovers the remote revision and saves the latest p
     fetchHandler = async (id) =>
         ({
             id,
+            projectJson: JSON.stringify(state.projects[0]),
             revision: 4,
             updatedAt: "2026-07-29T00:00:01.000Z",
         }) as never;
@@ -246,4 +245,16 @@ test("rehydration resumes dirty projects and pending deletions", async () => {
 
     expect(updateRequests).toEqual([1]);
     expect(deleteRequests).toEqual(["project-2"]);
+});
+
+test("recovering a lost create response does not overwrite a different remote snapshot", async () => {
+    const state = createState({ revision: 0, localVersion: 1 });
+    createHandler = async () => {
+        throw new Error("response lost");
+    };
+    fetchHandler = async (id) => ({ id, revision: 4, projectJson: JSON.stringify({ ...state.projects[0], title: "另一设备的作品" }) }) as never;
+    fireCreateProject(state.projects[0] as never, { getState: () => state } as never);
+    await waitFor(() => !state.projects[0].dirty || Boolean((state.projects[0] as Project & { syncConflict?: boolean }).syncConflict));
+    expect(state.projects[0]).toMatchObject({ title: "初始", revision: 0, dirty: true, syncConflict: true });
+    expect(updateRequests).toEqual([]);
 });

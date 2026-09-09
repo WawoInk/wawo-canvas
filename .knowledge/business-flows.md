@@ -166,7 +166,8 @@ Create/import in browser
 -> project-serialized PUT expectedRevision
 -> server CAS + new revision
 -> acknowledge if localVersion unchanged
--> retry dirty/tombstone with exponential backoff until acknowledged
+-> retry transient failures; pause on 409 and preserve the local replica
+-> explicit conflict resolution keeps a separate local copy and loads the remote project
 ```
 
 - **输入**：项目 JSON、项目 ID/name、后续编辑 patch。

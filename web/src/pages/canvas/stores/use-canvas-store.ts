@@ -10,7 +10,19 @@ import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "../types";
 import { useUserStore } from "@/stores/use-user-store";
 import { syncClient } from "@/services/sync-client";
-import { fireCreateProject, fireDeleteProjects, scheduleBackendSync, flushProjectSync, registerBeforeUnloadFlush, registerSyncDeltaHandler, resumePendingCanvasSync, detectDataChanges, clearSyncTimers, parseProjectJson } from "./canvas-sync";
+import {
+    fireCreateProject,
+    fireDeleteProjects,
+    scheduleBackendSync,
+    flushProjectSync,
+    registerBeforeUnloadFlush,
+    registerSyncDeltaHandler,
+    resumePendingCanvasSync,
+    detectDataChanges,
+    clearSyncTimers,
+    parseProjectJson,
+    fromServerProject,
+} from "./canvas-sync";
 import { normalizeCanvasProject } from "./canvas-replica";
 
 export type CanvasProject = {
@@ -19,8 +31,10 @@ export type CanvasProject = {
     createdAt: string;
     updatedAt: string;
     revision: number;
+    remoteRevision?: number;
     localVersion: number;
     dirty: boolean;
+    syncConflict?: boolean;
     nodes: CanvasNodeData[];
     connections: CanvasConnection[];
     chatSessions: CanvasAssistantSession[];
@@ -42,13 +56,14 @@ export type CanvasStore = {
     deleteProjects: (ids: string[]) => void;
     replaceProjects: (projects: CanvasProject[]) => void;
     clearProjects: () => void;
-    updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport" | "updatedAt" | "title">>) => Promise<void>;
+    updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport" | "updatedAt" | "title">>, expectedRemoteRevision?: number) => Promise<boolean>;
     waitForLocalPersistence: () => Promise<void>;
     acknowledgeProject: (id: string, localVersion: number, patch: Pick<CanvasProject, "revision" | "updatedAt">) => void;
     acknowledgeDelete: (id: string) => void;
     syncFromBackend: () => Promise<void>;
     fetchProjectFromBackend: (id: string) => Promise<CanvasProject | null>;
     flushProjectSync: (id: string) => void;
+    resolveProjectConflict: (id: string) => Promise<string | null>;
 };
 
 const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
@@ -147,7 +162,9 @@ export const useCanvasStore = create<CanvasStore>()(
                         const { fetchCanvasProject } = await import("@/services/api/canvas-projects");
                         const detail = await fetchCanvasProject(id);
                         const current = useUserStore.getState();
-                        if (!isCurrentSession(session, { token: current.token, userId: current.user?.id })) return null;
+                        if (!isCurrentSession(session, { token: current.token, userId: current.user?.id }) || get().tombstones.includes(id)) return null;
+                        const existing = get().openProject(id);
+                        if (existing && (existing.dirty || existing.revision >= detail.revision)) return existing;
                         const parsed = parseProjectJson(detail.projectJson);
                         const project: CanvasProject = normalizeCanvasProject({
                             ...parsed,
@@ -156,6 +173,8 @@ export const useCanvasStore = create<CanvasStore>()(
                             createdAt: detail.createdAt,
                             updatedAt: detail.updatedAt,
                             revision: detail.revision,
+                            remoteRevision: detail.revision,
+                            syncConflict: false,
                             localVersion: 0,
                             dirty: false,
                         })!;
@@ -175,9 +194,27 @@ export const useCanvasStore = create<CanvasStore>()(
 
                 flushProjectSync: (id: string) => flushProjectSync(id, { getState: get }),
 
+                resolveProjectConflict: async (id) => {
+                    const auth = useUserStore.getState();
+                    if (!auth.token || !auth.user?.id || !get().openProject(id)?.syncConflict) return null;
+                    const session = { token: auth.token, userId: auth.user.id };
+                    const { fetchCanvasProject } = await import("@/services/api/canvas-projects");
+                    const detail = await fetchCanvasProject(id);
+                    const current = useUserStore.getState();
+                    if (!isCurrentSession(session, { token: current.token, userId: current.user?.id })) return null;
+                    const local = get().openProject(id);
+                    if (!local?.syncConflict || get().tombstones.includes(id)) return null;
+                    const copy = { ...local, id: nanoid(), title: i18n.t("canvas.sync.localCopyTitle", { title: local.title }), revision: 0, remoteRevision: 0, localVersion: 1, dirty: true, syncConflict: false };
+                    // Both versions enter the same durable snapshot; never discard local work to resolve a conflict.
+                    set((state) => ({ projects: [copy, ...state.projects.map((project) => (project.id === id ? fromServerProject(detail, local) : project))] }));
+                    await waitForCanvasPersistence();
+                    if (isCurrentSession(session, { token: useUserStore.getState().token, userId: useUserStore.getState().user?.id })) fireCreateProject(copy, { getState: get });
+                    return copy.id;
+                },
+
                 renameProject: (id, title) =>
                     set((state) => ({
-                        projects: state.projects.map((project) => (project.id === id ? { ...project, title: title.trim() || project.title, localVersion: project.localVersion + 1, dirty: true } : project)),
+                        projects: state.projects.map((project) => (project.id === id && title.trim() && title.trim() !== project.title ? { ...project, title: title.trim(), localVersion: project.localVersion + 1, dirty: true } : project)),
                     })),
 
                 deleteProjects: (ids) => {
@@ -187,11 +224,18 @@ export const useCanvasStore = create<CanvasStore>()(
 
                 replaceProjects: (projects) => set({ projects }),
 
-                updateProject: async (id, patch) => {
+                updateProject: async (id, patch, expectedRemoteRevision) => {
+                    const project = get().openProject(id);
+                    if (!project || (expectedRemoteRevision !== undefined && expectedRemoteRevision !== (project.remoteRevision || 0))) return false;
+                    if (!Object.entries(patch).some(([key, value]) => JSON.stringify(project[key as keyof CanvasProject]) !== JSON.stringify(value))) {
+                        await waitForCanvasPersistence();
+                        return true;
+                    }
                     set((state) => ({
                         projects: state.projects.map((project) => (project.id === id ? { ...project, ...patch, localVersion: project.localVersion + 1, dirty: true } : project)),
                     }));
                     await waitForCanvasPersistence();
+                    return true;
                 },
 
                 waitForLocalPersistence: waitForCanvasPersistence,
@@ -241,6 +285,8 @@ export const useCanvasStore = create<CanvasStore>()(
                                     createdAt: d.createdAt || existing?.createdAt,
                                     updatedAt: d.updatedAt || existing?.updatedAt,
                                     revision: d.revision || existing?.revision,
+                                    remoteRevision: d.revision,
+                                    syncConflict: false,
                                     localVersion: existing?.localVersion || 0,
                                     dirty: false,
                                 })!,

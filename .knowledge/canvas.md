@@ -185,7 +185,10 @@ flowchart TB
 - 启动时先水合 IndexedDB，再执行全量项目拉取和 cursor delta。
 - 非 dirty 项目只有在远端 revision 更高时才替换。
 - dirty 项目拒绝远端 update/delete。
-- 409 会采用服务端当前 revision 并重新提交本地最新 Replica；当前产品不做多人字段级 merge，本地最近修改获胜。
+- 409 持久标记 `syncConflict` 并暂停该项目上传，不更换 revision 重传旧内容；刷新、online、visibilitychange 与 beforeunload 均不能绕过冲突。
+- 用户显式选择“保留本地副本并加载云端”时，同一账号 storage 快照同时保留新 ID 的本地副本与最新远端原项目，再同步副本；当前不做字段级多人 merge。
+- `remoteRevision` 标识最近接纳的远端内容版本；本设备保存确认只递增 `revision`，不改变 `remoteRevision`。页面私有 `useCanvasEditorReplica` 绑定显示快照，远端替换时重新还原，旧绑定写入由 Store 拒绝；视频结果提交同样携带绑定版本。
+- 无业务变化的保存不产生 dirty；初始化 URL 还原由编辑器显示层处理，不作为业务修改。创建响应丢失只在远端业务内容等于原提交快照时恢复 revision，否则暂停为冲突。
 - 当 delta 中存在比 dirty 项目更新的 revision 时，Canvas cursor 不前进，避免永久跳过冲突事实。
 
 ## 账户隔离

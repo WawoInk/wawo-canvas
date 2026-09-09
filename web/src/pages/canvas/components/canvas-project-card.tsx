@@ -54,6 +54,11 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
                         }}
                     >
                         <h2 className="truncate text-xl font-semibold">{project.title}</h2>
+                        {project.syncConflict && (
+                            <p role="status" className="mt-2 text-xs text-muted-foreground">
+                                {t("canvas.sync.badge")}
+                            </p>
+                        )}
                         <p className="mt-3 text-sm leading-6 text-muted-foreground">
                             {t("canvas.library.project.nodeCount", { count: project.nodes.length, value: formatNumber(project.nodes.length) })} ·{" "}
                             {t("canvas.library.project.connectionCount", { count: project.connections.length, value: formatNumber(project.connections.length) })}
