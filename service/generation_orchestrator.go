@@ -502,16 +502,25 @@ func executeGeneration(ctx context.Context, task model.GenerationTask, profile m
 		ref, err = adapter.Create(ctx, AdapterCreateRequest{Profile: profile, Channel: channel, Intent: intent, References: references, Metadata: metadata, CallbackURL: callbackURL})
 	}
 	persistGenerationAudit(task.ID, ref.Audit)
-	if err != nil {
+	if err != nil && task.UpstreamTaskID == "" {
 		failGenerationTaskWithError(task, profile, ref.Error, err)
 		return
 	}
-	updates := map[string]any{"upstream_task_id": ref.ID, "status": string(model.TaskStatusRunning), "updated_at": time.Now().UTC().Format(time.RFC3339Nano)}
-	changed, updateErr := repository.TransitionGenerationTask(task.ID, []model.TaskStatus{model.TaskStatusRunning}, updates)
-	if updateErr != nil || !changed {
-		return
+	if task.UpstreamTaskID == "" {
+		updates := map[string]any{"upstream_task_id": ref.ID, "status": string(model.TaskStatusRunning), "updated_at": time.Now().UTC().Format(time.RFC3339Nano)}
+		changed, updateErr := repository.TransitionGenerationTask(task.ID, []model.TaskStatus{model.TaskStatusRunning}, updates)
+		if updateErr != nil || !changed {
+			return
+		}
+		task.UpstreamTaskID = ref.ID
+		_ = appendGenerationTaskEvent(task.ID, "submit", ref.ID)
+	} else if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		_ = appendGenerationTaskEvent(task.ID, "retry", sanitizeGenerationAuditJSON(strconv.Quote(err.Error())))
+		ref = ProviderTaskRef{ID: task.UpstreamTaskID, Status: model.TaskStatusRunning}
 	}
-	_ = appendGenerationTaskEvent(task.ID, "submit", ref.ID)
 	deadline := time.Now().Add(generationTaskTimeout)
 	if createdAt, parseErr := time.Parse(time.RFC3339Nano, task.CreatedAt); parseErr == nil {
 		deadline = createdAt.Add(generationTaskTimeout)
@@ -545,13 +554,17 @@ func executeGeneration(ctx context.Context, task model.GenerationTask, profile m
 		}
 		attempt++
 		_ = appendGenerationTaskEvent(task.ID, "poll", fmt.Sprint(attempt))
-		ref, err = adapter.Poll(ctx, channel, ref.ID)
-		persistGenerationAudit(task.ID, ref.Audit)
+		nextRef, err := adapter.Poll(ctx, channel, task.UpstreamTaskID)
+		persistGenerationAudit(task.ID, nextRef.Audit)
 		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
 			log.Printf("first-party generation poll failed: task=%s err=%v", task.ID, err)
 			_ = appendGenerationTaskEvent(task.ID, "retry", sanitizeGenerationAuditJSON(strconv.Quote(err.Error())))
 			continue
 		}
+		ref = nextRef
 		if !isTerminalGenerationStatus(ref.Status) {
 			_ = updateGenerationProgress(task.ID, ref.Status, "poll")
 		}
