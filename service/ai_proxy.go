@@ -455,7 +455,11 @@ func scheduleAsyncImageTaskTimeout(taskID string, timeout time.Duration) {
 // resolveUpstreamRequest 按渠道协议构造上游请求。
 func resolveUpstreamRequest(channel model.ModelChannel, modelName, path string, body []byte, contentType string) upstreamRequest {
 	if channel.Protocol == "gemini" {
-		if strings.HasPrefix(path, "/async/images/") {
+		var input struct {
+			Contents json.RawMessage `json:"contents"`
+		}
+		nativeImage := strings.HasPrefix(path, "/images/") && json.Unmarshal(body, &input) == nil && len(input.Contents) > 0
+		if strings.HasPrefix(path, "/async/images/") || (strings.HasPrefix(path, "/images/") && !nativeImage) {
 			converted, err := geminiImageRequest(body, modelName, contentType)
 			if err != nil {
 				return upstreamRequest{Err: err}
