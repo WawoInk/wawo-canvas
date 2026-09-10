@@ -21,24 +21,27 @@
 
 ## Git Workflow Rules
 
-Before starting any development task, you MUST first determine the task type and select the correct parent branch:
+`main` is the default/main branch. Keep `main`, `dev`, `fix`, `refactor`, and `hotfix` as long-lived branches; never delete them or change the remote default branch away from `main`.
 
-- **Feature development** → `dev`
+Before starting any development task, select the correct parent branch:
+
+- **Feature development and routine documentation/rule maintenance** → `dev`
 - **Bug fixes for issues existing in `main`** → `fix`
 - **Planned or large-scale refactoring** → `refactor`
-- **Urgent production hotfixes** → `main`
+- **Urgent production hotfixes** → `hotfix`
 
-You MUST NOT perform actual development directly on `main`, `dev`, `fix`, or `refactor`. All code changes must be made in a dedicated task branch created from the appropriate parent branch.
+All changes must be made on a dedicated task branch, never directly on a long-lived branch. Before creating it:
 
-Before creating a new task branch, you MUST:
+1. Fetch `origin` and compare the selected local parent with `origin/<parent>`; do not use `origin/main` or stale remote-tracking refs as a substitute.
+2. If the parent is behind, fast-forward it to `origin/<parent>`. If it is ahead or diverged, preserve all local commits and reconcile the histories through review and a normal, authorized push; never discard commits or force-push to make them match. If fetching, permissions, or conflicts prevent synchronization, stop and report the blocker.
+3. Confirm the local parent and `origin/<parent>` point to the same commit. If the parent is checked out in another worktree, synchronize it there without overwriting uncommitted work.
+4. Create a new `codex/<task-name>` branch from that synchronized parent, then begin development. Do not branch from an unverified current branch or reuse a task branch for unrelated work.
 
-1. Identify the task type and corresponding parent branch.
-2. Fetch and synchronize the parent branch with its latest remote state.
-3. Ensure the local parent branch is up to date.
-4. Create a new dedicated task branch from the latest version of that parent branch.
-5. Only then begin development.
+After completing a task:
 
-Do NOT create a new branch from the current branch without first verifying that it is the correct and up-to-date parent branch. Do NOT reuse the same task branch for unrelated tasks. After completing a task, commit the changes and merge the task branch back into its corresponding parent branch through the appropriate review and validation process.
+1. Commit the task changes and merge the task branch back into its corresponding parent branch through the appropriate review and validation process. Re-fetch `origin` and reconcile any new parent-branch changes before merging; follow the project's restrictions on running tests/builds and report any pending validation.
+2. Only after verifying that the task branch has been successfully merged, switch off it and delete the local task branch with `git branch -d`. If a worktree holds it, safely switch that worktree to another branch or detached HEAD first; preserve its files and uncommitted work. Never force-delete an unmerged branch.
+3. If the task branch was published, delete its remote counterpart only after confirming the merge into the remote parent and authorization for remote deletion. Keep unfinished task branches until their work is safely merged.
 
 ## 后端规范
 
