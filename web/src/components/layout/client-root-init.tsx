@@ -7,7 +7,8 @@ import { App } from "antd";
 import { useTranslation } from "react-i18next";
 
 import i18n, { appPathname, localeFromPathname, resolveLanguage } from "@/i18n";
-import { createModelChannel, useConfigStore } from "@/stores/use-config-store";
+import { useConfigStore } from "@/stores/use-config-store";
+import { importChannelCredentials, readChannelImportUrl } from "./channel-url-import";
 import { useUserStore } from "@/stores/use-user-store";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { syncScheduler } from "@/services/sync-scheduler";
@@ -20,15 +21,14 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     const { message } = App.useApp();
     const { t } = useTranslation();
     const navigate = useNavigate();
-    const handledConfigParams = useRef(false);
-    const { pathname } = useLocation();
+    const pendingConfigParams = useRef<ReturnType<typeof readChannelImportUrl> | undefined>(undefined);
+    const { pathname, state: locationState } = useLocation();
     const appPath = appPathname(pathname);
     const hydrateUser = useUserStore((state) => state.hydrateUser);
     const userId = useUserStore((state) => state.user?.id);
     const loadPublicSettings = useConfigStore((state) => state.loadPublicSettings);
+    const configHydrated = useConfigStore((state) => state.configHydrated);
     const publicSettings = useConfigStore((state) => state.publicSettings);
-    const updateConfig = useConfigStore((state) => state.updateConfig);
-    const config = useConfigStore((state) => state.config);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const isLoginPage = appPath === "/login" || appPath === "/admin/login";
 
@@ -102,28 +102,24 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     }, [navigate]);
 
     useEffect(() => {
-        if (handledConfigParams.current) return;
-        const searchParams = new URLSearchParams(window.location.search);
-        const baseUrl = searchParams.get("baseUrl") || searchParams.get("baseurl");
-        const apiKey = searchParams.get("apiKey") || searchParams.get("apikey");
-        if (!baseUrl && !apiKey) return;
-        if (!publicSettings) return;
-        handledConfigParams.current = true;
-        searchParams.delete("baseUrl");
-        searchParams.delete("baseurl");
-        searchParams.delete("apiKey");
-        searchParams.delete("apikey");
-        window.history.replaceState(null, "", `${window.location.pathname}${searchParams.size ? `?${searchParams}` : ""}${window.location.hash}`);
-        if (!publicSettings.modelChannel.allowCustomChannel) {
-            openConfigDialog(false);
-            message.error(t("errors.customChannelDisabled"));
-            return;
+        if (pendingConfigParams.current === undefined) {
+            pendingConfigParams.current = readChannelImportUrl((url) => {
+                void navigate(url, { replace: true, state: locationState });
+            });
         }
-        updateConfig("channelMode", "local");
-        if (baseUrl) updateConfig("baseUrl", baseUrl);
-        if (apiKey) updateConfig("apiKey", apiKey);
-        openConfigDialog(false);
-    }, [message, openConfigDialog, publicSettings, t, updateConfig]);
+        if (!pendingConfigParams.current) return;
+        const result = importChannelCredentials(pendingConfigParams.current);
+        if (result.status === "pending") return;
+        pendingConfigParams.current = null;
+        if (result.status === "disabled") message.error(t("errors.customChannelDisabled"));
+        else if (result.status === "missing-base-url") message.error(t("config.importedChannelBaseUrlRequired", { defaultValue: "导入渠道需要提供 Base URL" }));
+        else if (result.status === "invalid-base-url") message.error(t("config.importedChannelBaseUrlInvalid", { defaultValue: "渠道 Base URL 无效，请使用 HTTP 或 HTTPS 地址" }));
+        else {
+            openConfigDialog(false);
+            if (result.status === "created") message.success(t("config.importedChannelCreated", { name: result.channelName, defaultValue: "已新增渠道：{{name}}" }));
+            else message.success(t("config.importedChannelUpdated", { name: result.channelName, defaultValue: "已更新渠道：{{name}}" }));
+        }
+    }, [configHydrated, locationState, message, navigate, openConfigDialog, publicSettings, t]);
 
     return <>{children}</>;
 }

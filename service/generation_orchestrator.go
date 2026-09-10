@@ -80,6 +80,17 @@ func CreateGeneration(ctx context.Context, user model.AuthUser, command model.Ge
 		return model.FirstPartyGenerationTask{}, err
 	}
 	command.Intent.Settings = settings
+	if settings["videoMode"] == "frames" {
+		if len(command.Intent.References.Images) > 2 {
+			return model.FirstPartyGenerationTask{}, invalidCommand("intent.references.images", "首尾帧模式最多支持两张图片", "")
+		}
+		if len(command.Intent.References.Videos) > 0 {
+			return model.FirstPartyGenerationTask{}, invalidCommand("intent.references.videos", "首尾帧模式不支持参考视频", "")
+		}
+		if len(command.Intent.References.Audios) > 0 {
+			return model.FirstPartyGenerationTask{}, invalidCommand("intent.references.audios", "首尾帧模式不支持参考音频", "")
+		}
+	}
 	if err := validateGenerationReferences(user.ID, command.Intent.References); err != nil {
 		return model.FirstPartyGenerationTask{}, err
 	}

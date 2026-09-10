@@ -35,6 +35,7 @@ export type AiConfig = {
     audioFormat: string;
     audioSpeed: string;
     audioInstructions: string;
+    videoMode: "reference" | "frames";
     videoSeconds: string;
     vquality: string;
     videoGenerateAudio: string;
@@ -95,6 +96,7 @@ export const defaultConfig: AiConfig = {
     audioFormat: "mp3",
     audioSpeed: "1",
     audioInstructions: "",
+    videoMode: "reference",
     videoSeconds: "6",
     vquality: "720",
     videoGenerateAudio: "true",
@@ -321,6 +323,7 @@ export const useConfigStore = create<ConfigStore>()(
                         audioSpeed: config.audioSpeed || defaultConfig.audioSpeed,
                         audioInstructions: config.audioInstructions || "",
                         imageRequestFormats: Array.isArray(persistedConfig.imageRequestFormats) ? config.imageRequestFormats : [],
+                        videoMode: config.videoMode === "frames" ? "frames" : "reference",
                         videoSeconds: config.videoSeconds || "6",
                         vquality: config.vquality || "720",
                         videoGenerateAudio: config.videoGenerateAudio || "true",

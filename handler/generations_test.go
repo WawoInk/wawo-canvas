@@ -47,8 +47,11 @@ func TestModelProfilesExposeVideoAdaptersWithoutSecrets(t *testing.T) {
 		t.Fatalf("intents = %#v, want video.generate", profile.Intents)
 	}
 	settings := profile.Capabilities.Settings
-	if len(settings) != 5 || settings["aspectRatio"].Default != "adaptive" || settings["resolution"].Default != "720p" || settings["durationSeconds"].Default != float64(-1) || settings["generateAudio"].Default != true || settings["watermark"].Default != false {
+	if len(settings) != 6 || settings["aspectRatio"].Default != "adaptive" || settings["resolution"].Default != "720p" || settings["durationSeconds"].Default != float64(-1) || settings["generateAudio"].Default != true || settings["watermark"].Default != false {
 		t.Fatalf("settings = %#v", settings)
+	}
+	if mode := settings["videoMode"]; mode.Type != model.GenerationSettingEnum || mode.Default != "reference" || !slices.Equal(mode.Values, []string{"reference", "frames"}) {
+		t.Fatalf("videoMode = %#v", mode)
 	}
 	if profile.Capabilities.Cancellation || len(profile.Capabilities.Completion) != 1 || profile.Capabilities.Completion[0] != "poll" {
 		t.Fatalf("lifecycle capabilities = %#v", profile.Capabilities)
@@ -72,6 +75,9 @@ func TestModelProfilesExposeVideoAdaptersWithoutSecrets(t *testing.T) {
 	}
 	if resolutions := sora.Capabilities.Settings["resolution"].Values; !slices.Equal(resolutions, []string{"480p", "720p", "1080p"}) {
 		t.Fatalf("sora resolutions = %#v", resolutions)
+	}
+	if _, exists := sora.Capabilities.Settings["videoMode"]; exists {
+		t.Fatal("Sora must not advertise videoMode")
 	}
 	payload := res.Body.String()
 	for _, secret := range []string{"apiKey", "baseUrl", "channelId", "upstreamModel"} {

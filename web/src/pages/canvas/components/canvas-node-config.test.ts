@@ -20,6 +20,7 @@ const defaults: AiConfig = {
     audioFormat: "mp3",
     audioSpeed: "1",
     audioInstructions: "",
+    videoMode: "reference",
     videoSeconds: "6",
     vquality: "720",
     videoGenerateAudio: "true",
@@ -72,7 +73,7 @@ test("buildNodeConfig normalizes hidden image sizes without opening settings", (
         node({ model: "image-2k", size: "3840x2160" }),
         "image",
     );
-    assert.equal(config.size, "3:2");
+    assert.equal(config.size, "1536x864");
 });
 
 test("buildNodeConfig maps media metadata to effective config", () => {
@@ -105,4 +106,11 @@ test("config patches map setting keys to node metadata", () => {
     assert.deepEqual(videoConfigPatch("vquality", "1080"), { vquality: "1080" });
     assert.deepEqual(audioConfigPatch("audioVoice", "nova"), { audioVoice: "nova" });
     assert.deepEqual(audioConfigPatch("audioInstructions", "calm"), { audioInstructions: "calm" });
+});
+
+test("video mode belongs to each node and survives setting patches", () => {
+    const metadata = videoConfigPatch("videoMode", "frames");
+    const config = buildNodeConfig(defaults, defaults, node(metadata), "video");
+    assert.equal(config.videoMode, "frames");
+    assert.equal(buildNodeConfig(defaults, defaults, node({}), "video").videoMode, "reference");
 });

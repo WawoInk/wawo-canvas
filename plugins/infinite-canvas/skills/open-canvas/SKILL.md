@@ -9,9 +9,11 @@ description: 打开 Infinite Canvas 网页画布并自动连接本地 Canvas Age
 
 ## 默认打开方式
 
-- 新建画布：`<画布网页地址>/canvas?mode=new&agentUrl=<Local URL>&agentToken=<Connect token>`
-- 最近画布：`<画布网页地址>/canvas?mode=recent&agentUrl=<Local URL>&agentToken=<Connect token>`
-- 自己选择：`<画布网页地址>/canvas?mode=choose&agentUrl=<Local URL>&agentToken=<Connect token>`
+- 新建画布：`<画布网页地址>/canvas?mode=new#agentUrl=<URL编码后的Local URL>&agentToken=<URL编码后的Connect token>`
+- 最近画布：`<画布网页地址>/canvas?mode=recent#agentUrl=<URL编码后的Local URL>&agentToken=<URL编码后的Connect token>`
+- 自己选择：`<画布网页地址>/canvas?mode=choose#agentUrl=<URL编码后的Local URL>&agentToken=<URL编码后的Connect token>`
+
+`mode` 放在 query；`agentUrl`、`agentToken` 只放在 `#` 后的 fragment，并分别使用 `encodeURIComponent` 编码值。不要把凭据放进 query、登录跳转参数或日志；进入具体画布后网页会替换当前历史记录并清除凭据。
 
 默认打开新建本地画布；只有用户明确要求线上地址、最近画布或自己选择时，才改用对应模式。
 
@@ -23,7 +25,7 @@ description: 打开 Infinite Canvas 网页画布并自动连接本地 Canvas Age
 4. 如果没有当前仓库的服务，启动本地画布开发服务，默认在 `web/` 下运行 `bun run dev`；若默认端口被其他项目占用，改用空闲端口启动，例如 `bunx next dev --webpack -H 0.0.0.0 -p <空闲端口>`。不要执行构建或测试。
 5. 启动本地 Canvas Agent，必须带上第 3/4 步得到的真实画布地址：`CANVAS_URL=<真实画布地址> npx -y @basketikun/canvas-agent`。如果 Agent 已经在运行，则读取 `~/.infinite-canvas/canvas-agent.json` 或 `/config` 获取 `Local URL` 和 token。
 6. 读取 Agent 输出或配置中的 `Local URL` 和 `Connect token`，不要让用户手动复制。
-7. 不走本地 Agent 的 `/open` 跳转；直接构造并打开最终 URL：`<真实画布地址>/canvas?mode=new&agentUrl=<Local URL>&agentToken=<Connect token>`。
+7. 不走本地 Agent 的 `/open` 跳转；直接构造并打开最终 URL：`<真实画布地址>/canvas?mode=new#agentUrl=<URL编码后的Local URL>&agentToken=<URL编码后的Connect token>`。
 8. 画布网页会自动新建具体画布、打开本机 Agent 面板并连接本地 Agent；不要用浏览器点击新建画布。
 9. 打开后再使用 `canvas_get_state` 检查画布是否已经连接；如果尚未连接，等待片刻再检查，不要改用线上站点，除非用户明确要求。
 

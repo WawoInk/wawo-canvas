@@ -891,7 +891,8 @@
         },
         "count": "Image Count",
         "imageCount_one": "{{value}} image",
-        "imageCount_other": "{{value}} images"
+        "imageCount_other": "{{value}} images",
+        "resolution": "Resolution"
     },
     "videoWorkbench": {
         "title": "Video Studio",
@@ -1030,7 +1031,12 @@
             "tall": "Tall",
             "adaptive": "Adaptive"
         },
-        "autoMatch": "Auto"
+        "autoMatch": "Auto",
+        "mode": "Generation mode",
+        "modes": {
+            "frames": "First / last frame",
+            "reference": "Multimodal references"
+        }
     },
     "audioSettings": {
         "title": "Audio Settings",
@@ -1168,7 +1174,11 @@
         "remote": {
             "forced": "The administrator requires the managed backend channel. All generation requests use the backend proxy and consume credits; custom channels are unavailable.",
             "active": "Using the managed remote channel. Generation requests use the backend proxy and consume credits."
-        }
+        },
+        "importedChannelBaseUrlRequired": "A Base URL is required to import a channel",
+        "importedChannelBaseUrlInvalid": "Invalid channel Base URL. Use an HTTP or HTTPS address",
+        "importedChannelCreated": "Channel added: {{name}}",
+        "importedChannelUpdated": "Channel updated: {{name}}"
     },
     "modelPicker": {
         "placeholder": "Select a model",
@@ -2079,7 +2089,8 @@
             "asyncEditFailed": "Failed to create the asynchronous image edit task",
             "taskQueryFailed": "Failed to query the image task",
             "taskSucceededWithoutImage": "The image task succeeded but returned no image",
-            "readModelsFailed": "Failed to load models"
+            "readModelsFailed": "Failed to load models",
+            "geminiUnsupportedRatio": "Gemini does not support the selected image aspect ratio. Choose another ratio."
         },
         "video": {
             "timeout": "Video generation timed out. Try again later.",

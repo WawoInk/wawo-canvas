@@ -80,6 +80,7 @@ func GenerationProfiles() []model.GenerationProfile {
 func seedanceCapabilities() model.GenerationCapabilities {
 	return model.GenerationCapabilities{
 		Settings: map[string]model.GenerationSettingDefinition{
+			"videoMode":       {Type: model.GenerationSettingEnum, Values: []string{"reference", "frames"}, Default: "reference"},
 			"aspectRatio":     {Type: model.GenerationSettingEnum, Values: []string{"adaptive", "16:9", "9:16", "1:1", "4:3", "3:4", "21:9"}, Default: "adaptive"},
 			"resolution":      {Type: model.GenerationSettingEnum, Values: []string{"480p", "720p", "1080p"}, Default: "720p"},
 			"durationSeconds": {Type: model.GenerationSettingDuration, Min: intPtr(4), Max: intPtr(15), AllowAuto: true, Default: -1},

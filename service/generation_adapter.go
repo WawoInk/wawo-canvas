@@ -86,8 +86,15 @@ func NewSoraVideosV1Adapter(client *http.Client) SoraVideosV1Adapter {
 
 func (a SeedanceContentsV1Adapter) Create(ctx context.Context, req AdapterCreateRequest) (ProviderTaskRef, error) {
 	content := []map[string]any{{"type": "text", "text": req.Intent.Prompt}}
-	for _, item := range req.References.Images {
-		content = append(content, map[string]any{"type": "image_url", "image_url": map[string]string{"url": item}, "role": "reference_image"})
+	for index, item := range req.References.Images {
+		role := "reference_image"
+		if generationSetting(req, "videoMode", "reference") == "frames" {
+			role = "first_frame"
+			if index > 0 {
+				role = "last_frame"
+			}
+		}
+		content = append(content, map[string]any{"type": "image_url", "image_url": map[string]string{"url": item}, "role": role})
 	}
 	for _, item := range req.References.Videos {
 		content = append(content, map[string]any{"type": "video_url", "video_url": map[string]string{"url": item}, "role": "reference_video"})

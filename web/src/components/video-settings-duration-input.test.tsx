@@ -14,7 +14,7 @@ const { defaultConfig } = await import("@/stores/use-config-store");
 const { useUserStore } = await import("@/stores/use-user-store");
 const { VideoSettingsPanel } = await import("./video-settings-panel");
 
-test("video duration input keeps a multi-digit draft and commits within the Profile maximum", async () => {
+test("video duration slider retains two-digit selections within the Profile maximum", async () => {
     const previousRequest = axios.request;
     const previousUserState = useUserStore.getState();
     axios.request = (async (config: { url?: string }) => {
@@ -69,24 +69,18 @@ test("video duration input keeps a multi-digit draft and commits within the Prof
 
     try {
         await act(async () => root.render(createElement(Harness)));
-        await waitFor(() => container.querySelector<HTMLInputElement>('input[type="number"]')?.max === "30");
+        await waitFor(() => container.querySelector<HTMLInputElement>('input[type="range"]')?.max === "30");
 
-        let input = required(container.querySelector<HTMLInputElement>('input[type="number"]'));
-        await act(async () => input.focus());
-        await act(async () => setInputValue(input, ""));
-        await act(async () => setInputValue(input, "2"));
-        input = required(container.querySelector<HTMLInputElement>('input[type="number"]'));
-        await act(async () => setInputValue(input, `${input.value}4`));
-        await act(async () => input.blur());
+        const input = required(container.querySelector<HTMLInputElement>('input[type="range"]'));
+        assert.equal(input.min, "4");
+        assert.equal(input.max, "30");
+        assert.equal(input.step, "1");
+        await act(async () => setInputValue(input, "24"));
         assert.equal(latestSeconds, "24");
-        assert.equal(required(container.querySelector<HTMLInputElement>('input[type="number"]')).value, "24");
-
-        input = required(container.querySelector<HTMLInputElement>('input[type="number"]'));
-        await act(async () => input.focus());
-        await act(async () => setInputValue(input, "31"));
-        await act(async () => input.blur());
+        assert.equal(input.value, "24");
+        await act(async () => setInputValue(input, "30"));
         assert.equal(latestSeconds, "30");
-        assert.equal(required(container.querySelector<HTMLInputElement>('input[type="number"]')).value, "30");
+        assert.equal(input.value, "30");
     } finally {
         await act(async () => root.unmount());
         container.remove();

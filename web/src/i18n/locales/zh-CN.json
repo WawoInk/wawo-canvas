@@ -891,7 +891,8 @@
         },
         "count": "生成张数",
         "imageCount_one": "{{value}} 张",
-        "imageCount_other": "{{value}} 张"
+        "imageCount_other": "{{value}} 张",
+        "resolution": "分辨率"
     },
     "videoWorkbench": {
         "title": "视频创作台",
@@ -1030,7 +1031,12 @@
             "tall": "长图",
             "adaptive": "自适应"
         },
-        "autoMatch": "自动匹配"
+        "autoMatch": "自动匹配",
+        "mode": "生成模式",
+        "modes": {
+            "frames": "首尾帧",
+            "reference": "全能参考"
+        }
     },
     "audioSettings": {
         "title": "音频设置",
@@ -1168,7 +1174,11 @@
         "remote": {
             "forced": "管理员已强制使用后台渠道，所有生成请求将由后台代理并消耗算力点，无法自行配置渠道",
             "active": "正在使用后台配置的远程渠道，生成请求将由后台代理并消耗算力点"
-        }
+        },
+        "importedChannelBaseUrlRequired": "导入渠道需要提供 Base URL",
+        "importedChannelBaseUrlInvalid": "渠道 Base URL 无效，请使用 HTTP 或 HTTPS 地址",
+        "importedChannelCreated": "已新增渠道：{{name}}",
+        "importedChannelUpdated": "已更新渠道：{{name}}"
     },
     "modelPicker": {
         "placeholder": "选择模型",
@@ -2079,7 +2089,8 @@
             "asyncEditFailed": "图片异步编辑任务创建失败",
             "taskQueryFailed": "图片任务查询失败",
             "taskSucceededWithoutImage": "图片任务成功但没有返回图片",
-            "readModelsFailed": "读取模型失败"
+            "readModelsFailed": "读取模型失败",
+            "geminiUnsupportedRatio": "Gemini 不支持所选图片比例，请更换比例"
         },
         "video": {
             "timeout": "视频生成超时，请稍后重试",

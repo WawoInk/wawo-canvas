@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { App, Button } from "antd";
 import { Download, FileUp, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +10,7 @@ import { formatNumber } from "@/i18n/formatters";
 import { readZip } from "@/lib/zip";
 import { CanvasDeleteProjectsDialog } from "./components/canvas-delete-projects-dialog";
 import { CanvasProjectCard } from "./components/canvas-project-card";
+import { hasAgentUrlBootstrap } from "./components/canvas-agent-url-bootstrap";
 import type { CanvasExportFile } from "./export-types";
 import { useCanvasStore } from "./stores/use-canvas-store";
 import { useCanvasUiStore } from "./stores/use-canvas-ui-store";
@@ -32,6 +33,7 @@ function CanvasPage() {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
+    const { hash } = useLocation();
     const inputRef = useRef<HTMLInputElement>(null);
     const autoOpenRef = useRef(false);
     const hydrated = useCanvasStore((state) => state.hydrated);
@@ -47,7 +49,7 @@ function CanvasPage() {
     const agentMode = mode === "new" || mode === "recent" || mode === "choose";
     const agentQuery = agentMode ? `?${searchParams.toString()}` : "";
     const enterProject = (id: string) => {
-        navigate(`/canvas/${id}${agentQuery}`);
+        navigate(`/canvas/${id}${agentQuery}${hash}`, { replace: hasAgentUrlBootstrap(hash) });
     };
     const createAndEnter = () => enterProject(createProject(t("canvas.library.project.defaultTitle", { index: formatNumber(projects.length + 1, { useGrouping: false }) })));
     const importCanvas = async (file?: File) => {

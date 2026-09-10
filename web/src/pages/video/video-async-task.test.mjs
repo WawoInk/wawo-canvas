@@ -23,11 +23,17 @@ const standardProfile = {
 };
 
 test("video workbench compiles ordinary video duration from the configured Profile", () => {
-    const profile = { ...standardProfile, capabilities: { ...standardProfile.capabilities, settings: { ...standardProfile.capabilities.settings, durationSeconds: { ...standardProfile.capabilities.settings.durationSeconds, max: 30 } } } };
+    const profile = {
+        ...standardProfile,
+        capabilities: {
+            ...standardProfile.capabilities,
+            settings: { ...standardProfile.capabilities.settings, videoMode: { type: "enum", values: ["reference", "frames"], default: "reference" }, durationSeconds: { ...standardProfile.capabilities.settings.durationSeconds, max: 30 } },
+        },
+    };
     const input = {
         clientRequestId: "video-duration-24",
         profile,
-        config: { ...defaultConfig, channelMode: "remote", model: profile.id, videoModel: profile.id, videoSeconds: "24" },
+        config: { ...defaultConfig, channelMode: "remote", model: profile.id, videoModel: profile.id, videoSeconds: "24", videoMode: "frames" },
         prompt: "make a launch film",
         references: [],
         videoReferences: [],
@@ -35,6 +41,7 @@ test("video workbench compiles ordinary video duration from the configured Profi
     };
 
     assert.equal(buildVideoWorkbenchGenerationCommand(input).intent.settings.durationSeconds, 24);
+    assert.equal(buildVideoWorkbenchGenerationCommand(input).intent.settings.videoMode, "frames");
     assert.equal(
         buildVideoWorkbenchGenerationCommand({
             ...input,

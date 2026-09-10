@@ -10,6 +10,8 @@ test("normalizes legacy persisted projects", () => {
         createdAt: "",
         updatedAt: "",
         revision: 0,
+        remoteRevision: 0,
+        syncConflict: false,
         localVersion: 0,
         dirty: false,
         nodes: [],

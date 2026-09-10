@@ -61,12 +61,6 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 	}
 	taskType := DetermineTaskType(path)
 	source := DetermineSource(r)
-	auditBody := func(body []byte) []byte {
-		if taskType == model.TaskTypeChat {
-			return []byte(`{"omitted":"chat content"}`)
-		}
-		return []byte(sanitizeGenerationAuditJSON(string(body)))
-	}
 	public, err := PublicSettings()
 	if err != nil || !publicModelAllowed(public, taskType, modelName) {
 		proxyAILogf("AI proxy model not exposed: model=%s taskType=%s err=%v", modelName, taskType, err)
@@ -91,7 +85,20 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		proxyFail(w, "AI 接口请求失败")
 		return
 	}
+	auditBody := func(body []byte) []byte {
+		if taskType == model.TaskTypeChat {
+			return []byte(`{"omitted":"chat content"}`)
+		}
+		if channel.Protocol == "gemini" && strings.HasPrefix(path, "/async/images/") {
+			body = geminiImageAudit(body)
+		}
+		return []byte(sanitizeGenerationAuditJSON(string(body)))
+	}
 	resolved := resolveUpstreamRequest(channel, modelName, path, body, contentType)
+	if resolved.Err != nil {
+		proxyFail(w, resolved.Err.Error())
+		return
+	}
 	if resolved.URL == "" {
 		proxyFail(w, "AI 接口请求失败")
 		return
@@ -185,6 +192,7 @@ func ProxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 				proxyAILogf("AI proxy update usage metadata failed: task=%s err=%v", genTaskID, err)
 			}
 		},
+		resolved.NormalizeResponse,
 	)
 }
 
@@ -315,9 +323,11 @@ func ProxyAIGetRequest(w http.ResponseWriter, r *http.Request, path string) {
 }
 
 type upstreamRequest struct {
-	URL     string
-	Headers http.Header
-	Body    []byte
+	URL               string
+	Headers           http.Header
+	Body              []byte
+	NormalizeResponse func([]byte) []byte
+	Err               error
 }
 
 func asyncImageTaskForPoll(r *http.Request, path, modelName string) (model.GenerationTask, bool) {
@@ -445,6 +455,15 @@ func scheduleAsyncImageTaskTimeout(taskID string, timeout time.Duration) {
 // resolveUpstreamRequest 按渠道协议构造上游请求。
 func resolveUpstreamRequest(channel model.ModelChannel, modelName, path string, body []byte, contentType string) upstreamRequest {
 	if channel.Protocol == "gemini" {
+		if strings.HasPrefix(path, "/async/images/") {
+			converted, err := geminiImageRequest(body, modelName, contentType)
+			if err != nil {
+				return upstreamRequest{Err: err}
+			}
+			resolved := buildGeminiUpstream(channel, modelName, path, converted)
+			resolved.NormalizeResponse = geminiImageResponse
+			return resolved
+		}
 		return buildGeminiUpstream(channel, modelName, path, body)
 	}
 	if channel.Protocol == "xvanai" {
@@ -604,7 +623,7 @@ func redactUpstreamURL(rawURL string) string {
 // onFailure — 上游返回错误或网络异常时调用（退款回调）。
 // onSuccess — 上游成功时调用，流式响应不传入响应体。
 // onFailureDetail — 上游失败时调用，传入错误码与脱敏错误信息。
-func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func(), onSuccess func(respBody []byte, respHeaders string), onFailureDetail func(errCode string, errMsg string, rawError string), onStreamUsage func(*compatibilityUsage)) {
+func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure func(), onSuccess func(respBody []byte, respHeaders string), onFailureDetail func(errCode string, errMsg string, rawError string), onStreamUsage func(*compatibilityUsage), normalizeResponse ...func([]byte) []byte) {
 	response, err := aiProxyHTTPClient.Do(request)
 	if err != nil {
 		safeURL := redactGenerationAuditString(request.URL.String())
@@ -629,6 +648,9 @@ func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure
 
 	if response.StatusCode >= http.StatusBadRequest {
 		respBody, _ := io.ReadAll(response.Body)
+		if len(normalizeResponse) > 0 && normalizeResponse[0] != nil {
+			respBody = geminiImageAudit(respBody)
+		}
 		auditBody := sanitizeGenerationAuditJSON(string(respBody))
 		log.Printf("AI upstream error: url=%s status=%d", redactGenerationAuditString(request.URL.String()), response.StatusCode)
 		code := fmt.Sprintf("UPSTREAM_%d", response.StatusCode)
@@ -753,6 +775,9 @@ func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure
 		}
 		proxyFail(w, "AI 接口请求失败")
 		return
+	}
+	if len(normalizeResponse) > 0 && normalizeResponse[0] != nil {
+		respBody = normalizeResponse[0](respBody)
 	}
 	w.WriteHeader(response.StatusCode)
 	_, _ = w.Write(respBody)

@@ -40,6 +40,7 @@ export type CanvasNodeMetadata = {
     quality?: string;
     background?: "" | "transparent";
     count?: number;
+    videoMode?: "reference" | "frames";
     seconds?: string;
     vquality?: string;
     generateAudio?: string;

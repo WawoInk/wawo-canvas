@@ -3,6 +3,7 @@ import { saveAs } from "file-saver";
 import i18n from "@/i18n";
 import { createZip, readZip } from "@/lib/zip";
 import { getMediaBlob, setMediaBlob, getImageBlob, setImageBlob } from "@/services/blob-storage";
+import { readPlatformFileBlob } from "@/services/api/files";
 import type { Asset } from "@/stores/use-asset-store";
 
 type AssetExportFile = {
@@ -19,6 +20,18 @@ type AssetExportItem = {
     mimeType: string;
     bytes: number;
 };
+
+export async function readAssetDownload(asset: Asset) {
+    if (asset.kind !== "image" && asset.kind !== "video") throw new Error(i18n.t("errors.file.readFailed"));
+    let blob = asset.data.fileId ? await readPlatformFileBlob(asset.data.fileId) : asset.data.storageKey ? await (asset.kind === "image" ? getImageBlob(asset.data.storageKey) : getMediaBlob(asset.data.storageKey)) : null;
+    if (!blob && !asset.data.fileId) {
+        const response = await fetch(asset.kind === "image" ? asset.data.dataUrl : asset.data.url);
+        if (!response.ok || response.headers.get("content-type")?.includes("application/json")) throw new Error(i18n.t("errors.file.readFailed", { defaultValue: "文件读取失败" }));
+        blob = await response.blob();
+    }
+    if (!blob?.size) throw new Error(i18n.t("errors.file.readFailed", { defaultValue: "文件读取失败" }));
+    return new File([blob], `${safeFileName(asset.title || i18n.t("assets.download.defaultFileName"))}.${fileExtension(blob.type || asset.data.mimeType, asset.kind)}`, { type: blob.type || asset.data.mimeType });
+}
 
 export async function exportAssets(assets: Asset[]) {
     const files: AssetExportItem[] = [];

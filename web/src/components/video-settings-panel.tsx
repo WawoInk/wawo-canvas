@@ -5,7 +5,7 @@ import { Switch } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { ImageSettingsTheme } from "@/components/image-settings-panel";
-import { boolConfig, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedanceDurationOptions, seedancePixelLabel, seedanceRatioLabel, seedanceRatioOptions, seedanceResolutionOptions } from "@/lib/seedance-video";
+import { boolConfig, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedancePixelLabel, seedanceRatioLabel, seedanceRatioOptions, seedanceResolutionOptions } from "@/lib/seedance-video";
 import { type CanvasTheme } from "@/lib/canvas-theme";
 import { buildShortDramaGenerationSettings, buildVideoGenerationSettings, findGenerationProfile, getGenerationProfiles, type GenerationProfile, type ShortDramaGenerationSettings, type VideoGenerationSettings } from "@/services/api/generations";
 import { type AiConfig } from "@/stores/use-config-store";
@@ -23,7 +23,7 @@ const sizeOptions = [
 
 type VideoSettingsPanelProps = {
     config: AiConfig;
-    onConfigChange: (key: "quality" | "vquality" | "size" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark" | "videoNegativePrompt", value: string) => void;
+    onConfigChange: (key: "quality" | "vquality" | "size" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark" | "videoNegativePrompt" | "videoMode", value: string) => void;
     theme: CanvasTheme;
     allowAutoDuration?: boolean;
     showTitle?: boolean;
@@ -56,6 +56,8 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
 
     const definitions = profile?.capabilities.settings;
     const durationDefinition = definitions?.durationSeconds;
+    const modeDefinition = definitions?.videoMode;
+    const videoMode = modeDefinition?.values?.includes(config.videoMode) ? config.videoMode : modeDefinition?.default;
     const provided: Partial<VideoGenerationSettings> = {
         aspectRatio: normalizeSeedanceRatio(config.size) as VideoGenerationSettings["aspectRatio"],
         resolution: normalizeSeedanceResolution(config.vquality) as VideoGenerationSettings["resolution"],
@@ -78,9 +80,11 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
     const supportedResolutions = definitions?.resolution.values ? new Set(definitions.resolution.values) : null;
     const ratioOptions = (definitions?.aspectRatio.values || seedanceRatioOptions.map((item) => item.value)).map((value) => ({ value, label: seedanceRatioLabel(value) }));
     const durationValue = settings.durationSeconds;
-    const durationOptions = seedanceDurationOptions.filter((value) =>
-        value === -1 ? allowAutoDuration && durationDefinition?.allowAuto !== false : !durationDefinition || (value >= (durationDefinition.min ?? value) && value <= (durationDefinition.max ?? value)),
-    );
+    const minDuration = durationDefinition?.min ?? 4;
+    const maxDuration = durationDefinition?.max ?? 15;
+    const supportsAutoDuration = Boolean(allowAutoDuration) && durationDefinition?.allowAuto !== false;
+    const autoDuration = supportsAutoDuration && (durationValue === -1 || durationValue === "auto");
+    const sliderDuration = Math.max(minDuration, Math.min(maxDuration, Number(durationValue) || minDuration));
     const settingError = (key: string) => (errorFieldPath === `intent.settings.${key}` ? { outline: "2px solid #ef4444", outlineOffset: 4, borderRadius: 12 } : undefined);
 
     return (
@@ -129,22 +133,47 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
                         </div>
                     </SettingGroup>
                 </div>
+                {!isDrama && modeDefinition?.values?.length ? (
+                    <div style={settingError("videoMode")}>
+                        <SettingGroup title={t("videoSettings.mode", { defaultValue: "生成模式" })} color={theme.node.muted}>
+                            <div className="grid grid-cols-2 gap-2.5">
+                                {modeDefinition.values
+                                    .filter((value) => value === "frames" || value === "reference")
+                                    .map((value) => (
+                                        <OptionPill key={value} selected={videoMode === value} theme={theme} onClick={() => onConfigChange("videoMode", value)}>
+                                            {value === "frames" ? t("videoSettings.modes.frames", { defaultValue: "首尾帧" }) : t("videoSettings.modes.reference", { defaultValue: "全能参考" })}
+                                        </OptionPill>
+                                    ))}
+                            </div>
+                        </SettingGroup>
+                    </div>
+                ) : null}
                 <div style={settingError("durationSeconds")}>
                     <SettingGroup title={t("videoSettings.duration")} color={theme.node.muted}>
-                        <div className="grid grid-cols-4 gap-2.5">
-                            {durationOptions.map((value) => (
-                                <OptionPill key={value} selected={durationValue === (value === -1 && isDrama ? "auto" : value)} theme={theme} onClick={() => onConfigChange("videoSeconds", String(value))}>
-                                    {value === -1 ? t("videoSettings.smart") : t("videoSettings.seconds", { value: formatNumber(value, { useGrouping: false }) })}
+                        <div className="flex items-center justify-between gap-3">
+                            <span className="text-sm tabular-nums">{autoDuration ? t("videoSettings.smart") : videoSecondsLabel(String(sliderDuration))}</span>
+                            {supportsAutoDuration ? (
+                                <OptionPill selected={autoDuration} theme={theme} onClick={() => onConfigChange("videoSeconds", "-1")}>
+                                    {t("videoSettings.smart")}
                                 </OptionPill>
-                            ))}
+                            ) : null}
                         </div>
-                        <NumberInput
-                            value={String(durationValue === "auto" ? -1 : durationValue)}
-                            min={allowAutoDuration && durationDefinition?.allowAuto ? -1 : (durationDefinition?.min ?? 4)}
-                            max={durationDefinition?.max ?? 15}
-                            theme={theme}
-                            onChange={(value) => onConfigChange("videoSeconds", value)}
+                        <input
+                            type="range"
+                            aria-label={t("videoSettings.duration")}
+                            aria-valuetext={autoDuration ? t("videoSettings.smart") : videoSecondsLabel(String(sliderDuration))}
+                            min={minDuration}
+                            max={maxDuration}
+                            step={1}
+                            value={sliderDuration}
+                            className="h-6 w-full cursor-pointer"
+                            style={{ accentColor: theme.node.text }}
+                            onChange={(event) => onConfigChange("videoSeconds", event.target.value)}
                         />
+                        <div className="flex justify-between text-xs tabular-nums" style={{ color: theme.node.muted }}>
+                            <span>{videoSecondsLabel(String(minDuration))}</span>
+                            <span>{videoSecondsLabel(String(maxDuration))}</span>
+                        </div>
                     </SettingGroup>
                 </div>
                 {definitions?.quality ? (
@@ -227,6 +256,7 @@ function OptionPill({ selected, disabled = false, theme, onClick, children }: { 
         <button
             type="button"
             disabled={disabled}
+            aria-pressed={selected}
             className="h-9 cursor-pointer rounded-full border px-2 text-sm transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-35"
             style={{ background: "transparent", borderColor: selected ? theme.node.text : theme.node.stroke, color: theme.node.text }}
             onMouseDown={(event) => event.stopPropagation()}
@@ -245,43 +275,6 @@ function SettingGroup({ title, color, children }: { title: string; color: string
             </div>
             {children}
         </div>
-    );
-}
-
-function NumberInput({ value, min, max, theme, onChange }: { value: string; min: number; max: number; theme: CanvasTheme; onChange: (value: string) => void }) {
-    const [draft, setDraft] = useState(value);
-    useEffect(() => setDraft(value), [value]);
-
-    const commit = () => {
-        if (!draft.trim()) {
-            onChange("");
-            return;
-        }
-        const number = Math.floor(Number(draft));
-        if (!Number.isFinite(number)) {
-            setDraft(value);
-            return;
-        }
-        const next = String(Math.max(min, Math.min(max, number)));
-        setDraft(next);
-        onChange(next);
-    };
-
-    return (
-        <input
-            type="number"
-            min={min}
-            max={max}
-            className="h-9 rounded-full border bg-transparent px-3 text-center text-sm outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            style={{ borderColor: theme.node.stroke, color: theme.node.text, WebkitTextFillColor: theme.node.text }}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={commit}
-            onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
-            }}
-            onMouseDown={(event) => event.stopPropagation()}
-        />
     );
 }
 

@@ -78,7 +78,7 @@ type GenerationLog = {
     dramaAssetRoles?: Record<string, ShortDramaAssetRole>;
 };
 
-type GenerationLogConfig = Pick<AiConfig, "model" | "videoModel" | "size" | "vquality" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark" | "channelMode">;
+type GenerationLogConfig = Pick<AiConfig, "model" | "videoModel" | "size" | "vquality" | "videoSeconds" | "videoMode" | "videoGenerateAudio" | "videoWatermark" | "channelMode">;
 
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
 
@@ -571,6 +571,7 @@ export default function VideoPage() {
                 size: item.size || "",
                 vquality: item.vquality || "",
                 videoSeconds: item.videoSeconds || "",
+                videoMode: "reference",
                 videoGenerateAudio: item.genAudio || "true",
                 videoWatermark: item.watermark || "false",
                 channelMode: "remote",
@@ -743,6 +744,7 @@ export default function VideoPage() {
         if (log.config.size) updateConfig("size", log.config.size);
         if (log.config.vquality) updateConfig("vquality", log.config.vquality);
         if (log.config.videoSeconds) updateConfig("videoSeconds", log.config.videoSeconds);
+        updateConfig("videoMode", log.config.videoMode);
         if (log.config.videoGenerateAudio) updateConfig("videoGenerateAudio", log.config.videoGenerateAudio);
         if (log.config.videoWatermark) updateConfig("videoWatermark", log.config.videoWatermark);
         setResults(log.status === "pending" ? [{ id: log.id, status: "pending" }] : log.video ? [{ id: log.video.id, status: "success", video: log.video }] : [{ id: log.id, status: "failed", error: log.error || t("errors.video.generationFailed") }]);
@@ -1269,6 +1271,7 @@ function mergeGenerationLog(log: GenerationLog, local?: GenerationLog): Generati
     return {
         ...log,
         task: log.task || local.task,
+        config: { ...log.config, videoMode: local.config.videoMode },
         references: local.references.length ? local.references : log.references,
         videoReferences: local.videoReferences.length ? local.videoReferences : log.videoReferences,
         audioReferences: local.audioReferences.length ? local.audioReferences : log.audioReferences,
@@ -1348,6 +1351,7 @@ function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
         size: log.config?.size || log.size || "",
         vquality: normalizeResolution(log.config?.vquality || log.resolution || ""),
         videoSeconds: log.config?.videoSeconds || log.seconds || "",
+        videoMode: log.config?.videoMode === "frames" ? "frames" : "reference",
         videoGenerateAudio: log.config?.videoGenerateAudio || "true",
         videoWatermark: log.config?.videoWatermark || "false",
         channelMode: log.config?.channelMode || "local",
@@ -1385,12 +1389,13 @@ function buildLog({
     dramaTitle?: string;
     dramaAssetRoles?: Record<string, ShortDramaAssetRole>;
 }): GenerationLog {
-    const logConfig = {
+    const logConfig: GenerationLogConfig = {
         model: config.model,
         videoModel: config.videoModel,
         size: config.size,
         vquality: normalizeResolution(config.vquality),
         videoSeconds: config.videoSeconds,
+        videoMode: config.videoMode,
         videoGenerateAudio: config.videoGenerateAudio,
         videoWatermark: config.videoWatermark,
         channelMode: config.channelMode,
@@ -1424,7 +1429,7 @@ function buildVideoConfig(config: AiConfig, model: string): AiConfig {
         model,
         videoModel: model,
         size: normalizeSeedanceRatio(config.size),
-        videoSeconds: normalizeVideoSeconds(config.videoSeconds),
+        videoSeconds: config.channelMode === "remote" ? config.videoSeconds : normalizeVideoSeconds(config.videoSeconds),
         vquality: normalizeResolution(config.vquality),
         videoGenerateAudio: String(boolConfig(config.videoGenerateAudio, true)),
         videoWatermark: String(boolConfig(config.videoWatermark, false)),

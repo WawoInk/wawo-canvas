@@ -356,3 +356,25 @@ test("builds a first-party video command with platform media references", () => 
     assert.equal(JSON.stringify(command).includes("dataUrl"), false);
     assert.equal(JSON.stringify(command).includes("image_url"), false);
 });
+
+test("video mode is projected only from a Profile that explicitly supports it", () => {
+    const profile = {
+        capabilities: {
+            settings: {
+                aspectRatio: { type: "enum", values: ["16:9"], default: "16:9" },
+                resolution: { type: "enum", values: ["720p"], default: "720p" },
+                durationSeconds: { type: "duration", min: 2, max: 60, default: 5 },
+                videoMode: { type: "enum", values: ["reference", "frames"], default: "reference" },
+            },
+        },
+    };
+    assert.deepEqual(buildVideoGenerationSettings(profile, { videoMode: "frames", durationSeconds: 55 }), {
+        aspectRatio: "16:9",
+        resolution: "720p",
+        durationSeconds: 55,
+        videoMode: "frames",
+    });
+    assert.equal(buildVideoGenerationSettings(profile, {}).videoMode, "reference");
+    delete profile.capabilities.settings.videoMode;
+    assert.equal(Object.hasOwn(buildVideoGenerationSettings(profile, { videoMode: "frames" }), "videoMode"), false);
+});

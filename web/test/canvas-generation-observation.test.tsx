@@ -60,6 +60,7 @@ const profile = {
         settings: {
             aspectRatio: { type: "enum", values: ["1:1"], default: "1:1" },
             resolution: { type: "enum", values: ["720p"], default: "720p" },
+            videoMode: { type: "enum", values: ["reference", "frames"], default: "reference" },
             durationSeconds: { type: "duration", min: 1, max: 30, default: 6 },
             generateAudio: { type: "boolean", default: false },
             watermark: { type: "boolean", default: false },
@@ -86,10 +87,26 @@ const project: CanvasProject = {
     showImageInfo: false,
     viewport: { x: 0, y: 0, k: 1 },
 };
-async function setup(mode: "video" | "image" = "video", firstParty = false, retry = false) {
+async function setup(mode: "video" | "image" = "video", firstParty = false, retry = false, savedVideoMode?: "frames") {
     const currentProject = structuredClone(project);
     currentProject.nodes[1].type = mode as CanvasProject["nodes"][number]["type"];
     if (retry) currentProject.nodes[1].metadata = { ...currentProject.nodes[1].metadata, status: "error", ...(mode === "image" ? { generationType: "edit", references: ["https://fixture.example/reference.png"] } : {}) };
+    if (savedVideoMode) {
+        currentProject.nodes[1].metadata = { ...currentProject.nodes[1].metadata, videoMode: savedVideoMode };
+        currentProject.nodes.push({
+            id: "config",
+            type: "config" as CanvasProject["nodes"][number]["type"],
+            title: "视频配置",
+            position: { x: 100, y: 150 },
+            width: 100,
+            height: 100,
+            metadata: { model: "profile", generationMode: "video", prompt: "生成", videoMode: "reference" },
+        });
+        currentProject.connections = [
+            { id: "input", fromNodeId: "reference", toNodeId: "config" },
+            { id: "result", fromNodeId: "config", toNodeId: "output" },
+        ];
+    }
     useUserStore.setState({ user: { id: "test-user" } as never, token: "", isReady: true });
     await useCanvasStore.persist.rehydrate();
     useCanvasStore.setState({ projects: [currentProject], hydrated: true, synced: true, tombstones: [] });
@@ -249,4 +266,13 @@ test.each(["video", "image"] as const)("retrying a connected %s node keeps obser
     expect(submitted).toBeDefined();
     expect(polls).toBeGreaterThan(0);
     expect(host.textContent).toContain("fixture terminal failure");
+});
+
+test("retrying a video result preserves its saved mode after the source config changes", async () => {
+    await setup("video", true, true, "frames");
+    const retry = host.querySelector<HTMLButtonElement>('[data-node-id="output"] [data-result-action="retry"]')!;
+    expect(retry).not.toBeNull();
+    await act(async () => retry.click());
+    await settleUntil(() => Boolean(submitted));
+    expect(submitted).toMatchObject({ modelProfileId: "profile", intent: { settings: { videoMode: "frames" } } });
 });

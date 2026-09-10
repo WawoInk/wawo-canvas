@@ -1,6 +1,7 @@
 import axios from "axios";
+import { imageSizePresets, parseImageSize, imageResolutionsForConfig, normalizeImageSizeForResolutions } from "@/lib/image-size";
 
-import { buildApiUrl, resolveModelRequestConfig, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
+import { buildApiUrl, resolveModelRequestConfig, useConfigStore, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
@@ -297,6 +298,9 @@ function normalizeQuality(quality: string) {
 /** Map "quality + ratio" to an explicit pixel dimension like "3840x2160". */
 function resolveSize(quality: string | undefined, ratio: string): string {
     const parsedRatio = parseImageRatio(ratio);
+    const resolution = quality === "high" ? "4k" : quality === "medium" || quality === "hd" ? "2k" : "1k";
+    const preset = imageSizePresets[resolution][ratio];
+    if (preset) return preset;
     const basePixels = quality ? QUALITY_BASE[quality] : undefined;
     const isLandscape = parsedRatio.width >= parsedRatio.height;
     const longRatio = isLandscape ? parsedRatio.width / parsedRatio.height : parsedRatio.height / parsedRatio.width;
@@ -1024,6 +1028,38 @@ async function requestGeminiImages(config: AiConfig, prompt: string, references:
     return (await Promise.all(requests)).flat();
 }
 
+function resolveGeminiImageConfig(config: AiConfig) {
+    const value = config.size.trim();
+    const dimensions = parseImageDimensions(value);
+    const ratios = ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"];
+    let aspectRatio: string | undefined;
+    if (value && value.toLowerCase() !== "auto") {
+        const ratio = dimensions || parseImageRatio(value);
+        const target = ratio.width / ratio.height;
+        aspectRatio = ratios.reduce((best, item) => {
+            const [width, height] = item.split(":").map(Number);
+            const [bestWidth, bestHeight] = best.split(":").map(Number);
+            return Math.abs(width / height - target) < Math.abs(bestWidth / bestHeight - target) ? item : best;
+        });
+        const [width, height] = aspectRatio.split(":").map(Number);
+        // Fixed presets may differ by one 16-pixel alignment step, not by another aspect ratio.
+        const unsupported = dimensions ? Math.abs(ratio.width - (ratio.height * width) / height) > IMAGE_SIZE_STEP && Math.abs(ratio.height - (ratio.width * height) / width) > IMAGE_SIZE_STEP : !ratios.includes(value);
+        if (unsupported) throw new Error(i18n.t("errors.image.geminiUnsupportedRatio", { defaultValue: "Gemini 不支持所选图片比例，请更换比例" }));
+    }
+    let imageSize: string | undefined;
+    if (/gemini-3|3\.1|3-pro/i.test(config.model)) {
+        const quality = normalizeQuality(config.quality);
+        if (dimensions) {
+            const { resolution } = parseImageSize(value);
+            const preset = Object.values(imageSizePresets[resolution] || {}).includes(value);
+            const edge = Math.max(dimensions.width, dimensions.height);
+            imageSize = preset ? resolution.toUpperCase() : edge <= 768 ? "512" : edge <= 1536 ? "1K" : edge <= 3072 ? "2K" : "4K";
+        } else if (quality) imageSize = ({ low: "1K", medium: "2K", high: "4K", standard: "1K", hd: "2K" } as Record<string, string>)[quality];
+    }
+    const imageConfig = { ...(aspectRatio ? { aspectRatio } : {}), ...(imageSize ? { imageSize } : {}) };
+    return Object.keys(imageConfig).length ? { imageConfig } : {};
+}
+
 async function requestGeminiImagesOnce(config: AiConfig, prompt: string, references: ReferenceImage[], options?: RequestOptions) {
     const parts: GeminiPart[] = [{ text: prompt }];
     for (const image of references) {
@@ -1031,7 +1067,7 @@ async function requestGeminiImagesOnce(config: AiConfig, prompt: string, referen
     }
     if (config.channelMode === "remote") {
         const body = {
-            ...toGeminiBody(config, [{ role: "user", content: prompt }], { generationConfig: { responseModalities: ["TEXT", "IMAGE"] } }),
+            ...toGeminiBody(config, [{ role: "user", content: prompt }], { generationConfig: { responseModalities: ["TEXT", "IMAGE"], ...resolveGeminiImageConfig(config) } }),
             contents: [{ role: "user", parts }],
         };
         const payload = await postGeminiViaBackend(config, "/images/generations", body);
@@ -1040,7 +1076,7 @@ async function requestGeminiImagesOnce(config: AiConfig, prompt: string, referen
     const response = await axios.post<GeminiPayload>(
         geminiApiUrl(config, "generateContent"),
         {
-            ...toGeminiBody(config, [{ role: "user", content: prompt }], { generationConfig: { responseModalities: ["TEXT", "IMAGE"] } }),
+            ...toGeminiBody(config, [{ role: "user", content: prompt }], { generationConfig: { responseModalities: ["TEXT", "IMAGE"], ...resolveGeminiImageConfig(config) } }),
             contents: [{ role: "user", parts }],
         },
         { headers: geminiHeaders(config), signal: options?.signal },
@@ -1064,8 +1100,15 @@ function parseGeminiImagePayload(payload: GeminiPayload) {
     return images;
 }
 
-export async function requestGeneration(config: AiConfig, prompt: string, options?: RequestOptions) {
+function resolveImageRequestConfig(config: AiConfig) {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
+    const imageRequestFormats = requestConfig.channelMode === "remote" ? (useConfigStore.getState().publicSettings?.modelChannel.imageRequestFormats ?? requestConfig.imageRequestFormats) : requestConfig.imageRequestFormats;
+    const resolutions = imageResolutionsForConfig({ ...requestConfig, imageRequestFormats });
+    return { ...requestConfig, size: normalizeImageSizeForResolutions(resolutions, requestConfig.size) };
+}
+
+export async function requestGeneration(config: AiConfig, prompt: string, options?: RequestOptions) {
+    const requestConfig = resolveImageRequestConfig(config);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
     if (requestConfig.apiFormat === "gemini") {
         try {
@@ -1075,7 +1118,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
         }
     }
     const quality = normalizeQuality(config.quality);
-    const requestSize = resolveRequestSize(quality, config.size);
+    const requestSize = resolveRequestSize(quality, requestConfig.size);
     const format = configuredImageRequestFormat(requestConfig, "application/json");
     const body = {
         model: requestConfig.model,
@@ -1099,7 +1142,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
 }
 
 export async function requestEdit(config: AiConfig, prompt: string, references: ReferenceImage[], mask?: ReferenceImage, options?: RequestOptions) {
-    const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
+    const requestConfig = resolveImageRequestConfig(config);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
     const requestPrompt = buildImageReferencePromptText(prompt, references);
     if (requestConfig.apiFormat === "gemini") {
@@ -1111,7 +1154,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
         }
     }
     const quality = normalizeQuality(config.quality);
-    const requestSize = resolveRequestSize(quality, config.size);
+    const requestSize = resolveRequestSize(quality, requestConfig.size);
     const format = configuredImageRequestFormat(requestConfig, "multipart/form-data");
     const fields = {
         model: requestConfig.model,
@@ -1133,7 +1176,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     } else {
         const formData = imageRequestFormData(fields);
         const files = await Promise.all(references.map(referenceImageToFile));
-        files.forEach((file) => formData.append("image", file));
+        files.forEach((file) => formData.append(files.length > 1 ? "image[]" : "image", file));
         if (mask) formData.set("mask", dataUrlToFile(mask));
         body = formData;
     }
@@ -1188,10 +1231,10 @@ function readAsyncImageTask(data: ImageApiResponse & { id?: string }, headers: u
 }
 
 export async function createAsyncImageTask(config: AiConfig, prompt: string, count = 1, source = "canvas"): Promise<AsyncImageTask> {
-    const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
+    const requestConfig = resolveImageRequestConfig(config);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
     const quality = normalizeQuality(config.quality);
-    const requestSize = resolveRequestSize(quality, config.size);
+    const requestSize = resolveRequestSize(quality, requestConfig.size);
     const format = configuredImageRequestFormat(requestConfig, "application/json");
     const body = {
         model: requestConfig.model,
@@ -1217,9 +1260,9 @@ export async function createAsyncImageTask(config: AiConfig, prompt: string, cou
 
 export async function createAsyncImageEditTask(config: AiConfig, prompt: string, references: ReferenceImage[], count = 1, source = "canvas"): Promise<AsyncImageTask> {
     if (references.length > MAX_ASYNC_IMAGE_REFERENCES) throw new Error(i18n.t("errors.image.tooManyReferences", { max: MAX_ASYNC_IMAGE_REFERENCES }));
-    const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
+    const requestConfig = resolveImageRequestConfig(config);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
-    const requestSize = resolveRequestSize(normalizeQuality(config.quality), config.size);
+    const requestSize = resolveRequestSize(normalizeQuality(config.quality), requestConfig.size);
     const format = configuredImageRequestFormat(requestConfig, "multipart/form-data");
     const images = format === "application/json" ? await Promise.all(references.map(imageToDataUrl)) : [];
     const files = format === "multipart/form-data" ? await Promise.all(references.map(referenceImageToFile)) : [];
@@ -1236,6 +1279,10 @@ export async function createAsyncImageEditTask(config: AiConfig, prompt: string,
         format,
         images,
     );
+    if (request.body instanceof FormData && files.length > 1) {
+        request.body.delete("image");
+        for (const file of files) request.body.append("image[]", file);
+    }
 
     try {
         const response = await axios.post<ImageApiResponse & { id?: string; status?: string }>(aiApiUrl(requestConfig, configuredCanvasImageEditPath(requestConfig)), request.body, {

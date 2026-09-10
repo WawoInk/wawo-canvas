@@ -7,6 +7,10 @@ import { App } from "antd";
 
 import AdminUsersPage from "../src/pages/admin/users/index.tsx";
 
+import i18n from "../src/i18n";
+
+await i18n.changeLanguage("zh-CN");
+
 test("用户管理列表展示用户 ID", () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(["admin", "users", "", "", 1, 10], {

@@ -143,17 +143,19 @@ test("prepares a durable first-party Canvas video run", () => {
                 aspectRatio: { type: "enum", values: ["9:16"], default: "9:16" },
                 resolution: { type: "enum", values: ["1080p"], default: "1080p" },
                 durationSeconds: { type: "duration", min: 4, max: 30, default: 10 },
+                videoMode: { type: "enum", values: ["reference", "frames"], default: "reference" },
                 generateAudio: { type: "boolean", default: true },
                 watermark: { type: "boolean", default: false },
             },
         },
     };
-    const config = { model: profile.id, size: "9:16", vquality: "1080p", videoSeconds: "24", videoGenerateAudio: "true", videoWatermark: "false", videoNegativePrompt: "  低质量，模糊  ", quality: "high" };
+    const config = { videoMode: "frames", model: profile.id, size: "9:16", vquality: "1080p", videoSeconds: "24", videoGenerateAudio: "true", videoWatermark: "false", videoNegativePrompt: "  低质量，模糊  ", quality: "high" };
     const run = prepareFirstPartyCanvasVideoRun({ nodeId: "video-1", nodes: [image, videoTarget], connections: [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "video-1" }], prompt: "prompt", config, profile, clientRequestId: "request-stable" });
     assert.equal(run.command.clientRequestId, "request-stable");
     assert.equal(run.command.modelProfileId, "stable-profile");
     assert.equal(run.command.intent.negativePrompt, "低质量，模糊");
     assert.equal(run.command.intent.settings.durationSeconds, 24);
+    assert.equal(run.command.intent.settings.videoMode, "frames");
     const serialized = JSON.stringify(run.command);
     for (const providerField of ["negative_prompt", "extra_params", "metadata"]) assert.equal(serialized.includes(`"${providerField}"`), false);
     assert.deepEqual(run.metadata, { generationClientRequestId: "request-stable", generationProfileId: "stable-profile", generationCancellation: false });
@@ -311,3 +313,30 @@ function assertTranslatedError(callback, key, options) {
         return true;
     });
 }
+
+test("numbers connected text blocks in reference order without changing the user prompt or media", async () => {
+    const language = i18n.language;
+    await i18n.changeLanguage("zh-CN");
+    try {
+        const target = { id: "out", type: "image", title: "输出", metadata: {} };
+        const texts = [
+            { id: "text-b", type: "text", title: "场景", metadata: { content: "第二段\n包含换行" } },
+            { id: "text-a", type: "text", title: "人物", metadata: { content: "第一段" } },
+        ];
+        const context = buildNodeGenerationContext(
+            "out",
+            [...texts, image, target],
+            [
+                { id: "a", fromNodeId: "text-a", toNodeId: "out" },
+                { id: "i", fromNodeId: image.id, toNodeId: "out" },
+                { id: "b", fromNodeId: "text-b", toNodeId: "out" },
+            ],
+            "结合文本1和文本2生成",
+        );
+        assert.equal(context.prompt, "结合文本1和文本2生成\n\n【文本1】\n第一段\n\n【文本2】\n第二段\n包含换行");
+        assert.equal(context.textCount, 2);
+        assert.equal(context.referenceImages[0].fileId, "file-image-1");
+    } finally {
+        await i18n.changeLanguage(language);
+    }
+});

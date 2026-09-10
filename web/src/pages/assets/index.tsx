@@ -16,7 +16,7 @@ import { formatBytes, readFileAsDataUrl } from "@/lib/image-utils";
 import { cn } from "@/lib/utils";
 import { useAssetStore, type Asset, type AssetKind, type ImageAsset, type VideoAsset } from "@/stores/use-asset-store";
 import { uploadBlob } from "@/services/upload-blob";
-import { exportAssets, readAssetPackage } from "./asset-transfer";
+import { exportAssets, readAssetPackage, readAssetDownload } from "./asset-transfer";
 
 type AssetFormValues = {
     kind: AssetKind;
@@ -215,22 +215,12 @@ export default function AssetsPage() {
 
     const downloadImage = async (asset: Asset) => {
         if (asset.kind !== "image" && asset.kind !== "video") return;
-        // Refresh presigned URL before download if the asset has a fileId
-        if (asset.data.fileId) {
-            await refreshAssetUrls([asset.data.fileId]);
-            const updated = useAssetStore.getState().assets.find((a) => a.id === asset.id);
-            if (updated) {
-                if (updated.kind === "video") {
-                    saveAs(updated.data.url, `${updated.title || t("assets.download.defaultFileName")}.${updated.data.mimeType.split("/")[1] || "mp4"}`);
-                    return;
-                }
-                if (updated.kind === "image") {
-                    saveAs(updated.data.dataUrl, `${updated.title || t("assets.download.defaultFileName")}.${updated.data.mimeType.split("/")[1] || "png"}`);
-                    return;
-                }
-            }
+        try {
+            const file = await readAssetDownload(asset);
+            saveAs(file, file.name);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("errors.file.readFailed", { defaultValue: "文件读取失败" }));
         }
-        saveAs(asset.kind === "video" ? asset.data.url : asset.data.dataUrl, `${asset.title || t("assets.download.defaultFileName")}.${asset.data.mimeType.split("/")[1] || "png"}`);
     };
 
     const exportAllAssets = async () => {

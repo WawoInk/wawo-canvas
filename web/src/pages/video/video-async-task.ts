@@ -158,6 +158,7 @@ export function buildVideoWorkbenchGenerationCommand(input: {
                 audios: input.audioReferences.map((audio) => ({ fileId: platformFileID(audio), sourceNodeId: audio.id, name: audio.name })),
             },
             settings: buildVideoGenerationSettings(input.profile, {
+                videoMode: input.config.videoMode,
                 aspectRatio: normalizeSeedanceRatio(input.config.size) as VideoGenerationSettings["aspectRatio"],
                 resolution: normalizeSeedanceResolution(input.config.vquality) as VideoGenerationSettings["resolution"],
                 durationSeconds: normalizeSeedanceDuration(input.config.videoSeconds, input.profile.capabilities.settings.durationSeconds),

@@ -8,6 +8,7 @@ import { saveAs } from "file-saver";
 import { useTranslation } from "react-i18next";
 
 import i18n from "@/i18n";
+import { hasAgentUrlBootstrap } from "../components/canvas-agent-url-bootstrap";
 import { formatNumber } from "@/i18n/formatters";
 import { createAsyncImageTask, createAsyncImageEditTask, pollAsyncImageTask, cancelAsyncImageTask, requestEdit, requestImageQuestion } from "@/services/api/image";
 import { completeAsyncImageTask, isAsyncImageTaskRetryableError } from "@/services/api/async-image-task";
@@ -381,7 +382,7 @@ function InfiniteCanvasPage() {
     const [agentMode, setAgentMode] = useState<CanvasAgentMode>("online");
     const [agentUndoSnapshot, setAgentUndoSnapshot] = useState<CanvasAgentSnapshot | null>(null);
     const codexAutoConnect = ["new", "recent", "choose"].includes(searchParams.get("mode") || "");
-    const codexCompactAgent = codexAutoConnect && searchParams.has("agentUrl");
+    const [codexCompactAgent] = useState(() => hasAgentUrlBootstrap(window.location.hash));
     const [titleEditing, setTitleEditing] = useState(false);
     const [titleDraft, setTitleDraft] = useState("");
     const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
@@ -2203,7 +2204,7 @@ function InfiniteCanvasPage() {
                 return projectIdRef.current === projectId && isCurrentSession(started, { token: current.token, userId: current.user?.id });
             };
             const userPrompt = payload.prompt.trim();
-            const generationConfig = { ...buildNodeConfig(effectiveConfig, defaultConfig, node, "image"), count: "1", size: node.metadata?.size || "auto" };
+            const generationConfig = { ...buildNodeConfig(effectiveConfig, defaultConfig, node, "image"), count: "1" };
             if (payload.generate && !isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
                 return;
@@ -2765,6 +2766,7 @@ function InfiniteCanvasPage() {
                             model: generationConfig.model,
                             size: generationConfig.size,
                             seconds: generationConfig.videoSeconds,
+                            videoMode: generationConfig.videoMode,
                             vquality: generationConfig.vquality,
                             generateAudio: generationConfig.videoGenerateAudio,
                             watermark: generationConfig.videoWatermark,
@@ -3027,6 +3029,7 @@ function InfiniteCanvasPage() {
                 hasSavedImageMetadata && savedImageMetadata
                     ? buildSavedImageConfig(effectiveConfig, savedImageMetadata)
                     : { ...buildNodeConfig(effectiveConfig, defaultConfig, sourceNode, node.type === CanvasNodeType.Text ? "text" : node.type === CanvasNodeType.Video ? "video" : node.type === CanvasNodeType.Audio ? "audio" : "image"), count: "1" };
+            if (node.type === CanvasNodeType.Video && node.metadata?.videoMode) generationConfig.videoMode = node.metadata.videoMode;
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
                 return;

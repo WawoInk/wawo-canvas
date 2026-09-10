@@ -13,6 +13,7 @@ export function buildNodeConfig(globalConfig: AiConfig, defaults: AiConfig, node
         quality: metadata?.quality || globalConfig.quality || defaults.quality,
         size: metadata?.size || globalConfig.size || defaults.size,
         background: metadata?.background ?? globalConfig.background ?? defaults.background,
+        videoMode: metadata?.videoMode || globalConfig.videoMode || defaults.videoMode,
         videoSeconds: mode === "video" && videoSeconds === "-1" ? defaults.videoSeconds : videoSeconds,
         vquality: metadata?.vquality || globalConfig.vquality || defaults.vquality,
         videoGenerateAudio: metadata?.generateAudio || (mode === "video" ? "false" : globalConfig.videoGenerateAudio || defaults.videoGenerateAudio),
@@ -40,6 +41,7 @@ export function buildSavedImageConfig(globalConfig: AiConfig, metadata: CanvasNo
 }
 
 export function videoConfigPatch(key: keyof AiConfig, value: string): Partial<CanvasNodeMetadata> {
+    if (key === "videoMode") return { videoMode: value === "frames" ? "frames" : "reference" };
     if (key === "videoSeconds") return { seconds: value };
     if (key === "videoGenerateAudio") return { generateAudio: value };
     if (key === "videoWatermark") return { watermark: value };

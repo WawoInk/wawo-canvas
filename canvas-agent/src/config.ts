@@ -13,6 +13,8 @@ export type CanvasWorkspaceConfig = { workspacePath: string; activeThreadId?: st
 export type CanvasAgentConfig = { url: string; token: string; origins?: string[]; canvases?: Record<string, CanvasWorkspaceConfig> };
 
 export function loadConfig(create = false): CanvasAgentConfig {
+    if (fs.existsSync(CONFIG_DIR)) fs.chmodSync(CONFIG_DIR, 0o700);
+    if (fs.existsSync(CONFIG_FILE)) fs.chmodSync(CONFIG_FILE, 0o600);
     try {
         return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")) as CanvasAgentConfig;
     } catch {
@@ -23,8 +25,11 @@ export function loadConfig(create = false): CanvasAgentConfig {
 }
 
 export function saveConfig(config: CanvasAgentConfig) {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true });
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+    fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
+    fs.chmodSync(CONFIG_DIR, 0o700);
+    if (fs.existsSync(CONFIG_FILE)) fs.chmodSync(CONFIG_FILE, 0o600);
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), { mode: 0o600 });
+    fs.chmodSync(CONFIG_FILE, 0o600);
 }
 
 export function ensureCanvasWorkspace(config: CanvasAgentConfig, canvasId: string) {

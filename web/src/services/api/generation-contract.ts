@@ -101,6 +101,7 @@ export function readGeneratedVideoFile(result: unknown): GeneratedFile | null {
 
 export type GenerationReferences = { images: PlatformMediaReference[]; videos: PlatformMediaReference[]; audios: PlatformMediaReference[] };
 export type VideoGenerationSettings = {
+    videoMode?: "reference" | "frames";
     aspectRatio: "adaptive" | "16:9" | "9:16" | "1:1" | "4:3" | "3:4" | "21:9";
     resolution: "480p" | "720p" | "1080p";
     durationSeconds: number;
@@ -169,7 +170,7 @@ export function buildShortDramaGenerationSettings(profile: GenerationProfile, pr
 
 export function buildVideoGenerationSettings(profile: GenerationProfile, provided: Partial<VideoGenerationSettings>): VideoGenerationSettings {
     const settings = profile.capabilities.settings;
-    const enumValue = (key: "aspectRatio" | "resolution") => {
+    const enumValue = (key: "aspectRatio" | "resolution" | "videoMode") => {
         const definition = settings[key];
         const value = provided[key];
         return typeof value === "string" && definition.values?.includes(value) ? value : definition.default;
@@ -179,6 +180,7 @@ export function buildVideoGenerationSettings(profile: GenerationProfile, provide
     const durationSeconds = duration.allowAuto && requestedDuration === -1 ? -1 : Math.max(duration.min!, Math.min(duration.max!, requestedDuration));
 
     return {
+        ...(settings.videoMode ? { videoMode: enumValue("videoMode") as VideoGenerationSettings["videoMode"] } : {}),
         aspectRatio: enumValue("aspectRatio") as VideoGenerationSettings["aspectRatio"],
         resolution: enumValue("resolution") as VideoGenerationSettings["resolution"],
         durationSeconds,

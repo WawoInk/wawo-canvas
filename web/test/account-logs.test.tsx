@@ -9,6 +9,10 @@ import AccountPage, { EnterpriseCreditLogs } from "../src/pages/account/index.ts
 import { AccountCreditLogs, AccountCreditLogTable, AccountLogs, AccountUsageLogs, AccountUsageLogTable } from "../src/pages/account/account-logs.tsx";
 import { useUserStore } from "../src/stores/use-user-store.ts";
 
+import i18n from "../src/i18n";
+
+await i18n.changeLanguage("zh-CN");
+
 test("账户日志明确展示用户操作和积分变动", () => {
     const usageHTML = renderToStaticMarkup(
         createElement(AccountUsageLogTable, {
@@ -41,7 +45,7 @@ test("账户日志明确展示用户操作和积分变动", () => {
     assert.match(usageHTML, /精品视频模型/);
     assert.match(usageHTML, /成功/);
     assert.match(usageHTML, /12/);
-    assert.match(usageHTML, /null/);
+    assert.match(usageHTML, /暂无/);
 
     const creditHTML = renderToStaticMarkup(
         createElement(AccountCreditLogTable, {
@@ -119,7 +123,7 @@ test("账户日志按当前视图显示日期筛选和导出按钮", () => {
     assert.match(usageHTML, /导出使用记录/);
     assert.match(creditHTML, /开始日期/);
     assert.match(creditHTML, /结束日期/);
-    assert.match(creditHTML, /导出渲染记录/);
+    assert.match(creditHTML, /导出日志记录/);
 });
 
 test("企业积分流水展示时间并支持日期筛选和导出", () => {

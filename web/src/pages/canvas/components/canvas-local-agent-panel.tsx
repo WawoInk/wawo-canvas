@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { consumeAgentUrlBootstrap } from "./canvas-agent-url-bootstrap";
 import { App, Button, Input, Segmented, Tooltip } from "antd";
 import copyToClipboard from "copy-to-clipboard";
 import { Copy, FolderOpen, History, KeyRound, Link2, LoaderCircle, PlugZap, Plus, RefreshCw, RotateCcw, Terminal, Trash2 } from "lucide-react";
@@ -67,7 +68,8 @@ export function CanvasLocalAgentPanel({
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const user = useUserStore((state) => state.user);
     const { message, modal } = App.useApp();
-    const [searchParams] = useSearchParams();
+    const { hash } = useLocation();
+    const navigate = useNavigate();
     const {
         width,
         url,
@@ -106,7 +108,6 @@ export function CanvasLocalAgentPanel({
     const attachmentUrlsRef = useRef(new Set<string>());
     const clientIdRef = useRef(typeof crypto === "undefined" ? `${Date.now()}` : crypto.randomUUID());
     const endpoint = useMemo(() => url.trim().replace(/\/$/, ""), [url]);
-    const urlAgentAutoConnect = searchParams.has("agentUrl") && searchParams.has("agentToken");
     const loadThreads = useCallback(async () => {
         const projectId = snapshotRef.current.projectId;
         if ((!connectedRef.current && !useCanvasAgentStore.getState().connected) || !projectId) return;
@@ -149,7 +150,8 @@ export function CanvasLocalAgentPanel({
     useEffect(() => () => attachmentUrlsRef.current.forEach((url) => URL.revokeObjectURL(url)), []);
 
     useEffect(() => {
-        if (!enabled || !token.trim()) return;
+        const current = useCanvasAgentStore.getState();
+        if (!enabled || !token.trim() || !current.enabled || current.token !== token || current.url.trim().replace(/\/$/, "") !== endpoint) return;
         localStorage.setItem("canvas-agent-url", endpoint);
         localStorage.setItem("canvas-agent-token", token);
         const clientId = clientIdRef.current;
@@ -356,11 +358,9 @@ export function CanvasLocalAgentPanel({
             clearAgentSession({ enabled: false, connected: false, activity: t("canvas.agent.status.offline"), connectError: "" });
             return;
         }
-        const urlToken = searchParams.get("agentToken") || "";
-        const urlEndpoint = searchParams.get("agentUrl") || "";
-        const discovered = urlToken ? null : await discoverAgentConfig(endpoint || DEFAULT_AGENT_URL);
-        const nextEndpoint = (urlEndpoint || discovered?.url || endpoint || DEFAULT_AGENT_URL).trim().replace(/\/$/, "");
-        const nextToken = (urlToken || token.trim() || discovered?.token || "").trim();
+        const discovered = await discoverAgentConfig(endpoint || DEFAULT_AGENT_URL);
+        const nextEndpoint = (discovered?.url || endpoint || DEFAULT_AGENT_URL).trim().replace(/\/$/, "");
+        const nextToken = (token.trim() || discovered?.token || "").trim();
         if (!nextEndpoint) {
             const text = t("canvas.agent.errors.urlRequired");
             setAgentState({ connectError: text });
@@ -386,9 +386,27 @@ export function CanvasLocalAgentPanel({
         setAgentState({ url: nextEndpoint, token: nextToken, enabled: true, connected: false, activity: t("canvas.agent.status.connecting"), connectError: "", activeTab: "setup" });
     };
 
-    useEffect(() => {
-        if (urlAgentAutoConnect && confirmTools) setAgentState({ confirmTools: false });
-    }, [confirmTools, setAgentState, urlAgentAutoConnect]);
+    useLayoutEffect(() => {
+        const bootstrap = consumeAgentUrlBootstrap(window.location, window.history);
+        if (!bootstrap) return;
+        autoConnectRef.current = true;
+        navigate(`${window.location.pathname}${window.location.search}${window.location.hash}`, { replace: true });
+        let error = !bootstrap.url ? "urlRequired" : !bootstrap.token ? "notDiscovered" : "";
+        if (!error) {
+            try {
+                const parsed = new URL(bootstrap.url);
+                if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("invalid protocol");
+            } catch {
+                error = "invalidUrl";
+            }
+        }
+        if (error) {
+            setAgentState({ enabled: false, connected: false, activeTab: "setup", connectError: t(`canvas.agent.errors.${error}`) });
+            return;
+        }
+        errorLoggedRef.current = false;
+        setAgentState({ url: bootstrap.url.replace(/\/$/, ""), token: bootstrap.token, enabled: true, connected: false, confirmTools: false, activity: t("canvas.agent.status.connecting"), connectError: "", activeTab: "setup" });
+    }, [hash, navigate, setAgentState, t]);
 
     useEffect(() => {
         if (!autoConnect || autoConnectRef.current || enabled || connected) return;
