@@ -16,7 +16,7 @@ const axios = (await import("axios")).default;
 const { defaultConfig, useConfigStore } = await import("@/stores/use-config-store");
 const { useUserStore } = await import("@/stores/use-user-store");
 const { default: i18n } = await import("@/i18n");
-const { default: VideoPage } = await import("./index");
+const { default: VideoPage, mergeVideoWorkbenchGenerationLog, normalizeVideoWorkbenchLogConfig } = await import("./index");
 import type { GenerationCommand, GenerationProfile } from "@/services/api/generations";
 
 const profile: GenerationProfile = {
@@ -109,7 +109,10 @@ async function withWorkbench(run: (container: HTMLDivElement, commands: Generati
 async function clickButton(container: HTMLElement, key: string) {
     const button = [...container.querySelectorAll("button")].find((item) => item.textContent?.trim() === i18n.t(key));
     assert.ok(button, `button ${key}`);
-    await act(async () => button.click());
+    await act(async () => {
+        button.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
 }
 
 async function generate(container: HTMLElement) {
@@ -130,16 +133,72 @@ test("workbench submits 55 seconds to a remote 60-second profile without the old
     });
 });
 
+test("video workbench history preserves Canvas generation parameters", () => {
+    const config = normalizeVideoWorkbenchLogConfig({
+        model: profile.id,
+        config: {
+            model: profile.id,
+            videoModel: profile.id,
+            quality: "high",
+            size: "16:9",
+            vquality: "1080p",
+            videoSeconds: "12",
+            videoMode: "frames",
+            videoGenerateAudio: "false",
+            videoWatermark: "true",
+            videoNegativePrompt: "low quality",
+            channelMode: "remote",
+        },
+    });
+    assert.equal(config.quality, "high");
+    assert.equal(config.videoNegativePrompt, "low quality");
+});
+
+test("video workbench history refresh keeps materialized file metadata and refreshes its URL", () => {
+    const config = normalizeVideoWorkbenchLogConfig({ model: profile.id });
+    const base = {
+        id: "run-1",
+        createdAt: 1,
+        title: "video",
+        prompt: "prompt",
+        model: profile.id,
+        config,
+        references: [],
+        videoReferences: [],
+        audioReferences: [],
+        durationMs: 1,
+        size: "16:9",
+        resolution: "1080p",
+        seconds: "12",
+        status: "success" as const,
+    };
+    const merged = mergeVideoWorkbenchGenerationLog(
+        { ...base, video: { id: "file-1", fileId: "file-1", url: "https://fresh.test/video", durationMs: 1, width: 1280, height: 720, bytes: 0, mimeType: "video/mp4" } },
+        { ...base, video: { id: "file-1", fileId: "file-1", url: "https://stale.test/video", durationMs: 12000, width: 1920, height: 1080, bytes: 456, mimeType: "video/webm" } },
+    );
+    assert.deepEqual(merged.video, { id: "file-1", fileId: "file-1", url: "https://fresh.test/video", durationMs: 12000, width: 1920, height: 1080, bytes: 456, mimeType: "video/webm" });
+});
+
 test("history restores the original video mode after reopening the page before retrying a failed Generation Run", async () => {
     await withWorkbench(async (container, commands, remount) => {
+        await act(async () => {
+            useConfigStore.getState().updateConfig("quality", "high");
+            useConfigStore.getState().updateConfig("videoNegativePrompt", "original negative prompt");
+        });
         await generate(container);
         assert.equal(commands[0].intent.kind, "video.generate");
         if (commands[0].intent.kind === "video.generate") assert.equal(commands[0].intent.settings?.videoMode, "frames");
-        await act(async () => useConfigStore.getState().updateConfig("videoMode", "reference"));
+        await act(async () => {
+            useConfigStore.getState().updateConfig("videoMode", "reference");
+            useConfigStore.getState().updateConfig("quality", "low");
+            useConfigStore.getState().updateConfig("videoNegativePrompt", "changed negative prompt");
+        });
         await remount();
         const history = [...container.querySelectorAll<HTMLElement>('[role="button"]')].find((item) => item.textContent?.includes("A 55-second"));
         assert.ok(history, "failed run is restored through the history card");
         await act(async () => history.click());
+        assert.equal(useConfigStore.getState().config.quality, "high");
+        assert.equal(useConfigStore.getState().config.videoNegativePrompt, "original negative prompt");
         await clickButton(container, "videoWorkbench.actions.retry");
         assert.equal(commands.length, 2);
         assert.equal(commands[1].intent.kind, "video.generate");
