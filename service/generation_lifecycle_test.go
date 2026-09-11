@@ -71,7 +71,7 @@ func TestGenerationCallbackAndPollConvergeOnce(t *testing.T) {
 	defer restore()
 	previousPersist := generationPersistVideo
 	defer func() { generationPersistVideo = previousPersist }()
-	generationPersistVideo = func(context.Context, string, string) (*model.UserFile, error) {
+	generationPersistVideo = func(context.Context, model.GenerationTask, string) (*model.UserFile, error) {
 		persisted.Add(1)
 		return &model.UserFile{ID: "file-converged", MimeType: "video/mp4"}, nil
 	}
@@ -135,7 +135,7 @@ func TestSucceededWithMissingPersistedFileIDFailsAndSettlesOnce(t *testing.T) {
 	defer restore()
 	previousPersist := generationPersistVideo
 	defer func() { generationPersistVideo = previousPersist }()
-	generationPersistVideo = func(context.Context, string, string) (*model.UserFile, error) {
+	generationPersistVideo = func(context.Context, model.GenerationTask, string) (*model.UserFile, error) {
 		return &model.UserFile{MimeType: "video/mp4"}, nil
 	}
 	task := createLifecycleTask(t, profile, model.TaskStatusRunning, "provider-missing-file-id", 2)
@@ -188,7 +188,7 @@ func TestGenerationConcurrentTerminalNotificationsPersistOnce(t *testing.T) {
 	defer restore()
 	previousPersist := generationPersistVideo
 	defer func() { generationPersistVideo = previousPersist }()
-	generationPersistVideo = func(context.Context, string, string) (*model.UserFile, error) {
+	generationPersistVideo = func(context.Context, model.GenerationTask, string) (*model.UserFile, error) {
 		persisted.Add(1)
 		time.Sleep(10 * time.Millisecond)
 		return &model.UserFile{ID: "file-concurrent", MimeType: "video/mp4"}, nil
@@ -298,7 +298,7 @@ func TestCancelAndSuccessRaceProducesOneTerminalDecision(t *testing.T) {
 	defer restore()
 	previousPersist := generationPersistVideo
 	defer func() { generationPersistVideo = previousPersist }()
-	generationPersistVideo = func(context.Context, string, string) (*model.UserFile, error) {
+	generationPersistVideo = func(context.Context, model.GenerationTask, string) (*model.UserFile, error) {
 		return &model.UserFile{ID: "file-race", MimeType: "video/mp4"}, nil
 	}
 	task := createLifecycleTask(t, profile, model.TaskStatusRunning, "provider-race", 0)

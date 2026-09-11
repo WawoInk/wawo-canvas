@@ -492,23 +492,20 @@ function InfiniteCanvasPage() {
         [modal, stopGenerationByRunningId, t],
     );
 
-    const resumeGenerationQuery = useCallback(
-        (nodeId: string) => {
-            const node = nodesRef.current.find((item) => item.id === nodeId);
-            const resume = canvasGenerationResume(node);
-            if (!node || !resume) return;
-            setNodes((prev) => prev.map((item) => (item.id === nodeId ? { ...item, metadata: { ...item.metadata, generationPollingPaused: false } } : item)));
-            if (resume.kind === "image") {
-                void pollCanvasImageNode(nodeId, { id: resume.taskId, model: resume.model || effectiveConfig.imageModel || effectiveConfig.model, platformTaskId: resume.platformTaskId }, buildSavedImageConfig(effectiveConfig, node.metadata || {}));
-            } else if (resume.kind === "first-party-video") {
-                void pollFirstPartyCanvasVideoNode(nodeId, resume.taskId, undefined, resume.clientRequestId);
-            } else {
-                const config = buildNodeConfig(effectiveConfig, defaultConfig, node, "video");
-                void pollCanvasVideoNode(nodeId, { id: resume.taskId, model: resume.model || config.model }, config);
-            }
-        },
-        [effectiveConfig],
-    );
+    const resumeGenerationQuery = (nodeId: string) => {
+        const node = nodesRef.current.find((item) => item.id === nodeId);
+        const resume = canvasGenerationResume(node);
+        if (!node || !resume) return;
+        setNodes((prev) => prev.map((item) => (item.id === nodeId ? { ...item, metadata: { ...item.metadata, generationPollingPaused: false } } : item)));
+        if (resume.kind === "image") {
+            void pollCanvasImageNode(nodeId, { id: resume.taskId, model: resume.model || effectiveConfig.imageModel || effectiveConfig.model, platformTaskId: resume.platformTaskId }, buildSavedImageConfig(effectiveConfig, node.metadata || {}));
+        } else if (resume.kind === "first-party-video") {
+            void pollFirstPartyCanvasVideoNode(nodeId, resume.taskId, undefined, resume.clientRequestId);
+        } else {
+            const config = buildNodeConfig(effectiveConfig, defaultConfig, node, "video");
+            void pollCanvasVideoNode(nodeId, { id: resume.taskId, model: resume.model || config.model }, config);
+        }
+    };
 
     const confirmCancelGeneration = useCallback(
         (nodeId: string) => {
@@ -3232,7 +3229,7 @@ function InfiniteCanvasPage() {
                 controller.signal,
                 (current) => {
                     setNodes((prev) =>
-                        prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, generationTaskId: current.id, generationTaskStatus: current.status, generationPollingPaused: false, status: NODE_STATUS_LOADING } } : node)),
+                        prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, generationTaskId: current.id, generationTaskStatus: current.status, generationPollingPaused: false, errorDetails: undefined, generationErrorFieldPath: undefined, generationErrorResourceId: undefined, status: NODE_STATUS_LOADING } } : node)),
                     );
                 },
                 clientRequestId,

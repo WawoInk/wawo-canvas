@@ -86,10 +86,11 @@ const project: CanvasProject = {
     showImageInfo: false,
     viewport: { x: 0, y: 0, k: 1 },
 };
-async function setup(mode: "video" | "image" = "video", firstParty = false, retry = false) {
+async function setup(mode: "video" | "image" = "video", firstParty = false, retry = false, savedMetadata: CanvasProject["nodes"][number]["metadata"] = {}) {
     const currentProject = structuredClone(project);
     currentProject.nodes[1].type = mode as CanvasProject["nodes"][number]["type"];
     if (retry) currentProject.nodes[1].metadata = { ...currentProject.nodes[1].metadata, status: "error", ...(mode === "image" ? { generationType: "edit", references: ["https://fixture.example/reference.png"] } : {}) };
+    currentProject.nodes[1].metadata = { ...currentProject.nodes[1].metadata, ...savedMetadata };
     useUserStore.setState({ user: { id: "test-user" } as never, token: "", isReady: true });
     await useCanvasStore.persist.rehydrate();
     useCanvasStore.setState({ projects: [currentProject], hydrated: true, synced: true, tombstones: [] });
@@ -249,4 +250,47 @@ test.each(["video", "image"] as const)("retrying a connected %s node keeps obser
     expect(submitted).toBeDefined();
     expect(polls).toBeGreaterThan(0);
     expect(host.textContent).toContain("fixture terminal failure");
+});
+
+
+test("resuming a timed-out video clears its stale error and materializes the original task", async () => {
+    await setup("video", true, false, {
+        status: "error", generationTaskId: "run-1", generationProfileId: "profile",
+        generationTaskStatus: "running", errorDetails: "视频生成超时，请稍后重试",
+    });
+    await settleUntil(() => polls >= 2);
+    const metadata = () => useCanvasStore.getState().openProject("project")?.nodes.find((node) => node.id === "output")?.metadata;
+    expect(submitted).toBeUndefined();
+    expect(metadata()?.status).toBe("loading");
+    expect(metadata()?.errorDetails).toBeUndefined();
+    await act(async () => finishTask?.());
+    await settleUntil(() => metadata()?.status === "success");
+    expect(metadata()).toMatchObject({ status: "success", generationTaskStatus: "succeeded", fileId: "result-file" });
+});
+
+
+test("manual resume observes the original task after editor initialization", async () => {
+    await setup("video", true, false, { status: "loading", generationTaskId: "run-1", generationProfileId: "profile", generationTaskStatus: "running" });
+    await settleUntil(() => polls >= 2);
+    const node = host.querySelector('[data-node-id="output"]')!;
+    await act(async () => {
+        (node.firstElementChild || node).dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 200 }));
+        window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 200 }));
+    });
+    const stop = host.querySelector<HTMLButtonElement>('button[aria-label="停止等待"]');
+    expect(stop).not.toBeNull();
+    await act(async () => stop!.click());
+    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>(".ant-modal-confirm-btns button")).find((button) => button.textContent?.replaceAll(" ", "") === "停止");
+    expect(confirm).toBeDefined();
+    await act(async () => confirm!.click());
+    const resume = host.querySelector<HTMLButtonElement>('button[aria-label="恢复查询"]');
+    expect(resume).not.toBeNull();
+    const before = polls;
+    await act(async () => resume!.click());
+    await settleUntil(() => polls > before);
+    expect(polls).toBeGreaterThan(before);
+    expect(submitted).toBeUndefined();
+    await act(async () => finishTask?.());
+    await settleUntil(() => useCanvasStore.getState().openProject("project")?.nodes.find((node) => node.id === "output")?.metadata?.status === "success");
+    expect(useCanvasStore.getState().openProject("project")?.nodes.find((node) => node.id === "output")?.metadata?.fileId).toBe("result-file");
 });

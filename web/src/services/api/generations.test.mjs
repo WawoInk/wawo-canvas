@@ -356,3 +356,13 @@ test("builds a first-party video command with platform media references", () => 
     assert.equal(JSON.stringify(command).includes("dataUrl"), false);
     assert.equal(JSON.stringify(command).includes("image_url"), false);
 });
+
+
+test("exhausting the observation window pauses polling without declaring generation timeout", async () => {
+    let polls = 0;
+    await assert.rejects(
+        pollGenerationTask(async () => { polls += 1; return { status: "running" }; }, async () => {}, undefined, 2),
+        (error) => error instanceof GenerationPollingPausedError,
+    );
+    assert.equal(polls, 2);
+});

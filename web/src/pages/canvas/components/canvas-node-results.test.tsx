@@ -253,6 +253,61 @@ test("failed batch children expose retry and delete", async () => {
     }
 });
 
+for (const status of ["loading", "error"] as const) test(`paused video observation does not keep displaying active generation (${status})`, async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const node = {
+        id: "video-observation-paused",
+        type: CanvasNodeType.Video,
+        title: "视频",
+        position: { x: 0, y: 0 },
+        width: 320,
+        height: 240,
+        metadata: {
+            status,
+            generationTaskId: "existing-video-task",
+            generationTaskStatus: "running" as const,
+            generationPollingPaused: true,
+            errorDetails: "视频任务查询暂时失败，已暂停自动查询",
+        },
+    };
+    try {
+        await act(async () =>
+            root.render(
+                <App>
+                    <CanvasNode
+                        data={node}
+                        scale={1}
+                        isSelected={false}
+                        isRelated={false}
+                        isFocusRelated={false}
+                        isConnectionTarget={false}
+                        isConnecting={false}
+                        showPanel={false}
+                        showImageInfo={false}
+                        onMouseDown={() => {}}
+                        onHoverStart={() => {}}
+                        onHoverEnd={() => {}}
+                        onConnectStart={() => {}}
+                        onResize={() => {}}
+                        onContentChange={() => {}}
+                        onContextMenu={() => {}}
+                    />
+                </App>,
+            ),
+        );
+        assert.equal(Boolean(container.querySelector(".animate-spin")), false, "paused observation must not show an active spinner");
+        assert.equal(Boolean(container.querySelector(".canvan-gen-active")), false, "paused observation must not keep generation animation active");
+        assert.doesNotMatch(container.textContent || "", /生成中/);
+        assert.match(container.textContent || "", /暂停/);
+        assert.equal(container.querySelector('[data-result-action="retry"]'), null, "observation should resume the existing task instead of submitting a retry");
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+    }
+});
+
 test("text batch roots toggle and text children expose primary copy delete", async () => {
     const container = document.createElement("div");
     document.body.append(container);

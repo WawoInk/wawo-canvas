@@ -466,7 +466,7 @@ func TestCreateGenerationChargesViduByUpstreamCreditsAtSuccess(t *testing.T) {
 		return model.ModelChannel{Name: channelName, Protocol: "xvanai", BaseURL: upstream.URL, APIKey: "secret", Enabled: true, Models: []string{upstreamModel}}, nil
 	}
 	generationHTTPClient = upstream.Client()
-	generationPersistVideo = func(context.Context, string, string) (*model.UserFile, error) {
+	generationPersistVideo = func(context.Context, model.GenerationTask, string) (*model.UserFile, error) {
 		return &model.UserFile{ID: "credit-file-" + key, MimeType: "video/mp4"}, nil
 	}
 	generationPollInterval = time.Millisecond
@@ -1062,7 +1062,7 @@ func TestCreateGenerationRunsPromptOnlySeedanceTask(t *testing.T) {
 		return model.ModelChannel{Name: "test", Protocol: "openai", BaseURL: upstream.URL, APIKey: "secret", Enabled: true}, nil
 	}
 	generationPollInterval = time.Millisecond
-	generationPersistVideo = func(context.Context, string, string) (*model.UserFile, error) {
+	generationPersistVideo = func(context.Context, model.GenerationTask, string) (*model.UserFile, error) {
 		return &model.UserFile{ID: "file-seedance-result", FileType: "results/videos", MimeType: "video/mp4"}, nil
 	}
 	generationDispatch = func(ctx context.Context, taskID string) {
@@ -1157,7 +1157,7 @@ func TestCreateGenerationRunsViduShortDramaTask(t *testing.T) {
 	}
 	generationPollInterval = time.Millisecond
 	generationCallbackPollInterval = time.Millisecond
-	generationPersistVideo = func(context.Context, string, string) (*model.UserFile, error) {
+	generationPersistVideo = func(context.Context, model.GenerationTask, string) (*model.UserFile, error) {
 		return &model.UserFile{ID: "file-drama-result", FileType: "results/videos", MimeType: "video/mp4"}, nil
 	}
 	generationDispatch = func(ctx context.Context, taskID string) {
@@ -1656,7 +1656,7 @@ func TestRecoveredGenerationPollsExistingProviderTask(t *testing.T) {
 		generationPersistVideo = previousPersist
 	}()
 	generationHTTPClient = upstream.Client()
-	generationPersistVideo = func(context.Context, string, string) (*model.UserFile, error) {
+	generationPersistVideo = func(context.Context, model.GenerationTask, string) (*model.UserFile, error) {
 		return &model.UserFile{ID: "file-recovered", MimeType: "video/mp4"}, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -1715,7 +1715,7 @@ func TestSoraGenerationPersistsMetadataVideoBeforeSuccess(t *testing.T) {
 	generationCost = func(string) (model.Decimal, error) { return credit(0), nil }
 	generationPollInterval = time.Millisecond
 	persistCalls := 0
-	generationPersistVideo = func(ctx context.Context, userID, rawURL string) (*model.UserFile, error) {
+	generationPersistVideo = func(ctx context.Context, task model.GenerationTask, rawURL string) (*model.UserFile, error) {
 		persistCalls++
 		if strings.Contains(rawURL, "X-Amz-Signature") == false {
 			t.Fatalf("provider URL = %q", rawURL)
@@ -1750,7 +1750,7 @@ func TestSoraGenerationPersistsMetadataVideoBeforeSuccess(t *testing.T) {
 func TestFirstPartyGenerationKeepsResultPersistenceFailureRecoverable(t *testing.T) {
 	previousPersist := generationPersistVideo
 	defer func() { generationPersistVideo = previousPersist }()
-	generationPersistVideo = func(context.Context, string, string) (*model.UserFile, error) {
+	generationPersistVideo = func(context.Context, model.GenerationTask, string) (*model.UserFile, error) {
 		return nil, errors.New("s3 unavailable")
 	}
 

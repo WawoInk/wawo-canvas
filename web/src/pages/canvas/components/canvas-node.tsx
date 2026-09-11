@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { ChevronRight, Cloud, Copy, Download, Image as ImageIcon, Music2, RefreshCw, Star, Trash2, Video } from "lucide-react";
+import { ChevronRight, Cloud, Copy, Download, Image as ImageIcon, Music2, Pause, RefreshCw, Star, Trash2, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -266,7 +266,7 @@ export const CanvasNode = React.memo(function CanvasNode({
     return (
         <div
             data-node-id={data.id}
-            className={`node-element group/node absolute flex select-none flex-col transition-shadow duration-200 ${isGroup ? "z-[5]" : isSelected ? "z-50" : "z-10"}${data.metadata?.status === "loading" ? " canvan-gen-active" : ""}`}
+            className={`node-element group/node absolute flex select-none flex-col transition-shadow duration-200 ${isGroup ? "z-[5]" : isSelected ? "z-50" : "z-10"}${data.metadata?.status === "loading" && !data.metadata.generationPollingPaused ? " canvan-gen-active" : ""}`}
             style={{
                 transform: `translate(${data.position.x}px, ${data.position.y}px)`,
                 width: data.width,
@@ -368,6 +368,14 @@ function NodeContent(props: NodeContentRendererProps) {
     const { node, theme } = props;
     if (node.type === CanvasNodeType.Group) return <GroupContent node={node} theme={theme} childCount={props.groupChildCount} t={props.t} />;
     if (node.type === CanvasNodeType.Config && props.renderNodeContent) return props.renderNodeContent(node);
+    if (node.type === CanvasNodeType.Video && node.metadata?.generationPollingPaused && (node.metadata.status === "loading" || node.metadata.status === "error")) {
+        return (
+            <div className="flex max-w-[260px] flex-col items-center gap-3 px-5 text-center" style={{ color: theme.node.muted }}>
+                <Pause className="size-6" />
+                <div className="text-xs leading-5">{node.metadata.errorDetails || props.t("canvas.actions.resumeQuery")}</div>
+            </div>
+        );
+    }
     if (node.metadata?.status === "loading") return <LoadingContent node={node} theme={theme} />;
     if (node.metadata?.status === "error") return <ErrorContent node={node} theme={theme} t={props.t} onRetry={props.onRetry} />;
 
