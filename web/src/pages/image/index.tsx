@@ -86,7 +86,7 @@ type GenerationLog = {
     tasks?: ImageWorkbenchTaskRecord[];
 };
 
-type GenerationLogConfig = Pick<AiConfig, "model" | "imageModel" | "quality" | "size" | "count">;
+type GenerationLogConfig = Pick<AiConfig, "model" | "imageModel" | "quality" | "size" | "background" | "count">;
 
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
 const LOG_STORE_KEY = "infinite-canvas:image_generation_logs";
@@ -96,6 +96,10 @@ function logStoreForUser() {
     const user = useUserStore.getState().user;
     const userId = user?.id || "anonymous";
     return localforage.createInstance({ name: "infinite-canvas", storeName: accountStoreName("image_generation_logs", userId) });
+}
+
+export function getImageWorkbenchGenerationCount(count: string) {
+    return Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
 }
 
 export default function ImagePage() {
@@ -131,7 +135,7 @@ export default function ImagePage() {
 
     const model = effectiveConfig.imageModel || effectiveConfig.model;
     const canGenerate = Boolean(prompt.trim());
-    const generationCount = Math.max(1, Math.min(10, Number(config.count) || 1));
+    const generationCount = getImageWorkbenchGenerationCount(config.count);
 
     const rememberLog = (log: GenerationLog) => {
         workbenchLogsRef.current.set(log.id, log);
@@ -561,6 +565,7 @@ export default function ImagePage() {
                 imageModel: item.model || "",
                 quality: item.quality || "",
                 size: item.size || "",
+                background: "",
                 count: item.count || "1",
             },
             references: [],
@@ -586,6 +591,7 @@ export default function ImagePage() {
         if (log.config.imageModel || log.model) updateConfig("imageModel", log.config.imageModel || log.model);
         if (log.config.quality) updateConfig("quality", log.config.quality);
         if (log.config.size) updateConfig("size", log.config.size);
+        updateConfig("background", log.config.background);
         if (log.config.count) updateConfig("count", log.config.count);
         const restoredSlots = restoreImageWorkbenchSlots(log.tasks || [], log.images);
         setResults(
@@ -946,7 +952,7 @@ function GenerationSettings({ config, model, updateConfig, openConfigDialog }: {
                 <ModelPicker config={config} value={model} onChange={(value) => updateConfig("imageModel", value)} capability="image" fullWidth onMissingConfig={() => openConfigDialog(false)} />
             </label>
             <div className="col-span-2">
-                <ImageSettingsPanel config={{ ...config, model }} onConfigChange={(key, value) => updateConfig(key, value)} theme={theme} showTitle={false} className="space-y-4" maxCount={10} />
+                <ImageSettingsPanel config={{ ...config, model }} onConfigChange={(key, value) => updateConfig(key, value)} theme={theme} showTitle={false} className="space-y-4" maxCount={15} />
             </div>
         </>
     );
@@ -1183,7 +1189,7 @@ async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog>
             dataUrl: item.fileId && urlMap.has(item.fileId) ? urlMap.get(item.fileId)! : await resolveImageUrl(item.storageKey, item.dataUrl),
         })),
     );
-    const config = normalizeLogConfig(log);
+    const config = normalizeImageWorkbenchLogConfig(log);
     const tasks = log.tasks?.map((task) => ({ ...task }));
     return {
         id: log.id || nanoid(),
@@ -1216,12 +1222,13 @@ function serializeLog(log: GenerationLog): GenerationLog {
     };
 }
 
-function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
+export function normalizeImageWorkbenchLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
     return {
         model: log.config?.model || log.model || "",
         imageModel: log.config?.imageModel || log.model || "",
         quality: log.config?.quality || log.quality || "",
         size: log.config?.size || log.size || "",
+        background: log.config?.background === "transparent" ? "transparent" : "",
         count: log.config?.count || String(log.imageCount || log.successCount || 1),
     };
 }
@@ -1280,6 +1287,7 @@ function buildLog({
         imageModel: config.imageModel,
         quality: config.quality,
         size: config.size,
+        background: config.background,
         count: config.count,
     };
     return {

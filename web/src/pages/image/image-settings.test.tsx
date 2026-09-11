@@ -9,8 +9,23 @@ const { createRoot } = await import("react-dom/client");
 const { App } = await import("antd");
 const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
 const { MemoryRouter } = await import("react-router-dom");
-const { default: ImagePage } = await import("./index");
+const { default: ImagePage, getImageWorkbenchGenerationCount, normalizeImageWorkbenchLogConfig } = await import("./index");
 const { defaultConfig, useConfigStore } = await import("@/stores/use-config-store");
+
+test("image workbench supports Canvas's 15-image batch maximum", () => {
+    assert.equal(getImageWorkbenchGenerationCount("15"), 15);
+    assert.equal(getImageWorkbenchGenerationCount("16"), 15);
+});
+
+test("image workbench history preserves the Canvas transparent-background parameter", () => {
+    assert.equal(
+        normalizeImageWorkbenchLogConfig({
+            model: "image-model",
+            config: { model: "image-model", imageModel: "image-model", quality: "high", size: "1:1", background: "transparent", count: "1" },
+        }).background,
+        "transparent",
+    );
+});
 
 test("image workbench settings follow selected imageModel instead of the unrelated default model", async () => {
     const previous = useConfigStore.getState();

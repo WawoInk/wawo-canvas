@@ -24,8 +24,8 @@ import { resolveFileUrls } from "@/services/resolve-file-urls";
 import { recordGenerationTask } from "@/services/api/generation-tasks";
 import { cancelVideoGenerationTask, pollVideoGenerationTask } from "@/services/api/video";
 import { fetchVideoHistory, deleteGenerationTask, type VideoHistoryItem } from "@/services/api/generation-tasks";
-import { cancelGeneration, GenerationPollingPausedError, generationQueryErrorMessage, getGenerationProfiles, type GenerationProfile, type ShortDramaAssetRole } from "@/services/api/generations";
-import { completeVideoWorkbenchTask, createVideoWorkbenchTask, type VideoWorkbenchTask } from "./video-async-task";
+import { cancelGeneration, GenerationPollingPausedError, generationQueryErrorMessage, generationRequestErrorMessage, getGenerationProfiles, type GenerationProfile, type ShortDramaAssetRole } from "@/services/api/generations";
+import { completeVideoWorkbenchTask, createVideoWorkbenchTask, VIDEO_WORKBENCH_COMPATIBILITY_POLL_ATTEMPTS, type VideoWorkbenchTask } from "./video-async-task";
 import { syncClient } from "@/services/sync-client";
 import { syncScheduler } from "@/services/sync-scheduler";
 import { useAssetStore } from "@/stores/use-asset-store";
@@ -78,7 +78,7 @@ type GenerationLog = {
     dramaAssetRoles?: Record<string, ShortDramaAssetRole>;
 };
 
-type GenerationLogConfig = Pick<AiConfig, "model" | "videoModel" | "size" | "vquality" | "videoSeconds" | "videoMode" | "videoGenerateAudio" | "videoWatermark" | "channelMode">;
+type GenerationLogConfig = Pick<AiConfig, "model" | "videoModel" | "quality" | "size" | "vquality" | "videoSeconds" | "videoMode" | "videoGenerateAudio" | "videoWatermark" | "videoNegativePrompt" | "channelMode">;
 
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
 
@@ -281,7 +281,7 @@ export default function VideoPage() {
             await saveLog(log);
             void pollGenerationLog(log, snapshot.config);
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : t("errors.video.generationFailed");
+            const errorMessage = generationRequestErrorMessage(error, t("errors.video.generationFailed"));
             setResults([{ id: nanoid(), status: "failed", error: errorMessage }]);
             await saveLog(
                 buildLog({
@@ -531,7 +531,7 @@ export default function VideoPage() {
                 }
                 const localLogs = await readStoredLogs();
                 const localByID = new Map(localLogs.map((log) => [log.id, log]));
-                const validLogs = backendLogs.filter((log) => log.id).map((log) => mergeGenerationLog(log, localByID.get(log.id)));
+                const validLogs = backendLogs.filter((log) => log.id).map((log) => mergeVideoWorkbenchGenerationLog(log, localByID.get(log.id)));
                 const knownIDs = new Set(validLogs.map((log) => log.id));
                 validLogs.push(...localLogs.filter((log) => !knownIDs.has(log.id)));
                 validLogs.sort((a, b) => b.createdAt - a.createdAt);
@@ -568,12 +568,14 @@ export default function VideoPage() {
             config: {
                 model,
                 videoModel: model,
+                quality: "",
                 size: item.size || "",
                 vquality: item.vquality || "",
                 videoSeconds: item.videoSeconds || "",
                 videoMode: "reference",
                 videoGenerateAudio: item.genAudio || "true",
                 videoWatermark: item.watermark || "false",
+                videoNegativePrompt: "",
                 channelMode: "remote",
             },
             references: [],
@@ -613,10 +615,10 @@ export default function VideoPage() {
         try {
             if (log.task.firstParty) {
                 const nextVideo = await completeVideoWorkbenchTask(log.task, {
-                    resolveFile: async (fileId) => {
+                    resolveFile: async (fileId, file) => {
                         const url = (await resolveFileUrls([fileId])).get(fileId);
                         if (!url) throw new Error(t("errors.video.emptyResult"));
-                        return { id: fileId, url, fileId, storageKey: "", durationMs: Date.now() - log.createdAt, width: 1280, height: 720, bytes: 0, mimeType: "video/mp4" };
+                        return { id: fileId, url, fileId, storageKey: "", durationMs: file?.durationMs ?? Date.now() - log.createdAt, width: file?.width || 1280, height: file?.height || 720, bytes: file?.bytes ?? 0, mimeType: file?.mimeType || "video/mp4" };
                     },
                     sleep: () => delay(5000, abortController.signal),
                     signal: abortController.signal,
@@ -644,7 +646,7 @@ export default function VideoPage() {
                 message.success(t("videoWorkbench.results.generated"));
                 return;
             }
-            for (let attempt = 0; attempt < 120; attempt += 1) {
+            for (let attempt = 0; attempt < VIDEO_WORKBENCH_COMPATIBILITY_POLL_ATTEMPTS; attempt += 1) {
                 const state = await pollVideoGenerationTask(configOverride || taskConfig, log.task, { signal: abortController.signal });
                 if (state.status === "completed") {
                     let stored;
@@ -681,7 +683,7 @@ export default function VideoPage() {
                     return;
                 }
                 if (state.status === "failed") throw new Error(state.error);
-                if (attempt === 119) throw new Error(t("errors.video.timeout"));
+                if (attempt === VIDEO_WORKBENCH_COMPATIBILITY_POLL_ATTEMPTS - 1) throw new Error(t("errors.video.timeout"));
                 // ponytail: persist intermediate poll state so page reload / nav-away doesn't lose the task
                 if (attempt % 3 === 0) {
                     logStoreForUser()
@@ -692,7 +694,7 @@ export default function VideoPage() {
             }
         } catch (error) {
             const aborted = abortController.signal.aborted || (error instanceof DOMException && error.name === "AbortError");
-            const errorMessage = aborted ? t("errors.requestCancelled") : error instanceof Error ? error.message : t("errors.video.generationFailed");
+            const errorMessage = aborted ? t("errors.requestCancelled") : generationRequestErrorMessage(error, t("errors.video.generationFailed"));
             if (error instanceof GenerationPollingPausedError) {
                 const pausedLog = { ...log, status: "pending" as const, durationMs: Date.now() - log.createdAt, error: generationQueryErrorMessage(error.queryError) };
                 await logStoreForUser().setItem(pausedLog.id, serializeLog(pausedLog));
@@ -747,6 +749,8 @@ export default function VideoPage() {
         updateConfig("videoMode", log.config.videoMode);
         if (log.config.videoGenerateAudio) updateConfig("videoGenerateAudio", log.config.videoGenerateAudio);
         if (log.config.videoWatermark) updateConfig("videoWatermark", log.config.videoWatermark);
+        updateConfig("quality", log.config.quality);
+        updateConfig("videoNegativePrompt", log.config.videoNegativePrompt);
         setResults(log.status === "pending" ? [{ id: log.id, status: "pending" }] : log.video ? [{ id: log.video.id, status: "success", video: log.video }] : [{ id: log.id, status: "failed", error: log.error || t("errors.video.generationFailed") }]);
     };
 
@@ -1244,7 +1248,7 @@ async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog>
             dataUrl: item.fileId ? (await resolveFileUrls([item.fileId])).get(item.fileId) || item.dataUrl : await resolveImageUrl(item.storageKey, item.dataUrl),
         })),
     );
-    const config = normalizeLogConfig(log);
+    const config = normalizeVideoWorkbenchLogConfig(log);
     return {
         id: log.id || nanoid(),
         createdAt: log.createdAt || Date.now(),
@@ -1266,12 +1270,13 @@ async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog>
     };
 }
 
-function mergeGenerationLog(log: GenerationLog, local?: GenerationLog): GenerationLog {
+export function mergeVideoWorkbenchGenerationLog(log: GenerationLog, local?: GenerationLog): GenerationLog {
     if (!local) return log;
     return {
         ...log,
         task: log.task || local.task,
-        config: { ...log.config, videoMode: local.config.videoMode },
+        config: { ...log.config, quality: local.config.quality, videoMode: local.config.videoMode, videoNegativePrompt: local.config.videoNegativePrompt },
+        video: local.video ? { ...local.video, url: log.video?.url || local.video.url } : log.video,
         references: local.references.length ? local.references : log.references,
         videoReferences: local.videoReferences.length ? local.videoReferences : log.videoReferences,
         audioReferences: local.audioReferences.length ? local.audioReferences : log.audioReferences,
@@ -1344,16 +1349,18 @@ function ReferenceOrderButtons({ index, total, onMove }: { index: number; total:
     );
 }
 
-function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
+export function normalizeVideoWorkbenchLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
     return {
         model: log.config?.model || log.model || "",
         videoModel: log.config?.videoModel || log.model || "",
+        quality: log.config?.quality || "",
         size: log.config?.size || log.size || "",
         vquality: normalizeResolution(log.config?.vquality || log.resolution || ""),
         videoSeconds: log.config?.videoSeconds || log.seconds || "",
         videoMode: log.config?.videoMode === "frames" ? "frames" : "reference",
         videoGenerateAudio: log.config?.videoGenerateAudio || "true",
         videoWatermark: log.config?.videoWatermark || "false",
+        videoNegativePrompt: log.config?.videoNegativePrompt || "",
         channelMode: log.config?.channelMode || "local",
     };
 }
@@ -1392,12 +1399,14 @@ function buildLog({
     const logConfig: GenerationLogConfig = {
         model: config.model,
         videoModel: config.videoModel,
+        quality: config.quality,
         size: config.size,
         vquality: normalizeResolution(config.vquality),
         videoSeconds: config.videoSeconds,
         videoMode: config.videoMode,
         videoGenerateAudio: config.videoGenerateAudio,
         videoWatermark: config.videoWatermark,
+        videoNegativePrompt: config.videoNegativePrompt,
         channelMode: config.channelMode,
     };
     return {

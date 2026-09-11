@@ -4,7 +4,7 @@ import axios from "axios";
 
 import { defaultConfig } from "../../stores/use-config-store.ts";
 import { cancelVideoGenerationTask } from "../../services/api/video.ts";
-import { buildVideoWorkbenchGenerationCommand, completeVideoWorkbenchTask, createVideoWorkbenchTask } from "./video-async-task.ts";
+import { buildVideoWorkbenchGenerationCommand, completeVideoWorkbenchTask, createVideoWorkbenchTask, VIDEO_WORKBENCH_COMPATIBILITY_POLL_ATTEMPTS } from "./video-async-task.ts";
 
 const standardProfile = {
     id: "seedance-profile",
@@ -91,6 +91,81 @@ test("remote video workbench submits its configured Profile to the first-party r
     }
 });
 
+test("remote video workbench recovers an accepted task when the create response is lost", async () => {
+    const previousAdapter = axios.defaults.adapter;
+    const requests = [];
+    axios.defaults.adapter = async (config) => {
+        requests.push(`${config.method} ${config.url}`);
+        if (config.method === "post" && config.url === "/api/v1/generations") throw new Error("connection closed after submit");
+        if (config.method === "get" && config.url === "/api/v1/generations/client-requests/request-lost") {
+            return {
+                data: { code: 0, data: { id: "generation-recovered", status: "queued", modelProfileId: standardProfile.id, intentKind: "video.generate", createdAt: "2026-08-20T00:00:00Z" }, msg: "ok" },
+                status: 200,
+                statusText: "OK",
+                headers: {},
+                config,
+            };
+        }
+        throw new Error(`unexpected request: ${config.url}`);
+    };
+
+    try {
+        const task = await createVideoWorkbenchTask({ ...defaultConfig, channelMode: "remote", model: standardProfile.id, videoModel: standardProfile.id }, "make a launch film", [], [], [], {
+            profile: standardProfile,
+            clientRequestId: "request-lost",
+        });
+        assert.equal(task.id, "generation-recovered");
+        assert.equal(task.clientRequestId, "request-lost");
+        assert.deepEqual(requests, ["post /api/v1/generations", "get /api/v1/generations/client-requests/request-lost"]);
+    } finally {
+        axios.defaults.adapter = previousAdapter;
+    }
+});
+
+test("local video workbench marks compatibility tasks with the video workbench source", async () => {
+    const previousAdapter = axios.defaults.adapter;
+    let source;
+    axios.defaults.adapter = async (config) => {
+        source = config.headers["X-Source"];
+        return {
+            data: { id: "compat-video-1", status: "queued" },
+            status: 200,
+            statusText: "OK",
+            headers: {},
+            config,
+        };
+    };
+
+    try {
+        const task = await createVideoWorkbenchTask(
+            {
+                ...defaultConfig,
+                channelMode: "local",
+                apiKey: "test-key",
+                baseUrl: "https://video.test",
+                model: "video-model",
+                videoModel: "video-model",
+                models: ["video-model"],
+                videoModels: ["video-model"],
+                channels: [{ id: "video", name: "Video", baseUrl: "https://video.test", apiKey: "test-key", apiFormat: "openai", models: ["video-model"] }],
+            },
+            "make a launch film",
+            [],
+            [],
+            [],
+        );
+
+        assert.equal(task.id, "compat-video-1");
+        assert.equal(source, "video_workbench");
+    } finally {
+        axios.defaults.adapter = previousAdapter;
+    }
+});
+
+test("video workbench compatibility polling keeps the Canvas observation window", () => {
+    assert.equal(VIDEO_WORKBENCH_COMPATIBILITY_POLL_ATTEMPTS, 360);
+});
+
 test("first-party video completion reads the server-materialized file", async () => {
     const previousAdapter = axios.defaults.adapter;
     const requests = [];
@@ -116,24 +191,44 @@ test("first-party video completion reads the server-materialized file", async ()
         };
     };
     try {
+        const resolved = [];
         const video = await completeVideoWorkbenchTask(
             { id: "generation-43", model: standardProfile.id, firstParty: true, clientRequestId: "request-43", cancellation: false },
             {
-                resolveFile: async (fileId) => ({
-                    id: fileId,
-                    url: "https://files.test/file-video-9",
-                    fileId,
-                    storageKey: "",
-                    durationMs: 12000,
-                    width: 1920,
-                    height: 1080,
-                    bytes: 456,
-                    mimeType: "video/mp4",
-                }),
+                resolveFile: async (fileId, file) => {
+                    resolved.push({ fileId, file });
+                    return {
+                        id: fileId,
+                        url: "https://files.test/file-video-9",
+                        fileId,
+                        storageKey: "",
+                        durationMs: 12000,
+                        width: 1920,
+                        height: 1080,
+                        bytes: file.bytes || 0,
+                        mimeType: file.mimeType,
+                    };
+                },
             },
         );
 
-        assert.equal(video.fileId, "file-video-9");
+        assert.deepEqual(resolved, [
+            {
+                fileId: "file-video-9",
+                file: { fileId: "file-video-9", mimeType: "video/mp4", bytes: 456 },
+            },
+        ]);
+        assert.deepEqual(video, {
+            id: "file-video-9",
+            url: "https://files.test/file-video-9",
+            fileId: "file-video-9",
+            storageKey: "",
+            durationMs: 12000,
+            width: 1920,
+            height: 1080,
+            bytes: 456,
+            mimeType: "video/mp4",
+        });
         assert.deepEqual(requests, ["get /api/v1/generations/generation-43"]);
     } finally {
         axios.defaults.adapter = previousAdapter;

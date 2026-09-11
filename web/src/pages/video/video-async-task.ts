@@ -3,9 +3,12 @@ import {
     buildShortDramaGenerationSettings,
     buildVideoGenerationSettings,
     createGeneration,
+    getGenerationByClientRequestId,
     readGeneratedVideoFile,
+    retryableGenerationQueryError,
     waitForGeneration,
     type GenerationCommand,
+    type GeneratedFile,
     type GenerationProfile,
     type ShortDramaAssetRole,
     type VideoGenerationSettings,
@@ -20,6 +23,7 @@ import { nanoid } from "nanoid";
 import i18n from "@/i18n";
 
 export type VideoWorkbenchTask = (VideoGenerationTask & { firstParty?: false }) | { id: string; model: string; firstParty: true; clientRequestId?: string; cancellation: boolean };
+export const VIDEO_WORKBENCH_COMPATIBILITY_POLL_ATTEMPTS = 360;
 
 export type MaterializedVideo = {
     id: string;
@@ -35,7 +39,7 @@ export type MaterializedVideo = {
 
 type CompletionDependencies = {
     pollTask?: () => Promise<GenerationTaskDetail>;
-    resolveFile: (fileId: string) => Promise<MaterializedVideo>;
+    resolveFile: (fileId: string, file?: GeneratedFile) => Promise<MaterializedVideo>;
     sleep?: () => Promise<void>;
     signal?: AbortSignal;
 };
@@ -55,22 +59,27 @@ export async function createVideoWorkbenchTask(
     audioReferences: ReferenceAudio[],
     options: CreateVideoWorkbenchTaskOptions = {},
 ): Promise<VideoWorkbenchTask> {
-    if (config.channelMode === "local") return createVideoGenerationTask(config, prompt, references, videoReferences, audioReferences);
+    if (config.channelMode === "local") return createVideoGenerationTask(config, prompt, references, videoReferences, audioReferences, undefined, "video_workbench");
     if (!options.profile) throw new Error(i18n.t("errors.video.firstPartyProfileRequired"));
     const clientRequestId = options.clientRequestId || nanoid();
-    const task = await createGeneration(
-        buildVideoWorkbenchGenerationCommand({
-            clientRequestId,
-            profile: options.profile,
-            config,
-            prompt,
-            title: options.title,
-            references,
-            videoReferences,
-            audioReferences,
-            dramaAssetRoles: options.dramaAssetRoles,
-        }),
-    );
+    const command = buildVideoWorkbenchGenerationCommand({
+        clientRequestId,
+        profile: options.profile,
+        config,
+        prompt,
+        title: options.title,
+        references,
+        videoReferences,
+        audioReferences,
+        dramaAssetRoles: options.dramaAssetRoles,
+    });
+    let task;
+    try {
+        task = await createGeneration(command);
+    } catch (error) {
+        if (!retryableGenerationQueryError(error)) throw error;
+        task = await getGenerationByClientRequestId(clientRequestId);
+    }
     return { id: task.id, model: options.profile.id, firstParty: true, clientRequestId, cancellation: options.profile.capabilities.cancellation };
 }
 
@@ -79,12 +88,12 @@ export async function completeVideoWorkbenchTask(task: VideoWorkbenchTask, depen
         const completed = await waitForGeneration(task.id, dependencies.signal, undefined, task.clientRequestId || "");
         const file = readGeneratedVideoFile(completed.result);
         if (!file) throw new Error("Video task completed without a file");
-        return dependencies.resolveFile(file.fileId);
+        return dependencies.resolveFile(file.fileId, file);
     }
     const platformTaskId = task.platformTaskId;
     if (!platformTaskId) throw new Error("Video task is missing its platform task ID");
     const pollTask = dependencies.pollTask || (() => fetchGenerationTaskDetail(platformTaskId));
-    for (let attempt = 0; attempt < 360; attempt += 1) {
+    for (let attempt = 0; attempt < VIDEO_WORKBENCH_COMPATIBILITY_POLL_ATTEMPTS; attempt += 1) {
         const detail = await pollTask();
         const status = detail.task.status;
         if (status === "success" || status === "succeeded") {
