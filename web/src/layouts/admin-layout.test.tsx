@@ -61,6 +61,7 @@ const translations: Record<string, string> = {
     "admin.menus.enterprises": "企业管理",
     "admin.menus.users": "用户管理",
     "admin.menus.creditLogs": "算力点日志",
+    "admin.menus.enterpriseCreditLogs": "企业流水日志",
     "admin.menus.generationTasks": "使用日志",
     "admin.menus.canvasNodes": "画布节点信息",
     "admin.menus.prompts": "提示词管理",
@@ -98,9 +99,21 @@ test("groups admin navigation into member, content, site, and operations submenu
     assert.match(html, /成员管理.*内容管理.*站点管理.*运维管理/s);
     assert.match(html, /内容管理.*提示词管理.*素材库.*火山引擎资产/s);
     assert.match(html, /站点管理.*品牌配置/s);
-    assert.match(html, /运维管理.*算力点日志.*使用日志.*画布节点信息.*系统设置/s);
+    assert.match(html, /运维管理.*算力点日志.*企业流水日志.*使用日志.*画布节点信息.*系统设置/s);
 
-    for (const path of ["/admin/enterprises", "/admin/users", "/admin/prompts", "/admin/assets", "/admin/volcengine-assets", "/admin/brand-config", "/admin/credit-logs", "/admin/generation-tasks", "/admin/canvas-nodes", "/admin/settings"]) {
+    for (const path of [
+        "/admin/enterprises",
+        "/admin/users",
+        "/admin/prompts",
+        "/admin/assets",
+        "/admin/volcengine-assets",
+        "/admin/brand-config",
+        "/admin/credit-logs",
+        "/admin/enterprise-credit-logs",
+        "/admin/generation-tasks",
+        "/admin/canvas-nodes",
+        "/admin/settings",
+    ]) {
         assert.match(html, new RegExp(`href="${path}"`));
     }
 

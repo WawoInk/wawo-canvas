@@ -1203,6 +1203,7 @@
             "enterprises": "企业管理",
             "users": "用户管理",
             "creditLogs": "算力点日志",
+            "enterpriseCreditLogs": "企业流水日志",
             "generationTasks": "使用日志",
             "canvasNodes": "画布节点信息",
             "prompts": "提示词管理",
@@ -1493,6 +1494,47 @@
             "delete": {
                 "title": "删除日志",
                 "confirm": "确定删除这条算力点日志吗？"
+            }
+        },
+        "enterpriseCreditLogs": {
+            "title": "企业流水日志",
+            "filters": {
+                "enterpriseId": "企业 ID",
+                "enterpriseIdPlaceholder": "输入企业 ID",
+                "enterpriseName": "企业名",
+                "enterpriseNamePlaceholder": "输入企业名",
+                "model": "模型名",
+                "modelPlaceholder": "输入模型名",
+                "status": "状态",
+                "dateRange": "日期范围"
+            },
+            "table": {
+                "enterprise": "企业",
+                "account": "账号",
+                "userId": "用户 ID",
+                "model": "使用模型",
+                "type": "流水类型",
+                "amount": "积分变动",
+                "status": "状态",
+                "remark": "备注",
+                "time": "时间"
+            },
+            "types": {
+                "admin_adjust": "后台调整",
+                "enterprise_allocate": "企业分配",
+                "enterprise_reclaim": "企业收回",
+                "ai_consume": "模型消费",
+                "ai_refund": "失败退款"
+            },
+            "export": {
+                "button": "导出",
+                "fileName": "企业流水日志.csv"
+            },
+            "messages": {
+                "loadFailed": "读取企业流水日志失败",
+                "emptyExport": "当前筛选范围没有可导出的企业流水日志",
+                "exportSuccess": "企业流水日志已导出",
+                "exportFailed": "导出企业流水日志失败"
             }
         },
         "generationTasks": {

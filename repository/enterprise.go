@@ -107,6 +107,46 @@ func ListEnterpriseCreditLogs(enterpriseID, memberID string, q model.Query) ([]m
 	return logs, total, err
 }
 
+func ListAdminEnterpriseCreditLogs(q model.AdminEnterpriseCreditLogQuery) ([]model.AdminEnterpriseCreditLog, int64, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, 0, err
+	}
+	q.Normalize()
+	tx := db.Table("credit_logs AS log").
+		Joins("JOIN users AS account ON account.id = log.user_id").
+		Joins("JOIN enterprises AS enterprise ON enterprise.id = account.enterprise_id").
+		Joins("LEFT JOIN generation_tasks AS task ON task.id = log.task_id").
+		Where("account.enterprise_role IN ?", []model.EnterpriseRole{model.EnterpriseRoleOwner, model.EnterpriseRoleMember}).
+		Where("log.type IN ?", []model.CreditLogType{model.CreditLogTypeAdminAdjust, model.CreditLogTypeEnterpriseAllocate, model.CreditLogTypeEnterpriseReclaim, model.CreditLogTypeAIConsume, model.CreditLogTypeAIRefund})
+	if enterpriseID := strings.TrimSpace(q.EnterpriseID); enterpriseID != "" {
+		tx = tx.Where("enterprise.id = ?", enterpriseID)
+	}
+	if enterpriseName := strings.TrimSpace(q.EnterpriseName); enterpriseName != "" {
+		tx = tx.Where("enterprise.name LIKE ?", "%"+enterpriseName+"%")
+	}
+	if modelName := strings.TrimSpace(q.Model); modelName != "" {
+		tx = tx.Where("task.model LIKE ?", "%"+modelName+"%")
+	}
+	if q.Status != "" {
+		tx = tx.Where("task.status IN ?", model.EquivalentTaskStatuses(q.Status))
+	}
+	if q.StartTime != "" {
+		tx = tx.Where("log.created_at::timestamptz >= ?::timestamptz", q.StartTime)
+	}
+	if q.EndTime != "" {
+		tx = tx.Where("log.created_at::timestamptz <= ?::timestamptz", q.EndTime)
+	}
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var logs []model.AdminEnterpriseCreditLog
+	err = tx.Select("log.*, enterprise.id AS enterprise_id, enterprise.name AS enterprise_name, account.username, account.display_name, task.model, task.status").
+		Order("log.created_at DESC, log.id DESC").Offset(q.Offset()).Limit(q.PageSize).Scan(&logs).Error
+	return logs, total, err
+}
+
 func GetEnterpriseMember(enterpriseID, id string) (model.User, bool, error) {
 	db, err := DB()
 	if err != nil {

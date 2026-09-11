@@ -3,6 +3,8 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/basketikun/infinite-canvas/model"
 	"github.com/basketikun/infinite-canvas/service"
@@ -29,6 +31,27 @@ func EnterpriseCreditLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := service.ListEnterpriseCreditLogs(user, r.URL.Query().Get("memberId"), parseQuery(r))
+	if err != nil {
+		FailError(w, err)
+		return
+	}
+	OK(w, result)
+}
+
+func AdminEnterpriseCreditLogs(w http.ResponseWriter, r *http.Request) {
+	values := r.URL.Query()
+	page, _ := strconv.Atoi(values.Get("page"))
+	pageSize, _ := strconv.Atoi(values.Get("pageSize"))
+	result, err := service.ListAdminEnterpriseCreditLogs(model.AdminEnterpriseCreditLogQuery{
+		EnterpriseID:   strings.TrimSpace(values.Get("enterprise_id")),
+		EnterpriseName: strings.TrimSpace(values.Get("enterprise_name")),
+		Model:          strings.TrimSpace(values.Get("model")),
+		Status:         model.TaskStatus(strings.TrimSpace(values.Get("status"))),
+		StartTime:      values.Get("start_time"),
+		EndTime:        values.Get("end_time"),
+		Page:           page,
+		PageSize:       pageSize,
+	})
 	if err != nil {
 		FailError(w, err)
 		return

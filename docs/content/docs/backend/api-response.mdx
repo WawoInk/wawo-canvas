@@ -136,8 +136,11 @@ Canvas 与远程视频创作台都使用第一方视频 Generation Run：客户�
 | `POST` | `/api/admin/enterprises/{id}/owner/status` | 设置主账号 `active/ban` 状态 |
 | `POST` | `/api/admin/enterprises/{id}/owner/password` | 重置主账号密码并使旧会话失效 |
 | `POST` | `/api/admin/enterprises/{id}/credits` | 使用 `{ delta, reason }` 按增量调整主账号积分；`delta` 不能为 0，扣减后余额不能为负 |
+| `GET` | `/api/admin/enterprise-credit-logs` | 按企业、模型、任务状态、日期范围和分页查询全部企业积分流水 |
 
 企业积分调整不接受客户端提交最终余额。服务端锁定主账号余额后应用 `delta`，并在同一数据库事务中写入 `admin_adjust` 流水；流水的 `userId` 是目标主账号，`relatedId` 是平台管理员，`remark` 保存调整原因。`GET /api/admin/credit-logs` 支持 `keyword/type/start_time/end_time/page/pageSize`，日期按闭区间筛选 `createdAt`，每条记录附带当前对应用户的 `username`；使用 `type=admin_adjust` 可筛选平台调整记录。企业账号不能再通过 `/api/admin/users/{id}/credits` 覆盖余额。
+
+`GET /api/admin/enterprise-credit-logs` 支持 `enterprise_id/enterprise_name/model/status/start_time/end_time/page/pageSize`。企业 ID 精确匹配，企业名与模型名模糊匹配，成功状态同时包含历史 `success` 与当前 `succeeded`；日期按流水 `createdAt` 闭区间筛选。列表包含企业主账号和成员的后台调整、企业分配/收回、AI 消费及失败退款流水，并附带企业、账号、生成模型和任务状态；非 AI 流水的模型与任务状态为空。
 
 管理后台使用日志 `GET /api/admin/generation-tasks` 同样支持 `start_time/end_time` 日期闭区间筛选。前端日期范围会按本地首日开始时间和末日结束时间转换为 ISO 时间戳。
 

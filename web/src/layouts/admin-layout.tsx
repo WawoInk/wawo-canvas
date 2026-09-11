@@ -69,6 +69,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             label: t("admin.menus.operationsManagement"),
             children: [
                 { key: "/admin/credit-logs", icon: <TransactionOutlined />, label: t("admin.menus.creditLogs") },
+                { key: "/admin/enterprise-credit-logs", icon: <TransactionOutlined />, label: t("admin.menus.enterpriseCreditLogs") },
                 { key: "/admin/generation-tasks", icon: <ExperimentOutlined />, label: t("admin.menus.generationTasks") },
                 { key: "/admin/canvas-nodes", icon: <NodeIndexOutlined />, label: t("admin.menus.canvasNodes") },
                 { key: "/admin/settings", icon: <SettingOutlined />, label: t("admin.menus.settings") },

@@ -92,3 +92,46 @@ type EnterpriseCreditLogList struct {
 	Items []EnterpriseCreditLog `json:"items"`
 	Total int                   `json:"total"`
 }
+
+// AdminEnterpriseCreditLog 管理员查看的企业积分流水，附带企业与生成任务信息。
+type AdminEnterpriseCreditLog struct {
+	CreditLog
+	EnterpriseID   string     `json:"enterpriseId"`
+	EnterpriseName string     `json:"enterpriseName"`
+	Username       string     `json:"username"`
+	DisplayName    string     `json:"displayName"`
+	Model          string     `json:"model"`
+	Status         TaskStatus `json:"status"`
+}
+
+type AdminEnterpriseCreditLogList struct {
+	Items []AdminEnterpriseCreditLog `json:"items"`
+	Total int                        `json:"total"`
+}
+
+type AdminEnterpriseCreditLogQuery struct {
+	EnterpriseID   string
+	EnterpriseName string
+	Model          string
+	Status         TaskStatus
+	StartTime      string
+	EndTime        string
+	Page           int
+	PageSize       int
+}
+
+func (q *AdminEnterpriseCreditLogQuery) Normalize() {
+	if q.Page < 1 {
+		q.Page = 1
+	}
+	if q.PageSize < 1 {
+		q.PageSize = 20
+	}
+	if q.PageSize > MaxPageSize {
+		q.PageSize = MaxPageSize
+	}
+}
+
+func (q *AdminEnterpriseCreditLogQuery) Offset() int {
+	return (q.Page - 1) * q.PageSize
+}

@@ -1203,6 +1203,7 @@
             "enterprises": "Enterprises",
             "users": "Users",
             "creditLogs": "Credit logs",
+            "enterpriseCreditLogs": "Enterprise credit logs",
             "generationTasks": "Usage logs",
             "canvasNodes": "Canvas node information",
             "prompts": "Prompts",
@@ -1493,6 +1494,47 @@
             "delete": {
                 "title": "Delete log",
                 "confirm": "Delete this credit log?"
+            }
+        },
+        "enterpriseCreditLogs": {
+            "title": "Enterprise credit logs",
+            "filters": {
+                "enterpriseId": "Enterprise ID",
+                "enterpriseIdPlaceholder": "Enter an enterprise ID",
+                "enterpriseName": "Enterprise name",
+                "enterpriseNamePlaceholder": "Enter an enterprise name",
+                "model": "Model",
+                "modelPlaceholder": "Enter a model name",
+                "status": "Status",
+                "dateRange": "Date range"
+            },
+            "table": {
+                "enterprise": "Enterprise",
+                "account": "Account",
+                "userId": "User ID",
+                "model": "Model",
+                "type": "Log type",
+                "amount": "Credit change",
+                "status": "Status",
+                "remark": "Note",
+                "time": "Time"
+            },
+            "types": {
+                "admin_adjust": "Admin adjustment",
+                "enterprise_allocate": "Enterprise allocation",
+                "enterprise_reclaim": "Enterprise reclaim",
+                "ai_consume": "Model usage",
+                "ai_refund": "Failure refund"
+            },
+            "export": {
+                "button": "Export",
+                "fileName": "enterprise-credit-logs.csv"
+            },
+            "messages": {
+                "loadFailed": "Failed to load enterprise credit logs",
+                "emptyExport": "There are no enterprise credit logs to export for the current filters",
+                "exportSuccess": "Enterprise credit logs exported",
+                "exportFailed": "Failed to export enterprise credit logs"
             }
         },
         "generationTasks": {

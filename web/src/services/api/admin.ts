@@ -91,6 +91,41 @@ export type AdminCreditLogQuery = {
     pageSize?: number;
 };
 
+export type AdminEnterpriseCreditLog = {
+    id: string;
+    userId: string;
+    taskId: string;
+    type: string;
+    amount: DecimalValue;
+    balance: DecimalValue;
+    relatedId: string;
+    counterpartyId: string;
+    remark: string;
+    createdAt: string;
+    enterpriseId: string;
+    enterpriseName: string;
+    username: string;
+    displayName: string;
+    model: string;
+    status: string;
+};
+
+export type AdminEnterpriseCreditLogListResponse = {
+    items: AdminEnterpriseCreditLog[];
+    total: number;
+};
+
+export type AdminEnterpriseCreditLogQuery = {
+    enterprise_id?: string;
+    enterprise_name?: string;
+    model?: string;
+    status?: string;
+    start_time?: string;
+    end_time?: string;
+    page?: number;
+    pageSize?: number;
+};
+
 export type AdminCanvasNode = {
     userId: string;
     username: string;
@@ -169,6 +204,10 @@ export async function deleteAdminUser(token: string, id: string) {
 
 export async function fetchAdminCreditLogs(token: string, query: AdminCreditLogQuery = {}) {
     return apiGet<AdminCreditLogListResponse>("/api/admin/credit-logs", compactApiParams(query), token);
+}
+
+export async function fetchAdminEnterpriseCreditLogs(token: string, query: AdminEnterpriseCreditLogQuery = {}) {
+    return apiGet<AdminEnterpriseCreditLogListResponse>("/api/admin/enterprise-credit-logs", compactApiParams(query), token);
 }
 
 export async function fetchAdminCanvasNodes(token: string, query: AdminCanvasNodeQuery = {}) {

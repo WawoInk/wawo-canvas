@@ -118,6 +118,14 @@ func ListEnterpriseCreditLogs(current model.AuthUser, memberID string, q model.Q
 	return model.EnterpriseCreditLogList{Items: items, Total: int(total)}, nil
 }
 
+func ListAdminEnterpriseCreditLogs(q model.AdminEnterpriseCreditLogQuery) (model.AdminEnterpriseCreditLogList, error) {
+	items, total, err := repository.ListAdminEnterpriseCreditLogs(q)
+	if err != nil {
+		return model.AdminEnterpriseCreditLogList{}, err
+	}
+	return model.AdminEnterpriseCreditLogList{Items: items, Total: int(total)}, nil
+}
+
 func CreateEnterpriseMember(current model.AuthUser, input CreateEnterpriseMemberInput) (model.EnterpriseMember, error) {
 	enterpriseID, err := enterpriseOwnerID(current)
 	if err != nil {
