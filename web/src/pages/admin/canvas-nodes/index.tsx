@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, Col, DatePicker, Form, Input, Row, Space, Table, Tooltip, Typography } from "antd";
+import { Button, Card, Col, DatePicker, Form, Input, Row, Space, Table, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import type { Dayjs } from "dayjs";
 import { SearchOutlined } from "@ant-design/icons";
@@ -21,21 +21,6 @@ export default function AdminCanvasNodesPage() {
         { title: t("admin.canvasNodes.table.nodeId"), dataIndex: "nodeId", width: 220, render: (value: string) => <Typography.Text>{value || "-"}</Typography.Text> },
         { title: t("admin.canvasNodes.table.upstreamTaskId"), dataIndex: "upstreamTaskId", width: 220, render: (value: string) => <Typography.Text>{value || "-"}</Typography.Text> },
         { title: t("admin.canvasNodes.table.createdAt"), dataIndex: "createdAt", width: 180, render: (value: string) => <Typography.Text type="secondary">{value ? formatDateTime(value) : "-"}</Typography.Text> },
-        {
-            title: t("admin.canvasNodes.table.resultUrl"),
-            dataIndex: "resultUrl",
-            width: 360,
-            render: (value: string) =>
-                value ? (
-                    <Tooltip title={value}>
-                        <Typography.Text copyable={{ text: value }} ellipsis style={{ display: "block", whiteSpace: "nowrap" }}>
-                            {value}
-                        </Typography.Text>
-                    </Tooltip>
-                ) : (
-                    <Typography.Text>-</Typography.Text>
-                ),
-        },
     ];
 
     return (
