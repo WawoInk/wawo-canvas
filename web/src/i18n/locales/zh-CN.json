@@ -1459,6 +1459,7 @@
             "table": {
                 "userId": "用户 ID",
                 "username": "用户名",
+                "enterpriseName": "企业名",
                 "relatedId": "操作者 / 关联 ID",
                 "type": "类型",
                 "change": "变动",

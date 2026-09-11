@@ -1459,6 +1459,7 @@
             "table": {
                 "userId": "User ID",
                 "username": "Username",
+                "enterpriseName": "Enterprise name",
                 "relatedId": "Operator / Related ID",
                 "type": "Type",
                 "change": "Change",

@@ -68,6 +68,8 @@ export type AdminCreditLog = {
     id: string;
     userId: string;
     username?: string;
+    enterpriseName?: string;
+    taskId: string;
     type: string;
     amount: DecimalValue;
     balance: DecimalValue;

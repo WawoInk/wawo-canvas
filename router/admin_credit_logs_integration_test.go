@@ -14,7 +14,8 @@ import (
 
 type adminCreditLogHTTPItem struct {
 	model.CreditLog
-	Username string `json:"username"`
+	Username       string `json:"username"`
+	EnterpriseName string `json:"enterpriseName"`
 }
 
 type adminCreditLogHTTPList struct {
@@ -100,5 +101,47 @@ func TestAdminCreditLogsFilterByInclusiveDateRangeAndReturnUsernameThroughHTTP(t
 	}
 	if len(expected) != 0 {
 		t.Fatalf("inclusive boundary logs missing = %#v", expected)
+	}
+}
+
+func TestAdminCreditLogsReturnEnterpriseMemberContextThroughHTTP(t *testing.T) {
+	previousJWTSecret := config.Cfg.JWTSecret
+	config.Cfg.JWTSecret = "admin-enterprise-member-credit-log-test-secret"
+	t.Cleanup(func() { config.Cfg.JWTSecret = previousJWTSecret })
+
+	adminUsername := "admin-enterprise-member-credit-log-" + uuid.NewString()
+	if _, err := service.SaveUser(model.User{Username: adminUsername, Role: model.UserRoleAdmin}, "admin-password"); err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	enterprise, err := service.CreateEnterprise(service.CreateEnterpriseInput{
+		Name: "算力点日志企业-" + uuid.NewString(), OwnerUsername: "credit-log-owner-" + uuid.NewString(), OwnerPassword: "owner-password",
+	})
+	if err != nil {
+		t.Fatalf("create enterprise: %v", err)
+	}
+	member, err := service.CreateEnterpriseMember(model.AuthUser{ID: enterprise.OwnerID, EnterpriseID: enterprise.ID, EnterpriseRole: model.EnterpriseRoleOwner}, service.CreateEnterpriseMemberInput{
+		Username: "credit-log-member-" + uuid.NewString(), Password: "member-password",
+	})
+	if err != nil {
+		t.Fatalf("create enterprise member: %v", err)
+	}
+	taskID := "enterprise-member-task-" + uuid.NewString()
+	if _, err := service.SaveCreditLog(model.CreditLog{
+		UserID: member.ID, TaskID: taskID, Type: model.CreditLogTypeAIConsume, Amount: credit(-1), Balance: credit(9), Remark: "成员模型消费",
+	}); err != nil {
+		t.Fatalf("create member credit log: %v", err)
+	}
+
+	server := httptest.NewServer(router.New())
+	defer server.Close()
+	admin := doJSON[model.AuthSession](t, http.MethodPost, server.URL+"/api/admin/login", "", map[string]string{"username": adminUsername, "password": "admin-password"})
+	logs := doJSON[adminCreditLogHTTPList](t, http.MethodGet, server.URL+"/api/admin/credit-logs?keyword="+member.ID, admin.Data.Token, nil)
+
+	if logs.Code != 0 || logs.Data.Total != 1 || len(logs.Data.Items) != 1 {
+		t.Fatalf("enterprise member credit logs = %#v", logs)
+	}
+	item := logs.Data.Items[0]
+	if item.TaskID != taskID || item.EnterpriseName != enterprise.Name {
+		t.Fatalf("enterprise member context = %#v, want task %q enterprise %q", item, taskID, enterprise.Name)
 	}
 }

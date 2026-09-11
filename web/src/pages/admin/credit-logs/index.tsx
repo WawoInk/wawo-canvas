@@ -56,10 +56,16 @@ export default function AdminCreditLogsPage() {
             render: (_, item) => <Typography.Text>{item.username || "-"}</Typography.Text>,
         },
         {
+            title: t("admin.creditLogs.table.enterpriseName"),
+            dataIndex: "enterpriseName",
+            width: 160,
+            render: (_, item) => <Typography.Text>{item.enterpriseName || "-"}</Typography.Text>,
+        },
+        {
             title: t("admin.creditLogs.table.relatedId"),
             dataIndex: "relatedId",
             width: 220,
-            render: (_, item) => (item.relatedId ? <Typography.Text copyable>{item.relatedId}</Typography.Text> : <Typography.Text type="secondary">-</Typography.Text>),
+            render: (_, item) => (item.relatedId || item.taskId ? <Typography.Text copyable>{item.relatedId || item.taskId}</Typography.Text> : <Typography.Text type="secondary">-</Typography.Text>),
         },
         {
             title: t("admin.creditLogs.table.type"),

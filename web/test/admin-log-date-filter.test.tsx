@@ -142,14 +142,16 @@ test("算力点日志选择和清空日期范围会更新管理员查询参数",
     }
 });
 
-test("算力点日志表格展示记录对应的用户名", async () => {
+test("算力点日志表格展示企业成员的关联任务和企业名", async () => {
     creditCalls.length = 0;
     creditItems = [
         {
             id: "credit-log-with-username",
             userId: "user-with-username",
             username: "visible-credit-user",
-            type: "admin_adjust",
+            enterpriseName: "visible-enterprise-name",
+            taskId: "visible-related-task",
+            type: "ai_consume",
             amount: "1",
             balance: "2",
             relatedId: "",
@@ -189,6 +191,8 @@ test("算力点日志表格展示记录对应的用户名", async () => {
         await waitFor(() => creditCalls.length > 0);
         await waitFor(() => container.textContent?.includes("user-with-username") === true);
         assert.match(container.textContent || "", /visible-credit-user/);
+        assert.match(container.textContent || "", /visible-related-task/);
+        assert.match(container.textContent || "", /visible-enterprise-name/);
     } finally {
         await act(async () => root.unmount());
         queryClient.clear();

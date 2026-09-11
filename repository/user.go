@@ -239,7 +239,8 @@ func SaveCreditLog(log model.CreditLog) (model.CreditLog, error) {
 
 type AdminCreditLogWithUser struct {
 	model.CreditLog
-	Username string `json:"username"`
+	Username       string `json:"username"`
+	EnterpriseName string `json:"enterpriseName"`
 }
 
 func ListCreditLogs(q model.Query) ([]AdminCreditLogWithUser, int64, error) {
@@ -249,7 +250,8 @@ func ListCreditLogs(q model.Query) ([]AdminCreditLogWithUser, int64, error) {
 	}
 	q.Normalize()
 	tx := db.Table("credit_logs AS log").
-		Joins("LEFT JOIN users AS account ON account.id = log.user_id")
+		Joins("LEFT JOIN users AS account ON account.id = log.user_id").
+		Joins("LEFT JOIN enterprises AS enterprise ON enterprise.id = account.enterprise_id")
 	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
 		like := "%" + keyword + "%"
 		tx = tx.Where("log.user_id LIKE ? OR log.type LIKE ? OR log.remark LIKE ? OR log.related_id LIKE ?", like, like, like, like)
@@ -268,7 +270,7 @@ func ListCreditLogs(q model.Query) ([]AdminCreditLogWithUser, int64, error) {
 		return nil, 0, err
 	}
 	var logs []AdminCreditLogWithUser
-	err = tx.Select("log.*, account.username AS username").
+	err = tx.Select("log.*, account.username AS username, enterprise.name AS enterprise_name").
 		Order("log.created_at DESC").
 		Offset(q.Offset()).
 		Limit(q.PageSize).
