@@ -378,3 +378,12 @@ test("video mode is projected only from a Profile that explicitly supports it", 
     delete profile.capabilities.settings.videoMode;
     assert.equal(Object.hasOwn(buildVideoGenerationSettings(profile, { videoMode: "frames" }), "videoMode"), false);
 });
+
+test("exhausting the observation window pauses polling without declaring generation timeout", async () => {
+    let polls = 0;
+    await assert.rejects(
+        pollGenerationTask(async () => { polls += 1; return { status: "running" }; }, async () => {}, undefined, 2),
+        (error) => error instanceof GenerationPollingPausedError,
+    );
+    assert.equal(polls, 2);
+});

@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -655,19 +656,12 @@ func completeGenerationTask(ctx context.Context, task model.GenerationTask, prof
 	_ = resolveGenerationTask(ctx, task, profile, ref, "worker")
 }
 
-func persistGenerationVideo(ctx context.Context, userID, rawURL string) (*model.UserFile, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	response, err := generationHTTPClient.Do(request)
+func persistGenerationVideo(ctx context.Context, task model.GenerationTask, rawURL string) (*model.UserFile, error) {
+	response, err := downloadGenerationVideo(ctx, task, rawURL)
 	if err != nil {
 		return nil, err
 	}
 	defer response.Body.Close()
-	if response.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("result download returned %d", response.StatusCode)
-	}
 	data, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, err
@@ -676,7 +670,44 @@ func persistGenerationVideo(ctx context.Context, userID, rawURL string) (*model.
 	if mimeType == "" {
 		mimeType = "video/mp4"
 	}
-	return UploadUserFile(ctx, userID, "results/videos", "generated.mp4", mimeType, bytes.NewReader(data), int64(len(data)))
+	return UploadUserFile(ctx, task.UserID, "results/videos", "generated.mp4", mimeType, bytes.NewReader(data), int64(len(data)))
+}
+
+func downloadGenerationVideo(ctx context.Context, task model.GenerationTask, rawURL string) (*http.Response, error) {
+	client := generationHTTPClient
+	authorization := ""
+	mediaURL, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	if task.AdapterKey == "sora-videos-v1" && task.UpstreamTaskID != "" && mediaURL.EscapedPath() == "/v1/videos/"+url.PathEscape(task.UpstreamTaskID)+"/content" {
+		channel, err := generationRouteChannel(task.ChannelID, task.UpstreamModel)
+		if err != nil {
+			return nil, err
+		}
+		rawURL = BuildModelChannelURL(channel, "/videos/"+url.PathEscape(task.UpstreamTaskID)+"/content")
+		authorization = modelChannelAuthorization(channel.APIKey)
+		// Provider content belongs to the saved route; never send its key to the advertised host or a redirect.
+		authenticatedClient := *client
+		authenticatedClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		client = &authenticatedClient
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	if authorization != "" {
+		request.Header.Set("Authorization", authorization)
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		response.Body.Close()
+		return nil, fmt.Errorf("result download returned %d", response.StatusCode)
+	}
+	return response, nil
 }
 
 func persistGenerationAudit(taskID string, audit GenerationAudit) {

@@ -174,7 +174,7 @@ func materializeFirstPartyGenerationResult(ctx context.Context, task model.Gener
 	if err != nil || !claimed {
 		return "", false, err
 	}
-	file, err := generationPersistVideo(ctx, task.UserID, strings.TrimSpace(ref.VideoURL))
+	file, err := generationPersistVideo(ctx, task, strings.TrimSpace(ref.VideoURL))
 	if err != nil {
 		_ = repository.UpdateGenerationPayloadRawError(task.ID, sanitizeGenerationAuditJSON(fmt.Sprintf("%q", err.Error())))
 		_, releaseErr := repository.TransitionGenerationTask(task.ID, []model.TaskStatus{model.TaskStatusPending}, map[string]any{

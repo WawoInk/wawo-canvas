@@ -42,7 +42,7 @@ export async function pollGenerationTask<T extends { status: GenerationTaskStatu
         if (task.status === "succeeded" || task.status === "failed" || task.status === "cancelled") return task;
         if (attempt < attempts) await sleep();
     }
-    throw new Error(i18n.t("errors.video.timeout"));
+    throw new GenerationPollingPausedError(undefined);
 }
 
 export type GenerationSettingDefinition = {

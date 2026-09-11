@@ -176,7 +176,7 @@ Adapter 不负责：
 
 1. 上游必须返回可用结果 URL。
 2. 任务 CAS 到内部 `pending`，占用结果持久化阶段。
-3. 后端下载视频并上传 S3。
+3. 后端下载视频并上传 S3。Sora 协议结果 URL 若精确指向当前上游任务的 `/v1/videos/:id/content`，通过任务绑定渠道构造下载地址并携带渠道鉴权，不跟随重定向；普通媒体 URL 保持匿名下载。
 4. 创建个人 `user_files` 记录。
 5. `ResultJSON` 保存带 `fileId/mimeType/bytes` 的判别结果。
 6. 终态从 `pending` 仲裁为 `succeeded`。
@@ -282,7 +282,7 @@ original credits * enterprise.discount_rate
 `web/src/services/api/generations.ts`：
 
 - `createGeneration` 创建 first-party task。
-- `waitForGeneration` 每 5 秒轮询；连续 20 次可重试的浏览器查询错误只暂停本地观察，收到有效任务响应会清零错误计数。
+- `waitForGeneration` 每 5 秒轮询；连续 20 次可重试的浏览器查询错误或 360 次有效查询仍未取得终态，都只暂停本地观察，收到有效任务响应会清零错误计数。恢复查询使用当前编辑器绑定并清除旧错误；暂停视频节点停止加载动画。
 - `getGenerationByClientRequestId` 在创建响应丢失时找回当前用户的同一 first-party task。
 - `cancelGeneration` 请求取消。
 - `readGenerationError` 读取信封中的稳定错误。

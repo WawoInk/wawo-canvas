@@ -49,7 +49,7 @@ func runCanvasVideoTransientPoll(t *testing.T, recovered, expired bool) {
 	generationPollInterval = time.Millisecond
 	generationPollIntervalMax = time.Millisecond
 	generationTaskTimeout = 100 * time.Millisecond
-	generationPersistVideo = func(context.Context, string, string) (*model.UserFile, error) {
+	generationPersistVideo = func(context.Context, model.GenerationTask, string) (*model.UserFile, error) {
 		return &model.UserFile{ID: "materialized-result", MimeType: "video/mp4"}, nil
 	}
 	upstreamID, wantCreates := "", 1
