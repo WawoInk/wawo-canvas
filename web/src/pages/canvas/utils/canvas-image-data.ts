@@ -1,5 +1,11 @@
 "use client";
 
+import { getImageBlob } from "@/services/blob-storage";
+import { readPlatformFileBlob } from "@/services/api/files";
+import { uploadUrlToS3 } from "@/services/upload-blob";
+
+type ImageSource = string | { content?: string; storageKey?: string; fileId?: string };
+
 export type ImageCropRect = {
     x: number;
     y: number;
@@ -34,8 +40,8 @@ export type ImageSplitPiece = {
     dataUrl: string;
 };
 
-export async function cropDataUrl(dataUrl: string, crop?: ImageCropRect) {
-    const image = await loadImage(dataUrl);
+export async function cropDataUrl(source: ImageSource, crop?: ImageCropRect) {
+    const image = await loadImage(source);
     if (crop) {
         return drawCrop(image, Math.floor(crop.x * image.width), Math.floor(crop.y * image.height), Math.ceil(crop.width * image.width), Math.ceil(crop.height * image.height));
     }
@@ -45,8 +51,8 @@ export async function cropDataUrl(dataUrl: string, crop?: ImageCropRect) {
     return drawCrop(image, sx, sy, size, size);
 }
 
-export async function splitDataUrl(dataUrl: string, params: ImageSplitParams): Promise<ImageSplitPiece[]> {
-    const image = await loadImage(dataUrl);
+export async function splitDataUrl(source: ImageSource, params: ImageSplitParams): Promise<ImageSplitPiece[]> {
+    const image = await loadImage(source);
     const rows = Math.max(1, Math.floor(params.rows));
     const columns = Math.max(1, Math.floor(params.columns));
     const pieces: ImageSplitPiece[] = [];
@@ -104,8 +110,8 @@ export async function transformAngleDataUrl(dataUrl: string, params: ImageAngleT
     return canvas.toDataURL("image/png");
 }
 
-export async function upscaleDataUrl(dataUrl: string, params: ImageUpscaleParams) {
-    const image = await loadImage(dataUrl);
+export async function upscaleDataUrl(source: ImageSource, params: ImageUpscaleParams) {
+    const image = await loadImage(source);
     const { width, height } = resolveUpscaleSize(image.width, image.height, params.targetLongEdge);
     return params.algorithm === "high" ? drawStepUpscale(image, width, height) : drawResize(image, image.width, image.height, width, height, params.algorithm);
 }
@@ -160,10 +166,30 @@ function drawResizeCanvas(source: CanvasImageSource, sourceWidth: number, source
     return canvas;
 }
 
-function loadImage(dataUrl: string) {
-    return new Promise<HTMLImageElement>((resolve) => {
+async function loadImage(source: ImageSource) {
+    let resolved: string | Blob = typeof source === "string" ? source : source.content || "";
+    if (typeof source !== "string" && source.fileId) resolved = await readPlatformFileBlob(source.fileId);
+    else if (typeof source !== "string" && source.storageKey) resolved = (await getImageBlob(source.storageKey)) || resolved;
+    if (typeof resolved === "string" && /^https?:/i.test(resolved)) {
+        resolved = await readPlatformFileBlob((await uploadUrlToS3(resolved, "images")).fileId);
+    }
+
+    let objectUrl = "";
+    if (resolved instanceof Blob) {
+        objectUrl = URL.createObjectURL(resolved);
+        resolved = objectUrl;
+    }
+    return new Promise<HTMLImageElement>((resolve, reject) => {
         const image = new Image();
-        image.onload = () => resolve(image);
-        image.src = dataUrl;
+        const cleanup = () => objectUrl && URL.revokeObjectURL(objectUrl);
+        image.onload = () => {
+            cleanup();
+            resolve(image);
+        };
+        image.onerror = () => {
+            cleanup();
+            reject(new Error("图片加载失败"));
+        };
+        image.src = resolved;
     });
 }

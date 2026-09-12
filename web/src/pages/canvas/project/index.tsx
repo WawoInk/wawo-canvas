@@ -2122,7 +2122,7 @@ function InfiniteCanvasPage() {
     const cropImageNode = useCallback(
         async (node: CanvasNodeData, crop: CanvasImageCropRect) => {
             if (!node.metadata?.content) return;
-            const cropped = await cropDataUrl(node.metadata.content, crop);
+            const cropped = await cropDataUrl(node.metadata, crop);
             const image = await uploadImage(cropped);
             const width = Math.min(node.width, Math.max(220, image.width));
             const childId = nanoid();
@@ -2152,7 +2152,7 @@ function InfiniteCanvasPage() {
         async (node: CanvasNodeData, params: CanvasImageSplitParams) => {
             if (!node.metadata?.content) return;
             setSplitNodeId(null);
-            const pieces = await splitDataUrl(node.metadata.content, params);
+            const pieces = await splitDataUrl(node.metadata, params);
             const gap = 16;
             const cellWidth = node.width / params.columns;
             const cellHeight = node.height / params.rows;
@@ -2293,7 +2293,7 @@ function InfiniteCanvasPage() {
         async (node: CanvasNodeData, params: CanvasImageUpscaleParams) => {
             if (!node.metadata?.content) return;
             setUpscaleNodeId(null);
-            const upscaled = await upscaleDataUrl(node.metadata.content, params);
+            const upscaled = await upscaleDataUrl(node.metadata, params);
             const image = await uploadImage(upscaled);
             const size = fitNodeSize(image.width, image.height);
             const childId = nanoid();
