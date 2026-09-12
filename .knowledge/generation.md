@@ -263,6 +263,7 @@ original credits * enterprise.discount_rate
 
 - `video_tasks` 保存 upstream task ID -> user/model 所有权。
 - `generation_tasks` 保存统一任务、计费和历史。
+- 对进入共享 worker 的 durable Compatibility Acceptance，上游 task identity、`video_tasks` 所有权、payload 响应和 accepted event 在同一 PostgreSQL transaction 中写入；任一唯一约束或持久化失败都会整体回滚 accepted transition。
 - 查询/取消/remix 必须校验当前用户拥有 upstream task。
 - 对绑定了 first-party Profile 的兼容模型，可由共享 worker 观察后续状态。
 

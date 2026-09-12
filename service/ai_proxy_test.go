@@ -1283,6 +1283,8 @@ func TestAsyncImageTaskRefAcceptsTopLevelImageData(t *testing.T) {
 }
 
 func TestProxyVideoTaskCreateChargesBoundViduByUpstreamCredits(t *testing.T) {
+	key := uuid.NewString()
+	upstreamTaskID := "compat-vidu-billed-" + key
 	requestedModels := make(chan string, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -1292,10 +1294,10 @@ func TestProxyVideoTaskCreateChargesBoundViduByUpstreamCredits(t *testing.T) {
 			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			requestedModels <- body.Model
-			_, _ = w.Write([]byte(`{"id":"compat-vidu-billed","model":"vidu_hq_t2v-oversea","status":"queued"}`))
+			_, _ = w.Write([]byte(`{"id":"` + upstreamTaskID + `","model":"vidu_hq_t2v-oversea","status":"queued"}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"id":"compat-vidu-billed","model":"vidu_hq_t2v-oversea","status":"succeeded","content":{"video_url":"https://example.com/video.mp4"},"credits":18}`))
+		_, _ = w.Write([]byte(`{"id":"` + upstreamTaskID + `","model":"vidu_hq_t2v-oversea","status":"succeeded","content":{"video_url":"https://example.com/video.mp4"},"credits":18}`))
 	}))
 	defer upstream.Close()
 
@@ -1315,7 +1317,6 @@ func TestProxyVideoTaskCreateChargesBoundViduByUpstreamCredits(t *testing.T) {
 		_, _ = repository.SaveSettings(previousSettings, time.Now().UTC().Format(time.RFC3339Nano))
 	}()
 
-	key := uuid.NewString()
 	profileID := "compat-credit-profile-" + key
 	upstreamModel := "vidu_hq_t2v-oversea-" + key
 	channelName := "compat-credit-channel-" + key
@@ -1358,7 +1359,7 @@ func TestProxyVideoTaskCreateChargesBoundViduByUpstreamCredits(t *testing.T) {
 	if requestedModel := <-requestedModels; requestedModel != upstreamModel {
 		t.Fatalf("upstream model = %q, want %q", requestedModel, upstreamModel)
 	}
-	if _, err := GetVideoTaskByTaskIDAndUser("compat-vidu-billed", userID); err != nil {
+	if _, err := GetVideoTaskByTaskIDAndUser(upstreamTaskID, userID); err != nil {
 		t.Fatalf("video task ownership: %v", err)
 	}
 	if !processGenerationTask(context.Background(), taskID, "compat-credit-worker-"+key) {

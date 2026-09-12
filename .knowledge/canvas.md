@@ -11,7 +11,8 @@
   - 项目 Store：`web/src/pages/canvas/stores/use-canvas-store.ts`
   - 同步：`web/src/pages/canvas/stores/canvas-sync.ts`
   - 视频结果 durable commit：`web/src/pages/canvas/stores/canvas-video-result.ts`
-  - Replica 归一化：`web/src/pages/canvas/stores/canvas-replica.ts`
+  - Replica 归一化与 transition：`web/src/pages/canvas/stores/canvas-replica.ts`
+  - 图编辑不变量：`web/src/pages/canvas/utils/canvas-graph-edit.ts`
   - 渲染：`web/src/pages/canvas/components/infinite-canvas.tsx`、`canvas-node.tsx`、`canvas-connections.tsx`
   - 生成输入：`web/src/pages/canvas/components/canvas-node-generation.ts`
   - 导入导出：`web/src/pages/canvas/utils/canvas-export.ts`、`export-types.ts`
@@ -76,7 +77,7 @@ type CanvasProject = {
 
 连接不保存端口坐标、供应商字段或意图 metadata。渲染时根据节点位置计算 SVG 路径。
 
-连接规则集中在项目页：
+连接和删除节点规则集中在 `canvas-graph-edit.ts`，项目页交互与 Agent operations 共享同一 transition：
 
 - 同一节点不能自连。
 - Config 节点之间不能直接连接。
@@ -188,6 +189,7 @@ flowchart TB
 - 409 持久标记 `syncConflict` 并暂停该项目上传，不更换 revision 重传旧内容；刷新、online、visibilitychange 与 beforeunload 均不能绕过冲突。
 - 用户显式选择“保留本地副本并加载云端”时，同一账号 storage 快照同时保留新 ID 的本地副本与最新远端原项目，再同步副本；当前不做字段级多人 merge。
 - `remoteRevision` 标识最近接纳的远端内容版本；本设备保存确认只递增 `revision`，不改变 `remoteRevision`。页面私有 `useCanvasEditorReplica` 绑定显示快照，远端替换时重新还原，旧绑定写入由 Store 拒绝；视频结果提交同样携带绑定版本。
+- `canvas-replica.ts` 集中本地 edit/ack、Replica state、远端 merge、pending work 和 `{projectId,remoteRevision,token,userId}` binding；Store、sync、editor 和视频结果不再分别实现这些判定。视频结果每轮基于 Store 当前节点重放，并在持久化等待前后重新验证完整 binding，旧账号或旧远端快照不能写入当前 Replica。
 - 无业务变化的保存不产生 dirty；初始化 URL 还原由编辑器显示层处理，不作为业务修改。创建响应丢失只在远端业务内容等于原提交快照时恢复 revision，否则暂停为冲突。
 - 当 delta 中存在比 dirty 项目更新的 revision 时，Canvas cursor 不前进，避免永久跳过冲突事实。
 
@@ -252,6 +254,8 @@ Canvas 节点可能同时有：
 
 网页侧 Store 只保存面板临时状态；thread、workspace 和历史由本地 Agent 管理。详细通信见 [runtime-supporting-systems.md](runtime-supporting-systems.md)。
 
+Agent HTTP/SSE session 以 Canvas Project Replica ID 隔离 state、pending tool result、事件和 thread。多画布连接时，MCP 必须携带明确 Replica identity；缺少 identity 只在恰好一个画布连接时兼容，不能使用最近状态或广播猜测目标。
+
 ## 导入、导出与 WebDAV
 
 ZIP 导出：
@@ -287,4 +291,4 @@ WebDAV：
 - `cleanupImages` 是空实现，Blob 可能累积。
 - Undo/Redo 快照不包含 viewport；视口单独持久化。
 - 旧文档只列图片/文本/config 等较少节点类型，不能作为当前类型来源。
-- 本地 Agent 当前单一 Canvas state/广播模型不适合可靠的多画布并发。
+- 本地 Agent 的多 Canvas Project Replica 隔离已有自动化覆盖；真实浏览器同时连接多个画布及 Codex app-server/MCP 端到端仍待用户验证。

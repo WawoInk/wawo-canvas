@@ -131,6 +131,13 @@ HTTP Agent 主要 endpoints：
 - Codex thread/workspace：`/agent/codex/*`。
 - Claude：`POST /agent/claude/turn`，网页当前主要开放 Codex。
 
+Canvas session ownership：
+
+- 浏览器通过现有 `canvasId/projectId` 把 Replica identity 带入 `/events`、`/canvas/state`、`/canvas/result` 和 thread/turn 请求。
+- `CanvasSession` 为每个 Canvas Project Replica 独立保存 clients、state 和 pending tool requests；Codex 结构化事件按 thread/turn 映射回对应 Replica，不再广播给全部客户端。
+- Codex thread 的 MCP 配置通过 `CANVAS_REPLICA_ID` 把相同 identity 带到 `/api/tools`。
+- 未显式携带 identity 的旧 MCP 调用只在恰好一个 Replica 已连接时兼容；多 Replica 时拒绝歧义调用。
+
 安全和持久化：
 
 - token、允许 Origins 和 canvas workspace 写入 `~/.infinite-canvas/canvas-agent.json`。
@@ -179,8 +186,8 @@ HTTP Agent 主要 endpoints：
 2. `.env.example` 的 docs env 名仍是 Next.js 旧名。
 3. Web Dockerfile 依赖运行时挂载 Caddyfile；脱离 Compose 直接启动镜像不会自动拥有 proxy config。
 4. `Dockerfile.api` 依赖 CI 构建产物，本地直接 `docker build -f Dockerfile.api` 不会编译 Go。
-5. Canvas Agent 当前只有一个 `CanvasSession.canvasState`，事件广播给所有 SSE 客户端；多画布并发存在覆盖风险。
-6. Agent token 长期复用，配置写入没有显式 `0600` mode；Origin 是累积列表。
+5. Canvas Agent 多 Replica session 已按 identity 隔离，但真实浏览器多画布与 Codex app-server/MCP 端到端仍待验证；进程级 stderr 只归属当前活动 Turn。
+6. Agent token 长期复用，Origin 是累积列表；配置目录/文件已显式使用 `0700/0600`。
 7. `pinnedThreadIds` 已持久化但当前没有明确消费者。
 8. WebDAV 的 Next.js proxy mode 仍在前端类型中，但主 Vite/Go 应用没有对应 route。
 9. docs 部分旧内容仍引用 `web/src/app/api`、Next dev 或纯本地数据。

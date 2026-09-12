@@ -4,6 +4,7 @@ import i18n from "@/i18n";
 import { formatList, formatNumber } from "@/i18n/formatters";
 import { getNodeSpec } from "../constants";
 import { CanvasNodeType, type CanvasConnection, type CanvasNodeData, type CanvasNodeMetadata, type ViewportTransform } from "../types";
+import { applyCanvasGraphEdit } from "./canvas-graph-edit";
 
 export type CanvasAgentOp =
     | { type: "add_node"; id?: string; nodeType?: CanvasNodeType; title?: string; position?: { x: number; y: number }; x?: number; y?: number; width?: number; height?: number; metadata?: CanvasNodeMetadata }
@@ -71,10 +72,10 @@ export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasA
         }
         if (op.type === "delete_node") {
             const ids = new Set(op.ids || (op.id ? [op.id] : op.nodeType ? nodes.filter((node) => node.type === op.nodeType).map((node) => node.id) : []));
-            const groupIds = new Set(nodes.filter((node) => ids.has(node.id) && node.type === CanvasNodeType.Group).map((node) => node.id));
-            nodes = nodes.filter((node) => !ids.has(node.id)).map((node) => (node.metadata?.groupId && groupIds.has(node.metadata.groupId) ? { ...node, metadata: { ...node.metadata, groupId: undefined } } : node));
-            connections = connections.filter((conn) => !ids.has(conn.fromNodeId) && !ids.has(conn.toNodeId));
-            selectedNodeIds = selectedNodeIds.filter((id) => !ids.has(id));
+            const next = applyCanvasGraphEdit({ nodes, connections }, { type: "delete", nodeIds: ids });
+            nodes = next.nodes;
+            connections = next.connections;
+            selectedNodeIds = selectedNodeIds.filter((id) => !next.deletedNodeIds.has(id));
         }
         if (op.type === "delete_connections") {
             const ids = new Set(op.ids || (op.id ? [op.id] : []));
@@ -82,11 +83,7 @@ export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasA
         }
         if (op.type === "connect_nodes") {
             if (!op.fromNodeId || !op.toNodeId) return;
-            const from = nodes.find((node) => node.id === op.fromNodeId);
-            const to = nodes.find((node) => node.id === op.toNodeId);
-            const exists = connections.some((conn) => conn.fromNodeId === op.fromNodeId && conn.toNodeId === op.toNodeId);
-            const valid = from && to && to.type !== CanvasNodeType.Group && !(from.type === CanvasNodeType.Config && to.type === CanvasNodeType.Config);
-            if (!exists && valid) connections = [...connections, { id: op.id || nanoid(), fromNodeId: op.fromNodeId, toNodeId: op.toNodeId }];
+            connections = applyCanvasGraphEdit({ nodes, connections }, { type: "connect", id: op.id || nanoid(), firstNodeId: op.fromNodeId, secondNodeId: op.toNodeId, firstHandleType: "source" }).connections;
         }
         if (op.type === "set_viewport" && op.viewport) viewport = op.viewport;
         if (op.type === "select_nodes") selectedNodeIds = (op.ids || []).filter((id) => nodes.some((node) => node.id === id));

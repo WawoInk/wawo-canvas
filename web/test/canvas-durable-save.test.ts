@@ -58,6 +58,11 @@ const project = {
     viewport: { x: 0, y: 0, k: 1 },
 };
 
+function replicaBinding(source: { id: string; remoteRevision?: number } = project) {
+    const auth = useUserStore.getState();
+    return { projectId: source.id, remoteRevision: source.remoteRevision || 0, token: auth.token, userId: auth.user?.id || "" };
+}
+
 async function waitFor(check: () => boolean, timeoutMs = 1000) {
     const deadline = Date.now() + timeoutMs;
     while (!check()) {
@@ -190,9 +195,8 @@ test("a generated video result completes only after its Canvas Replica commit is
     const { commitCanvasVideoResult } = await import("../src/pages/canvas/stores/canvas-video-result");
     let completed = false;
     const commit = commitCanvasVideoResult({
-        projectId: project.id,
+        binding: replicaBinding(),
         nodeId: videoNode.id,
-        nodes: [videoNode],
         display: { width: 640, height: 360 },
         file: {
             url: "https://files.example/video.mp4",
@@ -271,9 +275,8 @@ test("a generated video durable commit preserves a newer accepted Canvas edit", 
 
     const { commitCanvasVideoResult } = await import("../src/pages/canvas/stores/canvas-video-result");
     const videoCommit = commitCanvasVideoResult({
-        projectId: project.id,
+        binding: replicaBinding(),
         nodeId: videoNode.id,
-        nodes: initialNodes,
         display: { width: 640, height: 360 },
         file: {
             url: "https://files.example/video.mp4",
@@ -345,17 +348,15 @@ test("concurrent generated video commits converge and the last page publication 
         await Promise.race([
             Promise.all([
                 commitCanvasVideoResult({
-                    projectId: project.id,
+                    binding: replicaBinding(),
                     nodeId: videoA.id,
-                    nodes: initialNodes,
                     display: { width: 640, height: 360 },
                     file: { url: "https://files.example/video-a.mp4", fileId: "file-video-a", width: 1920, height: 1080, bytes: 2048, mimeType: "video/mp4", durationMs: 6000 },
                     generationTaskStatus: "succeeded",
                 }).then(publish),
                 commitCanvasVideoResult({
-                    projectId: project.id,
+                    binding: replicaBinding(),
                     nodeId: videoB.id,
-                    nodes: initialNodes,
                     display: { width: 640, height: 360 },
                     file: { url: "https://files.example/video-b.mp4", fileId: "file-video-b", width: 1920, height: 1080, bytes: 4096, mimeType: "video/mp4", durationMs: 8000 },
                     generationTaskStatus: "succeeded",
@@ -583,14 +584,71 @@ test("a late video result cannot commit an older editor graph over a remote repl
     useCanvasStore.setState({ projects: [latest as never] });
     const { commitCanvasVideoResult } = await import("../src/pages/canvas/stores/canvas-video-result");
     await commitCanvasVideoResult({
-        projectId: project.id,
+        binding: replicaBinding(),
         nodeId: "old-video",
-        expectedRemoteRevision: 0,
-        nodes: [{ id: "old-video", type: "video" as never, title: "旧视频", position: { x: 0, y: 0 }, width: 100, height: 100 }],
         display: { width: 100, height: 100 },
         file: { url: "https://fixture.example/video", fileId: "file", mimeType: "video/mp4" },
     });
     expect(useCanvasStore.getState().openProject(project.id)).toMatchObject({ nodes: latest.nodes, dirty: false });
+});
+
+test("a late video result cannot cross an account session with the same project revision", async () => {
+    const loading = { id: "video-1", type: "video" as const, title: "旧账号视频", position: { x: 0, y: 0 }, width: 480, height: 270, metadata: { status: "loading" as const } };
+    const oldProject = { ...project, id: "shared-project", revision: 4, remoteRevision: 4, nodes: [loading] };
+    useUserStore.setState({ token: "token-a", user: account as never });
+    useCanvasStore.setState({ projects: [oldProject as never] });
+    const binding = replicaBinding(oldProject);
+
+    const otherAccount = { id: "account-b" };
+    const newProject = { ...oldProject, nodes: [{ ...loading, title: "新账号视频" }] };
+    useUserStore.setState({ token: "token-b", user: otherAccount as never });
+    useCanvasStore.setState({ projects: [newProject as never] });
+    const { commitCanvasVideoResult } = await import("../src/pages/canvas/stores/canvas-video-result");
+    const result = await commitCanvasVideoResult({
+        binding,
+        nodeId: loading.id,
+        display: { width: 640, height: 360 },
+        file: { url: "https://files.example/old.mp4", fileId: "old-file", mimeType: "video/mp4" },
+    });
+
+    expect(result).toBe(newProject.nodes);
+    expect(useCanvasStore.getState().openProject(oldProject.id)).toMatchObject({ nodes: newProject.nodes, dirty: false });
+});
+
+test("a video result rechecks its account session after waiting for durability", async () => {
+    const loading = { id: "video-1", type: "video" as const, title: "旧账号视频", position: { x: 0, y: 0 }, width: 480, height: 270, metadata: { status: "loading" as const } };
+    const videoResult = { nodeId: loading.id, display: { width: 640, height: 360 }, file: { url: "https://files.example/old.mp4", fileId: "old-file", mimeType: "video/mp4" } };
+    const { applyCanvasVideoResult, commitCanvasVideoResult } = await import("../src/pages/canvas/stores/canvas-video-result");
+    const completedNodes = applyCanvasVideoResult([loading as never], videoResult);
+    const oldProject = { ...project, id: "shared-project", revision: 4, remoteRevision: 4, nodes: completedNodes };
+    useUserStore.setState({ token: "token-a", user: account as never });
+    const binding = replicaBinding(oldProject);
+    let release = () => {};
+    let markWaiting = () => {};
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const waiting = new Promise<void>((resolve) => {
+        markWaiting = resolve;
+    });
+    const originalWait = useCanvasStore.getState().waitForLocalPersistence;
+    useCanvasStore.setState({ projects: [oldProject as never], waitForLocalPersistence: async () => (markWaiting(), gate) });
+
+    try {
+        const commit = commitCanvasVideoResult({ binding, ...videoResult });
+        await waiting;
+        const otherAccount = { id: "account-b" };
+        const newProject = { ...oldProject, nodes: [{ ...loading, title: "新账号视频" }] };
+        useUserStore.setState({ token: "token-b", user: otherAccount as never });
+        useCanvasStore.setState({ projects: [newProject as never] });
+        release();
+
+        expect(await commit).toBe(newProject.nodes);
+        expect(useCanvasStore.getState().openProject(oldProject.id)?.dirty).toBe(false);
+    } finally {
+        useCanvasStore.setState({ waitForLocalPersistence: originalWait });
+        release();
+    }
 });
 
 test("confirming an unchanged project name does not create a dirty replica", async () => {

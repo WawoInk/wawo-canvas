@@ -38,3 +38,36 @@ func TestGenerationTaskLeaseBlocksSecondOwnerUntilExpiry(t *testing.T) {
 		t.Fatalf("claim after expiry=%#v ok=%v err=%v", claimed, ok, err)
 	}
 }
+
+func TestQueueAcceptedCompatibilityTaskRollsBackWhenOwnershipCannotBeSaved(t *testing.T) {
+	now := time.Now().UTC()
+	upstreamTaskID := "accepted-conflict-" + uuid.NewString()
+	if err := SaveVideoTask("existing-owner", upstreamTaskID, "existing-model"); err != nil {
+		t.Fatalf("save existing ownership: %v", err)
+	}
+	task := model.GenerationTask{
+		ID: "accepted-task-" + uuid.NewString(), UserID: "new-owner", TaskType: model.TaskTypeVideo,
+		Model: "seedance-1-5-pro", Status: model.TaskStatusRunning,
+		CreatedAt: now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano),
+	}
+	payload := model.GenerationPayload{ID: "accepted-payload-" + uuid.NewString(), CreatedAt: task.CreatedAt}
+	if err := CreateGenerationTask(task, payload); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	if err := QueueAcceptedCompatibilityTask(task.ID, upstreamTaskID, "channel", "seedance-contents-v1", "seedance-1-5-pro", 1, "seedance-1-5-pro", `{"id":"`+upstreamTaskID+`"}`, "headers", 12, now); err == nil {
+		t.Fatal("accepted transition unexpectedly succeeded with conflicting ownership")
+	}
+
+	stored, err := GetGenerationTaskByID(task.ID)
+	if err != nil || stored.Status != model.TaskStatusRunning || stored.UpstreamTaskID != "" {
+		t.Fatalf("stored task = %#v, err = %v", stored, err)
+	}
+	storedPayload, err := GetGenerationPayloadByTaskID(task.ID)
+	if err != nil || storedPayload.ResponseBody != "" || storedPayload.ResponseHeaders != "" {
+		t.Fatalf("payload = %#v, err = %v", storedPayload, err)
+	}
+	events, err := ListGenerationTaskEvents(task.ID)
+	if err != nil || len(events) != 0 {
+		t.Fatalf("events = %#v, err = %v", events, err)
+	}
+}

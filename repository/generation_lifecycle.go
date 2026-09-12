@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/basketikun/infinite-canvas/model"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -26,6 +27,13 @@ func QueueAcceptedCompatibilityTask(id, upstreamTaskID, channelName, adapterKey,
 		}
 		if result.RowsAffected != 1 {
 			return errors.New("compatibility task is not claimable")
+		}
+		var task model.GenerationTask
+		if err := tx.Select("user_id", "model").Where("id = ?", id).Take(&task).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&model.VideoTask{ID: "vt-" + uuid.NewString(), UserID: task.UserID, TaskID: upstreamTaskID, Model: task.Model, CreatedAt: stamp}).Error; err != nil {
+			return err
 		}
 		if err := tx.Model(&model.GenerationPayload{}).Where("task_id = ?", id).Updates(map[string]any{"response_body": responseBody, "response_headers": responseHeaders}).Error; err != nil {
 			return err

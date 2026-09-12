@@ -14,7 +14,21 @@ import { formatDateTime, formatNumber, formatTime, formatUnit } from "@/i18n/for
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { useUserStore } from "@/stores/use-user-store";
-import { useCanvasAgentStore, type AgentAttachment, type AgentChatItem, type AgentEventLog, type AgentPanelTab, type AgentPendingToolCall, type AgentThreadSummary } from "../stores/use-canvas-agent-store";
+import {
+    beginCanvasAgentRequest,
+    beginCanvasAgentSession,
+    captureCanvasAgentSession,
+    isCurrentCanvasAgentRequest,
+    isCurrentCanvasAgentSession,
+    useCanvasAgentStore,
+    type AgentAttachment,
+    type AgentChatItem,
+    type AgentEventLog,
+    type AgentPanelTab,
+    type AgentPendingToolCall,
+    type AgentThreadSummary,
+    type CanvasAgentSessionEpoch,
+} from "../stores/use-canvas-agent-store";
 import { summarizeCanvasAgentOps, type CanvasAgentOp, type CanvasAgentSnapshot } from "../utils/canvas-agent-ops";
 import { AgentChatComposer, AgentChatMessage, AgentPanelTabs, AgentPendingToolCard, AgentWorkingMessage, type CanvasAgentChatAttachment } from "./canvas-agent-chat-ui";
 
@@ -75,6 +89,7 @@ export function CanvasLocalAgentPanel({
         url,
         token,
         connected,
+        canvasId: boundCanvasId,
         enabled,
         prompt,
         attachments,
@@ -104,33 +119,54 @@ export function CanvasLocalAgentPanel({
     const onApplyOpsRef = useRef(onApplyOps);
     const autoConnectRef = useRef(false);
     const connectedRef = useRef(false);
+    const sessionInitializedRef = useRef(false);
     const errorLoggedRef = useRef(false);
     const attachmentUrlsRef = useRef(new Set<string>());
     const clientIdRef = useRef(typeof crypto === "undefined" ? `${Date.now()}` : crypto.randomUUID());
     const endpoint = useMemo(() => url.trim().replace(/\/$/, ""), [url]);
     const loadThreads = useCallback(async () => {
-        const projectId = snapshotRef.current.projectId;
-        if ((!connectedRef.current && !useCanvasAgentStore.getState().connected) || !projectId) return;
+        const session = captureCanvasAgentSession();
+        const projectId = session.canvasId;
+        const initial = useCanvasAgentStore.getState();
+        if ((!connectedRef.current && !initial.connected) || !projectId || initial.canvasId !== projectId || !isCurrentCanvasAgentSession(session)) return;
+        const request = beginCanvasAgentRequest("threads", session);
         setAgentState({ loadingThreads: true });
         try {
             const data = await fetchAgentJson<AgentThreadsResponse>(endpoint, token, `/agent/codex/threads?canvasId=${encodeURIComponent(projectId)}`);
             const current = useCanvasAgentStore.getState();
+            if (current.canvasId !== projectId || !isCurrentCanvasAgentRequest(request)) return;
+            const nextThreadId = data.workspace?.activeThreadId || "";
             setAgentState({
                 threads: data.data || [],
-                workspacePath: data.workspace?.workspacePath || current.workspacePath,
-                activeThreadId: data.workspace?.activeThreadId || current.activeThreadId,
+                workspacePath: data.workspace?.workspacePath || "",
+                activeThreadId: nextThreadId,
+                ...(!nextThreadId ? { messages: [] } : {}),
             });
-            const nextThreadId = data.workspace?.activeThreadId || current.activeThreadId;
             if (nextThreadId && !current.messages.length) {
                 const thread = await fetchAgentJson<AgentThreadResponse>(endpoint, token, `/agent/codex/threads/${encodeURIComponent(nextThreadId)}?canvasId=${encodeURIComponent(projectId)}`);
+                if (useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentRequest(request)) return;
                 setAgentState({ messages: normalizeHistoryMessages(thread.messages || []) });
             }
         } catch (error) {
-            addEventLog(i18n.t("canvas.agent.logs.historyLoadFailed"), error);
+            if (useCanvasAgentStore.getState().canvasId === projectId && isCurrentCanvasAgentRequest(request)) addEventLog(i18n.t("canvas.agent.logs.historyLoadFailed"), error);
         } finally {
-            setAgentState({ loadingThreads: false });
+            if (useCanvasAgentStore.getState().canvasId === projectId && isCurrentCanvasAgentRequest(request)) setAgentState({ loadingThreads: false });
         }
     }, [endpoint, setAgentState, token]);
+
+    useLayoutEffect(() => {
+        snapshotRef.current = snapshot;
+        const changedProject = boundCanvasId !== snapshot.projectId;
+        if (sessionInitializedRef.current && !changedProject) return;
+        sessionInitializedRef.current = true;
+        const staleTool = pendingToolRef.current || pendingTool;
+        if (changedProject && staleTool && boundCanvasId) void postToolResult(endpoint, token, clientIdRef.current, boundCanvasId, { requestId: staleTool.requestId, error: "画布已切换" }).catch(() => undefined);
+        beginCanvasAgentSession(snapshot.projectId);
+        if (!changedProject) return;
+        connectedRef.current = false;
+        pendingToolRef.current = null;
+        setAgentState({ canvasId: snapshot.projectId, connected: false, messages: [], eventLogs: [], threads: [], activeThreadId: "", workspacePath: "", loadingThreads: false, waiting: false, sending: false, pendingTool: null, activity: i18n.t("canvas.agent.status.ready") });
+    }, [boundCanvasId, endpoint, pendingTool, setAgentState, snapshot.projectId, token]);
 
     useEffect(() => {
         snapshotRef.current = snapshot;
@@ -151,41 +187,50 @@ export function CanvasLocalAgentPanel({
 
     useEffect(() => {
         const current = useCanvasAgentStore.getState();
-        if (!enabled || !token.trim() || !current.enabled || current.token !== token || current.url.trim().replace(/\/$/, "") !== endpoint) return;
+        const projectId = snapshot.projectId;
+        if (!projectId || current.canvasId !== projectId || !enabled || !token.trim() || !current.enabled || current.token !== token || current.url.trim().replace(/\/$/, "") !== endpoint) return;
+        const session = beginCanvasAgentSession(projectId);
         localStorage.setItem("canvas-agent-url", endpoint);
         localStorage.setItem("canvas-agent-token", token);
         const clientId = clientIdRef.current;
-        const source = new EventSource(`${endpoint}/events?token=${encodeURIComponent(token)}&clientId=${encodeURIComponent(clientId)}`);
+        const source = new EventSource(`${endpoint}/events?token=${encodeURIComponent(token)}&clientId=${encodeURIComponent(clientId)}&canvasId=${encodeURIComponent(projectId)}`);
         source.addEventListener("hello", () => {
+            if (useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentSession(session)) return;
             errorLoggedRef.current = false;
             connectedRef.current = true;
             setAgentState({ connected: true, activity: i18n.t("canvas.agent.status.connected"), connectError: "", messages: useCanvasAgentStore.getState().messages.filter((item) => !isConnectionErrorMessage(item)) });
             if (!headless) message.success(i18n.t("canvas.agent.messages.connected"));
-            void postState(endpoint, token, clientId, snapshotRef.current);
+            if (snapshotRef.current.projectId === projectId) void postState(endpoint, token, clientId, snapshotRef.current);
         });
         source.addEventListener("tool_call", (event) => {
+            if (useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentSession(session)) return;
             const data = parseEventData<AgentPendingToolCall>(event);
-            if (data) void handleToolCall(endpoint, token, data);
+            if (data) void handleToolCall(endpoint, token, session, data);
         });
         source.addEventListener("agent_event", (event) => {
+            if (useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentSession(session)) return;
             const data = parseEventData<AgentEventPayload>(event);
             if (data) handleAgentEvent(data);
         });
         source.addEventListener("agent_log", (event) => {
+            if (useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentSession(session)) return;
             const text = parseEventData<{ text?: unknown }>(event)?.text;
             addEventLog(i18n.t("canvas.agent.logs.agentLog"), text, text);
         });
         source.addEventListener("agent_error", (event) => {
+            if (useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentSession(session)) return;
             const message = parseEventData<{ message?: unknown }>(event)?.message;
             setAgentState({ activity: i18n.t("canvas.agent.status.error"), waiting: false });
             addMessage({ role: "error", title: i18n.t("canvas.agent.messages.errorTitle"), text: normalizeText(message) });
             addEventLog(i18n.t("canvas.agent.logs.error"), message, message);
         });
         source.addEventListener("agent_done", () => {
+            if (useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentSession(session)) return;
             setAgentState({ activity: i18n.t("canvas.agent.status.completed"), waiting: false, sending: false });
             void loadThreads();
         });
         source.onerror = () => {
+            if (useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentSession(session)) return;
             const wasConnected = connectedRef.current;
             const text = wasConnected ? i18n.t("canvas.agent.errors.connectionLost") : i18n.t("canvas.agent.errors.connectionFailed");
             if (!errorLoggedRef.current || wasConnected) {
@@ -202,30 +247,35 @@ export function CanvasLocalAgentPanel({
         };
         return () => {
             source.close();
-            connectedRef.current = false;
-            setAgentState({ connected: false });
+            if (useCanvasAgentStore.getState().canvasId === projectId && isCurrentCanvasAgentSession(session)) {
+                connectedRef.current = false;
+                setAgentState({ connected: false });
+            }
         };
-    }, [enabled, endpoint, loadThreads, message, setAgentState, token]);
+    }, [enabled, endpoint, loadThreads, message, setAgentState, snapshot.projectId, token]);
 
     useEffect(() => {
-        if (connected) void loadThreads();
-    }, [connected, loadThreads, snapshot.projectId]);
+        if (connected && boundCanvasId === snapshot.projectId) void loadThreads();
+    }, [boundCanvasId, connected, loadThreads, snapshot.projectId]);
 
     useEffect(() => {
-        if (!connected) return;
+        if (!connected || boundCanvasId !== snapshot.projectId) return;
         const timer = setTimeout(() => void postState(endpoint, token, clientIdRef.current, snapshot), 300);
         return () => clearTimeout(timer);
-    }, [connected, endpoint, snapshot, token]);
+    }, [boundCanvasId, connected, endpoint, snapshot, token]);
 
     const sendPrompt = async () => {
+        const session = captureCanvasAgentSession();
+        const projectId = session.canvasId;
         const text = prompt.trim();
         const files = attachments;
         const requestPrompt = promptWithAttachments(text, files);
-        if (!connected || !requestPrompt || sending || waiting) return;
+        if (!connected || !projectId || useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentSession(session) || !requestPrompt || sending || waiting) return;
         if (attachmentPayloadBytes(files) > MAX_ATTACHMENT_PAYLOAD_BYTES) {
             addMessage({ role: "error", title: t("canvas.agent.attachments.tooLargeTitle"), text: t("canvas.agent.attachments.payloadTooLarge", { size: formatUnit(30, "megabyte", { unitDisplay: "short", maximumFractionDigits: 0 }) }) });
             return;
         }
+        const request = beginCanvasAgentRequest("turn", session);
         setAgentState({ activity: t("canvas.agent.status.sending"), sending: true, waiting: true });
         addMessage({ role: "user", text: text || t("canvas.agent.attachments.imagesSent"), attachments: files });
         addEventLog(t("canvas.agent.logs.userSent"), { text, attachments: files.map(({ name, type, size }) => ({ name, type, size })) });
@@ -233,10 +283,11 @@ export function CanvasLocalAgentPanel({
             const res = await fetch(`${endpoint}/agent/codex/turn?token=${encodeURIComponent(token)}`, {
                 method: "POST",
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify({ prompt: requestPrompt, canvasId: snapshotRef.current.projectId, threadId: useCanvasAgentStore.getState().activeThreadId || undefined, attachments: files.map(({ name, type, dataUrl }) => ({ name, type, dataUrl })) }),
+                body: JSON.stringify({ prompt: requestPrompt, canvasId: projectId, threadId: useCanvasAgentStore.getState().activeThreadId || undefined, attachments: files.map(({ name, type, dataUrl }) => ({ name, type, dataUrl })) }),
             });
             if (!res.ok) throw new Error(t("canvas.agent.errors.requestRejected"));
             const data = (await res.json()) as { threadId?: string };
+            if (useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentRequest(request)) return;
             if (data.threadId) setAgentState({ activeThreadId: data.threadId });
             addEventLog(t("canvas.agent.logs.requestAccepted"), { status: res.status });
             files.forEach((item) => {
@@ -245,16 +296,18 @@ export function CanvasLocalAgentPanel({
             });
             setAgentState({ prompt: "", attachments: [] });
         } catch (error) {
+            if (useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentRequest(request)) return;
             setAgentState({ activity: t("canvas.agent.status.sendFailed"), waiting: false });
             addMessage({ role: "error", title: t("canvas.agent.messages.sendFailed"), text: error instanceof Error ? error.message : t("canvas.agent.messages.sendFailed") });
             addEventLog(t("canvas.agent.logs.sendFailed"), error);
         } finally {
-            setAgentState({ sending: false });
+            if (useCanvasAgentStore.getState().canvasId === projectId && isCurrentCanvasAgentRequest(request)) setAgentState({ sending: false });
         }
     };
 
     const addAttachments = async (files: FileList | File[] | null) => {
         if (!files) return;
+        const request = beginCanvasAgentRequest("attachments");
         const images = Array.from(files).filter((file) => file.type.startsWith("image/"));
         const prev = useCanvasAgentStore.getState().attachments;
         try {
@@ -266,6 +319,10 @@ export function CanvasLocalAgentPanel({
                     return { id: createId(), name: file.name, type: file.type, size: file.size, url, dataUrl };
                 }),
             );
+            if (!isCurrentCanvasAgentRequest(request)) {
+                next.forEach((item) => URL.revokeObjectURL(item.url));
+                return;
+            }
             const merged = [...prev, ...next];
             if (attachmentPayloadBytes(merged) > MAX_ATTACHMENT_PAYLOAD_BYTES) {
                 next.forEach((item) => {
@@ -277,6 +334,7 @@ export function CanvasLocalAgentPanel({
             }
             if (next.length) setAgentState({ attachments: merged });
         } catch (error) {
+            if (!isCurrentCanvasAgentRequest(request)) return;
             addMessage({ role: "error", title: t("canvas.agent.attachments.readFailed"), text: error instanceof Error ? error.message : t("canvas.agent.attachments.readFailed") });
         }
     };
@@ -290,10 +348,15 @@ export function CanvasLocalAgentPanel({
         setAgentState({ attachments: attachments.filter((item) => item.id !== id) });
     };
 
-    const handleToolCall = async (endpoint: string, token: string, payload: AgentPendingToolCall) => {
+    const handleToolCall = async (endpoint: string, token: string, session: CanvasAgentSessionEpoch, payload: AgentPendingToolCall) => {
+        const canvasId = session.canvasId;
+        if (useCanvasAgentStore.getState().canvasId !== canvasId || !isCurrentCanvasAgentSession(session)) {
+            await postToolResult(endpoint, token, clientIdRef.current, canvasId, { requestId: payload.requestId, error: "画布已切换" }).catch(() => undefined);
+            return;
+        }
         if (confirmToolsRef.current && payload.name === "canvas_apply_ops") {
             if (pendingToolRef.current) {
-                await postToolResult(endpoint, token, clientIdRef.current, { requestId: payload.requestId, error: t("canvas.agent.errors.pendingToolExists") });
+                await postToolResult(endpoint, token, clientIdRef.current, canvasId, { requestId: payload.requestId, error: t("canvas.agent.errors.pendingToolExists") });
                 return;
             }
             pendingToolRef.current = payload;
@@ -301,36 +364,57 @@ export function CanvasLocalAgentPanel({
             addEventLog(t("canvas.agent.logs.awaitingConfirmation"), payload, payload);
             return;
         }
-        await runToolCall(endpoint, token, payload);
+        await runToolCall(endpoint, token, session, payload);
     };
 
-    const runToolCall = async (endpoint: string, token: string, payload: AgentPendingToolCall) => {
-        try {
-            const input: { ops?: CanvasAgentOp[] } = payload.input || {};
-            setAgentState({ activity: payload.name === "canvas_apply_ops" ? t("canvas.agent.status.applyingCanvasOps") : t("canvas.agent.status.readingCanvas"), waiting: true });
-            addEventLog(toolName(payload.name), payload, payload);
-            const result = payload.name === "canvas_apply_ops" ? onApplyOpsRef.current(input.ops || []) : snapshotRef.current;
-            await postToolResult(endpoint, token, clientIdRef.current, { requestId: payload.requestId, result });
-            if (payload.name === "canvas_apply_ops") void postState(endpoint, token, clientIdRef.current, result as CanvasAgentSnapshot);
-            setAgentState({ activity: t("canvas.agent.status.toolCompleted"), waiting: true });
-            addEventLog(t("canvas.agent.logs.toolCompleted", { tool: toolName(payload.name) }), result, result);
-            addMessage({
-                role: "tool",
-                title: t("canvas.agent.messages.toolCompleted", { tool: toolName(payload.name) }),
-                text: payload.name === "canvas_apply_ops" ? summarizeCanvasAgentOps(input.ops || []) || t("canvas.agent.toolNames.applyOps") : t("canvas.agent.messages.completed"),
-                detail: { requestId: payload.requestId, name: payload.name, input, result },
-            });
-        } catch (error) {
-            const message = error instanceof Error ? error.message : t("canvas.agent.errors.canvasOperationFailed");
-            setAgentState({ activity: t("canvas.agent.status.toolFailed"), waiting: false });
-            addMessage({ role: "tool", title: t("canvas.agent.messages.toolFailed"), text: message, detail: payload });
-            await postToolResult(endpoint, token, clientIdRef.current, { requestId: payload.requestId, error: message });
+    const runToolCall = async (endpoint: string, token: string, session: CanvasAgentSessionEpoch, payload: AgentPendingToolCall) => {
+        const canvasId = session.canvasId;
+        if (useCanvasAgentStore.getState().canvasId !== canvasId || !isCurrentCanvasAgentSession(session)) {
+            await postToolResult(endpoint, token, clientIdRef.current, canvasId, { requestId: payload.requestId, error: "画布已切换" }).catch(() => undefined);
+            return;
         }
+        const request = beginCanvasAgentRequest("tool", session);
+        const input: { ops?: CanvasAgentOp[] } = payload.input || {};
+        setAgentState({ activity: payload.name === "canvas_apply_ops" ? t("canvas.agent.status.applyingCanvasOps") : t("canvas.agent.status.readingCanvas"), waiting: true });
+        addEventLog(toolName(payload.name), payload, payload);
+        let result: unknown;
+        try {
+            result = payload.name === "canvas_apply_ops" ? onApplyOpsRef.current(input.ops || []) : snapshotRef.current;
+        } catch (error) {
+            const errorText = error instanceof Error ? error.message : t("canvas.agent.errors.canvasOperationFailed");
+            await postToolResult(endpoint, token, clientIdRef.current, canvasId, { requestId: payload.requestId, error: errorText }).catch(() => undefined);
+            if (!isCurrentCanvasAgentRequest(request)) return;
+            setAgentState({ activity: t("canvas.agent.status.toolFailed"), waiting: false });
+            addMessage({ role: "tool", title: t("canvas.agent.messages.toolFailed"), text: errorText, detail: payload });
+            return;
+        }
+        try {
+            await postToolResult(endpoint, token, clientIdRef.current, canvasId, { requestId: payload.requestId, result });
+        } catch (error) {
+            if (!isCurrentCanvasAgentRequest(request)) return;
+            const errorText = error instanceof Error ? error.message : t("canvas.agent.errors.canvasOperationFailed");
+            setAgentState({ activity: t("canvas.agent.status.toolFailed"), waiting: false });
+            addMessage({ role: "tool", title: t("canvas.agent.messages.toolFailed"), text: errorText, detail: payload });
+            return;
+        }
+        if (!isCurrentCanvasAgentRequest(request)) return;
+        if (payload.name === "canvas_apply_ops") void postState(endpoint, token, clientIdRef.current, result as CanvasAgentSnapshot);
+        setAgentState({ activity: t("canvas.agent.status.toolCompleted"), waiting: true });
+        addEventLog(t("canvas.agent.logs.toolCompleted", { tool: toolName(payload.name) }), result, result);
+        addMessage({
+            role: "tool",
+            title: t("canvas.agent.messages.toolCompleted", { tool: toolName(payload.name) }),
+            text: payload.name === "canvas_apply_ops" ? summarizeCanvasAgentOps(input.ops || []) || t("canvas.agent.toolNames.applyOps") : t("canvas.agent.messages.completed"),
+            detail: { requestId: payload.requestId, name: payload.name, input, result },
+        });
     };
 
     const rejectPendingTool = async () => {
         if (!pendingTool) return;
-        await postToolResult(endpoint, token, clientIdRef.current, { requestId: pendingTool.requestId, error: t("canvas.agent.errors.toolCancelledByUser") });
+        const session = captureCanvasAgentSession();
+        const request = beginCanvasAgentRequest("tool", session);
+        await postToolResult(endpoint, token, clientIdRef.current, session.canvasId, { requestId: pendingTool.requestId, error: t("canvas.agent.errors.toolCancelledByUser") });
+        if (!isCurrentCanvasAgentRequest(request)) return;
         setAgentState({ activity: t("canvas.agent.status.cancelled"), waiting: false });
         addMessage({ role: "tool", title: t("canvas.agent.tools.status.rejected"), text: toolName(pendingTool.name), detail: { requestId: pendingTool.requestId, name: pendingTool.name, input: pendingTool.input } });
         pendingToolRef.current = null;
@@ -342,7 +426,7 @@ export function CanvasLocalAgentPanel({
         const tool = pendingTool;
         pendingToolRef.current = null;
         setAgentState({ pendingTool: null });
-        await runToolCall(endpoint, token, tool);
+        await runToolCall(endpoint, token, captureCanvasAgentSession(), tool);
     };
 
     const undoLastTool = () => {
@@ -430,24 +514,30 @@ export function CanvasLocalAgentPanel({
     }
 
     const startNewThread = async () => {
-        const projectId = snapshotRef.current.projectId;
-        if (!connected || !projectId) return;
+        const session = captureCanvasAgentSession();
+        const projectId = session.canvasId;
+        if (!connected || !projectId || !isCurrentCanvasAgentSession(session)) return;
+        const request = beginCanvasAgentRequest("thread-action", session);
         setAgentState({ loadingThreads: true });
         try {
             const data = await fetchAgentJson<AgentThreadResponse>(endpoint, token, "/agent/codex/threads/new", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ canvasId: projectId }) });
+            if (useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentRequest(request)) return;
             setAgentState({ activeThreadId: data.thread?.id || data.workspace?.activeThreadId || "", messages: [], activeTab: "chat", activity: t("canvas.agent.status.newConversation") });
             await loadThreads();
         } catch (error) {
+            if (useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentRequest(request)) return;
             addEventLog(t("canvas.agent.logs.newConversationFailed"), error);
             message.error(error instanceof Error ? error.message : t("canvas.agent.errors.newConversationFailed"));
         } finally {
-            setAgentState({ loadingThreads: false });
+            if (useCanvasAgentStore.getState().canvasId === projectId && isCurrentCanvasAgentRequest(request)) setAgentState({ loadingThreads: false });
         }
     };
 
     const resumeThread = async (threadId: string) => {
-        const projectId = snapshotRef.current.projectId;
-        if (!connected || !projectId || !threadId) return;
+        const session = captureCanvasAgentSession();
+        const projectId = session.canvasId;
+        if (!connected || !projectId || !threadId || !isCurrentCanvasAgentSession(session)) return;
+        const request = beginCanvasAgentRequest("thread-action", session);
         setAgentState({ loadingThreads: true });
         try {
             const data = await fetchAgentJson<AgentThreadResponse>(endpoint, token, `/agent/codex/threads/${encodeURIComponent(threadId)}/resume`, {
@@ -455,23 +545,28 @@ export function CanvasLocalAgentPanel({
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({ canvasId: projectId }),
             });
+            if (useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentRequest(request)) return;
             setAgentState({ activeThreadId: data.thread?.id || threadId, messages: normalizeHistoryMessages(data.messages || []), activeTab: "chat", activity: t("canvas.agent.status.sessionRestored") });
             await loadThreads();
         } catch (error) {
+            if (useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentRequest(request)) return;
             addEventLog(t("canvas.agent.logs.resumeConversationFailed"), error);
             message.error(error instanceof Error ? error.message : t("canvas.agent.errors.resumeConversationFailed"));
         } finally {
-            setAgentState({ loadingThreads: false });
+            if (useCanvasAgentStore.getState().canvasId === projectId && isCurrentCanvasAgentRequest(request)) setAgentState({ loadingThreads: false });
         }
     };
 
     const deleteThread = async (threadId: string) => {
-        const projectId = snapshotRef.current.projectId;
-        if (!connected || !projectId || !threadId) return;
+        const session = captureCanvasAgentSession();
+        const projectId = session.canvasId;
+        if (!connected || !projectId || !threadId || !isCurrentCanvasAgentSession(session)) return;
+        const request = beginCanvasAgentRequest("thread-action", session);
         setAgentState({ loadingThreads: true });
         try {
             await fetchAgentJson(endpoint, token, `/agent/codex/threads/${encodeURIComponent(threadId)}/delete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ canvasId: projectId }) });
             const current = useCanvasAgentStore.getState();
+            if (current.canvasId !== projectId || !isCurrentCanvasAgentRequest(request)) return;
             setAgentState({
                 threads: current.threads.filter((thread) => thread.id !== threadId),
                 activeThreadId: current.activeThreadId === threadId ? "" : current.activeThreadId,
@@ -479,10 +574,11 @@ export function CanvasLocalAgentPanel({
             });
             message.success(t("canvas.agent.messages.recordDeleted"));
         } catch (error) {
+            if (useCanvasAgentStore.getState().canvasId !== projectId || !isCurrentCanvasAgentRequest(request)) return;
             addEventLog(t("canvas.agent.logs.deleteConversationFailed"), error);
             message.error(error instanceof Error ? error.message : t("canvas.agent.errors.deleteConversationFailed"));
         } finally {
-            setAgentState({ loadingThreads: false });
+            if (useCanvasAgentStore.getState().canvasId === projectId && isCurrentCanvasAgentRequest(request)) setAgentState({ loadingThreads: false });
         }
     };
 
@@ -963,12 +1059,12 @@ function AgentHistoryView({
 
 async function postState(endpoint: string, token: string, clientId: string, snapshot: CanvasAgentSnapshot) {
     try {
-        await fetch(`${endpoint}/canvas/state?token=${encodeURIComponent(token)}&clientId=${encodeURIComponent(clientId)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(snapshot) });
+        await fetch(`${endpoint}/canvas/state?token=${encodeURIComponent(token)}&clientId=${encodeURIComponent(clientId)}&canvasId=${encodeURIComponent(snapshot.projectId)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(snapshot) });
     } catch {}
 }
 
-async function postToolResult(endpoint: string, token: string, clientId: string, body: { requestId: string; result?: unknown; error?: string }) {
-    await fetch(`${endpoint}/canvas/result?token=${encodeURIComponent(token)}&clientId=${encodeURIComponent(clientId)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+async function postToolResult(endpoint: string, token: string, clientId: string, canvasId: string, body: { requestId: string; result?: unknown; error?: string }) {
+    await fetch(`${endpoint}/canvas/result?token=${encodeURIComponent(token)}&clientId=${encodeURIComponent(clientId)}&canvasId=${encodeURIComponent(canvasId)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 }
 
 function agentMessageToChatMessage(item: AgentChatItem) {

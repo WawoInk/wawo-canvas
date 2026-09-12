@@ -6,43 +6,12 @@ import { nanoid } from "nanoid";
 import i18n from "@/i18n";
 import { createAccountStorage, isCurrentSession } from "@/lib/account-storage";
 import { localForageStorage } from "@/lib/localforage-storage";
-import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
-import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "../types";
 import { useUserStore } from "@/stores/use-user-store";
 import { syncClient } from "@/services/sync-client";
-import {
-    fireCreateProject,
-    fireDeleteProjects,
-    scheduleBackendSync,
-    flushProjectSync,
-    registerBeforeUnloadFlush,
-    registerSyncDeltaHandler,
-    resumePendingCanvasSync,
-    detectDataChanges,
-    clearSyncTimers,
-    parseProjectJson,
-    fromServerProject,
-} from "./canvas-sync";
-import { normalizeCanvasProject } from "./canvas-replica";
+import { fireCreateProject, fireDeleteProjects, scheduleBackendSync, flushProjectSync, registerBeforeUnloadFlush, registerSyncDeltaHandler, resumePendingCanvasSync, detectDataChanges, clearSyncTimers } from "./canvas-sync";
+import { mergeCanvasReplicaRemote, transitionCanvasReplica, transitionCanvasReplicaState, type CanvasProjectPatch, type ReplicaCanvasProject } from "./canvas-replica";
 
-export type CanvasProject = {
-    id: string;
-    title: string;
-    createdAt: string;
-    updatedAt: string;
-    revision: number;
-    remoteRevision?: number;
-    localVersion: number;
-    dirty: boolean;
-    syncConflict?: boolean;
-    nodes: CanvasNodeData[];
-    connections: CanvasConnection[];
-    chatSessions: CanvasAssistantSession[];
-    activeChatId: string | null;
-    backgroundMode: CanvasBackgroundMode;
-    showImageInfo: boolean;
-    viewport: ViewportTransform;
-};
+export type CanvasProject = ReplicaCanvasProject;
 
 export type CanvasStore = {
     hydrated: boolean;
@@ -56,7 +25,7 @@ export type CanvasStore = {
     deleteProjects: (ids: string[]) => void;
     replaceProjects: (projects: CanvasProject[]) => void;
     clearProjects: () => void;
-    updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport" | "updatedAt" | "title">>, expectedRemoteRevision?: number) => Promise<boolean>;
+    updateProject: (id: string, patch: CanvasProjectPatch, expectedRemoteRevision?: number) => Promise<boolean>;
     waitForLocalPersistence: () => Promise<void>;
     acknowledgeProject: (id: string, localVersion: number, patch: Pick<CanvasProject, "revision" | "updatedAt">) => void;
     acknowledgeDelete: (id: string) => void;
@@ -66,7 +35,7 @@ export type CanvasStore = {
     resolveProjectConflict: (id: string) => Promise<string | null>;
 };
 
-const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
+const initialViewport: CanvasProject["viewport"] = { x: 0, y: 0, k: 1 };
 const CANVAS_STORE_KEY = "infinite-canvas:canvas_store";
 let switchingAccount = false;
 const scopedStorage = createAccountStorage(
@@ -164,20 +133,9 @@ export const useCanvasStore = create<CanvasStore>()(
                         const current = useUserStore.getState();
                         if (!isCurrentSession(session, { token: current.token, userId: current.user?.id }) || get().tombstones.includes(id)) return null;
                         const existing = get().openProject(id);
-                        if (existing && (existing.dirty || existing.revision >= detail.revision)) return existing;
-                        const parsed = parseProjectJson(detail.projectJson);
-                        const project: CanvasProject = normalizeCanvasProject({
-                            ...parsed,
-                            id: detail.id,
-                            title: parsed.title || detail.name,
-                            createdAt: detail.createdAt,
-                            updatedAt: detail.updatedAt,
-                            revision: detail.revision,
-                            remoteRevision: detail.revision,
-                            syncConflict: false,
-                            localVersion: 0,
-                            dirty: false,
-                        })!;
+                        const project = mergeCanvasReplicaRemote({ projects: existing ? [existing] : [], tombstones: [], updates: [detail] }).projects[0];
+                        if (!project) return null;
+                        if (project === existing) return existing;
                         set((state) => {
                             const existing = state.projects.find((p) => p.id === id);
                             if (existing?.dirty) return {};
@@ -205,8 +163,9 @@ export const useCanvasStore = create<CanvasStore>()(
                     const local = get().openProject(id);
                     if (!local?.syncConflict || get().tombstones.includes(id)) return null;
                     const copy = { ...local, id: nanoid(), title: i18n.t("canvas.sync.localCopyTitle", { title: local.title }), revision: 0, remoteRevision: 0, localVersion: 1, dirty: true, syncConflict: false };
+                    const remote = mergeCanvasReplicaRemote({ projects: [local], tombstones: [], updates: [detail], force: true }).projects[0]!;
                     // Both versions enter the same durable snapshot; never discard local work to resolve a conflict.
-                    set((state) => ({ projects: [copy, ...state.projects.map((project) => (project.id === id ? fromServerProject(detail, local) : project))] }));
+                    set((state) => ({ projects: [copy, ...state.projects.map((project) => (project.id === id ? remote : project))] }));
                     await waitForCanvasPersistence();
                     if (isCurrentSession(session, { token: useUserStore.getState().token, userId: useUserStore.getState().user?.id })) fireCreateProject(copy, { getState: get });
                     return copy.id;
@@ -214,11 +173,11 @@ export const useCanvasStore = create<CanvasStore>()(
 
                 renameProject: (id, title) =>
                     set((state) => ({
-                        projects: state.projects.map((project) => (project.id === id && title.trim() && title.trim() !== project.title ? { ...project, title: title.trim(), localVersion: project.localVersion + 1, dirty: true } : project)),
+                        projects: state.projects.map((project) => (project.id === id && title.trim() ? transitionCanvasReplica(project, { type: "edit", patch: { title: title.trim() } }).project : project)),
                     })),
 
                 deleteProjects: (ids) => {
-                    set((state) => ({ projects: state.projects.filter((project) => !ids.includes(project.id)), tombstones: [...new Set([...state.tombstones, ...ids])] }));
+                    set((state) => transitionCanvasReplicaState(state, { type: "delete", ids }));
                     fireDeleteProjects(ids, { getState: get });
                 },
 
@@ -226,13 +185,15 @@ export const useCanvasStore = create<CanvasStore>()(
 
                 updateProject: async (id, patch, expectedRemoteRevision) => {
                     const project = get().openProject(id);
-                    if (!project || (expectedRemoteRevision !== undefined && expectedRemoteRevision !== (project.remoteRevision || 0))) return false;
-                    if (!Object.entries(patch).some(([key, value]) => JSON.stringify(project[key as keyof CanvasProject]) !== JSON.stringify(value))) {
+                    if (!project) return false;
+                    const update = transitionCanvasReplica(project, { type: "edit", patch, expectedRemoteRevision });
+                    if (!update.accepted) return false;
+                    if (!update.changed) {
                         await waitForCanvasPersistence();
                         return true;
                     }
                     set((state) => ({
-                        projects: state.projects.map((project) => (project.id === id ? { ...project, ...patch, localVersion: project.localVersion + 1, dirty: true } : project)),
+                        projects: state.projects.map((project) => (project.id === id ? update.project : project)),
                     }));
                     await waitForCanvasPersistence();
                     return true;
@@ -242,10 +203,10 @@ export const useCanvasStore = create<CanvasStore>()(
 
                 acknowledgeProject: (id, localVersion, patch) =>
                     set((state) => ({
-                        projects: state.projects.map((project) => (project.id === id ? { ...project, ...patch, dirty: project.localVersion !== localVersion } : project)),
+                        projects: state.projects.map((project) => (project.id === id ? transitionCanvasReplica(project, { type: "acknowledge-save", localVersion, revision: patch.revision, updatedAt: patch.updatedAt }).project : project)),
                     })),
 
-                acknowledgeDelete: (id) => set((state) => ({ tombstones: state.tombstones.filter((item) => item !== id) })),
+                acknowledgeDelete: (id) => set((state) => transitionCanvasReplicaState(state, { type: "acknowledge-delete", id })),
 
                 syncFromBackend: async () => {
                     const user = useUserStore.getState().user;
@@ -264,35 +225,8 @@ export const useCanvasStore = create<CanvasStore>()(
                         const details = await Promise.allSettled(serverProjects.filter((project) => !tombstones.has(project.id)).map((p) => fetchCanvasProject(p.id)));
                         const current = useUserStore.getState();
                         if (!isCurrentSession(session, { token: current.token, userId: current.user?.id })) return;
-                        const map = new Map(
-                            get()
-                                .projects.filter((project) => !tombstones.has(project.id))
-                                .map((p) => [p.id, p]),
-                        );
-                        for (const result of details) {
-                            if (result.status !== "fulfilled") continue;
-                            const d = result.value;
-                            const existing = map.get(d.id);
-                            if (existing?.dirty || (existing && d.revision <= existing.revision)) continue;
-                            const parsed = parseProjectJson(d.projectJson);
-                            map.set(
-                                d.id,
-                                normalizeCanvasProject({
-                                    ...existing,
-                                    ...parsed,
-                                    id: d.id,
-                                    title: parsed.title || d.name || existing?.title,
-                                    createdAt: d.createdAt || existing?.createdAt,
-                                    updatedAt: d.updatedAt || existing?.updatedAt,
-                                    revision: d.revision || existing?.revision,
-                                    remoteRevision: d.revision,
-                                    syncConflict: false,
-                                    localVersion: existing?.localVersion || 0,
-                                    dirty: false,
-                                })!,
-                            );
-                        }
-                        set({ projects: Array.from(map.values()), synced: true });
+                        const updates = details.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
+                        set({ projects: mergeCanvasReplicaRemote({ projects: get().projects, tombstones: get().tombstones, updates }).projects, synced: true });
                     } catch (err) {
                         console.warn("canvas: backend sync failed, falling back to local cache", err);
                         set({ synced: true });
@@ -311,10 +245,10 @@ export const useCanvasStore = create<CanvasStore>()(
             partialize: (state) => ({ projects: state.projects, tombstones: state.tombstones }) as StorageValue<CanvasStore>["state"],
             merge: (persisted, current) => {
                 const saved = persisted as Partial<CanvasStore> | undefined;
+                const restored = transitionCanvasReplicaState({ projects: [], tombstones: [] }, { type: "restore", persisted: saved });
                 return {
                     ...current,
-                    projects: Array.isArray(saved?.projects) ? saved.projects.map(normalizeCanvasProject).filter((project): project is CanvasProject => project !== null) : [],
-                    tombstones: Array.isArray(saved?.tombstones) ? [...new Set(saved.tombstones.filter((id): id is string => typeof id === "string" && Boolean(id)))] : [],
+                    ...restored,
                 };
             },
             onRehydrateStorage: () => () => {

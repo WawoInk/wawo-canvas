@@ -2,6 +2,10 @@
 
 ## Unreleased
 
++ [优化] Canvas 人工交互与 Agent operations 共享 Graph Edit 不变量，Canvas Project Replica 集中本地持久化、远端合并和完整账号/版本 binding，避免不同入口或迟到视频结果产生状态漂移。
++ [修复] 本地 Canvas Agent 按 Canvas Project Replica 隔离 state、pending tool、Codex 事件和 thread；单画布保持兼容，多画布不再广播或猜测目标。
++ [修复] durable Compatibility 视频任务在 accepted transaction 内原子保存上游任务所有权，后续查询、Remix 和 Cancel 不再因缺少映射失败。
+
 + [修复] Canvas 图片裁剪与切图改为从平台文件或浏览器持久 Blob 读取源图，避免跨域 Canvas 污染，并继续持久化处理结果。
 + [调整] 管理后台画布节点信息不再展示生成结果 URL，原有生成结果同步与存储逻辑保持不变。
 + [修复] 生图与视频工作台补齐与 Canvas 一致的批量、任务来源、观察窗口、结果元数据、历史参数和结构化失败处理，并继续遵循管理员模型配置。

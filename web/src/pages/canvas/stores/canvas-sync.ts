@@ -8,7 +8,7 @@ import { syncScheduler } from "@/services/sync-scheduler";
 import { useUserStore } from "@/stores/use-user-store";
 import { isCurrentSession } from "@/lib/account-storage";
 import type { CanvasProject, CanvasStore as CanvasStoreType } from "@/pages/canvas/stores/use-canvas-store";
-import { normalizeCanvasProject } from "@/pages/canvas/stores/canvas-replica";
+import { getCanvasReplicaPendingWork, mergeCanvasReplicaRemote } from "@/pages/canvas/stores/canvas-replica";
 
 const RETRY_BASE_MS = 500;
 const RETRY_MAX_MS = 30_000;
@@ -25,7 +25,7 @@ const syncRequests = new Map<string, Promise<SyncResult>>();
 
 function hasPendingWork(projectId: string, store: StoreAccess) {
     const state = store.getState();
-    return state.tombstones.includes(projectId) || Boolean(state.projects.find((item) => item.id === projectId)?.dirty);
+    return getCanvasReplicaPendingWork(state.projects, state.tombstones).pendingIds.includes(projectId);
 }
 
 function setProjectRevision(projectId: string, revision: number, updatedAt: string | undefined, store: StoreAccess) {
@@ -49,8 +49,8 @@ async function recoverProjectRevision(project: CanvasProject, store: StoreAccess
         const current = await fetchCanvasProject(project.id);
         const auth = useUserStore.getState();
         if (!isCurrentSession(session, { token: auth.token, userId: auth.user?.id })) return "pause";
-        const remote = parseProjectJson(current.projectJson);
-        if (dataFields.some((field) => JSON.stringify(remote[field]) !== JSON.stringify(project[field]))) return pauseProjectConflict(project.id, store);
+        const remote = mergeCanvasReplicaRemote({ projects: [project], tombstones: [], updates: [current] });
+        if (remote.conflictingIds.includes(project.id)) return pauseProjectConflict(project.id, store);
         setProjectRevision(project.id, current.revision, current.updatedAt, store);
         return "again";
     } catch {
@@ -195,10 +195,7 @@ export function fireDeleteProjects(ids: string[], store: StoreAccess) {
 
 export function resumePendingCanvasSync(store: StoreAccess) {
     const state = store.getState();
-    for (const project of state.projects) {
-        if (project.dirty) enqueueProjectSync(project.id, store);
-    }
-    for (const id of state.tombstones) enqueueProjectSync(id, store);
+    for (const id of getCanvasReplicaPendingWork(state.projects, state.tombstones).pendingIds) enqueueProjectSync(id, store);
 }
 
 export function retryPendingCanvasSync() {
@@ -216,8 +213,8 @@ export function registerBeforeUnloadFlush(store: StoreAccess) {
     window.addEventListener("beforeunload", () => {
         const token = useUserStore.getState().token;
         if (!useUserStore.getState().user?.id || !token) return;
-        for (const project of store.getState().projects) {
-            if (!project.dirty || project.syncConflict || project.revision === 0 || syncRequests.has(project.id)) continue;
+        const state = store.getState();
+        for (const project of getCanvasReplicaPendingWork(state.projects, state.tombstones, { inFlight: syncRequests.keys() }).unloadProjects) {
             fetch(`/api/v1/canvas/projects/${encodeURIComponent(project.id)}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -228,72 +225,18 @@ export function registerBeforeUnloadFlush(store: StoreAccess) {
     });
 }
 
-export function parseProjectJson(json?: string): Partial<CanvasProject> {
-    if (!json) return {};
-    try {
-        return JSON.parse(json) as Partial<CanvasProject>;
-    } catch {
-        return {};
-    }
-}
-
-export function fromServerProject(item: { id: string; name?: string; projectJson?: string; revision?: number; createdAt?: string; updatedAt?: string }, local: CanvasProject | null): CanvasProject {
-    const parsed = parseProjectJson(item.projectJson);
-    return normalizeCanvasProject({
-        ...local,
-        ...parsed,
-        id: item.id,
-        title: parsed.title || item.name || local?.title,
-        createdAt: item.createdAt || local?.createdAt,
-        updatedAt: item.updatedAt || local?.updatedAt,
-        revision: item.revision || local?.revision,
-        remoteRevision: item.revision,
-        localVersion: local?.localVersion || 0,
-        dirty: false,
-        syncConflict: false,
-    })!;
-}
-
 export function registerSyncDeltaHandler(store: StoreAccess) {
     syncClient.onDelta("canvas", (data) => {
         if (!data) return true;
         const state = store.getState();
-        const tombstones = new Set(state.tombstones);
-        const map = new Map(state.projects.filter((project) => !tombstones.has(project.id)).map((project) => [project.id, project]));
-        let blocked = false;
-
-        for (const item of data.updates || []) {
-            if (tombstones.has(item.id)) continue;
-            const existing = map.get(item.id);
-            if (existing?.dirty) {
-                if ((item.revision || 0) > existing.revision) blocked = true;
-                continue;
-            }
-            if (!existing || (item.revision || 0) > existing.revision) map.set(item.id, fromServerProject(item, existing || null));
-        }
-        for (const id of data.deletes || []) {
-            const existing = map.get(id);
-            if (existing?.dirty) {
-                blocked = true;
-                continue;
-            }
-            map.delete(id);
-        }
-        store.getState().replaceProjects(Array.from(map.values()));
-        return !blocked;
+        const merged = mergeCanvasReplicaRemote({ projects: state.projects, tombstones: state.tombstones, updates: data.updates, deletes: data.deletes });
+        store.getState().replaceProjects(merged.projects);
+        return merged.cursorAccepted;
     });
 }
 
-const dataFields: (keyof CanvasProject)[] = ["title", "nodes", "connections", "chatSessions", "activeChatId", "backgroundMode", "showImageInfo", "viewport"];
-
 export function detectDataChanges(prev: CanvasProject[], curr: CanvasProject[]): { sync: string[] } {
-    const sync: string[] = [];
-    for (const project of curr) {
-        const previous = prev.find((item) => item.id === project.id);
-        if (!previous || !project.dirty) continue;
-        if (dataFields.some((field) => JSON.stringify(previous[field]) !== JSON.stringify(project[field]))) sync.push(project.id);
-    }
-    return { sync };
+    return { sync: getCanvasReplicaPendingWork(curr, [], { previous: prev }).changedIds };
 }
 
 export function clearSyncTimers() {

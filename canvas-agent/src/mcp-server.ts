@@ -22,7 +22,8 @@ function registerCanvasTool(server: McpServer, config: CanvasAgentConfig, name: 
 }
 
 async function postCanvasAgentTool(config: CanvasAgentConfig, name: ToolName, input: unknown) {
-    const res = await fetch(`${config.url}/api/tools`, { method: "POST", headers: { "content-type": "application/json", "x-canvas-agent-token": config.token }, body: JSON.stringify({ name, input }) });
+    const replicaId = process.env.CANVAS_REPLICA_ID?.trim();
+    const res = await fetch(`${config.url}/api/tools`, { method: "POST", headers: { "content-type": "application/json", "x-canvas-agent-token": config.token }, body: JSON.stringify({ name, input, ...(replicaId ? { replicaId } : {}) }) });
     const body = (await res.json()) as CanvasAgentToolResponse;
     if (!body.ok) throw new Error(body.error || "tool call failed");
     return body.result;
