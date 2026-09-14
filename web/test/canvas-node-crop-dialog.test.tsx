@@ -15,14 +15,13 @@ const { default: i18n } = await import("@/i18n");
 const { CanvasNodeCropDialog } = await import("../src/pages/canvas/components/canvas-node-crop-dialog");
 await i18n.changeLanguage("zh-CN");
 
-test("users only enter crop width and height to update the preview", async () => {
+test("pixel width and height update the crop preview", async () => {
     const confirmed: Array<{ x: number; y: number; width: number; height: number }> = [];
     const dialog = await renderDialog((crop) => confirmed.push(crop));
     try {
         const sizeFields = required(document.querySelector<HTMLElement>(`[role="group"][aria-label="裁剪尺寸"]`));
         assert.equal(sizeFields.querySelectorAll("input").length, 2);
         assert.ok(sizeFields.textContent?.includes(":"));
-        assert.equal(document.querySelector(`input[aria-label="裁剪比例"]`), null);
 
         await changeInput(input("裁剪宽度"), "800");
         await changeInput(input("裁剪高度"), "600");
@@ -35,6 +34,32 @@ test("users only enter crop width and height to update the preview", async () =>
         await click(button("确认裁剪"));
         assert.equal(confirmed.length, 1);
         assertCropClose(confirmed[0], { x: 0.25, y: 1 / 6, width: 0.5, height: 2 / 3 });
+    } finally {
+        await dialog.unmount();
+    }
+});
+
+test("separate ratio fields reshape the crop without typing a colon", async () => {
+    const dialog = await renderDialog(() => {});
+    try {
+        const ratioFields = required(document.querySelector<HTMLElement>(`[role="group"][aria-label="裁剪比例"]`));
+        assert.equal(ratioFields.querySelectorAll("input").length, 2);
+        assert.ok(ratioFields.textContent?.includes(":"));
+
+        await changeInput(input("裁剪宽度"), "800");
+        await changeInput(input("裁剪高度"), "600");
+        assert.equal(input("裁剪宽比例").value, "4");
+        assert.equal(input("裁剪高比例").value, "3");
+
+        await changeInput(input("裁剪宽比例"), "16");
+        await changeInput(input("裁剪高比例"), "9");
+
+        assert.equal(input("裁剪宽比例").value, "16");
+        assert.equal(input("裁剪高比例").value, "9");
+        assert.equal(input("裁剪宽度").value, "800");
+        assert.equal(input("裁剪高度").value, "450");
+        assert.equal(cropFrame().style.width, "50%");
+        assert.equal(cropFrame().style.height, "50%");
     } finally {
         await dialog.unmount();
     }

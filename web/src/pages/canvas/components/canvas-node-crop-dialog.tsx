@@ -28,15 +28,22 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
     const [crop, setCrop] = useState<CanvasImageCropRect>(defaultCrop);
     const [locked, setLocked] = useState(false);
     const [image, setImage] = useState<{ width: number; height: number } | null>(null);
+    const [ratioSize, setRatioSize] = useState<{ width: number | null; height: number | null }>({ width: null, height: null });
     const cropSize = image ? { width: Math.max(1, Math.round(crop.width * image.width)), height: Math.max(1, Math.round(crop.height * image.height)) } : null;
 
     useEffect(() => {
-        if (open) setCrop(defaultCrop);
+        if (open) {
+            setCrop(defaultCrop);
+            setRatioSize({ width: null, height: null });
+        }
     }, [dataUrl, open]);
 
     useEffect(() => {
         if (!open) return;
-        void readImageMeta(dataUrl).then(setImage);
+        void readImageMeta(dataUrl).then((nextImage) => {
+            setImage(nextImage);
+            setRatioSize(getCropRatio(defaultCrop, nextImage));
+        });
     }, [dataUrl, open]);
 
     const startDrag = (mode: DragMode, event: ReactPointerEvent, handle?: ResizeHandle) => {
@@ -48,7 +55,9 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
         const move = (event: PointerEvent) => {
             const dx = (event.clientX - start.x) / box.width;
             const dy = (event.clientY - start.y) / box.height;
-            setCrop(mode === "move" ? moveCrop(start.crop, dx, dy) : resizeCrop(start.crop, dx, dy, handle || "se", locked, box));
+            const next = mode === "move" ? moveCrop(start.crop, dx, dy) : resizeCrop(start.crop, dx, dy, handle || "se", locked, box);
+            setCrop(next);
+            if (image) setRatioSize(getCropRatio(next, image));
         };
         const up = () => {
             document.removeEventListener("pointermove", move);
@@ -59,7 +68,21 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
     };
 
     const updateCropSize = (width: number, height: number) => {
-        if (image) setCrop((current) => resizeCropToPixels(current, image, width, height));
+        if (!image) return;
+        const next = resizeCropToPixels(crop, image, width, height);
+        setCrop(next);
+        setRatioSize(getCropRatio(next, image));
+    };
+
+    const updateCropRatio = (dimension: "width" | "height", value: number | null) => {
+        const next = { ...ratioSize, [dimension]: value };
+        setRatioSize(next);
+        if (image && next.width && next.height) setCrop((current) => resizeCropToRatio(current, image, next.width / next.height));
+    };
+
+    const resetCrop = () => {
+        setCrop(defaultCrop);
+        if (image) setRatioSize(getCropRatio(defaultCrop, image));
     };
 
     return (
@@ -103,6 +126,19 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
                                 <InputNumber aria-label={t("canvas.crop.heightAria")} className="w-28" min={1} max={image?.height} precision={0} value={cropSize?.height} disabled={!cropSize} onChange={(value) => value !== null && cropSize && updateCropSize(cropSize.width, value)} />
                             </label>
                         </div>
+                        <div role="group" aria-label={t("canvas.crop.ratioAria")} className="flex items-end gap-2">
+                            <label className="grid gap-1 text-xs opacity-80">
+                                <span>{t("canvas.crop.ratioWidth")}</span>
+                                <InputNumber aria-label={t("canvas.crop.ratioWidthAria")} className="w-20" min={1} max={10000} precision={0} value={ratioSize.width} disabled={!cropSize} onChange={(value) => updateCropRatio("width", value)} />
+                            </label>
+                            <span aria-hidden className="pb-2 text-sm opacity-50">
+                                :
+                            </span>
+                            <label className="grid gap-1 text-xs opacity-80">
+                                <span>{t("canvas.crop.ratioHeight")}</span>
+                                <InputNumber aria-label={t("canvas.crop.ratioHeightAria")} className="w-20" min={1} max={10000} precision={0} value={ratioSize.height} disabled={!cropSize} onChange={(value) => updateCropRatio("height", value)} />
+                            </label>
+                        </div>
                         {image ? <span className="pb-2 text-sm opacity-60">{t("canvas.crop.originalSize", { value: formatDimensions(image.width, image.height) })}</span> : null}
                     </div>
                     <Button icon={locked ? <Lock className="size-4" /> : <LockOpen className="size-4" />} onClick={() => setLocked((value) => !value)}>
@@ -111,7 +147,7 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
                 </div>
 
                 <div className="flex items-center justify-end gap-2">
-                    <Button onClick={() => setCrop(defaultCrop)}>{t("canvas.actions.reset")}</Button>
+                    <Button onClick={resetCrop}>{t("canvas.actions.reset")}</Button>
                     <Button icon={<X className="size-4" />} onClick={onClose}>
                         {t("canvas.actions.cancel")}
                     </Button>
@@ -182,6 +218,23 @@ function resizeCropToPixels(crop: CanvasImageCropRect, image: { width: number; h
     };
 }
 
+function resizeCropToRatio(crop: CanvasImageCropRect, image: { width: number; height: number }, ratio: number) {
+    let width = crop.width * image.width;
+    let height = width / ratio;
+    if (height > image.height) {
+        height = image.height;
+        width = height * ratio;
+    }
+    return resizeCropToPixels(crop, image, width, height);
+}
+
+function getCropRatio(crop: CanvasImageCropRect, image: { width: number; height: number }) {
+    const width = Math.max(1, Math.round(crop.width * image.width));
+    const height = Math.max(1, Math.round(crop.height * image.height));
+    const divisor = gcd(width, height);
+    return { width: width / divisor, height: height / divisor };
+}
+
 function handleStyle(handle: ResizeHandle) {
     const top = handle.includes("n") ? "-6px" : handle.includes("s") ? "calc(100% - 6px)" : "calc(50% - 6px)";
     const left = handle.includes("w") ? "-6px" : handle.includes("e") ? "calc(100% - 6px)" : "calc(50% - 6px)";
@@ -190,4 +243,8 @@ function handleStyle(handle: ResizeHandle) {
 
 function clamp(value: number, min: number, max: number) {
     return Math.min(max, Math.max(min, value));
+}
+
+function gcd(a: number, b: number): number {
+    return b ? gcd(b, a % b) : Math.max(1, a);
 }

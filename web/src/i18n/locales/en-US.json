@@ -3053,6 +3053,11 @@
             "height": "Height",
             "widthAria": "Crop width",
             "heightAria": "Crop height",
+            "ratioAria": "Crop ratio",
+            "ratioWidth": "Width ratio",
+            "ratioHeight": "Height ratio",
+            "ratioWidthAria": "Crop width ratio",
+            "ratioHeightAria": "Crop height ratio",
             "lockedRatio": "Locked Ratio",
             "freeRatio": "Free Ratio",
             "confirm": "Confirm Crop"

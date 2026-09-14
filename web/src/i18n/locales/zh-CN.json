@@ -3053,6 +3053,11 @@
             "height": "高度",
             "widthAria": "裁剪宽度",
             "heightAria": "裁剪高度",
+            "ratioAria": "裁剪比例",
+            "ratioWidth": "宽比例",
+            "ratioHeight": "高比例",
+            "ratioWidthAria": "裁剪宽比例",
+            "ratioHeightAria": "裁剪高比例",
             "lockedRatio": "锁定比例",
             "freeRatio": "自由比例",
             "confirm": "确认裁剪"
