@@ -20,6 +20,7 @@ type ResizeHandle = "n" | "e" | "s" | "w" | "ne" | "nw" | "se" | "sw";
 
 const handles: ResizeHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 const minSize = 0.06;
+const maxRatioPart = 20;
 const defaultCrop = { x: 0.12, y: 0.12, width: 0.76, height: 0.76 };
 
 export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { dataUrl: string; open: boolean; onClose: () => void; onConfirm: (crop: CanvasImageCropRect) => void }) {
@@ -229,15 +230,24 @@ function resizeCropToRatio(crop: CanvasImageCropRect, image: { width: number; he
 }
 
 function getImageRatio(image: { width: number; height: number }) {
-    const divisor = gcd(image.width, image.height);
-    return { width: image.width / divisor, height: image.height / divisor };
+    return getReadableRatio(image.width, image.height);
 }
 
 function getCropRatio(crop: CanvasImageCropRect, image: { width: number; height: number }) {
     const width = Math.max(1, Math.round(crop.width * image.width));
     const height = Math.max(1, Math.round(crop.height * image.height));
-    const divisor = gcd(width, height);
-    return { width: width / divisor, height: height / divisor };
+    return getReadableRatio(width, height);
+}
+
+function getReadableRatio(width: number, height: number) {
+    const target = width / height;
+    let best = { width: 1, height: 1, error: Number.POSITIVE_INFINITY };
+    for (let ratioHeight = 1; ratioHeight <= maxRatioPart; ratioHeight += 1) {
+        const ratioWidth = clamp(Math.round(target * ratioHeight), 1, maxRatioPart);
+        const error = Math.abs(target - ratioWidth / ratioHeight);
+        if (error < best.error) best = { width: ratioWidth, height: ratioHeight, error };
+    }
+    return { width: best.width, height: best.height };
 }
 
 function handleStyle(handle: ResizeHandle) {
@@ -248,8 +258,4 @@ function handleStyle(handle: ResizeHandle) {
 
 function clamp(value: number, min: number, max: number) {
     return Math.min(max, Math.max(min, value));
-}
-
-function gcd(a: number, b: number): number {
-    return b ? gcd(b, a % b) : Math.max(1, a);
 }

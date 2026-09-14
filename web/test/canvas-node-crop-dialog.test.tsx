@@ -67,7 +67,7 @@ test("ratio fields reshape the crop from the original image dimensions", async (
     }
 });
 
-test("resizing the crop frame updates pixel and ratio fields in real time", async () => {
+test("resizing the crop frame updates pixels and a readable ratio in real time", async () => {
     const dialog = await renderDialog(() => {});
     try {
         const frame = cropFrame();
@@ -81,15 +81,15 @@ test("resizing the crop frame updates pixel and ratio fields in real time", asyn
 
         await act(async () => {
             handles[4].dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, clientX: 0, clientY: 0 }));
-            document.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: -16, clientY: 216 }));
+            document.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: -15, clientY: 216 }));
             document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
         });
 
-        assert.equal(input("裁剪宽度").value, "1200");
+        assert.equal(input("裁剪宽度").value, "1201");
         assert.equal(input("裁剪高度").value, "900");
         assert.equal(input("裁剪宽比例").value, "4");
         assert.equal(input("裁剪高比例").value, "3");
-        assert.equal(frame.style.width, "75%");
+        assert.equal(frame.style.width, "75.0625%");
         assert.equal(frame.style.height, "100%");
     } finally {
         await dialog.unmount();
