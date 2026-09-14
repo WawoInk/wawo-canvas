@@ -15,10 +15,15 @@ const { default: i18n } = await import("@/i18n");
 const { CanvasNodeCropDialog } = await import("../src/pages/canvas/components/canvas-node-crop-dialog");
 await i18n.changeLanguage("zh-CN");
 
-test("manual crop dimensions update the preview and confirmed crop", async () => {
+test("users only enter crop width and height to update the preview", async () => {
     const confirmed: Array<{ x: number; y: number; width: number; height: number }> = [];
     const dialog = await renderDialog((crop) => confirmed.push(crop));
     try {
+        const sizeFields = required(document.querySelector<HTMLElement>(`[role="group"][aria-label="裁剪尺寸"]`));
+        assert.equal(sizeFields.querySelectorAll("input").length, 2);
+        assert.ok(sizeFields.textContent?.includes(":"));
+        assert.equal(document.querySelector(`input[aria-label="裁剪比例"]`), null);
+
         await changeInput(input("裁剪宽度"), "800");
         await changeInput(input("裁剪高度"), "600");
 
@@ -30,20 +35,6 @@ test("manual crop dimensions update the preview and confirmed crop", async () =>
         await click(button("确认裁剪"));
         assert.equal(confirmed.length, 1);
         assertCropClose(confirmed[0], { x: 0.25, y: 1 / 6, width: 0.5, height: 2 / 3 });
-    } finally {
-        await dialog.unmount();
-    }
-});
-
-test("manual crop ratio reshapes the preview immediately", async () => {
-    const dialog = await renderDialog(() => {});
-    try {
-        await changeInput(input("裁剪比例"), "1:1");
-
-        assert.equal(input("裁剪宽度").value, "900");
-        assert.equal(input("裁剪高度").value, "900");
-        assert.equal(cropFrame().style.width, "56.25%");
-        assert.equal(cropFrame().style.height, "100%");
     } finally {
         await dialog.unmount();
     }

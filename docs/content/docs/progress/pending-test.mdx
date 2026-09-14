@@ -10,7 +10,7 @@ description: 当前版本已实现但仍需人工验证的变更项
 - 本地 Canvas Agent 多画布隔离：同时打开两个 Canvas Project Replica，分别连接本地 Agent、切换 thread 并执行读取/写入工具，确认 state、pending tool、Codex 消息和 active thread 不跨画布；切换项目会回绝旧 pending tool、忽略旧异步响应并连接新 Replica。缺少明确 identity 的旧 MCP 调用在单画布下保持兼容，多画布下应拒绝歧义调用。自动化覆盖双 Replica session 与页面切换，真实 Codex app-server/MCP/浏览器端到端由用户验收。
 - Compatibility 视频任务所有权：通过绑定 Generation Profile 的 durable Compatibility 创建任务后，立即执行查询、Remix 和 Cancel 均使用同一用户所有权；其他账号必须被拒绝且请求不能转发上游。ownership、accepted task、payload 和 event 任一写入失败时整笔 transaction 回滚。自动化已覆盖 owner 全链路、跨用户拒绝和唯一冲突回滚；真实供应商响应由用户验收。
 
-- Canvas 图片裁剪与切图：裁剪弹窗可手动输入像素宽高或 `W:H` 比例，裁剪框会以当前选区中心同步预览；平台文件优先通过 `fileId` 内容接口读取，浏览器本地图片优先通过 `storageKey` 读取 IndexedDB Blob，遗留远程 URL 通过现有后端代理转为平台文件后再处理，避免跨域图片污染 Canvas。验证手动输入、拖动裁剪和多行多列切图均可生成图片节点，结果继续写入浏览器 IndexedDB 并保存 `storageKey`，刷新当前浏览器后仍可恢复；真实浏览器交互由用户验收。
+- Canvas 图片裁剪与切图：裁剪弹窗以“宽度 : 高度”两个数值输入框设置像素尺寸，裁剪框会以当前选区中心同步预览；平台文件优先通过 `fileId` 内容接口读取，浏览器本地图片优先通过 `storageKey` 读取 IndexedDB Blob，遗留远程 URL 通过现有后端代理转为平台文件后再处理，避免跨域图片污染 Canvas。验证手动输入、拖动裁剪和多行多列切图均可生成图片节点，结果继续写入浏览器 IndexedDB 并保存 `storageKey`，刷新当前浏览器后仍可恢复；真实浏览器交互由用户验收。
 
 - 生图与视频工作台对齐 Canvas：生图工作台批量上限与 Canvas 图片节点统一为 15，并在本地历史重试中保留透明背景；视频创作台本地兼容任务标记正确来源并采用与 Canvas 相同的约 30 分钟观察窗口，第一方创建响应丢失时按同一 `clientRequestId` 找回已接受任务，结果保留平台文件 ID、字节数和 MIME 类型，缺失的尺寸与时长沿用现有回退值，本地历史重试保留质量与负向提示词，创建和终态错误沿用 Canvas 的结构化错误说明。请求模型、图片格式、视频 Profile 与能力边界继续读取管理员系统设置。真实浏览器、实际供应商和媒体播放由用户验证。
 

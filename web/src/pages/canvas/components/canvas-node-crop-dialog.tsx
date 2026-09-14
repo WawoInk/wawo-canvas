@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Button, Input, InputNumber, Modal } from "antd";
+import { Button, InputNumber, Modal } from "antd";
 import { Check, Lock, LockOpen, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -28,7 +28,6 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
     const [crop, setCrop] = useState<CanvasImageCropRect>(defaultCrop);
     const [locked, setLocked] = useState(false);
     const [image, setImage] = useState<{ width: number; height: number } | null>(null);
-    const [ratioInput, setRatioInput] = useState("");
     const cropSize = image ? { width: Math.max(1, Math.round(crop.width * image.width)), height: Math.max(1, Math.round(crop.height * image.height)) } : null;
 
     useEffect(() => {
@@ -39,10 +38,6 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
         if (!open) return;
         void readImageMeta(dataUrl).then(setImage);
     }, [dataUrl, open]);
-
-    useEffect(() => {
-        if (cropSize) setRatioInput(formatRatio(cropSize.width, cropSize.height));
-    }, [cropSize?.height, cropSize?.width]);
 
     const startDrag = (mode: DragMode, event: ReactPointerEvent, handle?: ResizeHandle) => {
         const box = boxRef.current?.getBoundingClientRect();
@@ -65,12 +60,6 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
 
     const updateCropSize = (width: number, height: number) => {
         if (image) setCrop((current) => resizeCropToPixels(current, image, width, height));
-    };
-
-    const updateRatio = (value: string) => {
-        setRatioInput(value);
-        const ratio = parseRatio(value);
-        if (image && ratio) setCrop((current) => resizeCropToRatio(current, image, ratio));
     };
 
     return (
@@ -101,18 +90,19 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
 
                 <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg border px-3 py-2">
                     <div className="flex flex-wrap items-end gap-3">
-                        <label className="grid gap-1 text-xs opacity-80">
-                            <span>{t("canvas.crop.width")}</span>
-                            <InputNumber aria-label={t("canvas.crop.widthAria")} className="w-28" min={1} max={image?.width} precision={0} value={cropSize?.width} disabled={!cropSize} onChange={(value) => value !== null && cropSize && updateCropSize(value, cropSize.height)} />
-                        </label>
-                        <label className="grid gap-1 text-xs opacity-80">
-                            <span>{t("canvas.crop.height")}</span>
-                            <InputNumber aria-label={t("canvas.crop.heightAria")} className="w-28" min={1} max={image?.height} precision={0} value={cropSize?.height} disabled={!cropSize} onChange={(value) => value !== null && cropSize && updateCropSize(cropSize.width, value)} />
-                        </label>
-                        <label className="grid gap-1 text-xs opacity-80">
-                            <span>{t("canvas.crop.ratioField")}</span>
-                            <Input aria-label={t("canvas.crop.ratioAria")} className="w-28" value={ratioInput} status={ratioInput && !parseRatio(ratioInput) ? "error" : undefined} placeholder={t("canvas.crop.ratioPlaceholder")} disabled={!cropSize} onChange={(event) => updateRatio(event.target.value)} />
-                        </label>
+                        <div role="group" aria-label={t("canvas.crop.sizeAria")} className="flex items-end gap-2">
+                            <label className="grid gap-1 text-xs opacity-80">
+                                <span>{t("canvas.crop.width")}</span>
+                                <InputNumber aria-label={t("canvas.crop.widthAria")} className="w-28" min={1} max={image?.width} precision={0} value={cropSize?.width} disabled={!cropSize} onChange={(value) => value !== null && cropSize && updateCropSize(value, cropSize.height)} />
+                            </label>
+                            <span aria-hidden className="pb-2 text-sm opacity-50">
+                                :
+                            </span>
+                            <label className="grid gap-1 text-xs opacity-80">
+                                <span>{t("canvas.crop.height")}</span>
+                                <InputNumber aria-label={t("canvas.crop.heightAria")} className="w-28" min={1} max={image?.height} precision={0} value={cropSize?.height} disabled={!cropSize} onChange={(value) => value !== null && cropSize && updateCropSize(cropSize.width, value)} />
+                            </label>
+                        </div>
                         {image ? <span className="pb-2 text-sm opacity-60">{t("canvas.crop.originalSize", { value: formatDimensions(image.width, image.height) })}</span> : null}
                     </div>
                     <Button icon={locked ? <Lock className="size-4" /> : <LockOpen className="size-4" />} onClick={() => setLocked((value) => !value)}>
@@ -192,16 +182,6 @@ function resizeCropToPixels(crop: CanvasImageCropRect, image: { width: number; h
     };
 }
 
-function resizeCropToRatio(crop: CanvasImageCropRect, image: { width: number; height: number }, ratio: number) {
-    let width = crop.width * image.width;
-    let height = width / ratio;
-    if (height > image.height) {
-        height = image.height;
-        width = height * ratio;
-    }
-    return resizeCropToPixels(crop, image, width, height);
-}
-
 function handleStyle(handle: ResizeHandle) {
     const top = handle.includes("n") ? "-6px" : handle.includes("s") ? "calc(100% - 6px)" : "calc(50% - 6px)";
     const left = handle.includes("w") ? "-6px" : handle.includes("e") ? "calc(100% - 6px)" : "calc(50% - 6px)";
@@ -210,21 +190,4 @@ function handleStyle(handle: ResizeHandle) {
 
 function clamp(value: number, min: number, max: number) {
     return Math.min(max, Math.max(min, value));
-}
-
-function formatRatio(width: number, height: number) {
-    const divisor = gcd(width, height);
-    return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`;
-}
-
-function parseRatio(value: string) {
-    const match = value.match(/^\s*(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)\s*$/);
-    if (!match) return null;
-    const width = Number(match[1]);
-    const height = Number(match[2]);
-    return width > 0 && height > 0 ? width / height : null;
-}
-
-function gcd(a: number, b: number): number {
-    return b ? gcd(b, a % b) : Math.max(1, a);
 }
