@@ -3046,9 +3046,15 @@
         "crop": {
             "title": "裁剪图片",
             "resizeAria": "调整裁剪框",
-            "cropSize": "裁剪尺寸 {{value}}",
-            "ratio": "比例 {{value}}",
+            "selectionAria": "裁剪区域",
             "originalSize": "原图 {{value}}",
+            "width": "宽度",
+            "height": "高度",
+            "widthAria": "裁剪宽度",
+            "heightAria": "裁剪高度",
+            "ratioField": "比例",
+            "ratioAria": "裁剪比例",
+            "ratioPlaceholder": "例如 16:9",
             "lockedRatio": "锁定比例",
             "freeRatio": "自由比例",
             "confirm": "确认裁剪"

@@ -3046,9 +3046,15 @@
         "crop": {
             "title": "Crop Image",
             "resizeAria": "Resize crop box",
-            "cropSize": "Crop size: {{value}}",
-            "ratio": "Ratio: {{value}}",
+            "selectionAria": "Crop selection",
             "originalSize": "Original: {{value}}",
+            "width": "Width",
+            "height": "Height",
+            "widthAria": "Crop width",
+            "heightAria": "Crop height",
+            "ratioField": "Ratio",
+            "ratioAria": "Crop ratio",
+            "ratioPlaceholder": "e.g. 16:9",
             "lockedRatio": "Locked Ratio",
             "freeRatio": "Free Ratio",
             "confirm": "Confirm Crop"
