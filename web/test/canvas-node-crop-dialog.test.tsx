@@ -48,8 +48,8 @@ test("ratio fields reshape the crop from the original image dimensions", async (
 
         await changeInput(input("裁剪宽度"), "800");
         await changeInput(input("裁剪高度"), "600");
-        assert.equal(input("裁剪宽比例").value, "16");
-        assert.equal(input("裁剪高比例").value, "9");
+        assert.equal(input("裁剪宽比例").value, "4");
+        assert.equal(input("裁剪高比例").value, "3");
 
         await changeInput(input("裁剪宽比例"), "");
         await changeInput(input("裁剪高比例"), "");
@@ -62,6 +62,35 @@ test("ratio fields reshape the crop from the original image dimensions", async (
         assert.equal(input("裁剪高度").value, "900");
         assert.equal(cropFrame().style.width, "100%");
         assert.equal(cropFrame().style.height, "100%");
+    } finally {
+        await dialog.unmount();
+    }
+});
+
+test("resizing the crop frame updates pixel and ratio fields in real time", async () => {
+    const dialog = await renderDialog(() => {});
+    try {
+        const frame = cropFrame();
+        const box = required(frame.parentElement);
+        Object.defineProperty(box, "getBoundingClientRect", {
+            configurable: true,
+            value: () => ({ x: 0, y: 0, left: 0, top: 0, right: 1600, bottom: 900, width: 1600, height: 900, toJSON() {} }),
+        });
+        const handles = Array.from(document.querySelectorAll<HTMLButtonElement>(`button[aria-label="调整裁剪框"]`));
+        assert.equal(handles.length, 8);
+
+        await act(async () => {
+            handles[4].dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, clientX: 0, clientY: 0 }));
+            document.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: -16, clientY: 216 }));
+            document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+        });
+
+        assert.equal(input("裁剪宽度").value, "1200");
+        assert.equal(input("裁剪高度").value, "900");
+        assert.equal(input("裁剪宽比例").value, "4");
+        assert.equal(input("裁剪高比例").value, "3");
+        assert.equal(frame.style.width, "75%");
+        assert.equal(frame.style.height, "100%");
     } finally {
         await dialog.unmount();
     }

@@ -57,6 +57,7 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
             const dy = (event.clientY - start.y) / box.height;
             const next = mode === "move" ? moveCrop(start.crop, dx, dy) : resizeCrop(start.crop, dx, dy, handle || "se", locked, box);
             setCrop(next);
+            if (image) setRatioSize(getCropRatio(next, image));
         };
         const up = () => {
             document.removeEventListener("pointermove", move);
@@ -70,6 +71,7 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
         if (!image) return;
         const next = resizeCropToPixels(crop, image, width, height);
         setCrop(next);
+        setRatioSize(getCropRatio(next, image));
     };
 
     const updateCropRatio = (dimension: "width" | "height", value: number | null) => {
@@ -229,6 +231,13 @@ function resizeCropToRatio(crop: CanvasImageCropRect, image: { width: number; he
 function getImageRatio(image: { width: number; height: number }) {
     const divisor = gcd(image.width, image.height);
     return { width: image.width / divisor, height: image.height / divisor };
+}
+
+function getCropRatio(crop: CanvasImageCropRect, image: { width: number; height: number }) {
+    const width = Math.max(1, Math.round(crop.width * image.width));
+    const height = Math.max(1, Math.round(crop.height * image.height));
+    const divisor = gcd(width, height);
+    return { width: width / divisor, height: height / divisor };
 }
 
 function handleStyle(handle: ResizeHandle) {
