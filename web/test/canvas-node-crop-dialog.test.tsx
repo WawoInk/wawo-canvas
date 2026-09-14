@@ -39,7 +39,7 @@ test("pixel width and height update the crop preview", async () => {
     }
 });
 
-test("separate ratio fields reshape the crop without typing a colon", async () => {
+test("ratio fields reshape the crop from the original image dimensions", async () => {
     const dialog = await renderDialog(() => {});
     try {
         const ratioFields = required(document.querySelector<HTMLElement>(`[role="group"][aria-label="裁剪比例"]`));
@@ -48,18 +48,20 @@ test("separate ratio fields reshape the crop without typing a colon", async () =
 
         await changeInput(input("裁剪宽度"), "800");
         await changeInput(input("裁剪高度"), "600");
-        assert.equal(input("裁剪宽比例").value, "4");
-        assert.equal(input("裁剪高比例").value, "3");
+        assert.equal(input("裁剪宽比例").value, "16");
+        assert.equal(input("裁剪高比例").value, "9");
 
+        await changeInput(input("裁剪宽比例"), "");
+        await changeInput(input("裁剪高比例"), "");
         await changeInput(input("裁剪宽比例"), "16");
         await changeInput(input("裁剪高比例"), "9");
 
         assert.equal(input("裁剪宽比例").value, "16");
         assert.equal(input("裁剪高比例").value, "9");
-        assert.equal(input("裁剪宽度").value, "800");
-        assert.equal(input("裁剪高度").value, "450");
-        assert.equal(cropFrame().style.width, "50%");
-        assert.equal(cropFrame().style.height, "50%");
+        assert.equal(input("裁剪宽度").value, "1600");
+        assert.equal(input("裁剪高度").value, "900");
+        assert.equal(cropFrame().style.width, "100%");
+        assert.equal(cropFrame().style.height, "100%");
     } finally {
         await dialog.unmount();
     }

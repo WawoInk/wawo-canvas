@@ -42,7 +42,7 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
         if (!open) return;
         void readImageMeta(dataUrl).then((nextImage) => {
             setImage(nextImage);
-            setRatioSize(getCropRatio(defaultCrop, nextImage));
+            setRatioSize(getImageRatio(nextImage));
         });
     }, [dataUrl, open]);
 
@@ -57,7 +57,6 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
             const dy = (event.clientY - start.y) / box.height;
             const next = mode === "move" ? moveCrop(start.crop, dx, dy) : resizeCrop(start.crop, dx, dy, handle || "se", locked, box);
             setCrop(next);
-            if (image) setRatioSize(getCropRatio(next, image));
         };
         const up = () => {
             document.removeEventListener("pointermove", move);
@@ -71,7 +70,6 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
         if (!image) return;
         const next = resizeCropToPixels(crop, image, width, height);
         setCrop(next);
-        setRatioSize(getCropRatio(next, image));
     };
 
     const updateCropRatio = (dimension: "width" | "height", value: number | null) => {
@@ -82,7 +80,7 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
 
     const resetCrop = () => {
         setCrop(defaultCrop);
-        if (image) setRatioSize(getCropRatio(defaultCrop, image));
+        if (image) setRatioSize(getImageRatio(image));
     };
 
     return (
@@ -219,7 +217,7 @@ function resizeCropToPixels(crop: CanvasImageCropRect, image: { width: number; h
 }
 
 function resizeCropToRatio(crop: CanvasImageCropRect, image: { width: number; height: number }, ratio: number) {
-    let width = crop.width * image.width;
+    let width = image.width;
     let height = width / ratio;
     if (height > image.height) {
         height = image.height;
@@ -228,11 +226,9 @@ function resizeCropToRatio(crop: CanvasImageCropRect, image: { width: number; he
     return resizeCropToPixels(crop, image, width, height);
 }
 
-function getCropRatio(crop: CanvasImageCropRect, image: { width: number; height: number }) {
-    const width = Math.max(1, Math.round(crop.width * image.width));
-    const height = Math.max(1, Math.round(crop.height * image.height));
-    const divisor = gcd(width, height);
-    return { width: width / divisor, height: height / divisor };
+function getImageRatio(image: { width: number; height: number }) {
+    const divisor = gcd(image.width, image.height);
+    return { width: image.width / divisor, height: image.height / divisor };
 }
 
 function handleStyle(handle: ResizeHandle) {
