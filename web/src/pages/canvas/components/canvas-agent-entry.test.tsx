@@ -13,9 +13,10 @@ import CanvasLibrary from "../index";
 import { useCanvasStore, type CanvasProject } from "../stores/use-canvas-store";
 import { useCanvasAgentStore } from "../stores/use-canvas-agent-store";
 import { clearSyncTimers } from "../stores/canvas-sync";
+import { useConfigStore } from "../../../stores/use-config-store.ts";
+import { useUserStore } from "../../../stores/use-user-store.ts";
 
 Object.assign(globalThis, { __APP_VERSION__: "test", IS_REACT_ACT_ENVIRONMENT: true });
-const { default: CanvasProjectPage } = await import("../project/index");
 const project: CanvasProject = {
     id: "agent-entry",
     title: "Agent Entry Test",
@@ -33,18 +34,56 @@ const project: CanvasProject = {
     viewport: { x: 0, y: 0, k: 1 },
 };
 const fragment = "#agentUrl=http%3A%2F%2F127.0.0.1%3A17371&agentToken=fake-entry-token";
+const publicSettings = (canvasLocalAgent: boolean) => ({
+    modelChannel: {
+        availableModels: [],
+        modelCosts: [],
+        imageRequestFormats: [],
+        defaultModel: "",
+        defaultImageModel: "",
+        defaultVideoModel: "",
+        defaultTextModel: "",
+        defaultAudioModel: "",
+        imageModels: [],
+        videoModels: [],
+        textModels: [],
+        textModelProtocols: {},
+        audioModels: [],
+        systemPrompt: "",
+        allowCustomChannel: true,
+    },
+    auth: { allowRegister: true, linuxDo: { enabled: false } },
+    navigation: {
+        enabled: true,
+        canvas: true,
+        canvasLocalAgent,
+        storyboard: true,
+        image: true,
+        video: true,
+        assets: true,
+        volcengineAssets: true,
+        prompts: true,
+        storyboardItems: { brainstormAgent: true, storyboard: true, scriptAgent: true },
+    },
+});
+const { default: CanvasProjectPage } = await import("../project/index");
 
-for (const { mode, entryFragment, valid } of [
-    ...["new", "recent", "choose"].map((mode) => ({ mode, entryFragment: fragment, valid: true })),
-    { mode: "direct-partial", entryFragment: "#agentToken=fake-partial-token", valid: false },
-    { mode: "direct-invalid", entryFragment: "#agentUrl=javascript%3Afake&agentToken=fake-invalid-token", valid: false },
+for (const { mode, entryFragment, valid, localAgentVisible } of [
+    ...["new", "recent", "choose"].map((mode) => ({ mode, entryFragment: fragment, valid: true, localAgentVisible: true })),
+    { mode: "hidden", entryFragment: fragment, valid: true, localAgentVisible: false },
+    { mode: "direct-partial", entryFragment: "#agentToken=fake-partial-token", valid: false, localAgentVisible: true },
+    { mode: "direct-invalid", entryFragment: "#agentUrl=javascript%3Afake&agentToken=fake-invalid-token", valid: false, localAgentVisible: true },
 ]) {
-    test(`${mode}: real routes consume credentials, retain compact mount, and replace sensitive history`, async () => {
+    test(`${mode}: real routes respect local Agent visibility and replace sensitive history`, async () => {
+        const originalUser = useUserStore.getState();
+        const originalPublicSettings = useConfigStore.getState().publicSettings;
+        useUserStore.setState({ token: "test-token", user: { id: "user-1" } as typeof originalUser.user });
         await useCanvasStore.persist.rehydrate();
         useCanvasStore.setState({ hydrated: true, synced: true, projects: [structuredClone(project)], tombstones: [] });
         useCanvasAgentStore.setState({ enabled: !valid, connected: false, token: valid ? "" : "fake-old-token", url: "http://127.0.0.1:17371" });
+        useConfigStore.setState({ publicSettings: publicSettings(localAgentVisible) });
         window.history.replaceState(null, "", "/before-agent-entry");
-        window.history.pushState(null, "", `${valid ? `/canvas?mode=${mode}` : `/canvas/${project.id}?mode=choose`}${entryFragment}`);
+        window.history.pushState(null, "", `${valid && mode !== "hidden" ? `/canvas?mode=${mode}` : `/canvas/${project.id}?mode=choose`}${entryFragment}`);
         const historyLength = window.history.length;
         const sources: Array<{ url: string; closed: boolean }> = [];
         const originalSource = globalThis.EventSource;
@@ -99,17 +138,18 @@ for (const { mode, entryFragment, valid } of [
                 await act(async () => {
                     await new Promise((resolve) => setTimeout(resolve, 10));
                 });
-            if (valid)
+            assert.equal(window.location.hash, "");
+            assert.equal(
+                [...host.querySelectorAll("button")].some((button) => button.title === i18n.t("canvas.editor.agent.openPanel")),
+                localAgentVisible,
+                "compact local Agent status should follow the administrator setting",
+            );
+            if (valid && localAgentVisible)
                 assert.ok(
                     sources.some((source) => !source.closed),
                     "headless connection must remain mounted after URL cleanup",
                 );
-            else assert.equal(sources.length, 0, "invalid bootstrap must never connect with saved credentials");
-            assert.equal(window.location.hash, "");
-            assert.ok(
-                [...host.querySelectorAll("button")].some((button) => button.title === i18n.t("canvas.editor.agent.openPanel")),
-                "compact status must remain after fragment cleanup, including rejected credentials",
-            );
+            else assert.equal(sources.length, 0, "hidden or invalid bootstrap must never connect with saved credentials");
             assert.ok(sources.every((source) => new URL(source.url).searchParams.get("token") === "fake-entry-token"));
             assert.equal(window.history.length, historyLength, "credential entry should be replaced rather than pushed");
             await act(async () => {
@@ -126,6 +166,8 @@ for (const { mode, entryFragment, valid } of [
             globalThis.EventSource = originalSource;
             globalThis.fetch = originalFetch;
             axios.defaults.adapter = originalAdapter;
+            useUserStore.setState(originalUser, true);
+            useConfigStore.setState({ publicSettings: originalPublicSettings });
         }
     });
 }

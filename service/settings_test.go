@@ -87,6 +87,18 @@ func TestNormalizePublicSettingDefaultsNavigationVisibleAndPreservesHiddenItems(
 	}
 }
 
+func TestNormalizePublicSettingKeepsLocalCanvasAgentHiddenByDefault(t *testing.T) {
+	setting := normalizePublicSetting(model.PublicSetting{})
+	if setting.Navigation.CanvasLocalAgent {
+		t.Fatal("local Canvas Agent should be hidden by default")
+	}
+
+	setting = normalizePublicSetting(model.PublicSetting{Navigation: model.PublicNavigationSetting{CanvasLocalAgent: true}})
+	if !setting.Navigation.CanvasLocalAgent {
+		t.Fatal("explicitly enabled local Canvas Agent should stay visible")
+	}
+}
+
 func TestNormalizeSettingsPublishesEnabledChannelModelsAndRepairsDefaults(t *testing.T) {
 	settings := normalizeSettings(model.Settings{
 		Public: model.PublicSetting{

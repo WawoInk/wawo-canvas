@@ -72,6 +72,7 @@ type PublicSetting struct {
 type PublicNavigationSetting struct {
 	Enabled          *bool                             `json:"enabled"`
 	Canvas           *bool                             `json:"canvas"`
+	CanvasLocalAgent bool                              `json:"canvasLocalAgent"`
 	Storyboard       *bool                             `json:"storyboard"`
 	Image            *bool                             `json:"image"`
 	Video            *bool                             `json:"video"`

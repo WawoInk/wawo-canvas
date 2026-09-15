@@ -54,6 +54,7 @@
   - 新配置字段：store type/default/normalize + modal + 生成请求。
   - 新 protocol：store normalize + API request builder + 后端 remote channel。
 - **约束**：用户 API Key 是浏览器级配置，不按账号自动分区；安全文档必须明确这一点。
+- **Canvas 例外**：Canvas 节点生成、任务恢复和在线助手始终从公开后台设置构造 remote-only 配置，不使用浏览器本地渠道；后台配置缺失时 fail closed。
 
 ## API 请求层
 

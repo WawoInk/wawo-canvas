@@ -8,7 +8,7 @@ import { saveAs } from "file-saver";
 import { useTranslation } from "react-i18next";
 
 import i18n from "@/i18n";
-import { hasAgentUrlBootstrap } from "../components/canvas-agent-url-bootstrap";
+import { consumeAgentUrlBootstrap, hasAgentUrlBootstrap } from "../components/canvas-agent-url-bootstrap";
 import { formatNumber } from "@/i18n/formatters";
 import { createAsyncImageTask, createAsyncImageEditTask, pollAsyncImageTask, cancelAsyncImageTask, requestEdit, requestImageQuestion } from "@/services/api/image";
 import { completeAsyncImageTask, isAsyncImageTaskRetryableError } from "@/services/api/async-image-task";
@@ -330,6 +330,7 @@ function InfiniteCanvasPage() {
     const config = useConfigStore((state) => state.config);
     const effectiveConfig = useEffectiveConfig();
     const publicSettings = useConfigStore((state) => state.publicSettings);
+    const localCanvasAgentVisible = useConfigStore((state) => state.publicSettings?.navigation?.canvasLocalAgent === true);
     const loadPublicSettings = useConfigStore((state) => state.loadPublicSettings);
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
@@ -394,6 +395,11 @@ function InfiniteCanvasPage() {
     const [collapsingBatchIds, setCollapsingBatchIds] = useState<Set<string>>(new Set());
     const [openingBatchIds, setOpeningBatchIds] = useState<Set<string>>(new Set());
     const [isNodeDragging, setIsNodeDragging] = useState(false);
+
+    useLayoutEffect(() => {
+        if (!publicSettings || localCanvasAgentVisible) return;
+        consumeAgentUrlBootstrap(window.location, window.history);
+    }, [localCanvasAgentVisible, publicSettings]);
 
     const nodesRef = useRef(nodes);
     const projectIdRef = useRef(projectId);
@@ -504,11 +510,12 @@ function InfiniteCanvasPage() {
         if (!node || !resume) return;
         setNodes((prev) => prev.map((item) => (item.id === nodeId ? { ...item, metadata: { ...item.metadata, generationPollingPaused: false } } : item)));
         if (resume.kind === "image") {
-            void pollCanvasImageNode(nodeId, { id: resume.taskId, model: resume.model || effectiveConfig.imageModel || effectiveConfig.model, platformTaskId: resume.platformTaskId }, buildSavedImageConfig(effectiveConfig, node.metadata || {}));
+            const config = buildSavedImageConfig(effectiveConfig, node.metadata || {}, publicSettings);
+            void pollCanvasImageNode(nodeId, { id: resume.taskId, model: resume.model || config.model, platformTaskId: resume.platformTaskId }, config);
         } else if (resume.kind === "first-party-video") {
             void pollFirstPartyCanvasVideoNode(nodeId, resume.taskId, undefined, resume.clientRequestId);
         } else {
-            const config = buildNodeConfig(effectiveConfig, defaultConfig, node, "video");
+            const config = buildNodeConfig(effectiveConfig, defaultConfig, node, "video", publicSettings);
             void pollCanvasVideoNode(nodeId, { id: resume.taskId, model: resume.model || config.model }, config);
         }
     };
@@ -542,9 +549,10 @@ function InfiniteCanvasPage() {
                 continue;
             }
             if (node.metadata?.status !== "loading") continue;
-            const task = { id: resume.taskId, model: resume.model || effectiveConfig.imageModel || effectiveConfig.model, platformTaskId: resume.platformTaskId };
-            if (resume.kind === "image") void pollCanvasImageNode(node.id, task, effectiveConfig);
-            else void pollCanvasVideoNode(node.id, task, effectiveConfig, undefined, binding);
+            const config = resume.kind === "image" ? buildSavedImageConfig(effectiveConfig, node.metadata || {}, publicSettings) : buildNodeConfig(effectiveConfig, defaultConfig, node, "video", publicSettings);
+            const task = { id: resume.taskId, model: resume.model || config.model, platformTaskId: resume.platformTaskId };
+            if (resume.kind === "image") void pollCanvasImageNode(node.id, task, config);
+            else void pollCanvasVideoNode(node.id, task, config, undefined, binding);
         }
     };
 
@@ -2085,7 +2093,6 @@ function InfiniteCanvasPage() {
                     { x: textNode.position.x + textNode.width + gap + configSpec.width / 2, y: centerY },
                     {
                         generationMode: "text",
-                        useAdminTextModel: true,
                         model: adminModel.value,
                         count: 1,
                         composerContent: t("canvas.editor.prompts.reverseComposer", { imageNodeId: node.id, instructionNodeId: textNode.id }),
@@ -2186,7 +2193,7 @@ function InfiniteCanvasPage() {
                 return projectIdRef.current === projectId && isCurrentSession(started, { token: current.token, userId: current.user?.id });
             };
             const userPrompt = payload.prompt.trim();
-            const generationConfig = { ...buildNodeConfig(effectiveConfig, defaultConfig, node, "image"), count: "1" };
+            const generationConfig = { ...buildNodeConfig(effectiveConfig, defaultConfig, node, "image", publicSettings), count: "1" };
             if (payload.generate && !isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
                 return;
@@ -2251,7 +2258,7 @@ function InfiniteCanvasPage() {
                 setRunningNodeId(resultId);
                 const controller = startGenerationRequest(resultId, node.id, resultId);
                 try {
-                    const image = await requestEdit(generationConfig, prompt, [source, annotationSource], undefined, { signal: controller.signal }).then((items) => items[0]);
+                    const image = await requestEdit(generationConfig, prompt, [source, annotationSource], undefined, { signal: controller.signal, source: "canvas" }).then((items) => items[0]);
                     if (!isActive()) return;
                     const uploaded = await uploadImage(image.dataUrl);
                     if (!isActive()) return;
@@ -2306,7 +2313,7 @@ function InfiniteCanvasPage() {
     const generateAngleNode = useCallback(
         async (node: CanvasNodeData, params: CanvasImageAngleParams) => {
             if (!node.metadata?.content) return;
-            const generationConfig = { ...buildNodeConfig(effectiveConfig, defaultConfig, node, "image"), count: "1" };
+            const generationConfig = { ...buildNodeConfig(effectiveConfig, defaultConfig, node, "image", publicSettings), count: "1" };
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
                 return;
@@ -2343,7 +2350,7 @@ function InfiniteCanvasPage() {
                     prompt,
                     [{ id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey, fileId: node.metadata.fileId }],
                     undefined,
-                    { signal: controller.signal },
+                    { signal: controller.signal, source: "canvas" },
                 ).then((items) => items[0]);
                 const uploaded = await uploadImage(image.dataUrl);
                 const size = fitNodeSize(uploaded.width, uploaded.height, imageConfig.width, imageConfig.height);
@@ -2848,7 +2855,7 @@ function InfiniteCanvasPage() {
                     if (!isEmptyAudioNode) setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: nodeId, toNodeId: audioId }]);
                     const controller = startGenerationRequest(audioId, nodeId, nodeId, runController);
                     try {
-                        const audioBlob = await requestAudioGeneration(generationConfig, effectivePrompt, { signal: controller.signal });
+                        const audioBlob = await requestAudioGeneration(generationConfig, effectivePrompt, { signal: controller.signal, source: "canvas" });
                         const storedAudio = await uploadBlob(audioBlob, "results/audios");
                         setNodes((prev) => prev.map((node) => (node.id === audioId ? { ...node, metadata: { ...node.metadata, ...audioMetadata(storedAudio), prompt: effectivePrompt, ...buildAudioGenerationMetadata(generationConfig) } } : node)));
                     } finally {
@@ -3009,7 +3016,7 @@ function InfiniteCanvasPage() {
             const hasSavedImageMetadata = Boolean(savedImageMetadata?.generationType);
             const generationConfig =
                 hasSavedImageMetadata && savedImageMetadata
-                    ? buildSavedImageConfig(effectiveConfig, savedImageMetadata)
+                    ? buildSavedImageConfig(effectiveConfig, savedImageMetadata, publicSettings)
                     : { ...buildNodeConfig(effectiveConfig, defaultConfig, sourceNode, node.type === CanvasNodeType.Text ? "text" : node.type === CanvasNodeType.Video ? "video" : node.type === CanvasNodeType.Audio ? "audio" : "image", publicSettings), count: "1" };
             if (node.type === CanvasNodeType.Video && node.metadata?.videoMode) generationConfig.videoMode = node.metadata.videoMode;
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
@@ -3101,7 +3108,7 @@ function InfiniteCanvasPage() {
                     return;
                 }
                 if (node.type === CanvasNodeType.Audio) {
-                    const audioBlob = await requestAudioGeneration(generationConfig, prompt, { signal: controller.signal });
+                    const audioBlob = await requestAudioGeneration(generationConfig, prompt, { signal: controller.signal, source: "canvas" });
                     const storedAudio = await uploadBlob(audioBlob, "results/audios");
                     setNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, metadata: { ...item.metadata, ...audioMetadata(storedAudio), prompt, ...buildAudioGenerationMetadata(generationConfig) } } : item)));
                     return;
@@ -3510,7 +3517,7 @@ function InfiniteCanvasPage() {
                     onUndo={undoCanvas}
                     onRedo={redoCanvas}
                     agentOpen={assistantOpen}
-                    compactAgentStatus={codexCompactAgent ? { connected: localAgentConnected, enabled: localAgentEnabled, activity: localAgentActivity } : undefined}
+                    compactAgentStatus={localCanvasAgentVisible && codexCompactAgent ? { connected: localAgentConnected, enabled: localAgentEnabled, activity: localAgentActivity } : undefined}
                     onToggleAgent={() => (assistantOpen ? closeAgent() : openAgent())}
                 />
 
@@ -3868,7 +3875,7 @@ function InfiniteCanvasPage() {
                 </Modal>
 
                 <AssetPickerModal open={assetPickerOpen} onInsert={handleAssetInsert} onClose={() => setAssetPickerOpen(false)} />
-                {codexCompactAgent && !assistantMounted ? <CanvasLocalAgentPanel headless snapshot={agentSnapshot} canUndoOps={Boolean(agentUndoSnapshot)} onApplyOps={applyAgentOps} onUndoOps={undoAgentOps} autoConnect={codexAutoConnect} /> : null}
+                {localCanvasAgentVisible && codexCompactAgent && !assistantMounted ? <CanvasLocalAgentPanel headless snapshot={agentSnapshot} canUndoOps={Boolean(agentUndoSnapshot)} onApplyOps={applyAgentOps} onUndoOps={undoAgentOps} autoConnect={codexAutoConnect} /> : null}
             </section>
             {assistantMounted ? (
                 <CanvasAssistantPanel
@@ -3883,9 +3890,10 @@ function InfiniteCanvasPage() {
                     canUndoOps={Boolean(agentUndoSnapshot)}
                     onUndoOps={undoAgentOps}
                     onPasteImage={pasteAssistantImage}
-                    agentMode={agentMode}
+                    agentMode={localCanvasAgentVisible ? agentMode : "online"}
                     onAgentModeChange={setAgentMode}
-                    autoConnectLocal={codexAutoConnect}
+                    autoConnectLocal={localCanvasAgentVisible && codexAutoConnect}
+                    localAgentVisible={localCanvasAgentVisible}
                     closing={assistantClosing}
                     onCollapse={closeAgent}
                 />

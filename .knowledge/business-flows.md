@@ -298,6 +298,8 @@ owner/member selects copy
 
 ## Local AI 生成
 
+该路径仅供允许自定义渠道的图片、视频和音频等独立工作台使用；Canvas 节点生成、任务恢复和在线助手不进入 local path。
+
 ```text
 AiConfig.channelMode=local
 -> resolve browser channel/model
@@ -337,6 +339,8 @@ Workbench/Canvas
 - **常见修改位置**：新供应商兼容字段放 request builder，不放 Canvas。
 
 Brainstorm Agent 的文本调用是该兼容链路的强制 remote 使用方：Runtime 使用管理员公开 `textModels` 列表中的用户选择和对应协议，拒绝本地配置或缺少有效映射的请求；`X-Source: brainstorm_agent` 仅用于现有任务来源归类，不创建新的扣费或日志机制。
+
+Canvas 也是强制 remote 使用方：图片、文本、音频、兼容视频、任务恢复和在线助手只读取管理员公开的能力模型，统一发送 `X-Source: canvas`；公开配置缺失时 fail closed，不回退浏览器本地渠道。
 
 ## 第一方视频 Generation Run
 

@@ -3,9 +3,31 @@ import { createServer } from "node:http";
 import { test } from "node:test";
 import axios from "axios";
 
-import { defaultConfig } from "../../stores/use-config-store.ts";
+import { defaultConfig, useConfigStore } from "../../stores/use-config-store.ts";
 import { useUserStore } from "../../stores/use-user-store.ts";
-import { createAsyncImageEditTask, createAsyncImageTask, pollAsyncImageTask } from "./image.ts";
+import { createAsyncImageEditTask, createAsyncImageTask, pollAsyncImageTask, requestEdit } from "./image.ts";
+
+test("canvas immediate image edits send an explicit source", async () => {
+    const previousPost = axios.post;
+    let request;
+    axios.post = async (url, body, options) => {
+        request = { url, body, options };
+        return { data: { data: [{ b64_json: "aW1hZ2U=" }] } };
+    };
+
+    try {
+        await requestEdit(
+            { ...defaultConfig, channelMode: "remote", model: "admin-image", imageModel: "admin-image" },
+            "编辑图片",
+            [{ id: "image-1", name: "image.png", type: "image/png", dataUrl: "data:image/png;base64,aW1hZ2U=" }],
+            undefined,
+            { source: "canvas" },
+        );
+        assert.equal(request.options.headers["X-Source"], "canvas");
+    } finally {
+        axios.post = previousPost;
+    }
+});
 
 test("workbench image generations preserve source and platform task identity", async () => {
     const previousPost = axios.post;
@@ -566,6 +588,8 @@ test("async multipart image edits send image[] without changing source, route, o
 test("all image request boundaries normalize disabled remote resolutions without changing local sizes", async () => {
     const { requestGeneration, requestEdit } = await import("./image.ts");
     const previousPost = axios.post;
+    const previousPublicSettings = useConfigStore.getState().publicSettings;
+    useConfigStore.setState({ publicSettings: null });
     let body;
     axios.post = async (_url, value) => {
         body = value;
@@ -597,6 +621,7 @@ test("all image request boundaries normalize disabled remote resolutions without
         }
     } finally {
         axios.post = previousPost;
+        useConfigStore.setState({ publicSettings: previousPublicSettings });
     }
 });
 

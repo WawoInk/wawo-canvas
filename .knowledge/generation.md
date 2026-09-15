@@ -31,6 +31,8 @@
 
 Brainstorm Agent 虽然保持浏览器流式交互，但不再使用 local channel 或用户 API Key。每次 Turn 开始读取 `GET /api/settings`，只使用用户从管理员 `textModels` 列表选择、且同时存在于 `availableModels` 并有唯一 `textModelProtocols` 映射的模型；`defaultTextModel` 只作为初始选择，配置缺失或协议冲突时 fail closed。有效请求统一带 `X-Source: brainstorm_agent` 进入 `/api/v1/chat/completions` 或 `/api/v1/xvanai/chat/completions`，由既有 compatibility proxy 选渠道、按 `modelCosts` 扣费、记录 `generation_tasks`/`generation_payloads`/`credit_logs`，并把上游 usage 写入任务 `metadata.usage`。主回复、Summary、Tool follow-up 和重试共享同一 Turn 配置快照，不新增 Brainstorm 专用模型、计费或日志体系。
 
+Canvas 的节点生成、重试、恢复和在线助手同样强制 remote：只接受管理员 `availableModels` 与对应能力列表的交集，配置缺失时不调用模型，并统一使用 `X-Source: canvas`。浏览器 local channel 仍可供其他工作台使用，但不再是 Canvas 路径。
+
 第一方和兼容入口共享任务、积分和审计基础设施，但不能把未知供应商扩展字段强制转换为第一方意图。
 
 ## 第一方合同

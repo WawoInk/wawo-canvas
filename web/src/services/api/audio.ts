@@ -6,18 +6,19 @@ import { buildApiUrl, resolveModelRequestConfig, type AiConfig } from "@/stores/
 import { useUserStore } from "@/stores/use-user-store";
 import i18n from "@/i18n";
 
-type RequestOptions = { signal?: AbortSignal };
+type RequestOptions = { signal?: AbortSignal; source?: string };
 
 function aiApiUrl(config: AiConfig, path: string) {
     return config.channelMode === "remote" ? `/api/v1${path}` : buildApiUrl(config.baseUrl, path);
 }
 
-function aiHeaders(config: AiConfig) {
+function aiHeaders(config: AiConfig, source?: string) {
     const token = useUserStore.getState().token;
     return config.channelMode === "remote"
         ? {
               ...(token ? { Authorization: `Bearer ${token}` } : {}),
               "Content-Type": "application/json",
+              ...(source ? { "X-Source": source } : {}),
           }
         : {
               Authorization: `Bearer ${config.apiKey}`,
@@ -43,7 +44,7 @@ export async function requestAudioGeneration(config: AiConfig, prompt: string, o
                 speed: Number(normalizeAudioSpeedValue(config.audioSpeed)),
                 ...(instructions ? { instructions } : {}),
             },
-            { headers: aiHeaders(requestConfig), responseType: "blob", signal: options?.signal },
+            { headers: aiHeaders(requestConfig, options?.source), responseType: "blob", signal: options?.signal },
         );
         await assertAudioBlob(response.data);
         return response.data.type.startsWith("audio/") ? response.data : new Blob([response.data], { type: audioMimeType(format) });

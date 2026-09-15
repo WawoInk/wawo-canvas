@@ -34,7 +34,6 @@ export type CanvasNodeMetadata = {
     generationErrorResourceId?: string;
     fontSize?: number;
     generationMode?: CanvasGenerationMode;
-    useAdminTextModel?: boolean;
     generationType?: CanvasImageGenerationType;
     model?: string;
     size?: string;

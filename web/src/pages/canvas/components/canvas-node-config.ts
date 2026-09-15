@@ -5,13 +5,52 @@ import type { AiConfig } from "@/stores/use-config-store";
 import type { CanvasAudioSettingKey } from "./canvas-audio-settings-popover";
 import type { CanvasGenerationMode, CanvasNodeData, CanvasNodeMetadata } from "../types";
 
+export function buildCanvasAdminConfig(globalConfig: AiConfig, publicSettings?: PublicSettings | null): AiConfig {
+    const channel = publicSettings?.modelChannel;
+    const available = new Set((channel?.availableModels || []).map((model) => model.trim()).filter(Boolean));
+    const listed = (models: string[] = []) => Array.from(new Set(models.map((model) => model.trim()).filter(Boolean)));
+    const allowed = (models: string[] = []) => listed(models).filter((model) => available.has(model));
+    const imageModels = allowed(channel?.imageModels);
+    const videoModels = listed(channel?.videoModels);
+    const textOptions = brainstormAdminTextModelOptions(publicSettings);
+    const textModels = textOptions.map((option) => option.value);
+    const audioModels = allowed(channel?.audioModels);
+    const pick = (current: string, fallback: string | undefined, models: string[]) => (models.includes(current.trim()) ? current.trim() : models.includes(fallback?.trim() || "") ? fallback!.trim() : models[0] || "");
+    const textModel = pick(globalConfig.textModel, channel?.defaultTextModel, textModels);
+    return {
+        ...globalConfig,
+        channelMode: "remote",
+        baseUrl: "",
+        apiKey: "",
+        apiFormat: textOptions.find((option) => option.value === textModel)?.protocol || "openai",
+        channels: [],
+        model: textModel,
+        imageModel: pick(globalConfig.imageModel, channel?.defaultImageModel, imageModels),
+        videoModel: pick(globalConfig.videoModel, channel?.defaultVideoModel, videoModels),
+        textModel,
+        audioModel: pick(globalConfig.audioModel, channel?.defaultAudioModel, audioModels),
+        models: Array.from(new Set([...imageModels, ...videoModels, ...textModels, ...audioModels])),
+        imageModels,
+        videoModels,
+        textModels,
+        audioModels,
+        systemPrompt: channel?.systemPrompt || "",
+        modelDisplayNames: Object.fromEntries((channel?.modelCosts || []).filter((item) => item.model && item.displayName?.trim()).map((item) => [item.model, item.displayName!.trim()])),
+        imageRequestFormats: channel?.imageRequestFormats || [],
+    };
+}
+
 export function buildNodeConfig(globalConfig: AiConfig, defaults: AiConfig, node: CanvasNodeData | undefined, mode: CanvasGenerationMode, publicSettings?: PublicSettings | null): AiConfig {
     const metadata = node?.metadata;
-    const defaultModel = mode === "image" ? globalConfig.imageModel : mode === "video" ? globalConfig.videoModel : mode === "audio" ? globalConfig.audioModel : globalConfig.textModel;
+    const adminConfig = buildCanvasAdminConfig(globalConfig, publicSettings);
+    const models = mode === "image" ? adminConfig.imageModels : mode === "video" ? adminConfig.videoModels : mode === "audio" ? adminConfig.audioModels : adminConfig.textModels;
+    const defaultModel = mode === "image" ? adminConfig.imageModel : mode === "video" ? adminConfig.videoModel : mode === "audio" ? adminConfig.audioModel : adminConfig.textModel;
+    const model = metadata?.model?.trim();
     const videoSeconds = metadata?.seconds || globalConfig.videoSeconds || defaults.videoSeconds;
     const config = {
-        ...globalConfig,
-        model: metadata?.model || defaultModel || (mode === "audio" ? defaults.audioModel : globalConfig.model || defaults.model),
+        ...adminConfig,
+        model: model && models.includes(model) ? model : defaultModel,
+        apiFormat: mode === "text" ? publicSettings?.modelChannel.textModelProtocols[model && models.includes(model) ? model : defaultModel] || "openai" : "openai",
         quality: metadata?.quality || globalConfig.quality || defaults.quality,
         size: metadata?.size || globalConfig.size || defaults.size,
         background: metadata?.background ?? globalConfig.background ?? defaults.background,
@@ -27,30 +66,15 @@ export function buildNodeConfig(globalConfig: AiConfig, defaults: AiConfig, node
         audioInstructions: metadata?.audioInstructions || globalConfig.audioInstructions || defaults.audioInstructions,
         count: String(metadata?.count || (mode === "image" ? globalConfig.canvasImageCount || globalConfig.count : globalConfig.count) || defaults.count),
     };
-    if (mode === "text" && metadata?.useAdminTextModel) {
-        const options = brainstormAdminTextModelOptions(publicSettings);
-        const selected = options.find((option) => option.value === metadata.model) || options.find((option) => option.value === publicSettings?.modelChannel.defaultTextModel) || options[0];
-        Object.assign(config, {
-            channelMode: "remote",
-            apiFormat: selected?.protocol || "openai",
-            baseUrl: "",
-            apiKey: "",
-            channels: [],
-            model: selected?.value || "",
-            textModel: selected?.value || "",
-            models: options.map((option) => option.value),
-            textModels: options.map((option) => option.value),
-            systemPrompt: publicSettings?.modelChannel.systemPrompt || "",
-        });
-    }
     if (mode === "image") config.size = normalizeImageSizeForResolutions(imageResolutionsForConfig(config), config.size);
     return config;
 }
 
-export function buildSavedImageConfig(globalConfig: AiConfig, metadata: CanvasNodeMetadata): AiConfig {
+export function buildSavedImageConfig(globalConfig: AiConfig, metadata: CanvasNodeMetadata, publicSettings?: PublicSettings | null): AiConfig {
+    const adminConfig = buildCanvasAdminConfig(globalConfig, publicSettings);
     return {
-        ...globalConfig,
-        model: metadata.model || globalConfig.imageModel || globalConfig.model,
+        ...adminConfig,
+        model: metadata.model && adminConfig.imageModels.includes(metadata.model) ? metadata.model : adminConfig.imageModel,
         quality: metadata.quality || globalConfig.quality,
         size: metadata.size || globalConfig.size,
         background: metadata.background === "transparent" ? "transparent" : "",

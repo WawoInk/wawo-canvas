@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { CanvasPromptLibrary } from "./canvas-prompt-library";
 import { AgentChatComposer, AgentChatMessage, AgentModeSwitch, AgentPanelTabs, AgentWorkingMessage, type CanvasAgentChatMessage, type CanvasAgentMode } from "./canvas-agent-chat-ui";
 import { CanvasLocalAgentPanel } from "./canvas-local-agent-panel";
+import { buildCanvasAdminConfig } from "./canvas-node-config";
 import { NODE_DEFAULT_SIZE } from "../constants";
 import { CanvasNodeType, type CanvasAssistantMessage, type CanvasAssistantReference, type CanvasAssistantSession, type CanvasNodeData } from "../types";
 import { useCanvasAgentStore } from "../stores/use-canvas-agent-store";
@@ -217,6 +218,7 @@ type CanvasAssistantPanelProps = {
     agentMode: CanvasAgentMode;
     onAgentModeChange: (mode: CanvasAgentMode) => void;
     autoConnectLocal?: boolean;
+    localAgentVisible?: boolean;
     closing: boolean;
     onCollapse: () => void;
 };
@@ -236,6 +238,7 @@ export function CanvasAssistantPanel({
     agentMode,
     onAgentModeChange,
     autoConnectLocal,
+    localAgentVisible = false,
     closing,
     onCollapse,
 }: CanvasAssistantPanelProps) {
@@ -243,15 +246,16 @@ export function CanvasAssistantPanel({
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const user = useUserStore((state) => state.user);
     const effectiveConfig = useEffectiveConfig();
+    const publicSettings = useConfigStore((state) => state.publicSettings);
     const cleanupImages = useAssetStore((state) => state.cleanupImages);
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
-    const updateConfig = useConfigStore((state) => state.updateConfig);
     const confirmTools = useCanvasAgentStore((state) => state.confirmTools);
     const setAgentState = useCanvasAgentStore((state) => state.setAgentState);
     const [width, setWidth] = useState(520);
     const [view, setView] = useState<OnlineAgentTab>("chat");
     const [prompt, setPrompt] = useState("");
+    const [selectedTextModel, setSelectedTextModel] = useState("");
     const [isRunning, setIsRunning] = useState(false);
     const [deleteChatIds, setDeleteChatIds] = useState<string[]>([]);
     const [onlineLogs, setOnlineLogs] = useState<OnlineAgentLog[]>([]);
@@ -281,7 +285,8 @@ export function CanvasAssistantPanel({
     const historySessions = safeSessions.filter((session) => session.messages.length > 0);
     const messages = activeSession?.messages || [];
     const hasMessages = messages.length > 0;
-    const activeModel = effectiveConfig.textModel || effectiveConfig.model;
+    const canvasConfig = useMemo(() => buildCanvasAdminConfig({ ...effectiveConfig, textModel: selectedTextModel || effectiveConfig.textModel }, publicSettings), [effectiveConfig, publicSettings, selectedTextModel]);
+    const activeModel = canvasConfig.textModel;
     const selectedNodeKey = useMemo(() => Array.from(selectedNodeIds).sort().join(","), [selectedNodeIds]);
     const allSelectedReferences = useMemo(() => buildAssistantReferences(nodes, selectedNodeIds), [nodes, selectedNodeIds]);
     const selectedReferences = useMemo(() => allSelectedReferences.filter((item) => !removedReferenceIds.has(item.id)), [allSelectedReferences, removedReferenceIds]);
@@ -348,7 +353,7 @@ export function CanvasAssistantPanel({
     };
 
     const sendMessage = async (text: string, history: CanvasAssistantMessage[], savedReferences?: CanvasAssistantReference[]) => {
-        const requestConfig = { ...effectiveConfig, model: effectiveConfig.textModel || effectiveConfig.model };
+        const requestConfig = { ...canvasConfig, model: canvasConfig.textModel };
         if (!isAiConfigReady(requestConfig, requestConfig.model)) {
             openConfigDialog(true);
             return;
@@ -371,7 +376,7 @@ export function CanvasAssistantPanel({
     };
 
     const runOnlineAgentStep = async (sessionId: string, assistantId: string, history: CanvasAssistantMessage[], userMessage: CanvasAssistantMessage, loop: OnlineLoopContext) => {
-        const requestConfig = { ...effectiveConfig, model: effectiveConfig.textModel || effectiveConfig.model };
+        const requestConfig = { ...canvasConfig, model: canvasConfig.textModel };
         try {
             setIsRunning(true);
             const messages = await buildToolAgentMessages(snapshotRef.current, history, userMessage);
@@ -380,7 +385,7 @@ export function CanvasAssistantPanel({
             const result = await requestToolResponse({ ...requestConfig, systemPrompt: "" }, messages, ONLINE_AGENT_TOOLS, "required", (text) => {
                 streamed = text;
                 if (text.trim()) upsertMessage(sessionId, { id: assistantId, role: "assistant", text });
-            });
+            }, { includeUsage: true, source: "canvas" });
             addOnlineLog(t("canvas.assistant.logs.modelToolResponse"), result);
             if (result.toolCalls.length) {
                 const writableCalls = result.toolCalls.filter(isWritableToolCall);
@@ -433,12 +438,12 @@ export function CanvasAssistantPanel({
             addOnlineLog(t("canvas.assistant.logs.stepLimitReached"), { maxSteps: ONLINE_AGENT_MAX_STEPS });
             return;
         }
-        const requestConfig = { ...effectiveConfig, model: effectiveConfig.textModel || effectiveConfig.model };
+        const requestConfig = { ...canvasConfig, model: canvasConfig.textModel };
         let streamed = "";
         const next = await requestToolResponse({ ...requestConfig, systemPrompt: "" }, nextMessages, ONLINE_AGENT_TOOLS, "auto", (text) => {
             streamed = text;
             if (text.trim()) upsertMessage(sessionId, { id: assistantId, role: "assistant", text });
-        });
+        }, { includeUsage: true, source: "canvas" });
         addOnlineLog(t("canvas.assistant.logs.toolLoopReply", { step: formatNumber(step + 1) }), next);
         if (next.toolCalls.length) {
             const writableCalls = next.toolCalls.filter(isWritableToolCall);
@@ -480,7 +485,7 @@ export function CanvasAssistantPanel({
                     data: { nodes: compactSnapshot({ ...current, nodes: current.nodes.filter((node) => ids.has(node.id)) }).nodes },
                 };
             }
-            const ops = onlineToolToOps(name, args, current, effectiveConfig);
+            const ops = onlineToolToOps(name, args, current, canvasConfig);
             const result = executeOps(ops);
             return { ok: result.changed, message: result.changed ? summarizeCanvasAgentOps(ops) || t("canvas.assistant.messages.canvasOperationApplied") : result.noopReason, data: result };
         } catch (error) {
@@ -705,7 +710,7 @@ export function CanvasAssistantPanel({
                         left={
                             <>
                                 <CanvasPromptLibrary onSelect={setPrompt} />
-                                <AgentTextModelPicker config={effectiveConfig} value={effectiveConfig.textModel} onChange={(model) => updateConfig("textModel", model)} />
+                                <AgentTextModelPicker config={canvasConfig} value={canvasConfig.textModel} onChange={setSelectedTextModel} />
                             </>
                         }
                     />
@@ -767,7 +772,7 @@ export function CanvasAssistantPanel({
                         </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                        <AgentModeSwitch value={agentMode} theme={theme} onChange={onAgentModeChange} />
+                        {localAgentVisible ? <AgentModeSwitch value={agentMode} theme={theme} onChange={onAgentModeChange} /> : null}
                         <label className="flex items-center gap-1.5 text-xs" style={{ color: theme.node.muted }}>
                             <Switch size="small" checked={confirmTools} onChange={(confirmTools) => setAgentState({ confirmTools })} />
                             {t("canvas.agent.tools.confirmToggle")}
@@ -777,7 +782,7 @@ export function CanvasAssistantPanel({
                         </Tooltip>
                     </div>
                 </header>
-                {agentMode === "local" ? <CanvasLocalAgentPanel embedded snapshot={snapshot} canUndoOps={canUndoOps} onApplyOps={onApplyOps} onUndoOps={onUndoOps} autoConnect={autoConnectLocal} /> : onlineContent}
+                {localAgentVisible && agentMode === "local" ? <CanvasLocalAgentPanel embedded snapshot={snapshot} canUndoOps={canUndoOps} onApplyOps={onApplyOps} onUndoOps={onUndoOps} autoConnect={autoConnectLocal} /> : onlineContent}
             </motion.aside>
         </motion.div>
     );

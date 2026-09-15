@@ -68,7 +68,7 @@ export function CanvasNodePromptPanel({
     const publicSettings = useConfigStore((state) => state.publicSettings);
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const mode = defaultMode(node.type);
-    const config = buildNodeConfig(globalConfig, defaultConfig, node, mode);
+    const config = buildNodeConfig(globalConfig, defaultConfig, node, mode, publicSettings);
     const hasTextContent = node.type === CanvasNodeType.Text && Boolean(node.metadata?.content?.trim());
     const hasImageContent = node.type === CanvasNodeType.Image && Boolean(node.metadata?.content);
     const isEditingExistingContent = hasTextContent || hasImageContent;

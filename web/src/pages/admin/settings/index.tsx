@@ -52,6 +52,7 @@ const emptySettings: AdminSettings = {
         navigation: {
             enabled: true,
             canvas: true,
+            canvasLocalAgent: false,
             storyboard: true,
             image: true,
             video: true,

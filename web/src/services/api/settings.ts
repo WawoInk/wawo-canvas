@@ -48,6 +48,7 @@ export type PublicStoryboardNavigationSettings = {
 export type PublicNavigationSettings = {
     enabled: boolean;
     canvas: boolean;
+    canvasLocalAgent: boolean;
     storyboard: boolean;
     image: boolean;
     video: boolean;

@@ -12,6 +12,7 @@ import { useUserStore } from "@/stores/use-user-store";
 const defaultNavigation: PublicNavigationSettings = {
     enabled: true,
     canvas: true,
+    canvasLocalAgent: false,
     storyboard: true,
     image: true,
     video: true,
@@ -45,6 +46,7 @@ export default function AdminBrandConfigPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [loadError, setLoadError] = useState("");
     const navigationEnabled = Form.useWatch("enabled", form) !== false;
+    const canvasEnabled = Form.useWatch("canvas", form) !== false;
     const storyboardEnabled = Form.useWatch("storyboard", form) !== false;
 
     async function loadSettings() {
@@ -211,6 +213,18 @@ export default function AdminBrandConfigPage() {
                                             </section>
                                         );
                                     })}
+                                </Flex>
+                            </Card>
+
+                            <Card title={t("admin.brandConfig.sections.canvasFeatures")} variant="borderless">
+                                <Flex align="center" justify="space-between" gap={24}>
+                                    <Flex vertical gap={4}>
+                                        <Typography.Text>{t("admin.brandConfig.fields.canvasLocalAgent")}</Typography.Text>
+                                        <Typography.Text type="secondary">{t("admin.brandConfig.fields.canvasLocalAgentDescription")}</Typography.Text>
+                                    </Flex>
+                                    <Form.Item name="canvasLocalAgent" valuePropName="checked" noStyle>
+                                        <Switch aria-label={t("admin.brandConfig.fields.canvasLocalAgent")} disabled={!navigationEnabled || !canvasEnabled} />
+                                    </Form.Item>
                                 </Flex>
                             </Card>
                         </Flex>

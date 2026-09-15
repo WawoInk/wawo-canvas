@@ -2,6 +2,7 @@
 
 ## Unreleased
 
++ [调整] “我的画布”全部模型调用强制遵循管理员公开模型、平台计费与任务审计，本地 Canvas Agent 默认隐藏并由品牌配置开关控制。
 + [修复] Canvas 图片反推提示词完整传递参考图，并强制使用管理员公开文本模型及平台计费、任务审计和用量记录链路。
 + [优化] Canvas 人工交互与 Agent operations 共享 Graph Edit 不变量，Canvas Project Replica 集中本地持久化、远端合并和完整账号/版本 binding，避免不同入口或迟到视频结果产生状态漂移。
 + [修复] 本地 Canvas Agent 按 Canvas Project Replica 隔离 state、pending tool、Codex 事件和 thread；单画布保持兼容，多画布不再广播或猜测目标。

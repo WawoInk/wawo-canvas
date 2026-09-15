@@ -2052,10 +2052,10 @@
         },
         "brandConfig": {
             "title": "Brand configuration",
-            "description": "Configure which product entries appear in the user-facing top navigation.",
+            "description": "Configure user-facing product entries and optional features.",
             "notice": {
-                "title": "Controls entry visibility only",
-                "description": "Turning an item off only hides its frontend navigation entry. It does not disable the route or feature, which remains accessible through a known URL."
+                "title": "Controls user-facing visibility",
+                "description": "Main navigation switches only hide entries. Canvas feature switches control whether the feature appears in Canvas."
             },
             "actions": {
                 "refresh": "Refresh",
@@ -2065,6 +2065,7 @@
             "sections": {
                 "navigation": "Top navigation",
                 "mainItems": "Main navigation items",
+                "canvasFeatures": "Canvas features",
                 "storyboardItems": "Storyboard Studio items",
                 "storyboardItemsDescription": "Manage the three child entries directly under Storyboard Studio. Turning off the parent also turns off and locks every child."
             },
@@ -2072,6 +2073,8 @@
                 "enabled": "Show top navigation",
                 "enabledDescription": "Turning this off hides all top navigation entries while preserving every item setting.",
                 "canvas": "Canvas",
+                "canvasLocalAgent": "Local Canvas Agent",
+                "canvasLocalAgentDescription": "Allow users to switch to the local Codex Agent inside the Canvas assistant. Hidden by default.",
                 "storyboard": "Storyboard Studio",
                 "image": "Image generation",
                 "video": "Video generation",

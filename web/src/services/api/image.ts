@@ -447,8 +447,8 @@ function imageRequestBody(fields: Record<string, string | number | undefined>, f
     return format === "multipart/form-data" ? imageRequestFormData(fields) : fields;
 }
 
-function imageRequestHeaders(config: AiConfig, format: ImageRequestFormat) {
-    return aiHeaders(config, format === "application/json" ? format : undefined);
+function imageRequestHeaders(config: AiConfig, format: ImageRequestFormat, source?: RequestSource) {
+    return aiHeaders(config, format === "application/json" ? format : undefined, source);
 }
 
 async function referenceImageToFile(image: ReferenceImage) {
@@ -891,7 +891,7 @@ function toGeminiToolOptions(tools: ResponseFunctionTool[], toolChoice: ToolChoi
  */
 async function postGeminiViaBackend(config: AiConfig, path: string, geminiBody: Record<string, unknown>, options?: RequestOptions): Promise<GeminiPayload> {
     const url = aiApiUrl(config, path);
-    const headers = { ...aiHeaders(config, "application/json"), Accept: "application/json" };
+    const headers = { ...aiHeaders(config, "application/json", options?.source), Accept: "application/json" };
     const response = await fetch(url, {
         method: "POST",
         headers,
@@ -1070,7 +1070,7 @@ async function requestGeminiImagesOnce(config: AiConfig, prompt: string, referen
             ...toGeminiBody(config, [{ role: "user", content: prompt }], { generationConfig: { responseModalities: ["TEXT", "IMAGE"], ...resolveGeminiImageConfig(config) } }),
             contents: [{ role: "user", parts }],
         };
-        const payload = await postGeminiViaBackend(config, "/images/generations", body);
+        const payload = await postGeminiViaBackend(config, "/images/generations", body, options);
         return parseGeminiImagePayload(payload);
     }
     const response = await axios.post<GeminiPayload>(
@@ -1131,7 +1131,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
     };
     try {
         const response = await axios.post<ImageApiResponse>(aiApiUrl(requestConfig, "/images/generations"), imageRequestBody(body, format), {
-            headers: imageRequestHeaders(requestConfig, format),
+            headers: imageRequestHeaders(requestConfig, format, options?.source),
             signal: options?.signal,
         });
         const images = parseImagePayload(response.data);
@@ -1183,7 +1183,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
 
     try {
         const response = await axios.post<ImageApiResponse>(aiApiUrl(requestConfig, "/images/edits"), body, {
-            headers: imageRequestHeaders(requestConfig, format),
+            headers: imageRequestHeaders(requestConfig, format, options?.source),
             signal: options?.signal,
         });
         const images = parseImagePayload(response.data);

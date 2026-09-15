@@ -228,7 +228,7 @@ Canvas 节点可能同时有：
 
 ## 在线助手
 
-`canvas-assistant-panel.tsx` 使用当前网页文本模型：
+`canvas-assistant-panel.tsx` 只使用管理员公开且具有有效协议映射的文本模型，强制通过平台 remote compatibility path 调用：
 
 - 提供画布快照和选中/上游节点上下文。
 - 最多执行有限轮工具调用。
@@ -246,6 +246,8 @@ Canvas 节点可能同时有：
 ## 本地 Canvas Agent
 
 `canvas-local-agent-panel.tsx` 通过 HTTP/SSE 连接 `canvas-agent`：
+
+该入口默认隐藏，只有管理员在“站点管理 > 品牌配置”开启 `navigation.canvasLocalAgent` 后才显示和连接；关闭时 URL bootstrap 凭据仍会被清除，但不会发起本地连接。
 
 - 上报当前 Canvas snapshot。
 - 发送 prompt 和本地图片附件。
