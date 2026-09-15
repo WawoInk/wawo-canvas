@@ -114,7 +114,7 @@ type GeminiPayload = {
 type GeminiStreamState = { buffer: string; text: string; toolCalls: ResponseToolCall[]; usage?: ModelUsage; finishReason?: ModelFinishReason; done?: boolean };
 type ChatMessage = {
     role: "system" | "user" | "assistant" | "tool";
-    content?: string | null;
+    content?: AiTextMessage["content"] | null;
     tool_calls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>;
     tool_call_id?: string;
 };
@@ -146,7 +146,7 @@ type ChatCompletionPayload = {
 };
 
 type ChatStreamState = { buffer: string; text: string; toolCalls: Map<number, { id: string; name: string; args: string }>; usage?: ModelUsage; finishReason?: ModelFinishReason; done?: boolean };
-export type RequestSource = "brainstorm_agent";
+export type RequestSource = "brainstorm_agent" | "canvas";
 export type RequestOptions = { signal?: AbortSignal; onEvent?: (event: ModelStreamEvent) => void; includeUsage?: boolean; source?: RequestSource };
 
 function normalizeFinishReason(reason?: string | null): ModelFinishReason | undefined {
@@ -659,7 +659,7 @@ function toChatMessages(messages: ResponseInputMessage[]): ChatMessage[] {
         }
         return {
             role: message.role as "system" | "user" | "assistant",
-            content: typeof message.content === "string" ? message.content : Array.isArray(message.content) ? message.content.map((item) => (item.type === "text" ? item.text : "")).join("") : "",
+            content: message.content || "",
         };
     });
 }

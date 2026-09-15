@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import i18n from "@/i18n";
-import { buildNodeGenerationContext, buildShortDramaGenerationIntent, buildVideoGenerationIntent, cleanShortDramaAssetMappings, hydrateNodeGenerationContext, locateGenerationError, prepareFirstPartyCanvasVideoRun } from "./canvas-node-generation.ts";
+import { buildNodeGenerationContext, buildNodeResponseMessages, buildShortDramaGenerationIntent, buildVideoGenerationIntent, cleanShortDramaAssetMappings, hydrateNodeGenerationContext, locateGenerationError, prepareFirstPartyCanvasVideoRun } from "./canvas-node-generation.ts";
 
 const image = {
     id: "image-1",
@@ -21,6 +21,24 @@ test("keeps uploaded file IDs in Canvas image references", () => {
     const context = buildNodeGenerationContext("image-target", [image, target], [{ id: "connection-1", fromNodeId: "image-1", toNodeId: "image-target" }], "替换背景");
 
     assert.equal(context.referenceImages[0].fileId, "file-image-1");
+});
+
+test("compiles reverse prompt composer inputs into a multimodal model message", () => {
+    const instruction = { id: "instruction-1", type: "text", title: "反推提示词", metadata: { content: "只输出完整的生图提示词" } };
+    const config = { id: "config-1", type: "config", title: "反推提示词配置", metadata: { composerContent: "参考图片：@[node:image-1]\n任务说明：@[node:instruction-1]" } };
+    const context = buildNodeGenerationContext(
+        "config-1",
+        [image, instruction, config],
+        [
+            { id: "image-config", fromNodeId: "image-1", toNodeId: "config-1" },
+            { id: "instruction-config", fromNodeId: "instruction-1", toNodeId: "config-1" },
+        ],
+        config.metadata.composerContent,
+    );
+
+    assert.equal(context.referenceImages.length, 1);
+    assert.match(context.prompt, /只输出完整的生图提示词/);
+    assert.deepEqual(buildNodeResponseMessages(context)[0].content[1], { type: "image_url", image_url: { url: image.metadata.content } });
 });
 
 test("compiles Canvas media and settings as a first-party intent", () => {

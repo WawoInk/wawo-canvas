@@ -1,9 +1,11 @@
 import { imageResolutionsForConfig, normalizeImageSizeForResolutions } from "@/components/image-settings-panel";
+import { brainstormAdminTextModelOptions } from "@/pages/storyboard/brainstorm-agent-model";
+import type { PublicSettings } from "@/services/api/settings";
 import type { AiConfig } from "@/stores/use-config-store";
 import type { CanvasAudioSettingKey } from "./canvas-audio-settings-popover";
 import type { CanvasGenerationMode, CanvasNodeData, CanvasNodeMetadata } from "../types";
 
-export function buildNodeConfig(globalConfig: AiConfig, defaults: AiConfig, node: CanvasNodeData | undefined, mode: CanvasGenerationMode): AiConfig {
+export function buildNodeConfig(globalConfig: AiConfig, defaults: AiConfig, node: CanvasNodeData | undefined, mode: CanvasGenerationMode, publicSettings?: PublicSettings | null): AiConfig {
     const metadata = node?.metadata;
     const defaultModel = mode === "image" ? globalConfig.imageModel : mode === "video" ? globalConfig.videoModel : mode === "audio" ? globalConfig.audioModel : globalConfig.textModel;
     const videoSeconds = metadata?.seconds || globalConfig.videoSeconds || defaults.videoSeconds;
@@ -25,6 +27,22 @@ export function buildNodeConfig(globalConfig: AiConfig, defaults: AiConfig, node
         audioInstructions: metadata?.audioInstructions || globalConfig.audioInstructions || defaults.audioInstructions,
         count: String(metadata?.count || (mode === "image" ? globalConfig.canvasImageCount || globalConfig.count : globalConfig.count) || defaults.count),
     };
+    if (mode === "text" && metadata?.useAdminTextModel) {
+        const options = brainstormAdminTextModelOptions(publicSettings);
+        const selected = options.find((option) => option.value === metadata.model) || options.find((option) => option.value === publicSettings?.modelChannel.defaultTextModel) || options[0];
+        Object.assign(config, {
+            channelMode: "remote",
+            apiFormat: selected?.protocol || "openai",
+            baseUrl: "",
+            apiKey: "",
+            channels: [],
+            model: selected?.value || "",
+            textModel: selected?.value || "",
+            models: options.map((option) => option.value),
+            textModels: options.map((option) => option.value),
+            systemPrompt: publicSettings?.modelChannel.systemPrompt || "",
+        });
+    }
     if (mode === "image") config.size = normalizeImageSizeForResolutions(imageResolutionsForConfig(config), config.size);
     return config;
 }

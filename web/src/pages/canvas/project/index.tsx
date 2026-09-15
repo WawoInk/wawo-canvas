@@ -30,6 +30,7 @@ import {
     waitForGeneration,
 } from "@/services/api/generations";
 import { DOCS_URL } from "@/constant/env";
+import { brainstormAdminTextModelOptions } from "@/pages/storyboard/brainstorm-agent-model";
 import { defaultConfig, modelOptionName, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { resolveImageUrl, uploadImage, type UploadedImage, resolveMediaUrl, type UploadedFile } from "@/services/blob-storage";
 import { uploadBlob, uploadUrlToS3, type UploadResult } from "@/services/upload-blob";
@@ -328,6 +329,8 @@ function InfiniteCanvasPage() {
 
     const config = useConfigStore((state) => state.config);
     const effectiveConfig = useEffectiveConfig();
+    const publicSettings = useConfigStore((state) => state.publicSettings);
+    const loadPublicSettings = useConfigStore((state) => state.loadPublicSettings);
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const addAsset = useAssetStore((state) => state.addAsset);
@@ -2052,9 +2055,18 @@ function InfiniteCanvasPage() {
     );
 
     const createImageReversePromptNodes = useCallback(
-        (node: CanvasNodeData) => {
+        async (node: CanvasNodeData) => {
             if (node.type !== CanvasNodeType.Image || !node.metadata?.content) {
                 message.warning(t("canvas.editor.errors.emptyImageForReversePrompt"));
+                return;
+            }
+
+            if (!publicSettings) await loadPublicSettings();
+            const settings = useConfigStore.getState().publicSettings;
+            const adminModels = brainstormAdminTextModelOptions(settings);
+            const adminModel = adminModels.find((option) => option.value === settings?.modelChannel.defaultTextModel) || adminModels[0];
+            if (!adminModel) {
+                message.error(t("canvas.editor.errors.adminTextModelUnavailable"));
                 return;
             }
 
@@ -2073,7 +2085,8 @@ function InfiniteCanvasPage() {
                     { x: textNode.position.x + textNode.width + gap + configSpec.width / 2, y: centerY },
                     {
                         generationMode: "text",
-                        model: effectiveConfig.textModel || effectiveConfig.model || defaultConfig.textModel,
+                        useAdminTextModel: true,
+                        model: adminModel.value,
                         count: 1,
                         composerContent: t("canvas.editor.prompts.reverseComposer", { imageNodeId: node.id, instructionNodeId: textNode.id }),
                     },
@@ -2088,7 +2101,7 @@ function InfiniteCanvasPage() {
             setDialogNodeId(configNode.id);
             setContextMenu(null);
         },
-        [effectiveConfig.model, effectiveConfig.textModel, message, t],
+        [loadPublicSettings, message, publicSettings, t],
     );
 
     const cropImageNode = useCallback(
@@ -2537,7 +2550,7 @@ function InfiniteCanvasPage() {
         async (nodeId: string, mode: CanvasNodeGenerationMode, prompt: string) => {
             const sourceNode = nodesRef.current.find((node) => node.id === nodeId);
             if (sourceNode?.type === CanvasNodeType.Group) return;
-            const generationConfig = buildNodeConfig(effectiveConfig, defaultConfig, sourceNode, mode);
+            const generationConfig = buildNodeConfig(effectiveConfig, defaultConfig, sourceNode, mode, publicSettings);
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
                 return;
@@ -2915,7 +2928,7 @@ function InfiniteCanvasPage() {
                                 if (isConfigNode) return;
                                 setNodes((prev) => prev.map((node) => (node.id === targetNodeId ? { ...node, type: CanvasNodeType.Text, metadata: { ...node.metadata, content: text, status: NODE_STATUS_LOADING } } : node)));
                             },
-                            { signal: controller.signal },
+                            { signal: controller.signal, includeUsage: true, source: "canvas" },
                         )
                             .then((answer) => ({ nodeId: targetNodeId, content: answer || localStreamed, errorDetails: "" }))
                             .catch((error) => ({ nodeId: targetNodeId, content: localStreamed, errorDetails: error instanceof Error ? error.message : t("canvas.editor.errors.generationFailed") }))
@@ -2981,7 +2994,7 @@ function InfiniteCanvasPage() {
                 setRunningNodeId(null);
             }
         },
-        [editorBinding, effectiveConfig, finishGenerationRequest, isAiConfigReady, message, openConfigDialog, projectId, startGenerationRequest, t],
+        [editorBinding, effectiveConfig, finishGenerationRequest, isAiConfigReady, message, openConfigDialog, projectId, publicSettings, startGenerationRequest, t],
     );
     useEffect(() => {
         generateNodeRef.current = handleGenerateNode;
@@ -2997,7 +3010,7 @@ function InfiniteCanvasPage() {
             const generationConfig =
                 hasSavedImageMetadata && savedImageMetadata
                     ? buildSavedImageConfig(effectiveConfig, savedImageMetadata)
-                    : { ...buildNodeConfig(effectiveConfig, defaultConfig, sourceNode, node.type === CanvasNodeType.Text ? "text" : node.type === CanvasNodeType.Video ? "video" : node.type === CanvasNodeType.Audio ? "audio" : "image"), count: "1" };
+                    : { ...buildNodeConfig(effectiveConfig, defaultConfig, sourceNode, node.type === CanvasNodeType.Text ? "text" : node.type === CanvasNodeType.Video ? "video" : node.type === CanvasNodeType.Audio ? "audio" : "image", publicSettings), count: "1" };
             if (node.type === CanvasNodeType.Video && node.metadata?.videoMode) generationConfig.videoMode = node.metadata.videoMode;
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
@@ -3043,7 +3056,7 @@ function InfiniteCanvasPage() {
                                 ),
                             );
                         },
-                        { signal: controller.signal },
+                        { signal: controller.signal, includeUsage: true, source: "canvas" },
                     );
                     setNodes((prev) =>
                         prev.map((item) =>
@@ -3110,7 +3123,7 @@ function InfiniteCanvasPage() {
                 setRunningNodeId(null);
             }
         },
-        [editorBinding, effectiveConfig, finishGenerationRequest, isAiConfigReady, message, openConfigDialog, projectId, startGenerationRequest, t],
+        [editorBinding, effectiveConfig, finishGenerationRequest, isAiConfigReady, message, openConfigDialog, projectId, publicSettings, startGenerationRequest, t],
     );
 
     // ── Async polling helpers ──

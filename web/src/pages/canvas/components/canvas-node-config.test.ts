@@ -58,6 +58,41 @@ test("buildNodeConfig preserves node overrides and image canvas count", () => {
     assert.equal(config.background, "");
 });
 
+test("reverse prompt configs use the administrator text model through the platform", () => {
+    const config = buildNodeConfig(
+        { ...defaults, textModel: "local-text" },
+        defaults,
+        node({ model: "local-text", useAdminTextModel: true } as CanvasNodeData["metadata"]),
+        "text",
+        {
+            modelChannel: {
+                availableModels: ["admin-text", "admin-text-alt", "image-only"],
+                modelCosts: [],
+                imageRequestFormats: [],
+                defaultModel: "",
+                defaultImageModel: "image-only",
+                defaultVideoModel: "",
+                defaultTextModel: "admin-text",
+                defaultAudioModel: "",
+                imageModels: ["image-only"],
+                videoModels: [],
+                textModels: ["admin-text", "admin-text-alt"],
+                textModelProtocols: { "admin-text": "openai", "admin-text-alt": "xvanai" },
+                audioModels: [],
+                systemPrompt: "",
+                allowCustomChannel: true,
+            },
+            auth: { allowRegister: true, linuxDo: { enabled: false } },
+        },
+    );
+
+    assert.equal(config.channelMode, "remote");
+    assert.equal(config.model, "admin-text");
+    assert.equal(config.textModel, "admin-text");
+    assert.equal(config.apiFormat, "openai");
+    assert.deepEqual(config.textModels, ["admin-text", "admin-text-alt"]);
+});
+
 test("buildNodeConfig normalizes hidden image sizes without opening settings", () => {
     const config = buildNodeConfig(
         {

@@ -36,7 +36,7 @@ export function CanvasConfigNodePanel({ node, isRunning, inputSummary, onConfigC
     const publicSettings = useConfigStore((state) => state.publicSettings);
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const mode = node.metadata?.generationMode || "image";
-    const config = buildNodeConfig(globalConfig, defaultConfig, node, mode);
+    const config = buildNodeConfig(globalConfig, defaultConfig, node, mode, publicSettings);
     const count = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
     const [profiles, setProfiles] = useState<GenerationProfile[]>([]);
     const profile = findGenerationProfile(profiles, config.model || config.videoModel);

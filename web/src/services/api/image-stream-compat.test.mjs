@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { defaultConfig } from "../../stores/use-config-store.ts";
-import { requestToolResponse } from "./image.ts";
+import { requestImageQuestion, requestToolResponse } from "./image.ts";
 
 const messages = [{ role: "user", content: "继续" }];
 const tools = [
@@ -214,6 +214,35 @@ test("OpenAI DONE terminates parsing and usage opt-in is explicit", async () => 
         ["保留"],
     );
     assert.equal(events.filter((event) => event.type === "done").length, 1);
+});
+
+test("Canvas reverse prompts send the reference image through the metered platform chat route", async () => {
+    let request;
+    const result = await withFetch(
+        async (input, init) => {
+            request = { input, init, body: JSON.parse(init.body) };
+            return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "电影感夜景" }, finish_reason: "stop" }] }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+        },
+        () =>
+            requestImageQuestion(
+                { ...defaultConfig, channelMode: "remote", channels: [], model: "admin-text", textModel: "admin-text", apiFormat: "openai" },
+                [{ role: "user", content: [{ type: "text", text: "反推提示词" }, { type: "image_url", image_url: { url: "data:image/png;base64,aW1hZ2U=" } }] }],
+                () => undefined,
+                { source: "canvas", includeUsage: true },
+            ),
+    );
+
+    assert.equal(result, "电影感夜景");
+    assert.equal(request.input, "/api/v1/chat/completions");
+    assert.equal(new Headers(request.init.headers).get("X-Source"), "canvas");
+    assert.deepEqual(request.body.stream_options, { include_usage: true });
+    assert.deepEqual(request.body.messages[0].content, [
+        { type: "text", text: "反推提示词" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,aW1hZ2U=" } },
+    ]);
 });
 
 test("provider error finish reasons reject without done", async () => {

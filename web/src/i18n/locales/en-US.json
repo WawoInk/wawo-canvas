@@ -2717,6 +2717,7 @@
                 "emptySaveVideo": "There is no video to save",
                 "emptySaveImage": "There is no image to save",
                 "emptyImageForReversePrompt": "This image node is empty, so a prompt cannot be reverse-engineered",
+                "adminTextModelUnavailable": "No administrator text model is available",
                 "maskEditFailed": "Masked edit failed",
                 "generationFailed": "Generation failed",
                 "videoTaskCreateFailed": "Failed to create the video task",

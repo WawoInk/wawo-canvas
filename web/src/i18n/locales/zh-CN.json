@@ -2717,6 +2717,7 @@
                 "emptySaveVideo": "没有可保存的视频",
                 "emptySaveImage": "没有可保存的图片",
                 "emptyImageForReversePrompt": "图片节点为空，无法反推提示词",
+                "adminTextModelUnavailable": "管理员尚未配置可用的文本模型",
                 "maskEditFailed": "局部修改失败",
                 "generationFailed": "生成失败",
                 "videoTaskCreateFailed": "视频任务创建失败",
