@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 import { consumeAgentUrlBootstrap, hasAgentUrlBootstrap } from "../components/canvas-agent-url-bootstrap";
 import { formatNumber } from "@/i18n/formatters";
-import { createAsyncImageTask, createAsyncImageEditTask, pollAsyncImageTask, cancelAsyncImageTask, requestEdit, requestImageQuestion } from "@/services/api/image";
+import { createAsyncImageTask, createAsyncImageEditTask, pollAsyncImageTask, cancelAsyncImageTask, requestImageQuestion } from "@/services/api/image";
 import { completeAsyncImageTask, isAsyncImageTaskRetryableError } from "@/services/api/async-image-task";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { createVideoGenerationTask, pollVideoGenerationTask, cancelVideoGenerationTask, storeGeneratedVideo } from "@/services/api/video";
@@ -2258,12 +2258,10 @@ function InfiniteCanvasPage() {
                 setRunningNodeId(resultId);
                 const controller = startGenerationRequest(resultId, node.id, resultId);
                 try {
-                    const image = await requestEdit(generationConfig, prompt, [source, annotationSource], undefined, { signal: controller.signal, source: "canvas" }).then((items) => items[0]);
+                    const task = await createAsyncImageEditTask(generationConfig, prompt, [source, annotationSource]);
                     if (!isActive()) return;
-                    const uploaded = await uploadImage(image.dataUrl);
-                    if (!isActive()) return;
-                    const size = fitNodeSize(uploaded.width, uploaded.height, node.width, node.height);
-                    setNodes((prev) => prev.map((item) => (item.id === resultId ? { ...item, width: size.width, height: size.height, metadata: { ...item.metadata, ...imageMetadata(uploaded), prompt, ...generationMetadata } } : item)));
+                    setNodes((prev) => prev.map((item) => (item.id === resultId ? { ...item, metadata: { ...item.metadata, upstreamTaskId: task.id, platformTaskId: task.platformTaskId, taskModel: task.model } } : item)));
+                    void pollCanvasImageNode(resultId, task, generationConfig);
                 } catch (error) {
                     if (isGenerationCanceled(error)) return;
                     if (!isActive()) return;
@@ -2345,16 +2343,11 @@ function InfiniteCanvasPage() {
             setDialogNodeId(childId);
             const controller = startGenerationRequest(childId, node.id, childId);
             try {
-                const image = await requestEdit(
-                    generationConfig,
-                    prompt,
-                    [{ id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey, fileId: node.metadata.fileId }],
-                    undefined,
-                    { signal: controller.signal, source: "canvas" },
-                ).then((items) => items[0]);
-                const uploaded = await uploadImage(image.dataUrl);
-                const size = fitNodeSize(uploaded.width, uploaded.height, imageConfig.width, imageConfig.height);
-                setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, width: size.width, height: size.height, metadata: { ...item.metadata, ...imageMetadata(uploaded), prompt, ...generationMetadata } } : item)));
+                const task = await createAsyncImageEditTask(generationConfig, prompt, [
+                    { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey, fileId: node.metadata.fileId },
+                ]);
+                setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, metadata: { ...item.metadata, upstreamTaskId: task.id, platformTaskId: task.platformTaskId, taskModel: task.model } } : item)));
+                void pollCanvasImageNode(childId, task, generationConfig);
             } catch (error) {
                 if (isGenerationCanceled(error)) return;
                 const errorDetails = error instanceof Error ? error.message : t("canvas.editor.errors.generationFailed");
