@@ -280,11 +280,18 @@ test("retrying a video result preserves its saved mode after the source config c
 
 test("resuming a timed-out video clears its stale error and materializes the original task", async () => {
     await setup("video", true, false, undefined, {
-        status: "error", generationTaskId: "run-1", generationProfileId: "profile",
-        generationTaskStatus: "running", errorDetails: "视频生成超时，请稍后重试",
+        status: "error",
+        generationTaskId: "run-1",
+        generationProfileId: "profile",
+        generationTaskStatus: "running",
+        errorDetails: "视频生成超时，请稍后重试",
     });
     await settleUntil(() => polls >= 2);
-    const metadata = () => useCanvasStore.getState().openProject("project")?.nodes.find((node) => node.id === "output")?.metadata;
+    const metadata = () =>
+        useCanvasStore
+            .getState()
+            .openProject("project")
+            ?.nodes.find((node) => node.id === "output")?.metadata;
     expect(submitted).toBeUndefined();
     expect(metadata()?.status).toBe("loading");
     expect(metadata()?.errorDetails).toBeUndefined();
@@ -292,7 +299,6 @@ test("resuming a timed-out video clears its stale error and materializes the ori
     await settleUntil(() => metadata()?.status === "success");
     expect(metadata()).toMatchObject({ status: "success", generationTaskStatus: "succeeded", fileId: "result-file" });
 });
-
 
 test("manual resume observes the original task after editor initialization", async () => {
     await setup("video", true, false, undefined, { status: "loading", generationTaskId: "run-1", generationProfileId: "profile", generationTaskStatus: "running" });
@@ -316,6 +322,17 @@ test("manual resume observes the original task after editor initialization", asy
     expect(polls).toBeGreaterThan(before);
     expect(submitted).toBeUndefined();
     await act(async () => finishTask?.());
-    await settleUntil(() => useCanvasStore.getState().openProject("project")?.nodes.find((node) => node.id === "output")?.metadata?.status === "success");
-    expect(useCanvasStore.getState().openProject("project")?.nodes.find((node) => node.id === "output")?.metadata?.fileId).toBe("result-file");
+    await settleUntil(
+        () =>
+            useCanvasStore
+                .getState()
+                .openProject("project")
+                ?.nodes.find((node) => node.id === "output")?.metadata?.status === "success",
+    );
+    expect(
+        useCanvasStore
+            .getState()
+            .openProject("project")
+            ?.nodes.find((node) => node.id === "output")?.metadata?.fileId,
+    ).toBe("result-file");
 });

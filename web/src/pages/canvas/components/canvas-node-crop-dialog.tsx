@@ -93,7 +93,12 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
                     <div ref={boxRef} className="relative inline-block max-w-full overflow-hidden rounded-lg bg-black select-none">
                         <img src={dataUrl} alt="" className="block max-h-[62vh] max-w-full opacity-90" draggable={false} />
                         <CropMask crop={crop} />
-                        <div aria-label={t("canvas.crop.selectionAria")} className="absolute cursor-move border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,.3),0_0_28px_rgba(0,0,0,.28)]" style={cropStyle(crop)} onPointerDown={(event) => startDrag("move", event)}>
+                        <div
+                            aria-label={t("canvas.crop.selectionAria")}
+                            className="absolute cursor-move border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,.3),0_0_28px_rgba(0,0,0,.28)]"
+                            style={cropStyle(crop)}
+                            onPointerDown={(event) => startDrag("move", event)}
+                        >
                             <div className="pointer-events-none absolute inset-x-0 top-1/3 border-t border-white/50" />
                             <div className="pointer-events-none absolute inset-x-0 top-2/3 border-t border-white/50" />
                             <div className="pointer-events-none absolute inset-y-0 left-1/3 border-l border-white/50" />
@@ -117,14 +122,32 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
                         <div role="group" aria-label={t("canvas.crop.sizeAria")} className="flex items-end gap-2">
                             <label className="grid gap-1 text-xs opacity-80">
                                 <span>{t("canvas.crop.width")}</span>
-                                <InputNumber aria-label={t("canvas.crop.widthAria")} className="w-28" min={1} max={image?.width} precision={0} value={cropSize?.width} disabled={!cropSize} onChange={(value) => value !== null && cropSize && updateCropSize(value, cropSize.height)} />
+                                <InputNumber
+                                    aria-label={t("canvas.crop.widthAria")}
+                                    className="w-28"
+                                    min={1}
+                                    max={image?.width}
+                                    precision={0}
+                                    value={cropSize?.width}
+                                    disabled={!cropSize}
+                                    onChange={(value) => value !== null && cropSize && updateCropSize(value, cropSize.height)}
+                                />
                             </label>
                             <span aria-hidden className="pb-2 text-sm opacity-50">
                                 :
                             </span>
                             <label className="grid gap-1 text-xs opacity-80">
                                 <span>{t("canvas.crop.height")}</span>
-                                <InputNumber aria-label={t("canvas.crop.heightAria")} className="w-28" min={1} max={image?.height} precision={0} value={cropSize?.height} disabled={!cropSize} onChange={(value) => value !== null && cropSize && updateCropSize(cropSize.width, value)} />
+                                <InputNumber
+                                    aria-label={t("canvas.crop.heightAria")}
+                                    className="w-28"
+                                    min={1}
+                                    max={image?.height}
+                                    precision={0}
+                                    value={cropSize?.height}
+                                    disabled={!cropSize}
+                                    onChange={(value) => value !== null && cropSize && updateCropSize(cropSize.width, value)}
+                                />
                             </label>
                         </div>
                         <div role="group" aria-label={t("canvas.crop.ratioAria")} className="flex items-end gap-2">

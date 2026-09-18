@@ -229,7 +229,15 @@ test("Canvas reverse prompts send the reference image through the metered platfo
         () =>
             requestImageQuestion(
                 { ...defaultConfig, channelMode: "remote", channels: [], model: "admin-text", textModel: "admin-text", apiFormat: "openai" },
-                [{ role: "user", content: [{ type: "text", text: "反推提示词" }, { type: "image_url", image_url: { url: "data:image/png;base64,aW1hZ2U=" } }] }],
+                [
+                    {
+                        role: "user",
+                        content: [
+                            { type: "text", text: "反推提示词" },
+                            { type: "image_url", image_url: { url: "data:image/png;base64,aW1hZ2U=" } },
+                        ],
+                    },
+                ],
                 () => undefined,
                 { source: "canvas", includeUsage: true },
             ),

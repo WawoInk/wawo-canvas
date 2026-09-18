@@ -16,13 +16,9 @@ test("canvas immediate image edits send an explicit source", async () => {
     };
 
     try {
-        await requestEdit(
-            { ...defaultConfig, channelMode: "remote", model: "admin-image", imageModel: "admin-image" },
-            "编辑图片",
-            [{ id: "image-1", name: "image.png", type: "image/png", dataUrl: "data:image/png;base64,aW1hZ2U=" }],
-            undefined,
-            { source: "canvas" },
-        );
+        await requestEdit({ ...defaultConfig, channelMode: "remote", model: "admin-image", imageModel: "admin-image" }, "编辑图片", [{ id: "image-1", name: "image.png", type: "image/png", dataUrl: "data:image/png;base64,aW1hZ2U=" }], undefined, {
+            source: "canvas",
+        });
         assert.equal(request.options.headers["X-Source"], "canvas");
     } finally {
         axios.post = previousPost;

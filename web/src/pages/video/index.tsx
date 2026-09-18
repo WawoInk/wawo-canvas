@@ -618,7 +618,17 @@ export default function VideoPage() {
                     resolveFile: async (fileId, file) => {
                         const url = (await resolveFileUrls([fileId])).get(fileId);
                         if (!url) throw new Error(t("errors.video.emptyResult"));
-                        return { id: fileId, url, fileId, storageKey: "", durationMs: file?.durationMs ?? Date.now() - log.createdAt, width: file?.width || 1280, height: file?.height || 720, bytes: file?.bytes ?? 0, mimeType: file?.mimeType || "video/mp4" };
+                        return {
+                            id: fileId,
+                            url,
+                            fileId,
+                            storageKey: "",
+                            durationMs: file?.durationMs ?? Date.now() - log.createdAt,
+                            width: file?.width || 1280,
+                            height: file?.height || 720,
+                            bytes: file?.bytes ?? 0,
+                            mimeType: file?.mimeType || "video/mp4",
+                        };
                     },
                     sleep: () => delay(5000, abortController.signal),
                     signal: abortController.signal,

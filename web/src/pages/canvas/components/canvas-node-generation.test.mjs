@@ -2,7 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import i18n from "@/i18n";
-import { buildNodeGenerationContext, buildNodeResponseMessages, buildShortDramaGenerationIntent, buildVideoGenerationIntent, cleanShortDramaAssetMappings, hydrateNodeGenerationContext, locateGenerationError, prepareFirstPartyCanvasVideoRun } from "./canvas-node-generation.ts";
+import {
+    buildNodeGenerationContext,
+    buildNodeResponseMessages,
+    buildShortDramaGenerationIntent,
+    buildVideoGenerationIntent,
+    cleanShortDramaAssetMappings,
+    hydrateNodeGenerationContext,
+    locateGenerationError,
+    prepareFirstPartyCanvasVideoRun,
+} from "./canvas-node-generation.ts";
 
 const image = {
     id: "image-1",

@@ -382,10 +382,17 @@ export function CanvasAssistantPanel({
             const messages = await buildToolAgentMessages(snapshotRef.current, history, userMessage);
             addOnlineLog(t("canvas.assistant.logs.toolLoopStarted", { step: formatNumber(loop.step) }), { toolChoice: "required" });
             let streamed = "";
-            const result = await requestToolResponse({ ...requestConfig, systemPrompt: "" }, messages, ONLINE_AGENT_TOOLS, "required", (text) => {
-                streamed = text;
-                if (text.trim()) upsertMessage(sessionId, { id: assistantId, role: "assistant", text });
-            }, { includeUsage: true, source: "canvas" });
+            const result = await requestToolResponse(
+                { ...requestConfig, systemPrompt: "" },
+                messages,
+                ONLINE_AGENT_TOOLS,
+                "required",
+                (text) => {
+                    streamed = text;
+                    if (text.trim()) upsertMessage(sessionId, { id: assistantId, role: "assistant", text });
+                },
+                { includeUsage: true, source: "canvas" },
+            );
             addOnlineLog(t("canvas.assistant.logs.modelToolResponse"), result);
             if (result.toolCalls.length) {
                 const writableCalls = result.toolCalls.filter(isWritableToolCall);
@@ -440,10 +447,17 @@ export function CanvasAssistantPanel({
         }
         const requestConfig = { ...canvasConfig, model: canvasConfig.textModel };
         let streamed = "";
-        const next = await requestToolResponse({ ...requestConfig, systemPrompt: "" }, nextMessages, ONLINE_AGENT_TOOLS, "auto", (text) => {
-            streamed = text;
-            if (text.trim()) upsertMessage(sessionId, { id: assistantId, role: "assistant", text });
-        }, { includeUsage: true, source: "canvas" });
+        const next = await requestToolResponse(
+            { ...requestConfig, systemPrompt: "" },
+            nextMessages,
+            ONLINE_AGENT_TOOLS,
+            "auto",
+            (text) => {
+                streamed = text;
+                if (text.trim()) upsertMessage(sessionId, { id: assistantId, role: "assistant", text });
+            },
+            { includeUsage: true, source: "canvas" },
+        );
         addOnlineLog(t("canvas.assistant.logs.toolLoopReply", { step: formatNumber(step + 1) }), next);
         if (next.toolCalls.length) {
             const writableCalls = next.toolCalls.filter(isWritableToolCall);

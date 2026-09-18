@@ -14,11 +14,7 @@ test("canvas audio generation uses the platform endpoint and explicit source", a
     };
 
     try {
-        await requestAudioGeneration(
-            { ...defaultConfig, channelMode: "remote", model: "admin-audio", audioModel: "admin-audio" },
-            "旁白",
-            { source: "canvas" },
-        );
+        await requestAudioGeneration({ ...defaultConfig, channelMode: "remote", model: "admin-audio", audioModel: "admin-audio" }, "旁白", { source: "canvas" });
         assert.equal(request.url, "/api/v1/audio/speech");
         assert.equal(request.options.headers["X-Source"], "canvas");
     } finally {

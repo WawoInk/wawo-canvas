@@ -3010,7 +3010,10 @@ function InfiniteCanvasPage() {
             const generationConfig =
                 hasSavedImageMetadata && savedImageMetadata
                     ? buildSavedImageConfig(effectiveConfig, savedImageMetadata, publicSettings)
-                    : { ...buildNodeConfig(effectiveConfig, defaultConfig, sourceNode, node.type === CanvasNodeType.Text ? "text" : node.type === CanvasNodeType.Video ? "video" : node.type === CanvasNodeType.Audio ? "audio" : "image", publicSettings), count: "1" };
+                    : {
+                          ...buildNodeConfig(effectiveConfig, defaultConfig, sourceNode, node.type === CanvasNodeType.Text ? "text" : node.type === CanvasNodeType.Video ? "video" : node.type === CanvasNodeType.Audio ? "audio" : "image", publicSettings),
+                          count: "1",
+                      };
             if (node.type === CanvasNodeType.Video && node.metadata?.videoMode) generationConfig.videoMode = node.metadata.videoMode;
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
@@ -3868,7 +3871,9 @@ function InfiniteCanvasPage() {
                 </Modal>
 
                 <AssetPickerModal open={assetPickerOpen} onInsert={handleAssetInsert} onClose={() => setAssetPickerOpen(false)} />
-                {localCanvasAgentVisible && codexCompactAgent && !assistantMounted ? <CanvasLocalAgentPanel headless snapshot={agentSnapshot} canUndoOps={Boolean(agentUndoSnapshot)} onApplyOps={applyAgentOps} onUndoOps={undoAgentOps} autoConnect={codexAutoConnect} /> : null}
+                {localCanvasAgentVisible && codexCompactAgent && !assistantMounted ? (
+                    <CanvasLocalAgentPanel headless snapshot={agentSnapshot} canUndoOps={Boolean(agentUndoSnapshot)} onApplyOps={applyAgentOps} onUndoOps={undoAgentOps} autoConnect={codexAutoConnect} />
+                ) : null}
             </section>
             {assistantMounted ? (
                 <CanvasAssistantPanel

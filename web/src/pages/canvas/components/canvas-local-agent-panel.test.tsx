@@ -14,7 +14,11 @@ test("session request epochs reject await-delayed and A-B-A work", async () => {
     const oldA = beginCanvasAgentRequest("threads", beginCanvasAgentSession("replica-a"));
     let release!: () => void;
     let wroteAfterAwait = false;
-    const delayed = new Promise<void>((resolve) => { release = resolve; }).then(() => { wroteAfterAwait = isCurrentCanvasAgentRequest(oldA); });
+    const delayed = new Promise<void>((resolve) => {
+        release = resolve;
+    }).then(() => {
+        wroteAfterAwait = isCurrentCanvasAgentRequest(oldA);
+    });
     beginCanvasAgentSession("replica-b");
     const newA = beginCanvasAgentRequest("threads", beginCanvasAgentSession("replica-a"));
     release();
@@ -165,13 +169,7 @@ test("switching projects reconnects with the new replica and clears the previous
     const renderPanel = (projectId: string) => (
         <BrowserRouter>
             <App>
-                <CanvasLocalAgentPanel
-                    headless
-                    snapshot={{ projectId, title: projectId, nodes: [], connections: [], selectedNodeIds: [], viewport: { x: 0, y: 0, k: 1 } }}
-                    canUndoOps={false}
-                    onApplyOps={() => null}
-                    onUndoOps={() => null}
-                />
+                <CanvasLocalAgentPanel headless snapshot={{ projectId, title: projectId, nodes: [], connections: [], selectedNodeIds: [], viewport: { x: 0, y: 0, k: 1 } }} canUndoOps={false} onApplyOps={() => null} onUndoOps={() => null} />
             </App>
         </BrowserRouter>
     );

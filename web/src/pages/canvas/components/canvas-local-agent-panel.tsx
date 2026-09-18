@@ -165,7 +165,20 @@ export function CanvasLocalAgentPanel({
         if (!changedProject) return;
         connectedRef.current = false;
         pendingToolRef.current = null;
-        setAgentState({ canvasId: snapshot.projectId, connected: false, messages: [], eventLogs: [], threads: [], activeThreadId: "", workspacePath: "", loadingThreads: false, waiting: false, sending: false, pendingTool: null, activity: i18n.t("canvas.agent.status.ready") });
+        setAgentState({
+            canvasId: snapshot.projectId,
+            connected: false,
+            messages: [],
+            eventLogs: [],
+            threads: [],
+            activeThreadId: "",
+            workspacePath: "",
+            loadingThreads: false,
+            waiting: false,
+            sending: false,
+            pendingTool: null,
+            activity: i18n.t("canvas.agent.status.ready"),
+        });
     }, [boundCanvasId, endpoint, pendingTool, setAgentState, snapshot.projectId, token]);
 
     useEffect(() => {
@@ -1059,12 +1072,20 @@ function AgentHistoryView({
 
 async function postState(endpoint: string, token: string, clientId: string, snapshot: CanvasAgentSnapshot) {
     try {
-        await fetch(`${endpoint}/canvas/state?token=${encodeURIComponent(token)}&clientId=${encodeURIComponent(clientId)}&canvasId=${encodeURIComponent(snapshot.projectId)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(snapshot) });
+        await fetch(`${endpoint}/canvas/state?token=${encodeURIComponent(token)}&clientId=${encodeURIComponent(clientId)}&canvasId=${encodeURIComponent(snapshot.projectId)}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(snapshot),
+        });
     } catch {}
 }
 
 async function postToolResult(endpoint: string, token: string, clientId: string, canvasId: string, body: { requestId: string; result?: unknown; error?: string }) {
-    await fetch(`${endpoint}/canvas/result?token=${encodeURIComponent(token)}&clientId=${encodeURIComponent(clientId)}&canvasId=${encodeURIComponent(canvasId)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    await fetch(`${endpoint}/canvas/result?token=${encodeURIComponent(token)}&clientId=${encodeURIComponent(clientId)}&canvasId=${encodeURIComponent(canvasId)}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+    });
 }
 
 function agentMessageToChatMessage(item: AgentChatItem) {
