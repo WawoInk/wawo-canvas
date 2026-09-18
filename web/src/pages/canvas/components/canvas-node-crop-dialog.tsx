@@ -77,8 +77,9 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
 
     const updateCropRatio = (dimension: "width" | "height", value: number | null) => {
         const next = { ...ratioSize, [dimension]: value };
+        const { width, height } = next;
         setRatioSize(next);
-        if (image && next.width && next.height) setCrop((current) => resizeCropToRatio(current, image, next.width / next.height));
+        if (image && width && height) setCrop((current) => resizeCropToRatio(current, image, width / height));
     };
 
     const resetCrop = () => {

@@ -1,4 +1,5 @@
-import { expect, test } from "bun:test";
+import assert from "node:assert/strict";
+import test from "node:test";
 import { useUserStore } from "@/stores/use-user-store";
 import { cropDataUrl, splitDataUrl } from "./canvas-image-data";
 
@@ -49,8 +50,8 @@ test("remote canvas images can be cropped and split without tainting the output"
 
     try {
         const source = "https://cdn.example/image.png";
-        await expect(cropDataUrl(source, { x: 0, y: 0, width: 1, height: 1 })).resolves.toStartWith("data:image/png");
-        await expect(splitDataUrl(source, { rows: 2, columns: 2 })).resolves.toHaveLength(4);
+        assert.match(await cropDataUrl(source, { x: 0, y: 0, width: 1, height: 1 }), /^data:image\/png/);
+        assert.equal((await splitDataUrl(source, { rows: 2, columns: 2 })).length, 4);
     } finally {
         Object.assign(globalThis, originalGlobals);
         useUserStore.setState(originalState, true);
