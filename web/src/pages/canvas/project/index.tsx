@@ -2143,44 +2143,57 @@ function InfiniteCanvasPage() {
     const splitImageNode = useCallback(
         async (node: CanvasNodeData, params: CanvasImageSplitParams) => {
             if (!node.metadata?.content) return;
+            const auth = useUserStore.getState();
+            const started = { token: auth.token, userId: auth.user?.id };
+            const isActive = () => {
+                const current = useUserStore.getState();
+                return projectIdRef.current === projectId && isCurrentSession(started, { token: current.token, userId: current.user?.id });
+            };
             setSplitNodeId(null);
-            const pieces = await splitDataUrl(node.metadata, params);
-            const gap = 16;
-            const cellWidth = node.width / params.columns;
-            const cellHeight = node.height / params.rows;
-            const startX = node.position.x + node.width + 96;
-            const startY = node.position.y;
-            const childNodes = await Promise.all(
-                pieces.map(async (piece) => {
-                    const image = await uploadImage(piece.dataUrl);
-                    const id = nanoid();
-                    return {
-                        id,
-                        createdAt: new Date().toISOString(),
-                        type: CanvasNodeType.Image,
-                        title: t("canvas.editor.nodes.splitImageTitle", {
-                            title: node.title || t("canvas.nodeTypes.image"),
-                            row: formatNumber(piece.row + 1, { useGrouping: false }),
-                            column: formatNumber(piece.column + 1, { useGrouping: false }),
-                        }),
-                        position: { x: startX + piece.column * (cellWidth + gap), y: startY + piece.row * (cellHeight + gap) },
-                        width: cellWidth,
-                        height: cellHeight,
-                        metadata: {
-                            ...imageMetadata(image),
-                            prompt: node.metadata?.prompt,
-                        },
-                    } satisfies CanvasNodeData;
-                }),
-            );
-            setNodes((prev) => [...prev, ...childNodes]);
-            setConnections((prev) => [...prev, ...childNodes.map((child) => ({ id: nanoid(), fromNodeId: node.id, toNodeId: child.id }))]);
-            setSelectedNodeIds(new Set(childNodes.map((child) => child.id)));
-            setSelectedConnectionId(null);
-            setDialogNodeId(null);
-            message.success(t("canvas.editor.messages.imageSplit", { count: childNodes.length, value: formatNumber(childNodes.length) }));
+            try {
+                const pieces = await splitDataUrl(node.metadata, params);
+                const gap = 16;
+                const cellWidth = node.width / params.columns;
+                const cellHeight = node.height / params.rows;
+                const startX = node.position.x + node.width + 96;
+                const startY = node.position.y;
+                const childNodes = await Promise.all(
+                    pieces.map(async (piece) => {
+                        const blob = await (await fetch(piece.dataUrl)).blob();
+                        if (!isActive()) throw new Error(t("errors.authRequired"));
+                        const image = await uploadBlob(blob, "images");
+                        const id = nanoid();
+                        return {
+                            id,
+                            createdAt: new Date().toISOString(),
+                            type: CanvasNodeType.Image,
+                            title: t("canvas.editor.nodes.splitImageTitle", {
+                                title: node.title || t("canvas.nodeTypes.image"),
+                                row: formatNumber(piece.row + 1, { useGrouping: false }),
+                                column: formatNumber(piece.column + 1, { useGrouping: false }),
+                            }),
+                            position: { x: startX + piece.column * (cellWidth + gap), y: startY + piece.row * (cellHeight + gap) },
+                            width: cellWidth,
+                            height: cellHeight,
+                            metadata: {
+                                ...imageMetadata(image),
+                                prompt: node.metadata?.prompt,
+                            },
+                        } satisfies CanvasNodeData;
+                    }),
+                );
+                if (!isActive()) return;
+                setNodes((prev) => [...prev, ...childNodes]);
+                setConnections((prev) => [...prev, ...childNodes.map((child) => ({ id: nanoid(), fromNodeId: node.id, toNodeId: child.id }))]);
+                setSelectedNodeIds(new Set(childNodes.map((child) => child.id)));
+                setSelectedConnectionId(null);
+                setDialogNodeId(null);
+                message.success(t("canvas.editor.messages.imageSplit", { count: childNodes.length, value: formatNumber(childNodes.length) }));
+            } catch (error) {
+                if (isActive()) message.error(error instanceof Error ? error.message : t("errors.upload.failed"));
+            }
         },
-        [message, t],
+        [message, projectId, t],
     );
 
     const maskEditImageNode = useCallback(
