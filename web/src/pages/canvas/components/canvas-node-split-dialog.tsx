@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Button, InputNumber, Modal } from "antd";
+import { useEffect, useRef, useState } from "react";
+import { Alert, Button, InputNumber, Modal, Progress } from "antd";
 import { Grid2x2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -14,10 +14,14 @@ export type CanvasImageSplitParams = ImageSplitParams;
 const defaultParams: CanvasImageSplitParams = { rows: 2, columns: 2 };
 const maxGridSize = 12;
 
-export function CanvasNodeSplitDialog({ dataUrl, open, onClose, onConfirm }: { dataUrl: string; open: boolean; onClose: () => void; onConfirm: (params: CanvasImageSplitParams) => void }) {
+export function CanvasNodeSplitDialog({ dataUrl, open, onClose, onConfirm }: { dataUrl: string; open: boolean; onClose: () => void; onConfirm: (params: CanvasImageSplitParams, onProgress: (completed: number) => void) => Promise<void> }) {
     const { t } = useTranslation();
     const [params, setParams] = useState(defaultParams);
     const [image, setImage] = useState<{ width: number; height: number } | null>(null);
+    const runningRef = useRef(false);
+    const [running, setRunning] = useState(false);
+    const [completed, setCompleted] = useState<number | null>(null);
+    const [error, setError] = useState("");
     const total = params.rows * params.columns;
     const pieceSize = image ? { width: Math.max(1, Math.floor(image.width / params.columns)), height: Math.max(1, Math.floor(image.height / params.rows)) } : null;
 
@@ -32,13 +36,61 @@ export function CanvasNodeSplitDialog({ dataUrl, open, onClose, onConfirm }: { d
         void readImageMeta(dataUrl).then(setImage);
     }, [dataUrl, open]);
 
+    useEffect(() => {
+        if (!open) return;
+        const blockShortcuts = (event: KeyboardEvent) => {
+            if (!runningRef.current || event.key === "Tab") return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        };
+        window.addEventListener("keydown", blockShortcuts, true);
+        return () => window.removeEventListener("keydown", blockShortcuts, true);
+    }, [open]);
+
     const update = (key: keyof CanvasImageSplitParams, value: string | number | null) => {
         setParams((current) => ({ ...current, [key]: clampGrid(value ?? current[key]) }));
     };
 
+    const confirm = async () => {
+        if (runningRef.current) return;
+        runningRef.current = true;
+        setRunning(true);
+        setCompleted(null);
+        setError("");
+        try {
+            await onConfirm(params, setCompleted);
+        } catch (error) {
+            setError(error instanceof Error ? error.message : t("errors.upload.failed"));
+        } finally {
+            runningRef.current = false;
+            setRunning(false);
+        }
+    };
+
     return (
-        <Modal title={null} open={open && Boolean(dataUrl)} onCancel={onClose} footer={null} width={780} centered destroyOnHidden>
-            <div className="space-y-5">
+        <Modal
+            title={null}
+            open={open && Boolean(dataUrl)}
+            onCancel={() => {
+                if (!runningRef.current) onClose();
+            }}
+            closable={!running}
+            keyboard={!running}
+            mask={{ closable: !running }}
+            footer={null}
+            width={780}
+            centered
+            destroyOnHidden
+        >
+            <div className="space-y-5" aria-busy={running}>
+                {error && <Alert type="error" showIcon title={error} />}
+                {running && (
+                    <div role="status" aria-live="polite" className="space-y-2">
+                        <p className="font-medium">{t(completed === null ? "canvas.split.preparing" : "canvas.split.saving")}</p>
+                        <Progress percent={Math.round(((completed ?? 0) / total) * 100)} status="active" aria-label={t("canvas.split.progress")} />
+                        <p className="text-sm opacity-60">{t("canvas.split.completed", { completed: formatNumber(completed ?? 0), total: formatNumber(total) })}</p>
+                    </div>
+                )}
                 <div>
                     <h2 className="text-xl font-semibold">{t("canvas.split.title")}</h2>
                     <p className="mt-1 text-sm opacity-60">{t("canvas.split.description", { count: total, value: formatNumber(total) })}</p>
@@ -57,8 +109,8 @@ export function CanvasNodeSplitDialog({ dataUrl, open, onClose, onConfirm }: { d
                         </div>
                     </div>
                     <div className="space-y-5 py-2">
-                        <NumberField label={t("canvas.split.rows")} value={params.rows} onChange={(value) => update("rows", value)} />
-                        <NumberField label={t("canvas.split.columns")} value={params.columns} onChange={(value) => update("columns", value)} />
+                        <NumberField disabled={running} label={t("canvas.split.rows")} value={params.rows} onChange={(value) => update("rows", value)} />
+                        <NumberField disabled={running} label={t("canvas.split.columns")} value={params.columns} onChange={(value) => update("columns", value)} />
                         <div className="rounded-xl border px-4 py-3 text-sm">
                             <div className="flex items-center justify-between">
                                 <span className="opacity-60">{t("canvas.split.childNodes")}</span>
@@ -69,7 +121,7 @@ export function CanvasNodeSplitDialog({ dataUrl, open, onClose, onConfirm }: { d
                                 <span className="font-semibold">{pieceSize ? formatDimensions(pieceSize.width, pieceSize.height) : t("canvas.common.unknown")}</span>
                             </div>
                         </div>
-                        <Button type="primary" size="large" className="w-full" icon={<Grid2x2 className="size-4" />} onClick={() => onConfirm(params)}>
+                        <Button type="primary" size="large" className="w-full" icon={<Grid2x2 className="size-4" />} disabled={running} loading={running} onClick={() => void confirm()}>
                             {t("canvas.split.generate")}
                         </Button>
                     </div>
@@ -79,11 +131,11 @@ export function CanvasNodeSplitDialog({ dataUrl, open, onClose, onConfirm }: { d
     );
 }
 
-function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: string | number | null) => void }) {
+function NumberField({ label, value, onChange, disabled }: { disabled: boolean; label: string; value: number; onChange: (value: string | number | null) => void }) {
     return (
         <label className="block space-y-2">
             <span className="font-medium opacity-75">{label}</span>
-            <InputNumber className="w-full" min={1} max={maxGridSize} precision={0} value={value} onChange={onChange} />
+            <InputNumber disabled={disabled} className="w-full" min={1} max={maxGridSize} precision={0} value={value} onChange={onChange} />
         </label>
     );
 }

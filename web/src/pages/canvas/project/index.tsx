@@ -2141,7 +2141,7 @@ function InfiniteCanvasPage() {
     );
 
     const splitImageNode = useCallback(
-        async (node: CanvasNodeData, params: CanvasImageSplitParams) => {
+        async (node: CanvasNodeData, params: CanvasImageSplitParams, onProgress?: (completed: number) => void) => {
             if (!node.metadata?.content) return;
             const auth = useUserStore.getState();
             const started = { token: auth.token, userId: auth.user?.id };
@@ -2149,19 +2149,24 @@ function InfiniteCanvasPage() {
                 const current = useUserStore.getState();
                 return projectIdRef.current === projectId && isCurrentSession(started, { token: current.token, userId: current.user?.id });
             };
-            setSplitNodeId(null);
             try {
+                // Let the blocking dialog paint before encoding the image pieces.
+                await new Promise((resolve) => setTimeout(resolve, 0));
                 const pieces = await splitDataUrl(node.metadata, params);
+                if (!isActive()) return;
+                let completed = 0;
+                onProgress?.(completed);
                 const gap = 16;
                 const cellWidth = node.width / params.columns;
                 const cellHeight = node.height / params.rows;
                 const startX = node.position.x + node.width + 96;
                 const startY = node.position.y;
-                const childNodes = await Promise.all(
+                const results = await Promise.allSettled(
                     pieces.map(async (piece) => {
                         const blob = await (await fetch(piece.dataUrl)).blob();
                         if (!isActive()) throw new Error(t("errors.authRequired"));
                         const image = await uploadBlob(blob, "images");
+                        if (isActive()) onProgress?.(++completed);
                         const id = nanoid();
                         return {
                             id,
@@ -2183,14 +2188,18 @@ function InfiniteCanvasPage() {
                     }),
                 );
                 if (!isActive()) return;
+                const failed = results.find((result) => result.status === "rejected");
+                if (failed?.status === "rejected") throw failed.reason;
+                const childNodes = results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
                 setNodes((prev) => [...prev, ...childNodes]);
                 setConnections((prev) => [...prev, ...childNodes.map((child) => ({ id: nanoid(), fromNodeId: node.id, toNodeId: child.id }))]);
                 setSelectedNodeIds(new Set(childNodes.map((child) => child.id)));
                 setSelectedConnectionId(null);
                 setDialogNodeId(null);
+                setSplitNodeId(null);
                 message.success(t("canvas.editor.messages.imageSplit", { count: childNodes.length, value: formatNumber(childNodes.length) }));
             } catch (error) {
-                if (isActive()) message.error(error instanceof Error ? error.message : t("errors.upload.failed"));
+                if (isActive()) throw error;
             }
         },
         [message, projectId, t],
@@ -3842,7 +3851,7 @@ function InfiniteCanvasPage() {
 
                 {maskEditNode?.metadata?.content && maskEditDataUrl ? <CanvasNodeMaskEditDialog dataUrl={maskEditDataUrl} open onClose={() => setMaskEditNodeId(null)} onConfirm={(payload) => void maskEditImageNode(maskEditNode, payload)} /> : null}
 
-                {splitNode?.metadata?.content ? <CanvasNodeSplitDialog dataUrl={splitNode.metadata.content} open={Boolean(splitNode)} onClose={() => setSplitNodeId(null)} onConfirm={(params) => void splitImageNode(splitNode!, params)} /> : null}
+                {splitNode?.metadata?.content ? <CanvasNodeSplitDialog dataUrl={splitNode.metadata.content} open={Boolean(splitNode)} onClose={() => setSplitNodeId(null)} onConfirm={(params, onProgress) => splitImageNode(splitNode!, params, onProgress)} /> : null}
 
                 {upscaleNode?.metadata?.content ? (
                     <CanvasNodeUpscaleDialog dataUrl={upscaleNode.metadata.content} open={Boolean(upscaleNode)} onClose={() => setUpscaleNodeId(null)} onConfirm={(params) => void upscaleImageNode(upscaleNode!, params)} />

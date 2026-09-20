@@ -3098,6 +3098,10 @@
             "columns": "Columns",
             "childNodes": "Child Nodes",
             "approxPiece": "Approx. per Piece",
+            "preparing": "Splitting image, please wait…",
+            "saving": "Saving pieces. Keep this page open.",
+            "progress": "Split progress",
+            "completed": "Saved {{completed}} / {{total}}",
             "generate": "Generate Child Nodes"
         },
         "upscale": {

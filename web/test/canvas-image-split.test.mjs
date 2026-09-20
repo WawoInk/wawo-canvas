@@ -46,7 +46,12 @@ async function split({ fail = false, switchAt } = {}) {
         message: { success: noop, error: (error) => errors.push(error) },
     };
     const run = new Function(...Object.keys(dependencies), code)(...Object.values(dependencies));
-    await run({ id: "source", title: "source", width: 40, height: 10, position: { x: 0, y: 0 }, metadata: { content: "source", prompt: "prompt" } }, { rows: 1, columns: 2 });
+    try {
+        await run({ id: "source", title: "source", width: 40, height: 10, position: { x: 0, y: 0 }, metadata: { content: "source", prompt: "prompt" } }, { rows: 1, columns: 2 });
+    } catch (error) {
+        // The dialog owns the error display and retry state.
+        errors.push(error);
+    }
     return { nodes, uploads, errors, connections };
 }
 

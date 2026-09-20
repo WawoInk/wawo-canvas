@@ -3098,6 +3098,10 @@
             "columns": "列数",
             "childNodes": "子节点",
             "approxPiece": "单块约",
+            "preparing": "正在切图，请稍候…",
+            "saving": "正在保存切图结果，请勿关闭页面",
+            "progress": "切图进度",
+            "completed": "已保存 {{completed}} / {{total}}",
             "generate": "生成子节点"
         },
         "upscale": {
