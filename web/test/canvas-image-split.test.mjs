@@ -12,9 +12,14 @@ const code = ts.transpileModule(`${metadata}\n${callback}\nreturn splitImageNode
 async function split({ fail = false, switchAt } = {}) {
     let session = { token: "token-a", user: { id: "user-a" } };
     const projectIdRef = { current: "project-a" };
-    const changeSession = () => { session = { token: "token-b", user: { id: "user-b" } }; };
+    const changeSession = () => {
+        session = { token: "token-b", user: { id: "user-b" } };
+    };
     let nextId = 0;
-    const nodes = [], uploads = [], errors = [], connections = [];
+    const nodes = [],
+        uploads = [],
+        errors = [],
+        connections = [];
     const noop = () => {};
     const dependencies = {
         useUserStore: { getState: () => session },
@@ -59,7 +64,10 @@ test("split images use platform upload and retain durable file references", asyn
     const { nodes, uploads, connections } = await split();
     assert.equal(uploads.length, 2, "each piece must use the authenticated platform upload instead of IndexedDB");
     assert.ok(uploads.every(({ blob, fileType }) => blob.type === "image/png" && fileType === "images"));
-    assert.deepEqual(nodes.map((node) => node.metadata.fileId), ["file-1", "file-2"]);
+    assert.deepEqual(
+        nodes.map((node) => node.metadata.fileId),
+        ["file-1", "file-2"],
+    );
     assert.ok(nodes.every((node) => node.metadata.storageKey === "" && node.metadata.prompt === "prompt"));
     assert.equal(connections.length, 2);
 });

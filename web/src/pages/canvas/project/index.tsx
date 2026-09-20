@@ -3851,7 +3851,9 @@ function InfiniteCanvasPage() {
 
                 {maskEditNode?.metadata?.content && maskEditDataUrl ? <CanvasNodeMaskEditDialog dataUrl={maskEditDataUrl} open onClose={() => setMaskEditNodeId(null)} onConfirm={(payload) => void maskEditImageNode(maskEditNode, payload)} /> : null}
 
-                {splitNode?.metadata?.content ? <CanvasNodeSplitDialog dataUrl={splitNode.metadata.content} open={Boolean(splitNode)} onClose={() => setSplitNodeId(null)} onConfirm={(params, onProgress) => splitImageNode(splitNode!, params, onProgress)} /> : null}
+                {splitNode?.metadata?.content ? (
+                    <CanvasNodeSplitDialog dataUrl={splitNode.metadata.content} open={Boolean(splitNode)} onClose={() => setSplitNodeId(null)} onConfirm={(params, onProgress) => splitImageNode(splitNode!, params, onProgress)} />
+                ) : null}
 
                 {upscaleNode?.metadata?.content ? (
                     <CanvasNodeUpscaleDialog dataUrl={upscaleNode.metadata.content} open={Boolean(upscaleNode)} onClose={() => setUpscaleNodeId(null)} onConfirm={(params) => void upscaleImageNode(upscaleNode!, params)} />

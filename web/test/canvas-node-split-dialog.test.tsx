@@ -12,7 +12,10 @@ await i18n.changeLanguage("zh-CN");
 function deferred() {
     let resolve!: () => void;
     let reject!: (error: Error) => void;
-    const promise = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
+    const promise = new Promise<void>((yes, no) => {
+        resolve = yes;
+        reject = no;
+    });
     return { promise, resolve, reject };
 }
 
@@ -22,7 +25,15 @@ async function renderDialog(onConfirm: React.ComponentProps<typeof CanvasNodeSpl
     const root = createRoot(host);
     let closed = 0;
     await act(async () => root.render(<CanvasNodeSplitDialog dataUrl="data:image/png;base64,aW1hZ2U=" open onClose={() => closed++} onConfirm={onConfirm} />));
-    return { get closed() { return closed; }, async unmount() { await act(async () => root.unmount()); host.remove(); } };
+    return {
+        get closed() {
+            return closed;
+        },
+        async unmount() {
+            await act(async () => root.unmount());
+            host.remove();
+        },
+    };
 }
 
 function generate() {
@@ -32,13 +43,18 @@ function generate() {
 }
 
 async function click(element: Element) {
-    await act(async () => { element.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    await act(async () => {
+        element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
 }
 
 test("confirming a split blocks duplicate submissions, editing and dismissal until it finishes", async () => {
     const task = deferred();
     let submissions = 0;
-    const dialog = await renderDialog(() => { submissions++; return task.promise; });
+    const dialog = await renderDialog(() => {
+        submissions++;
+        return task.promise;
+    });
     try {
         const button = generate();
         await click(button);
@@ -47,7 +63,9 @@ test("confirming a split blocks duplicate submissions, editing and dismissal unt
         assert.equal(document.querySelector(".ant-modal-close"), null);
         const wrap = document.querySelector(".ant-modal-wrap")!;
         await click(wrap);
-        await act(async () => { wrap.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true })); });
+        await act(async () => {
+            wrap.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true }));
+        });
         await click(button);
         assert.equal(dialog.closed, 0);
         assert.equal(submissions, 1);
@@ -62,7 +80,10 @@ test("confirming a split blocks duplicate submissions, editing and dismissal unt
 test("split progress shows preparation then the number of durably saved pieces", async () => {
     const task = deferred();
     let report!: (completed: number) => void;
-    const dialog = await renderDialog((_params, onProgress) => { report = onProgress; return task.promise; });
+    const dialog = await renderDialog((_params, onProgress) => {
+        report = onProgress;
+        return task.promise;
+    });
     try {
         await click(generate());
         assert.ok(document.body.textContent?.includes("正在切图"));
@@ -107,11 +128,15 @@ test("canvas keyboard shortcuts do not receive keys while splitting", async () =
     const task = deferred();
     const dialog = await renderDialog(() => task.promise);
     let deletions = 0;
-    const shortcut = (event: KeyboardEvent) => { if (event.key === "Delete") deletions++; };
+    const shortcut = (event: KeyboardEvent) => {
+        if (event.key === "Delete") deletions++;
+    };
     window.addEventListener("keydown", shortcut);
     try {
         await click(generate());
-        await act(async () => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true })); });
+        await act(async () => {
+            window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }));
+        });
         assert.equal(deletions, 0);
         await act(async () => task.resolve());
         window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
