@@ -78,6 +78,10 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
     const videoSettings = profile && !isDrama ? buildVideoGenerationSettings(profile, provided) : provided;
     const settings = dramaSettings || videoSettings;
     const supportedResolutions = definitions?.resolution.values ? new Set(definitions.resolution.values) : null;
+    const resolutionOptions = [
+        ...seedanceResolutionOptions,
+        ...(definitions?.resolution.values || []).filter((value) => !seedanceResolutionOptions.some((item) => item.value === value)).map((value) => ({ value, label: value })),
+    ];
     const ratioOptions = (definitions?.aspectRatio.values || seedanceRatioOptions.map((item) => item.value)).map((value) => ({ value, label: seedanceRatioLabel(value) }));
     const durationValue = settings.durationSeconds;
     const minDuration = durationDefinition?.min ?? 4;
@@ -99,7 +103,7 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
                 <div style={settingError("resolution")}>
                     <SettingGroup title={t("videoSettings.resolution")} color={theme.node.muted}>
                         <div className="grid grid-cols-3 gap-2.5">
-                            {seedanceResolutionOptions.map((item) => (
+                            {resolutionOptions.map((item) => (
                                 <OptionPill
                                     key={item.value}
                                     selected={settings.resolution === item.value}

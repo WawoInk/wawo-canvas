@@ -2006,6 +2006,8 @@
                     "maxDuration": "最大时长",
                     "durationPlaceholder": "{{value}} 秒",
                     "resolutions": "支持分辨率",
+                    "resolutionPlaceholder": "选择或输入分辨率，如 540p",
+                    "invalidResolution": "请输入正整数加 p 的分辨率，如 540p",
                     "billingMode": "计费方式",
                     "metadata": "Metadata 配置",
                     "metadataKey": "Key",

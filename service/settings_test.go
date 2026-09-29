@@ -697,6 +697,27 @@ func TestResolveGenerationProfilesRejectsUnsafeResolutionLimits(t *testing.T) {
 	}
 }
 
+func TestResolveGenerationProfilesPublishesCustomResolution(t *testing.T) {
+	private := normalizePrivateSetting(model.PrivateSetting{
+		Channels: []model.ModelChannel{{Name: "video", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"custom"}}},
+		GenerationProfiles: []model.GenerationProfileBinding{{
+			ID: "custom", ProfileID: "seedance-1-5-pro", UpstreamModel: "custom", ChannelName: "video", Enabled: true,
+			LimitOverrides: model.GenerationLimitOverrides{ResolutionValues: []string{"480p", "720p", "1080p", "540p"}},
+		}},
+	})
+	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, model.PublicSetting{})
+	if err != nil {
+		t.Fatalf("resolveGenerationProfiles: %v", err)
+	}
+	if got := profiles[0].Capabilities.Settings["resolution"].Values; !reflect.DeepEqual(got, []string{"480p", "720p", "1080p", "540p"}) {
+		t.Fatalf("published resolutions = %v", got)
+	}
+	settings, err := normalizeGenerationSettings(profiles[0], model.ScalarSettings{"resolution": "540p"})
+	if err != nil || settings["resolution"] != "540p" {
+		t.Fatalf("submitted resolution = %v, err = %v", settings["resolution"], err)
+	}
+}
+
 func TestResolveGenerationProfilesDoesNotShareLimitOverrides(t *testing.T) {
 	maxDuration := 8
 	private := normalizePrivateSetting(model.PrivateSetting{

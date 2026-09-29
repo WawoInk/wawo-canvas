@@ -103,7 +103,7 @@ export type GenerationReferences = { images: PlatformMediaReference[]; videos: P
 export type VideoGenerationSettings = {
     videoMode?: "reference" | "frames";
     aspectRatio: "adaptive" | "16:9" | "9:16" | "1:1" | "4:3" | "3:4" | "21:9";
-    resolution: "480p" | "720p" | "1080p";
+    resolution: string;
     durationSeconds: number;
     generateAudio?: boolean;
     watermark?: boolean;
@@ -112,7 +112,7 @@ export type ShortDramaAssetRole = "character" | "scene" | "tool";
 export type ShortDramaAsset = { sourceNodeId: string; role: ShortDramaAssetRole; name: string; description?: string; reference: PlatformMediaReference };
 export type ShortDramaGenerationSettings = {
     aspectRatio: "16:9" | "9:16";
-    resolution: "1080p";
+    resolution: string;
     durationSeconds: "auto" | number;
     quality: "standard" | "high";
 };

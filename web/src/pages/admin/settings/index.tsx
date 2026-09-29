@@ -1038,12 +1038,18 @@ export default function AdminSettingsPage() {
                                                                             <Col xs={24} md={12} xl={5}>
                                                                                 <Form.Item label={t("admin.settings.generationProfiles.form.resolutions")}>
                                                                                     <Select
-                                                                                        mode="multiple"
+                                                                                        mode="tags"
                                                                                         value={billingRule.resolutions}
-                                                                                        options={profileOption.resolutionValues.map((value) => ({ label: value, value }))}
+                                                                                        placeholder={t("admin.settings.generationProfiles.form.resolutionPlaceholder")}
+                                                                                        options={[...new Set([...profileOption.resolutionValues, ...billingRule.resolutions])].map((value) => ({ label: value, value }))}
                                                                                         onChange={(values) => {
                                                                                             if (!values.length) return;
-                                                                                            const resolutionOverride = values.length === profileOption.resolutionValues.length ? undefined : values;
+                                                                                            const resolutions = [...new Set(values.map((value) => value.trim().toLowerCase()))];
+                                                                                            if (resolutions.some((value) => !/^[1-9]\d*p$/.test(value))) {
+                                                                                                message.error(t("admin.settings.generationProfiles.form.invalidResolution"));
+                                                                                                return;
+                                                                                            }
+                                                                                            const resolutionOverride = resolutions.length === profileOption.resolutionValues.length && profileOption.resolutionValues.every((value) => resolutions.includes(value)) ? undefined : resolutions;
                                                                                             updateGenerationProfile(index, {
                                                                                                 limitOverrides: { ...binding.limitOverrides, resolutionValues: resolutionOverride },
                                                                                             });
