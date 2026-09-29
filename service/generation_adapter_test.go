@@ -719,7 +719,7 @@ func TestCreateGenerationRunsMediaSeedanceTask(t *testing.T) {
 		return []model.GenerationProfile{{
 			ID: "seedance-media", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "seedance-media",
 			Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities(),
-			Metadata: map[string]string{"action": "videogen"},
+			Metadata: map[string]any{"action": "videogen"},
 		}}
 	}
 	generationChannel = func(string) (model.ModelChannel, error) {
@@ -1221,7 +1221,7 @@ func TestSeedanceAdapterCreatesPromptOnlyTask(t *testing.T) {
 		},
 		Channel:  model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"},
 		Intent:   model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "人物走进雨夜街道", NegativePrompt: "低质量，模糊"},
-		Metadata: map[string]string{"action": "videogen"},
+		Metadata: map[string]any{"action": "videogen"},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -1277,7 +1277,7 @@ func TestSoraAdapterCreatesVideoTask(t *testing.T) {
 		Intent: model.GenerationIntent{Kind: model.IntentVideoGenerate, Prompt: "人物走进雨夜街道", Settings: model.ScalarSettings{
 			"aspectRatio": "16:9", "resolution": "720p", "durationSeconds": 8,
 		}},
-		Metadata: map[string]string{"action": "template_hq_t2v"},
+		Metadata: map[string]any{"action": "template_hq_t2v"},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -1326,7 +1326,7 @@ func TestSoraAdapterCreatesImageToVideoTask(t *testing.T) {
 			Videos: []string{"https://example.com/reference.mp4"},
 			Audios: []string{"https://example.com/audio.mp3"},
 		},
-		Metadata: map[string]string{"action": "template_hq_i2v"},
+		Metadata: map[string]any{"action": "template_hq_i2v"},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -1371,7 +1371,7 @@ func TestSoraAdapterCreatesVolcengineAssetReferences(t *testing.T) {
 			Videos: []string{"asset://asset-video-1"},
 			Audios: []string{"asset://asset-audio-1"},
 		},
-		Metadata: map[string]string{"action": "template_hq_i2v"},
+		Metadata: map[string]any{"action": "template_hq_i2v"},
 	})
 	if err != nil || ref.ID != "sora-asset-task" || ref.Status != model.TaskStatusRunning {
 		t.Fatalf("ref=%#v err=%v", ref, err)
@@ -1420,7 +1420,7 @@ func TestSoraAdapterCreatesReferenceToVideoTask(t *testing.T) {
 			"https://example.com/ref-2.png",
 			"https://example.com/ref-3.png",
 		}},
-		Metadata: map[string]string{"action": "template_hq_r2v"},
+		Metadata: map[string]any{"action": "template_hq_r2v"},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -1460,7 +1460,7 @@ func TestSoraAdapterPreservesConfiguredActionWithTwoImages(t *testing.T) {
 			"https://example.com/start.png",
 			"https://example.com/end.png",
 		}},
-		Metadata: map[string]string{"action": "template_future_video"},
+		Metadata: map[string]any{"action": "template_future_video"},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -1566,7 +1566,7 @@ func TestViduShortDramaAdapterCreatesGoldenPayloads(t *testing.T) {
 				Channel:    model.ModelChannel{BaseURL: upstream.URL, APIKey: "secret"},
 				Intent:     testCase.intent,
 				References: AdapterMediaReferences{Images: testCase.imageURLs},
-				Metadata:   map[string]string{"action": "videogen"},
+				Metadata:   map[string]any{"action": "videogen"},
 			})
 			if err != nil {
 				t.Fatalf("Create: %v", err)
@@ -1602,7 +1602,7 @@ func TestCreateGenerationStoresOnlyLongTermCommandSummary(t *testing.T) {
 		return []model.GenerationProfile{{
 			ID: "summary-profile", Version: 1, AdapterKey: "seedance-contents-v1", UpstreamModel: "summary-model",
 			Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: seedanceCapabilities(),
-			Metadata: map[string]string{"action": "videogen"},
+			Metadata: map[string]any{"action": "videogen"},
 		}}
 	}
 	generationChannel = func(string) (model.ModelChannel, error) {
@@ -1705,7 +1705,7 @@ func TestSoraGenerationPersistsMetadataVideoBeforeSuccess(t *testing.T) {
 	generationProfiles = func() []model.GenerationProfile {
 		return []model.GenerationProfile{{
 			ID: "sora-result", Version: 1, AdapterKey: "sora-videos-v1", UpstreamModel: "sora-result", ChannelName: "test",
-			Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: soraCapabilities(), Metadata: map[string]string{"action": "template_hq_t2v"},
+			Intents: []model.GenerationIntentKind{model.IntentVideoGenerate}, Capabilities: soraCapabilities(), Metadata: map[string]any{"action": "template_hq_t2v"},
 		}}
 	}
 	generationRouteChannel = func(string, string) (model.ModelChannel, error) {

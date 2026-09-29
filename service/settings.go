@@ -410,11 +410,11 @@ func normalizePrivateSetting(setting model.PrivateSetting) model.PrivateSetting 
 	return setting
 }
 
-func normalizeGenerationMetadata(metadata map[string]string) map[string]string {
+func normalizeGenerationMetadata(metadata map[string]any) map[string]any {
 	if len(metadata) == 0 {
 		return nil
 	}
-	normalized := make(map[string]string, len(metadata))
+	normalized := make(map[string]any, len(metadata))
 	for key, value := range metadata {
 		key = strings.TrimSpace(key)
 		if key == "" {

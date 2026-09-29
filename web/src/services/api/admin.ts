@@ -432,7 +432,7 @@ export type AdminGenerationProfileBinding = {
     credits?: DecimalValue;
     enabled: boolean;
     limitOverrides: { durationSecondsMax?: number; resolutionValues?: string[] };
-    metadata?: Record<string, string>;
+    metadata?: Record<string, string | number | boolean>;
 };
 
 export type AdminPrivateSettings = {

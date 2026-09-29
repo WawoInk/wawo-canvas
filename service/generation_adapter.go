@@ -21,7 +21,7 @@ type AdapterCreateRequest struct {
 	Channel     model.ModelChannel
 	Intent      model.GenerationIntent
 	References  AdapterMediaReferences
-	Metadata    map[string]string
+	Metadata    map[string]any
 	CallbackURL string
 }
 
@@ -256,7 +256,7 @@ func (a ViduShortDramaV1Adapter) Create(ctx context.Context, req AdapterCreateRe
 	return createContentsGenerationTask(ctx, a.client, req.Channel, payload)
 }
 
-func mergeGenerationMetadata(payload map[string]any, metadata map[string]string) {
+func mergeGenerationMetadata(payload map[string]any, metadata map[string]any) {
 	if len(metadata) == 0 {
 		return
 	}

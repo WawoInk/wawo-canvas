@@ -19,7 +19,7 @@ type GenerationProfile struct {
 	Credits       Decimal                `json:"credits"`
 	Intents       []GenerationIntentKind `json:"intents"`
 	Capabilities  GenerationCapabilities `json:"capabilities"`
-	Metadata      map[string]string      `json:"-"`
+	Metadata      map[string]any         `json:"-"`
 }
 
 // GenerationSettingType identifies the validation shape of a scalar setting.

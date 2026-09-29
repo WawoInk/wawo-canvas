@@ -121,7 +121,7 @@ type GenerationProfileBinding struct {
 	LegacyCredits  *Decimal                 `json:"credits,omitempty"`
 	Enabled        bool                     `json:"enabled"`
 	LimitOverrides GenerationLimitOverrides `json:"limitOverrides"`
-	Metadata       map[string]string        `json:"metadata,omitempty"`
+	Metadata       map[string]any           `json:"metadata,omitempty"`
 }
 
 // PrivateSetting 私有配置。

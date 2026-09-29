@@ -194,7 +194,7 @@ func validGenerationSource(source string) bool {
 
 type storedGenerationCommand struct {
 	model.GenerationCommand
-	UpstreamMetadata map[string]string `json:"upstreamMetadata,omitempty"`
+	UpstreamMetadata map[string]any `json:"upstreamMetadata,omitempty"`
 }
 
 func generationCommandSummary(command model.GenerationCommand) model.GenerationCommandSummary {
@@ -573,7 +573,7 @@ func executeGeneration(ctx context.Context, task model.GenerationTask, profile m
 	_ = resolveGenerationTask(ctx, task, profile, ref, "poll")
 }
 
-func generationIntentFromTask(ctx context.Context, task model.GenerationTask) (model.GenerationIntent, AdapterMediaReferences, map[string]string, error) {
+func generationIntentFromTask(ctx context.Context, task model.GenerationTask) (model.GenerationIntent, AdapterMediaReferences, map[string]any, error) {
 	payload, err := repository.GetGenerationPayloadByTaskID(task.ID)
 	if err != nil {
 		return model.GenerationIntent{}, AdapterMediaReferences{}, nil, err
