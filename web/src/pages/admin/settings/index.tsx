@@ -958,6 +958,17 @@ export default function AdminSettingsPage() {
                                                 const modelOptions = (channelModelsByName[binding.channelName] || []).map((model) => ({ label: model, value: model }));
                                                 const profileOption = generationProfileOptions.find((option) => option.value === binding.profileId) || generationProfileOptions[0];
                                                 const billingRule = videoBillingRule(binding, profileOption.resolutionValues);
+                                                const updateResolutions = (values: string[]) => {
+                                                    if (!values.length) return false;
+                                                    const resolutions = [...new Set(values.map((value) => value.trim().toLowerCase()))];
+                                                    if (resolutions.some((value) => !/^[1-9]\d*p$/.test(value))) {
+                                                        message.error(t("admin.settings.generationProfiles.form.invalidResolution"));
+                                                        return false;
+                                                    }
+                                                    const resolutionOverride = resolutions.length === profileOption.resolutionValues.length && profileOption.resolutionValues.every((value) => resolutions.includes(value)) ? undefined : resolutions;
+                                                    updateGenerationProfile(index, { limitOverrides: { ...binding.limitOverrides, resolutionValues: resolutionOverride } });
+                                                    return true;
+                                                };
                                                 return (
                                                     <section key={`${binding.profileId}-${index}`} style={{ border: "1px solid var(--ant-color-border)", borderRadius: 6, padding: "12px 12px 4px" }}>
                                                         <Flex justify="space-between" align="center" gap={12} style={{ marginBottom: 4 }}>
@@ -1037,24 +1048,15 @@ export default function AdminSettingsPage() {
                                                                             </Col>
                                                                             <Col xs={24} md={12} xl={5}>
                                                                                 <Form.Item label={t("admin.settings.generationProfiles.form.resolutions")}>
-                                                                                    <Select
-                                                                                        mode="tags"
-                                                                                        value={billingRule.resolutions}
-                                                                                        placeholder={t("admin.settings.generationProfiles.form.resolutionPlaceholder")}
-                                                                                        options={[...new Set([...profileOption.resolutionValues, ...billingRule.resolutions])].map((value) => ({ label: value, value }))}
-                                                                                        onChange={(values) => {
-                                                                                            if (!values.length) return;
-                                                                                            const resolutions = [...new Set(values.map((value) => value.trim().toLowerCase()))];
-                                                                                            if (resolutions.some((value) => !/^[1-9]\d*p$/.test(value))) {
-                                                                                                message.error(t("admin.settings.generationProfiles.form.invalidResolution"));
-                                                                                                return;
-                                                                                            }
-                                                                                            const resolutionOverride = resolutions.length === profileOption.resolutionValues.length && profileOption.resolutionValues.every((value) => resolutions.includes(value)) ? undefined : resolutions;
-                                                                                            updateGenerationProfile(index, {
-                                                                                                limitOverrides: { ...binding.limitOverrides, resolutionValues: resolutionOverride },
-                                                                                            });
-                                                                                        }}
-                                                                                    />
+                                                                                    <Flex vertical gap={8}>
+                                                                                        <Select
+                                                                                            mode="multiple"
+                                                                                            value={billingRule.resolutions}
+                                                                                            options={[...new Set([...profileOption.resolutionValues, ...billingRule.resolutions])].map((value) => ({ label: value, value }))}
+                                                                                            onChange={updateResolutions}
+                                                                                        />
+                                                                                        <CustomResolutionInput onAdd={(value) => updateResolutions([...billingRule.resolutions, value])} />
+                                                                                    </Flex>
                                                                                 </Form.Item>
                                                                             </Col>
                                                                             <Col span={24}>
@@ -1350,6 +1352,20 @@ export default function AdminSettingsPage() {
                 </Modal>
             </Flex>
         </main>
+    );
+}
+
+function CustomResolutionInput({ onAdd }: { onAdd: (value: string) => boolean }) {
+    const { t } = useTranslation();
+    const [value, setValue] = useState("");
+    const add = () => {
+        if (onAdd(value)) setValue("");
+    };
+    return (
+        <Space.Compact block>
+            <Input aria-label={t("admin.settings.generationProfiles.form.customResolution")} placeholder={t("admin.settings.generationProfiles.form.resolutionPlaceholder")} value={value} onChange={(event) => setValue(event.target.value)} onPressEnter={add} />
+            <Button onClick={add}>{t("admin.settings.generationProfiles.form.addResolution")}</Button>
+        </Space.Compact>
     );
 }
 

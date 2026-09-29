@@ -42,14 +42,13 @@ test("administrator can save 540p as a selectable video binding resolution", asy
         await act(async () => privateTab.click());
         await waitFor(() => !![...container.querySelectorAll(".ant-form-item")].find((item) => item.textContent?.includes("支持分辨率")));
         const resolutionField = required([...container.querySelectorAll<HTMLElement>(".ant-form-item")].find((item) => item.querySelector(".ant-select") && item.textContent?.includes("支持分辨率")));
-        const input = required(resolutionField.querySelector<HTMLInputElement>("input"));
+        const input = required(resolutionField.querySelector<HTMLInputElement>('input[aria-label="自定义分辨率"]'));
         await act(async () => {
-            input.focus();
             Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "540p");
             input.dispatchEvent(new InputEvent("input", { bubbles: true, data: "540p", inputType: "insertText" }));
         });
-        const customOption = required([...document.querySelectorAll<HTMLElement>(".ant-select-item-option")].find((item) => item.textContent === "540p"));
-        await act(async () => customOption.click());
+        const addButton = required([...resolutionField.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "添加分辨率"));
+        await act(async () => addButton.click());
         const saveButton = required([...container.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("保存设置")));
         await act(async () => saveButton.click());
         await waitFor(() => !!saved);
