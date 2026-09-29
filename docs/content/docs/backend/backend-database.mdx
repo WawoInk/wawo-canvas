@@ -141,6 +141,8 @@ Memory 表只保存已确认记录；候选 Memory 和运行时 Context 不属�
 
 `settings` 表中的 `key = VolcAssetConfig` 保存完整的管理员资产网关 JSON。该行只允许管理员 API 读写；返回前清除 `secret_key` 与 `access_token`，数据库中仍保留真实凭据。火山远端素材本体只保存在上游，平台不把 Action 列表写入个人 `assets`、Canvas 同步或 WebDAV。
 
+`settings` 表的 `private` JSON 中，`generationProfiles[].metadata` 保存视频能力绑定的 Key/Value；Value 支持字符串、整数和布尔值，未选择类型时为字符串。创建任务时将这些 JSON 类型原样快照并传给上游。
+
 ## generation_tasks
 
 `generation_tasks` 是第一方生成、兼容生成历史和后台恢复共用的任务事实表。第一方任务使用以下生命周期：

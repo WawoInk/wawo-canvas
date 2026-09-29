@@ -2011,7 +2011,8 @@
                     "billingMode": "计费方式",
                     "metadata": "Metadata 配置",
                     "metadataKey": "Key",
-                    "metadataValue": "Value"
+                    "metadataValue": "Value",
+                    "metadataType": "Value 类型"
                 }
             },
             "modelSelector": {

@@ -501,7 +501,7 @@ func TestResolveGenerationProfilesRoutesSoraBinding(t *testing.T) {
 		GenerationProfiles: []model.GenerationProfileBinding{
 			{
 				ID: "sora-pro", ProfileID: "sora-2", UpstreamModel: "sora-2-pro", ChannelName: "openai", Enabled: true,
-				Metadata: map[string]string{"action": "videogen"},
+				Metadata: map[string]any{"action": "videogen"},
 			},
 		},
 	})

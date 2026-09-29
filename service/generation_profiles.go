@@ -197,6 +197,20 @@ func normalizeGenerationSettings(profile model.GenerationProfile, provided model
 }
 
 func ValidateGenerationBindings(settings model.Settings) error {
+	for _, binding := range settings.Private.GenerationProfiles {
+		for key, value := range binding.Metadata {
+			valid := false
+			switch number := value.(type) {
+			case string, bool, int, int64:
+				valid = true
+			case float64:
+				valid = math.Trunc(number) == number && math.Abs(number) <= 9007199254740991
+			}
+			if !valid {
+				return safeMessageError{message: fmt.Sprintf("Metadata %s 仅支持 string、int、boolean", key)}
+			}
+		}
+	}
 	_, err := resolveGenerationProfiles(GenerationProfiles(), normalizePrivateSetting(settings.Private), settings.Public)
 	return err
 }

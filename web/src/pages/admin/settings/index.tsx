@@ -383,7 +383,7 @@ export default function AdminSettingsPage() {
         updateGenerationProfiles(profiles);
     }
 
-    function updateGenerationProfileMetadata(profileIndex: number, metadataIndex: number, patch: Partial<{ key: string; value: string }>) {
+    function updateGenerationProfileMetadata(profileIndex: number, metadataIndex: number, patch: Partial<{ key: string; value: string | number | boolean }>) {
         const entries = Object.entries(currentGenerationProfiles(form)[profileIndex]?.metadata || {});
         const current = entries[metadataIndex];
         if (!current) return;
@@ -1068,12 +1068,36 @@ export default function AdminSettingsPage() {
                                                                                                     placeholder={t("admin.settings.generationProfiles.form.metadataKey")}
                                                                                                     onChange={(event) => updateGenerationProfileMetadata(index, metadataIndex, { key: event.target.value })}
                                                                                                 />
-                                                                                                <Input
-                                                                                                    value={value}
-                                                                                                    aria-label={t("admin.settings.generationProfiles.form.metadataValue")}
-                                                                                                    placeholder={t("admin.settings.generationProfiles.form.metadataValue")}
-                                                                                                    onChange={(event) => updateGenerationProfileMetadata(index, metadataIndex, { value: event.target.value })}
+                                                                                                <Select
+                                                                                                    aria-label={t("admin.settings.generationProfiles.form.metadataType")}
+                                                                                                    style={{ width: 110 }}
+                                                                                                    value={typeof value === "number" ? "int" : typeof value === "boolean" ? "boolean" : "string"}
+                                                                                                    options={["string", "int", "boolean"].map((type) => ({ label: type, value: type }))}
+                                                                                                    onChange={(type) => updateGenerationProfileMetadata(index, metadataIndex, { value: type === "int" ? (Number.isSafeInteger(Number(value)) ? Number(value) : 0) : type === "boolean" ? value === true || value === "true" : String(value) })}
                                                                                                 />
+                                                                                                {typeof value === "number" ? (
+                                                                                                    <InputNumber
+                                                                                                        value={value}
+                                                                                                        precision={0}
+                                                                                                        aria-label={t("admin.settings.generationProfiles.form.metadataValue")}
+                                                                                                        placeholder={t("admin.settings.generationProfiles.form.metadataValue")}
+                                                                                                        onChange={(next) => updateGenerationProfileMetadata(index, metadataIndex, { value: next ?? 0 })}
+                                                                                                    />
+                                                                                                ) : typeof value === "boolean" ? (
+                                                                                                    <Select
+                                                                                                        value={String(value)}
+                                                                                                        aria-label={t("admin.settings.generationProfiles.form.metadataValue")}
+                                                                                                        options={[{ label: "true", value: "true" }, { label: "false", value: "false" }]}
+                                                                                                        onChange={(next) => updateGenerationProfileMetadata(index, metadataIndex, { value: next === "true" })}
+                                                                                                    />
+                                                                                                ) : (
+                                                                                                    <Input
+                                                                                                        value={value}
+                                                                                                        aria-label={t("admin.settings.generationProfiles.form.metadataValue")}
+                                                                                                        placeholder={t("admin.settings.generationProfiles.form.metadataValue")}
+                                                                                                        onChange={(event) => updateGenerationProfileMetadata(index, metadataIndex, { value: event.target.value })}
+                                                                                                    />
+                                                                                                )}
                                                                                                 <Button
                                                                                                     danger
                                                                                                     type="text"
@@ -1409,7 +1433,7 @@ function normalizePrivateSetting(setting: Partial<AdminSettings["private"]> = {}
                 limitOverrides: binding.limitOverrides || {},
                 metadata: Object.fromEntries(
                     Object.entries(binding.metadata || {})
-                        .map(([key, value]) => [String(key).trim(), String(value || "")])
+                        .map(([key, value]) => [String(key).trim(), typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? value : ""])
                         .filter(([key]) => key),
                 ),
             })) ?? null,

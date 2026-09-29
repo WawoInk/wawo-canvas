@@ -2011,7 +2011,8 @@
                     "billingMode": "Billing mode",
                     "metadata": "Metadata",
                     "metadataKey": "Key",
-                    "metadataValue": "Value"
+                    "metadataValue": "Value",
+                    "metadataType": "Value type"
                 }
             },
             "modelSelector": {
