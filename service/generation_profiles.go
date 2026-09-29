@@ -5,6 +5,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/basketikun/infinite-canvas/model"
@@ -262,13 +263,10 @@ func resolveGenerationProfiles(templates []model.GenerationProfile, private mode
 		}
 		if values := binding.LimitOverrides.ResolutionValues; values != nil {
 			definition, ok := profile.Capabilities.Settings["resolution"]
-			allowed := map[string]bool{}
-			for _, value := range definition.Values {
-				allowed[value] = true
-			}
 			seenValues := map[string]bool{}
 			for _, value := range values {
-				if !allowed[value] || seenValues[value] {
+				n, err := strconv.Atoi(strings.TrimSuffix(value, "p"))
+				if err != nil || n < 1 || strconv.Itoa(n)+"p" != value || seenValues[value] {
 					ok = false
 				}
 				seenValues[value] = true

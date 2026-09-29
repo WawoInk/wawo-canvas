@@ -51,6 +51,26 @@ test("video workbench compiles ordinary video duration from the configured Profi
     );
 });
 
+test("video workbench submits a custom resolution published by its Profile", () => {
+    const profile = {
+        ...standardProfile,
+        capabilities: {
+            ...standardProfile.capabilities,
+            settings: { ...standardProfile.capabilities.settings, resolution: { type: "enum", values: ["720p", "540p"], default: "720p" } },
+        },
+    };
+    const command = buildVideoWorkbenchGenerationCommand({
+        clientRequestId: "custom-resolution",
+        profile,
+        config: { ...defaultConfig, channelMode: "remote", model: profile.id, videoModel: profile.id, vquality: "540p" },
+        prompt: "make a launch film",
+        references: [],
+        videoReferences: [],
+        audioReferences: [],
+    });
+    assert.equal(command.intent.settings.resolution, "540p");
+});
+
 test("remote video workbench submits its configured Profile to the first-party route", async () => {
     const previousAdapter = axios.defaults.adapter;
     const requests = [];

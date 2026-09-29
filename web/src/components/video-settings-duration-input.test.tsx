@@ -89,6 +89,56 @@ test("video duration slider retains two-digit selections within the Profile maxi
     }
 });
 
+test("video settings offers a custom resolution from the published Profile", async () => {
+    const previousRequest = axios.request;
+    const previousUserState = useUserStore.getState();
+    axios.request = (async () => ({
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config: {},
+        data: { code: 0, msg: "", data: [{
+            id: "custom-video",
+            intents: ["video.generate"],
+            capabilities: { settings: {
+                aspectRatio: { type: "enum", values: ["16:9"], default: "16:9" },
+                resolution: { type: "enum", values: ["720p", "540p"], default: "720p" },
+                durationSeconds: { type: "duration", min: 4, max: 15, default: 5 },
+            } },
+        }] },
+    })) as typeof axios.request;
+    useUserStore.setState({ ...previousUserState, token: "resolution-input-token", isReady: true, isLoading: false });
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    let selectedResolution = "720p";
+
+    function Harness() {
+        const [config, setConfig] = useState({ ...defaultConfig, channelMode: "remote" as const, model: "custom-video", videoModel: "custom-video", vquality: "720p" });
+        selectedResolution = config.vquality;
+        return createElement(ConfigProvider, null, createElement(VideoSettingsPanel, {
+            config,
+            theme: canvasThemes.light,
+            onConfigChange: (key, value) => setConfig((current) => ({ ...current, [key]: value })),
+        }));
+    }
+
+    try {
+        await act(async () => root.render(createElement(Harness)));
+        await waitFor(() => [...container.querySelectorAll("button")].some((button) => button.textContent === "540p"));
+        const option = required([...container.querySelectorAll("button")].find((button) => button.textContent === "540p"));
+        await act(async () => option.click());
+        assert.equal(selectedResolution, "540p");
+        assert.equal(option.getAttribute("aria-pressed"), "true");
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        axios.request = previousRequest;
+        useUserStore.setState(previousUserState);
+    }
+});
+
 function setInputValue(input: HTMLInputElement, value: string) {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
     input.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
@@ -103,7 +153,7 @@ async function waitFor(check: () => boolean, timeoutMs = 2000) {
     }
 }
 
-function required<T>(value: T | null): T {
+function required<T>(value: T | null | undefined): T {
     assert.ok(value);
     return value;
 }

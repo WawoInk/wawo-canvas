@@ -2006,6 +2006,8 @@
                     "maxDuration": "Maximum duration",
                     "durationPlaceholder": "{{value}} sec",
                     "resolutions": "Supported resolutions",
+                    "resolutionPlaceholder": "Select or enter a resolution, e.g. 540p",
+                    "invalidResolution": "Enter a positive integer followed by p, e.g. 540p",
                     "billingMode": "Billing mode",
                     "metadata": "Metadata",
                     "metadataKey": "Key",

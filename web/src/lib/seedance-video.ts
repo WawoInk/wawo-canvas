@@ -65,7 +65,7 @@ export function isSeedanceFastModel(model: string) {
 export function normalizeSeedanceResolution(value: string, model = "") {
     const normalized = normalizeResolutionToken(value);
     if (isSeedanceFastModel(model) && normalized === "1080p") return "720p";
-    return seedanceResolutionOptions.some((item) => item.value === normalized) ? normalized : "720p";
+    return /^[1-9]\d*p$/.test(normalized) ? normalized : "720p";
 }
 
 export function normalizeResolutionToken(value: string) {
@@ -105,7 +105,7 @@ export function seedancePixelLabel(resolution: string, ratio: string) {
     const normalizedResolution = normalizeSeedanceResolution(resolution) as keyof typeof seedancePixels;
     const normalizedRatio = normalizeSeedanceRatio(ratio) as keyof (typeof seedancePixels)[typeof normalizedResolution] | "adaptive";
     if (normalizedRatio === "adaptive") return i18n.t("videoSettings.autoMatch");
-    return seedancePixels[normalizedResolution][normalizedRatio] || "";
+    return seedancePixels[normalizedResolution]?.[normalizedRatio] || "";
 }
 
 export function seedanceRatioLabel(value: string) {
