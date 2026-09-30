@@ -961,7 +961,7 @@ export default function AdminSettingsPage() {
                                                 const updateResolutions = (values: string[]) => {
                                                     if (!values.length) return false;
                                                     const resolutions = [...new Set(values.map((value) => value.trim().toLowerCase()))];
-                                                    if (resolutions.some((value) => !/^[1-9]\d*p$/.test(value))) {
+                                                    if (resolutions.some((value) => !/^[1-9]\d*[pk]$/.test(value))) {
                                                         message.error(t("admin.settings.generationProfiles.form.invalidResolution"));
                                                         return false;
                                                     }

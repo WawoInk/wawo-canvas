@@ -265,8 +265,12 @@ func resolveGenerationProfiles(templates []model.GenerationProfile, private mode
 			definition, ok := profile.Capabilities.Settings["resolution"]
 			seenValues := map[string]bool{}
 			for _, value := range values {
-				n, err := strconv.Atoi(strings.TrimSuffix(value, "p"))
-				if err != nil || n < 1 || strconv.Itoa(n)+"p" != value || seenValues[value] {
+				unit := "p"
+				if strings.HasSuffix(value, "k") {
+					unit = "k"
+				}
+				n, err := strconv.Atoi(strings.TrimSuffix(value, unit))
+				if err != nil || n < 1 || strconv.Itoa(n)+unit != value || seenValues[value] {
 					ok = false
 				}
 				seenValues[value] = true
