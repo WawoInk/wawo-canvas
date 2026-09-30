@@ -59,7 +59,7 @@ async function uploadBlobServer(blob: Blob, fileType: FileType): Promise<UploadR
     assertCurrentSession(session);
     const form = new FormData();
     form.set("fileType", fileType);
-    form.set("file", blob, `generated-${Date.now()}.${blob.type.split("/")[1] || "png"}`);
+    form.set("file", blob, blob instanceof File ? blob.name : `generated-${Date.now()}.${blob.type.split("/")[1] || "png"}`);
     const resp = await fetch("/api/v1/files", { method: "POST", body: form, headers: { Authorization: `Bearer ${session.token}` } });
     const json = await resp.json();
     assertCurrentSession(session);
