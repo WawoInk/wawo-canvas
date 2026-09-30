@@ -13,7 +13,7 @@ const { default: i18n } = await import("@/i18n");
 const { useUserStore } = await import("@/stores/use-user-store");
 const { default: AdminSettingsPage } = await import("./index");
 
-test("administrator can save 540p as a selectable video binding resolution", async () => {
+test("administrator can save custom p and k video binding resolutions", async () => {
     await i18n.changeLanguage("zh-CN");
     const previousRequest = axios.request;
     const previousUserState = useUserStore.getState();
@@ -43,17 +43,19 @@ test("administrator can save 540p as a selectable video binding resolution", asy
         await waitFor(() => !![...container.querySelectorAll(".ant-form-item")].find((item) => item.textContent?.includes("支持分辨率")));
         const resolutionField = required([...container.querySelectorAll<HTMLElement>(".ant-form-item")].find((item) => item.querySelector(".ant-select") && item.textContent?.includes("支持分辨率")));
         const input = required(resolutionField.querySelector<HTMLInputElement>('input[aria-label="自定义分辨率"]'));
-        await act(async () => {
-            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "540p");
-            input.dispatchEvent(new InputEvent("input", { bubbles: true, data: "540p", inputType: "insertText" }));
-        });
         const addButton = required([...resolutionField.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "添加分辨率"));
-        await act(async () => addButton.click());
+        for (const resolution of ["540p", "2k", "4k"]) {
+            await act(async () => {
+                Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, resolution);
+                input.dispatchEvent(new InputEvent("input", { bubbles: true, data: resolution, inputType: "insertText" }));
+            });
+            await act(async () => addButton.click());
+        }
         const saveButton = required([...container.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("保存设置")));
         await act(async () => saveButton.click());
         await waitFor(() => !!saved);
-        assert.deepEqual(saved.private.generationProfiles[0].limitOverrides.resolutionValues, ["480p", "720p", "1080p", "540p"]);
-        assert.match(resolutionField.textContent || "", /540p/);
+        assert.deepEqual(saved.private.generationProfiles[0].limitOverrides.resolutionValues, ["480p", "720p", "1080p", "540p", "2k", "4k"]);
+        assert.match(resolutionField.textContent || "", /540p.*2k.*4k/);
     } finally {
         await act(async () => root.unmount());
         container.remove();

@@ -678,8 +678,8 @@ func TestResolveGenerationProfilesAppliesResolutionLimits(t *testing.T) {
 func TestResolveGenerationProfilesRejectsUnsafeResolutionLimits(t *testing.T) {
 	for name, values := range map[string][]string{
 		"empty":     {},
-		"unknown":   {"4k"},
-		"mixed":     {"720p", "4k"},
+		"unknown":   {"4m"},
+		"mixed":     {"720p", "4m"},
 		"duplicate": {"720p", "720p"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -702,19 +702,21 @@ func TestResolveGenerationProfilesPublishesCustomResolution(t *testing.T) {
 		Channels: []model.ModelChannel{{Name: "video", BaseURL: "https://example.com", APIKey: "secret", Enabled: true, Models: []string{"custom"}}},
 		GenerationProfiles: []model.GenerationProfileBinding{{
 			ID: "custom", ProfileID: "seedance-1-5-pro", UpstreamModel: "custom", ChannelName: "video", Enabled: true,
-			LimitOverrides: model.GenerationLimitOverrides{ResolutionValues: []string{"480p", "720p", "1080p", "540p"}},
+			LimitOverrides: model.GenerationLimitOverrides{ResolutionValues: []string{"480p", "720p", "1080p", "540p", "2k", "4k"}},
 		}},
 	})
 	profiles, err := resolveGenerationProfiles(GenerationProfiles(), private, model.PublicSetting{})
 	if err != nil {
 		t.Fatalf("resolveGenerationProfiles: %v", err)
 	}
-	if got := profiles[0].Capabilities.Settings["resolution"].Values; !reflect.DeepEqual(got, []string{"480p", "720p", "1080p", "540p"}) {
+	if got := profiles[0].Capabilities.Settings["resolution"].Values; !reflect.DeepEqual(got, []string{"480p", "720p", "1080p", "540p", "2k", "4k"}) {
 		t.Fatalf("published resolutions = %v", got)
 	}
-	settings, err := normalizeGenerationSettings(profiles[0], model.ScalarSettings{"resolution": "540p"})
-	if err != nil || settings["resolution"] != "540p" {
-		t.Fatalf("submitted resolution = %v, err = %v", settings["resolution"], err)
+	for _, resolution := range []string{"540p", "2k", "4k"} {
+		settings, err := normalizeGenerationSettings(profiles[0], model.ScalarSettings{"resolution": resolution})
+		if err != nil || settings["resolution"] != resolution {
+			t.Fatalf("submitted resolution = %v, err = %v", settings["resolution"], err)
+		}
 	}
 }
 

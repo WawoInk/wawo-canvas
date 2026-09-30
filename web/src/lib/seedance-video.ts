@@ -65,13 +65,15 @@ export function isSeedanceFastModel(model: string) {
 export function normalizeSeedanceResolution(value: string, model = "") {
     const normalized = normalizeResolutionToken(value);
     if (isSeedanceFastModel(model) && normalized === "1080p") return "720p";
-    return /^[1-9]\d*p$/.test(normalized) ? normalized : "720p";
+    return /^[1-9]\d*[pk]$/.test(normalized) ? normalized : "720p";
 }
 
 export function normalizeResolutionToken(value: string) {
-    if (value === "low") return "480p";
-    if (value === "auto" || value === "high" || value === "medium") return "720p";
-    const resolution = String(value || "").replace(/p$/i, "") || "720";
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === "low") return "480p";
+    if (normalized === "auto" || normalized === "high" || normalized === "medium") return "720p";
+    if (/^[1-9]\d*k$/.test(normalized)) return normalized;
+    const resolution = normalized.replace(/p$/, "") || "720";
     return `${resolution}p`;
 }
 
