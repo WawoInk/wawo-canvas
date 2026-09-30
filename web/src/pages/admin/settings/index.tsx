@@ -1075,7 +1075,18 @@ export default function AdminSettingsPage() {
                                                                                                     style={{ width: 110 }}
                                                                                                     value={typeof value === "number" ? "int" : typeof value === "boolean" ? "boolean" : "string"}
                                                                                                     options={["string", "int", "boolean"].map((type) => ({ label: type, value: type }))}
-                                                                                                    onChange={(type) => updateGenerationProfileMetadata(index, metadataIndex, { value: type === "int" ? (Number.isSafeInteger(Number(value)) ? Number(value) : 0) : type === "boolean" ? value === true || value === "true" : String(value) })}
+                                                                                                    onChange={(type) =>
+                                                                                                        updateGenerationProfileMetadata(index, metadataIndex, {
+                                                                                                            value:
+                                                                                                                type === "int"
+                                                                                                                    ? Number.isSafeInteger(Number(value))
+                                                                                                                        ? Number(value)
+                                                                                                                        : 0
+                                                                                                                    : type === "boolean"
+                                                                                                                      ? value === true || value === "true"
+                                                                                                                      : String(value),
+                                                                                                        })
+                                                                                                    }
                                                                                                 />
                                                                                                 {typeof value === "number" ? (
                                                                                                     <InputNumber
@@ -1089,7 +1100,10 @@ export default function AdminSettingsPage() {
                                                                                                     <Select
                                                                                                         value={String(value)}
                                                                                                         aria-label={t("admin.settings.generationProfiles.form.metadataValue")}
-                                                                                                        options={[{ label: "true", value: "true" }, { label: "false", value: "false" }]}
+                                                                                                        options={[
+                                                                                                            { label: "true", value: "true" },
+                                                                                                            { label: "false", value: "false" },
+                                                                                                        ]}
                                                                                                         onChange={(next) => updateGenerationProfileMetadata(index, metadataIndex, { value: next === "true" })}
                                                                                                     />
                                                                                                 ) : (
@@ -1387,7 +1401,13 @@ function CustomResolutionInput({ onAdd }: { onAdd: (value: string) => boolean })
     };
     return (
         <Space.Compact block>
-            <Input aria-label={t("admin.settings.generationProfiles.form.customResolution")} placeholder={t("admin.settings.generationProfiles.form.resolutionPlaceholder")} value={value} onChange={(event) => setValue(event.target.value)} onPressEnter={add} />
+            <Input
+                aria-label={t("admin.settings.generationProfiles.form.customResolution")}
+                placeholder={t("admin.settings.generationProfiles.form.resolutionPlaceholder")}
+                value={value}
+                onChange={(event) => setValue(event.target.value)}
+                onPressEnter={add}
+            />
             <Button onClick={add}>{t("admin.settings.generationProfiles.form.addResolution")}</Button>
         </Space.Compact>
     );

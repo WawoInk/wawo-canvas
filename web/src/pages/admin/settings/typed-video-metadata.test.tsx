@@ -61,7 +61,10 @@ test("administrator can save and reload typed video binding metadata", async () 
         await act(async () => root.unmount());
         root = createRoot(container);
         await render();
-        assert.deepEqual([...container.querySelectorAll<HTMLElement>('[aria-label="Value 类型"]')].map((input) => input.parentElement?.textContent), ["int", "boolean", "string", "int"]);
+        assert.deepEqual(
+            [...container.querySelectorAll<HTMLElement>('[aria-label="Value 类型"]')].map((input) => input.parentElement?.textContent),
+            ["int", "boolean", "string", "int"],
+        );
         assert.equal(required(container.querySelector<HTMLInputElement>('input[value="legacy"]')).value, "legacy");
         const addButton = required([...container.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "新增 Metadata"));
         await act(async () => addButton.click());

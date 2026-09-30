@@ -69,7 +69,9 @@ export function normalizeSeedanceResolution(value: string, model = "") {
 }
 
 export function normalizeResolutionToken(value: string) {
-    const normalized = String(value || "").trim().toLowerCase();
+    const normalized = String(value || "")
+        .trim()
+        .toLowerCase();
     if (normalized === "low") return "480p";
     if (normalized === "auto" || normalized === "high" || normalized === "medium") return "720p";
     if (/^[1-9]\d*k$/.test(normalized)) return normalized;
