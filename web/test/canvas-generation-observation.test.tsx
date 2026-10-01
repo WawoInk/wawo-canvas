@@ -237,6 +237,109 @@ class TransformImage {
     }
 }
 
+async function startLocalImageImport(fail = false, replace = false) {
+    const originalImage = globalThis.Image;
+    globalThis.Image = TransformImage as any;
+    await setup("image");
+    let finishUpload!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        finishUpload = resolve;
+    });
+    let uploading = false;
+    const preparedFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === "/api/v1/files" && init?.method === "POST") {
+            uploading = true;
+            await gate;
+            return Response.json(fail ? { code: 1, msg: "本地文件上传失败" } : { code: 0, data: { id: "imported-file", url: "https://fixture.example/imported.png", bytes: 5, mimeType: "image/png" } });
+        }
+        return preparedFetch(input, init);
+    }) as typeof fetch;
+    if (replace) {
+        await act(async () => host.querySelector('[data-node-id="reference"]')!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+        await act(async () => host.querySelector<HTMLButtonElement>('[data-toolbar-action="replace"]')!.click());
+        await act(async () => document.querySelector<HTMLButtonElement>(".ant-modal .ant-btn-primary")!.click());
+    }
+    const input = host.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, "files", { configurable: true, value: [new File(["image"], "import.png", { type: "image/png" })] });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    await settleUntil(() => uploading);
+    expect(uploading).toBe(true);
+    return {
+        finish: async () => {
+            await act(async () => finishUpload());
+        },
+        cleanup: async () => {
+            await act(async () => finishUpload());
+            globalThis.Image = originalImage;
+        },
+    };
+}
+
+test("switching canvas during a local file upload discards the late imported node", async () => {
+    const upload = await startLocalImageImport();
+    try {
+        await act(async () => host.querySelector<HTMLButtonElement>("[data-test-switch-canvas]")!.click());
+        await settleUntil(() => host.querySelectorAll("[data-node-id]").length === 0);
+        await upload.finish();
+        expect(host.querySelectorAll("[data-node-id]")).toHaveLength(0);
+        expect(savedProjects.some((saved) => saved.nodes.some((node) => node.metadata?.fileId === "imported-file"))).toBe(false);
+    } finally {
+        await upload.cleanup();
+    }
+});
+
+test.each([false, true])("local image upload persists the platform file (replace=%s)", async (replace) => {
+    const upload = await startLocalImageImport(false, replace);
+    try {
+        await upload.finish();
+        await settleUntil(() => savedProjects.some((saved) => saved.nodes.some((node) => node.metadata?.fileId === "imported-file")));
+        expect(host.querySelectorAll("[data-node-id]")).toHaveLength(replace ? 2 : 3);
+        expect(savedProjects.some((saved) => saved.nodes.some((node) => node.metadata?.fileId === "imported-file" && (!replace || node.id === "reference")))).toBe(true);
+    } finally {
+        await upload.cleanup();
+    }
+});
+
+test.each([false, true])("a remote snapshot supersedes a pending local upload (replace=%s)", async (replace) => {
+    const upload = await startLocalImageImport(false, replace);
+    try {
+        remoteProject = { ...structuredClone(project), revision: 2, remoteRevision: 2 };
+        await act(async () => {
+            await useCanvasStore.getState().fetchProjectFromBackend("project");
+        });
+        await upload.finish();
+        expect(host.querySelectorAll("[data-node-id]")).toHaveLength(2);
+        expect(savedProjects.some((saved) => saved.nodes.some((node) => node.metadata?.fileId === "imported-file"))).toBe(false);
+    } finally {
+        await upload.cleanup();
+    }
+});
+
+test.each([false, true])("failed local upload shows its error without changing nodes (replace=%s)", async (replace) => {
+    const upload = await startLocalImageImport(true, replace);
+    try {
+        await upload.finish();
+        await settleUntil(() => document.body.textContent?.includes("本地文件上传失败") === true);
+        expect(document.body.textContent).toContain("本地文件上传失败");
+        expect(host.querySelectorAll("[data-node-id]")).toHaveLength(2);
+    } finally {
+        await upload.cleanup();
+    }
+});
+
+test("a changed account session discards a pending local upload without an unhandled error", async () => {
+    const upload = await startLocalImageImport();
+    try {
+        await act(async () => useUserStore.setState({ token: "replacement-token" }));
+        await upload.finish();
+        expect(host.querySelectorAll("[data-node-id]")).toHaveLength(2);
+        expect(savedProjects.some((saved) => saved.nodes.some((node) => node.metadata?.fileId === "imported-file"))).toBe(false);
+    } finally {
+        await upload.cleanup();
+    }
+});
+
 async function confirmImageTransform(kind: "crop" | "upscale", fail = false) {
     const originalImage = globalThis.Image;
     const originalContext = HTMLCanvasElement.prototype.getContext;

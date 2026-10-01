@@ -1607,69 +1607,100 @@ function InfiniteCanvasPage() {
         };
     }, [finishNodeDrag, handleGlobalMouseMove, handleGlobalMouseUp, handleGlobalPointerMove]);
 
-    const createImageFileNode = useCallback(async (file: File, position: Position) => {
-        const image = await uploadBlob(file, "images");
-        const size = fitNodeSize(image.width, image.height);
-        const id = `image-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        const newNode: CanvasNodeData = {
-            id,
-            createdAt: new Date().toISOString(),
-            type: CanvasNodeType.Image,
-            title: file.name,
-            position: { x: position.x - size.width / 2, y: position.y - size.height / 2 },
-            width: size.width,
-            height: size.height,
-            metadata: clearVolcengineMaterialMetadata(imageMetadata(image)),
-        };
+    const uploadCanvasFile = useCallback(
+        async (file: File, fileType: Parameters<typeof uploadBlob>[1]) => {
+            const isActive = () => {
+                const auth = useUserStore.getState();
+                return Boolean(
+                    containerRef.current && editorBinding && projectIdRef.current === projectId && matchesCanvasReplicaBinding(useCanvasStore.getState().openProject(projectId), editorBinding, { token: auth.token, userId: auth.user?.id || "" }),
+                );
+            };
+            if (!isActive()) return;
+            try {
+                const uploaded = await uploadBlob(file, fileType);
+                return isActive() ? uploaded : undefined;
+            } catch (error) {
+                if (isActive()) message.error(error instanceof Error ? error.message : t("errors.upload.failed"));
+            }
+        },
+        [editorBinding, projectId, message, t],
+    );
 
-        setNodes((prev) => [...prev, newNode]);
-        setSelectedNodeIds(new Set([id]));
-        setSelectedConnectionId(null);
-        setDialogNodeId(id);
-    }, []);
-
-    const createVideoFileNode = useCallback(async (file: File, position: Position) => {
-        const video = await uploadBlob(file, "videos");
-        const size = fitNodeSize(video.width || 1280, video.height || 720, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
-        const id = `video-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        setNodes((prev) => [
-            ...prev,
-            {
+    const createImageFileNode = useCallback(
+        async (file: File, position: Position) => {
+            const image = await uploadCanvasFile(file, "images");
+            if (!image) return;
+            const size = fitNodeSize(image.width, image.height);
+            const id = `image-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+            const newNode: CanvasNodeData = {
                 id,
                 createdAt: new Date().toISOString(),
-                type: CanvasNodeType.Video,
+                type: CanvasNodeType.Image,
                 title: file.name,
                 position: { x: position.x - size.width / 2, y: position.y - size.height / 2 },
                 width: size.width,
                 height: size.height,
-                metadata: clearVolcengineMaterialMetadata(videoMetadata(video)),
-            },
-        ]);
-        setSelectedNodeIds(new Set([id]));
-        setSelectedConnectionId(null);
-        setDialogNodeId(id);
-    }, []);
+                metadata: clearVolcengineMaterialMetadata(imageMetadata(image)),
+            };
 
-    const createAudioFileNode = useCallback(async (file: File, position: Position) => {
-        const audio = await uploadBlob(file, "audios");
-        const spec = NODE_DEFAULT_SIZE[CanvasNodeType.Audio];
-        const id = `audio-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        setNodes((prev) => [
-            ...prev,
-            {
-                id,
-                createdAt: new Date().toISOString(),
-                type: CanvasNodeType.Audio,
-                title: file.name,
-                position: { x: position.x - spec.width / 2, y: position.y - spec.height / 2 },
-                width: spec.width,
-                height: spec.height,
-                metadata: clearVolcengineMaterialMetadata(audioMetadata(audio)),
-            },
-        ]);
-        setSelectedNodeIds(new Set([id]));
-        setSelectedConnectionId(null);
-    }, []);
+            setNodes((prev) => [...prev, newNode]);
+            setSelectedNodeIds(new Set([id]));
+            setSelectedConnectionId(null);
+            setDialogNodeId(id);
+        },
+        [uploadCanvasFile],
+    );
+
+    const createVideoFileNode = useCallback(
+        async (file: File, position: Position) => {
+            const video = await uploadCanvasFile(file, "videos");
+            if (!video) return;
+            const size = fitNodeSize(video.width || 1280, video.height || 720, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
+            const id = `video-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+            setNodes((prev) => [
+                ...prev,
+                {
+                    id,
+                    createdAt: new Date().toISOString(),
+                    type: CanvasNodeType.Video,
+                    title: file.name,
+                    position: { x: position.x - size.width / 2, y: position.y - size.height / 2 },
+                    width: size.width,
+                    height: size.height,
+                    metadata: clearVolcengineMaterialMetadata(videoMetadata(video)),
+                },
+            ]);
+            setSelectedNodeIds(new Set([id]));
+            setSelectedConnectionId(null);
+            setDialogNodeId(id);
+        },
+        [uploadCanvasFile],
+    );
+
+    const createAudioFileNode = useCallback(
+        async (file: File, position: Position) => {
+            const audio = await uploadCanvasFile(file, "audios");
+            if (!audio) return;
+            const spec = NODE_DEFAULT_SIZE[CanvasNodeType.Audio];
+            const id = `audio-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+            setNodes((prev) => [
+                ...prev,
+                {
+                    id,
+                    createdAt: new Date().toISOString(),
+                    type: CanvasNodeType.Audio,
+                    title: file.name,
+                    position: { x: position.x - spec.width / 2, y: position.y - spec.height / 2 },
+                    width: spec.width,
+                    height: spec.height,
+                    metadata: clearVolcengineMaterialMetadata(audioMetadata(audio)),
+                },
+            ]);
+            setSelectedNodeIds(new Set([id]));
+            setSelectedConnectionId(null);
+        },
+        [uploadCanvasFile],
+    );
 
     const createTextNodeFromClipboard = useCallback(
         (text: string) => {
@@ -2461,9 +2492,12 @@ function InfiniteCanvasPage() {
             const target = uploadTargetRef.current;
             if (!file || (!file.type.startsWith("image/") && !file.type.startsWith("video/") && !isAudioFile(file))) return;
 
+            uploadTargetRef.current = null;
+            event.target.value = "";
             if (target?.nodeId) {
                 if (isAudioFile(file)) {
-                    const audio = await uploadBlob(file, "audios");
+                    const audio = await uploadCanvasFile(file, "audios");
+                    if (!audio) return;
                     const spec = NODE_DEFAULT_SIZE[CanvasNodeType.Audio];
                     setNodes((prev) =>
                         prev.map((node) =>
@@ -2482,12 +2516,11 @@ function InfiniteCanvasPage() {
                     );
                     setSelectedNodeIds(new Set([target.nodeId]));
                     setSelectedConnectionId(null);
-                    uploadTargetRef.current = null;
-                    event.target.value = "";
                     return;
                 }
                 if (file.type.startsWith("video/")) {
-                    const video = await uploadBlob(file, "videos");
+                    const video = await uploadCanvasFile(file, "videos");
+                    if (!video) return;
                     const nextSize = fitNodeSize(video.width || 1280, video.height || 720, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
                     setNodes((prev) =>
                         prev.map((node) =>
@@ -2507,11 +2540,10 @@ function InfiniteCanvasPage() {
                     setSelectedNodeIds(new Set([target.nodeId]));
                     setSelectedConnectionId(null);
                     setDialogNodeId(target.nodeId);
-                    uploadTargetRef.current = null;
-                    event.target.value = "";
                     return;
                 }
-                const image = await uploadBlob(file, "images");
+                const image = await uploadCanvasFile(file, "images");
+                if (!image) return;
                 const size = fitNodeSize(image.width, image.height);
                 setNodes((prev) =>
                     prev.map((node) =>
@@ -2551,11 +2583,8 @@ function InfiniteCanvasPage() {
                 const position = target?.position || screenToCanvas((containerRef.current?.getBoundingClientRect().left || 0) + size.width / 2, (containerRef.current?.getBoundingClientRect().top || 0) + size.height / 2);
                 void (isAudioFile(file) ? createAudioFileNode(file, position) : file.type.startsWith("video/") ? createVideoFileNode(file, position) : createImageFileNode(file, position));
             }
-
-            uploadTargetRef.current = null;
-            event.target.value = "";
         },
-        [createAudioFileNode, createImageFileNode, createVideoFileNode, screenToCanvas, size.height, size.width],
+        [createAudioFileNode, createImageFileNode, createVideoFileNode, screenToCanvas, size.height, size.width, uploadCanvasFile],
     );
 
     const handleDrop = useCallback(

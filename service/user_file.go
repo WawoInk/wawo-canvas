@@ -37,11 +37,11 @@ func UserFileSizeLimit(fileType string) int64 {
 	}
 	limits := normalizeFileSizeLimits(normalizePrivateSetting(settings.Private).FileSizeLimits)
 	switch fileType {
-	case "images":
+	case "images", "results/images":
 		return limits.Image
-	case "videos":
+	case "videos", "results/videos":
 		return limits.Video
-	case "audios":
+	case "audios", "results/audios":
 		return limits.Audio
 	case "prompts":
 		return limits.Prompt

@@ -51,8 +51,16 @@ export async function completeAsyncImageTask(task: AsyncImagePlatformTask, depen
             if (dependencies.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
             throw new AsyncImageTaskRetryableError(error);
         }
+        if (dependencies.signal?.aborted) {
+            await requestCancellation();
+            throw new DOMException("Aborted", "AbortError");
+        }
         if (task.platformTaskId) {
             await dependencies.patchMetadata(task.platformTaskId, JSON.stringify({ fileIds: [stored.fileId] })).catch(() => {});
+            if (dependencies.signal?.aborted) {
+                await requestCancellation();
+                throw new DOMException("Aborted", "AbortError");
+            }
         }
         return stored;
     };
@@ -79,6 +87,10 @@ export async function completeAsyncImageTask(task: AsyncImagePlatformTask, depen
             if (consecutiveErrors >= MAX_CONSECUTIVE_QUERY_ERRORS) throw new AsyncImageTaskRetryableError(error);
             await waitForNextPoll(true);
             continue;
+        }
+        if (dependencies.signal?.aborted) {
+            await requestCancellation();
+            throw new DOMException("Aborted", "AbortError");
         }
         if (state.status === "failed") throw new Error(state.error);
         if (state.status === "succeeded") {
