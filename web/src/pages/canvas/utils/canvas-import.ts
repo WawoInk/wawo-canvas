@@ -1,14 +1,27 @@
 import { setImageBlob, setMediaBlob } from "@/services/blob-storage";
+import i18n from "@/i18n";
 import { uploadBlob, type UploadResult } from "@/services/upload-blob";
 import type { CanvasExportFile } from "../export-types";
+import { collectCanvasExportReferences } from "./canvas-export-references";
 
 const defaultServices = { setImageBlob, setMediaBlob, uploadBlob };
 
 export async function restoreCanvasExportFiles(data: CanvasExportFile, zip: { get(path: string): Blob | undefined }, services = defaultServices) {
     for (const item of data.projects) {
+        const references = collectCanvasExportReferences(item.project);
+        for (const storageKey of references.storageKeys) {
+            if (!item.files.some((file) => file.storageKey === storageKey)) throw new Error(i18n.t("canvas.export.missingMedia", { reference: storageKey }));
+        }
+        for (const fileId of references.fileIds) {
+            if (!item.files.some((file) => file.fileId === fileId)) throw new Error(i18n.t("canvas.export.missingMedia", { reference: fileId }));
+        }
         for (const file of item.files) {
-            const archived = zip.get(file.path);
-            if (!archived) continue;
+            if (!zip.get(file.path)) throw new Error(i18n.t("canvas.export.missingMedia", { reference: file.path }));
+        }
+    }
+    for (const item of data.projects) {
+        for (const file of item.files) {
+            const archived = zip.get(file.path)!;
             const blob = archived.type ? archived : archived.slice(0, archived.size, file.mimeType);
             if (file.storageKey) {
                 await (file.storageKey.startsWith("image:") ? services.setImageBlob(file.storageKey, blob) : services.setMediaBlob(file.storageKey, blob));

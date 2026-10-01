@@ -61,12 +61,12 @@ func processClaimedGenerationTask(ctx context.Context, task model.GenerationTask
 	}()
 	profile, ok := generationProfileForTask(task)
 	if !ok {
-		_ = arbitrateGenerationTerminalFrom(task, task.UpstreamModel, ProviderTaskRef{ID: task.UpstreamTaskID, Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: "MODEL_CONFIGURATION_INVALID", Message: "generation profile is unavailable", Retryable: false}}, "worker", "", task.CommandVersion > 0, []model.TaskStatus{model.TaskStatusRunning})
+		_ = arbitrateGenerationTerminalFrom(task, task.UpstreamModel, ProviderTaskRef{ID: task.UpstreamTaskID, Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: "MODEL_CONFIGURATION_INVALID", Message: "generation profile is unavailable", Retryable: false}}, "worker", "", true, []model.TaskStatus{model.TaskStatusRunning})
 		return
 	}
 	channel, err := generationRouteChannel(task.ChannelID, profile.UpstreamModel)
 	if err != nil {
-		_ = arbitrateGenerationTerminalFrom(task, profile.UpstreamModel, ProviderTaskRef{ID: task.UpstreamTaskID, Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: "MODEL_CONFIGURATION_INVALID", Message: err.Error(), Retryable: false}}, "worker", "", task.CommandVersion > 0, []model.TaskStatus{model.TaskStatusRunning})
+		_ = arbitrateGenerationTerminalFrom(task, profile.UpstreamModel, ProviderTaskRef{ID: task.UpstreamTaskID, Status: model.TaskStatusFailed, Error: &model.GenerationError{Code: "MODEL_CONFIGURATION_INVALID", Message: err.Error(), Retryable: false}}, "worker", "", true, []model.TaskStatus{model.TaskStatusRunning})
 		return
 	}
 	if isAcceptedCompatibilityTask(task) {

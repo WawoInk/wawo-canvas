@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Button, InputNumber, Modal } from "antd";
+import { Alert, Button, InputNumber, Modal } from "antd";
 import { Check, Lock, LockOpen, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -23,9 +23,12 @@ const minSize = 0.06;
 const maxRatioPart = 20;
 const defaultCrop = { x: 0.12, y: 0.12, width: 0.76, height: 0.76 };
 
-export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { dataUrl: string; open: boolean; onClose: () => void; onConfirm: (crop: CanvasImageCropRect) => void }) {
+export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { dataUrl: string; open: boolean; onClose: () => void; onConfirm: (crop: CanvasImageCropRect) => Promise<void> }) {
     const { t } = useTranslation();
     const boxRef = useRef<HTMLDivElement>(null);
+    const runningRef = useRef(false);
+    const [running, setRunning] = useState(false);
+    const [error, setError] = useState("");
     const [crop, setCrop] = useState<CanvasImageCropRect>(defaultCrop);
     const [locked, setLocked] = useState(false);
     const [image, setImage] = useState<{ width: number; height: number } | null>(null);
@@ -36,8 +39,35 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
         if (open) {
             setCrop(defaultCrop);
             setRatioSize({ width: null, height: null });
+            setError("");
         }
     }, [dataUrl, open]);
+
+    useEffect(() => {
+        if (!open) return;
+        const blockShortcuts = (event: KeyboardEvent) => {
+            if (!runningRef.current || event.key === "Tab") return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        };
+        window.addEventListener("keydown", blockShortcuts, true);
+        return () => window.removeEventListener("keydown", blockShortcuts, true);
+    }, [open]);
+
+    const confirm = async () => {
+        if (runningRef.current) return;
+        runningRef.current = true;
+        setRunning(true);
+        setError("");
+        try {
+            await onConfirm(crop);
+        } catch (error) {
+            setError(error instanceof Error ? error.message : t("errors.upload.failed"));
+        } finally {
+            runningRef.current = false;
+            setRunning(false);
+        }
+    };
 
     useEffect(() => {
         if (!open) return;
@@ -48,6 +78,7 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
     }, [dataUrl, open]);
 
     const startDrag = (mode: DragMode, event: ReactPointerEvent, handle?: ResizeHandle) => {
+        if (runningRef.current) return;
         const box = boxRef.current?.getBoundingClientRect();
         if (!box) return;
         event.preventDefault();
@@ -88,8 +119,22 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
     };
 
     return (
-        <Modal title={t("canvas.crop.title")} open={open && Boolean(dataUrl)} onCancel={onClose} footer={null} width={780} centered destroyOnHidden>
-            <div className="space-y-4">
+        <Modal
+            title={t("canvas.crop.title")}
+            open={open && Boolean(dataUrl)}
+            onCancel={() => {
+                if (!runningRef.current) onClose();
+            }}
+            closable={!running}
+            keyboard={!running}
+            mask={{ closable: !running }}
+            footer={null}
+            width={780}
+            centered
+            destroyOnHidden
+        >
+            <div className="space-y-4" aria-busy={running}>
+                {error && <Alert type="error" showIcon title={error} />}
                 <div className="flex justify-center">
                     <div ref={boxRef} className="relative inline-block max-w-full overflow-hidden rounded-lg bg-black select-none">
                         <img src={dataUrl} alt="" className="block max-h-[62vh] max-w-full opacity-90" draggable={false} />
@@ -130,7 +175,7 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
                                     max={image?.width}
                                     precision={0}
                                     value={cropSize?.width}
-                                    disabled={!cropSize}
+                                    disabled={running || !cropSize}
                                     onChange={(value) => value !== null && cropSize && updateCropSize(value, cropSize.height)}
                                 />
                             </label>
@@ -146,7 +191,7 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
                                     max={image?.height}
                                     precision={0}
                                     value={cropSize?.height}
-                                    disabled={!cropSize}
+                                    disabled={running || !cropSize}
                                     onChange={(value) => value !== null && cropSize && updateCropSize(cropSize.width, value)}
                                 />
                             </label>
@@ -154,29 +199,40 @@ export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { da
                         <div role="group" aria-label={t("canvas.crop.ratioAria")} className="flex items-end gap-2">
                             <label className="grid gap-1 text-xs opacity-80">
                                 <span>{t("canvas.crop.ratioWidth")}</span>
-                                <InputNumber aria-label={t("canvas.crop.ratioWidthAria")} className="w-20" min={1} max={10000} precision={0} value={ratioSize.width} disabled={!cropSize} onChange={(value) => updateCropRatio("width", value)} />
+                                <InputNumber aria-label={t("canvas.crop.ratioWidthAria")} className="w-20" min={1} max={10000} precision={0} value={ratioSize.width} disabled={running || !cropSize} onChange={(value) => updateCropRatio("width", value)} />
                             </label>
                             <span aria-hidden className="pb-2 text-sm opacity-50">
                                 :
                             </span>
                             <label className="grid gap-1 text-xs opacity-80">
                                 <span>{t("canvas.crop.ratioHeight")}</span>
-                                <InputNumber aria-label={t("canvas.crop.ratioHeightAria")} className="w-20" min={1} max={10000} precision={0} value={ratioSize.height} disabled={!cropSize} onChange={(value) => updateCropRatio("height", value)} />
+                                <InputNumber
+                                    aria-label={t("canvas.crop.ratioHeightAria")}
+                                    className="w-20"
+                                    min={1}
+                                    max={10000}
+                                    precision={0}
+                                    value={ratioSize.height}
+                                    disabled={running || !cropSize}
+                                    onChange={(value) => updateCropRatio("height", value)}
+                                />
                             </label>
                         </div>
                         {image ? <span className="pb-2 text-sm opacity-60">{t("canvas.crop.originalSize", { value: formatDimensions(image.width, image.height) })}</span> : null}
                     </div>
-                    <Button icon={locked ? <Lock className="size-4" /> : <LockOpen className="size-4" />} onClick={() => setLocked((value) => !value)}>
+                    <Button disabled={running} icon={locked ? <Lock className="size-4" /> : <LockOpen className="size-4" />} onClick={() => setLocked((value) => !value)}>
                         {t(locked ? "canvas.crop.lockedRatio" : "canvas.crop.freeRatio")}
                     </Button>
                 </div>
 
                 <div className="flex items-center justify-end gap-2">
-                    <Button onClick={resetCrop}>{t("canvas.actions.reset")}</Button>
-                    <Button icon={<X className="size-4" />} onClick={onClose}>
+                    <Button disabled={running} onClick={resetCrop}>
+                        {t("canvas.actions.reset")}
+                    </Button>
+                    <Button disabled={running} icon={<X className="size-4" />} onClick={onClose}>
                         {t("canvas.actions.cancel")}
                     </Button>
-                    <Button type="primary" icon={<Check className="size-4" />} onClick={() => onConfirm(crop)}>
+                    <Button type="primary" icon={<Check className="size-4" />} disabled={running} loading={running} onClick={() => void confirm()}>
                         {t("canvas.crop.confirm")}
                     </Button>
                 </div>

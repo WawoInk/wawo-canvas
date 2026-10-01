@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Button, Modal, Segmented } from "antd";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Button, Modal, Segmented } from "antd";
 import { ImagePlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -28,8 +28,11 @@ const defaultParams: CanvasImageUpscaleParams = {
     algorithm: "high",
 };
 
-export function CanvasNodeUpscaleDialog({ dataUrl, open, onClose, onConfirm }: { dataUrl: string; open: boolean; onClose: () => void; onConfirm: (params: CanvasImageUpscaleParams) => void }) {
+export function CanvasNodeUpscaleDialog({ dataUrl, open, onClose, onConfirm }: { dataUrl: string; open: boolean; onClose: () => void; onConfirm: (params: CanvasImageUpscaleParams) => Promise<void> }) {
     const { t } = useTranslation();
+    const runningRef = useRef(false);
+    const [running, setRunning] = useState(false);
+    const [error, setError] = useState("");
     const [params, setParams] = useState<CanvasImageUpscaleParams>(defaultParams);
     const [image, setImage] = useState<{ width: number; height: number } | null>(null);
     const sourceLongEdge = image ? Math.max(image.width, image.height) : 0;
@@ -41,6 +44,7 @@ export function CanvasNodeUpscaleDialog({ dataUrl, open, onClose, onConfirm }: {
         if (!open) return;
         setParams(defaultParams);
         setImage(null);
+        setError("");
     }, [dataUrl, open]);
 
     useEffect(() => {
@@ -54,9 +58,49 @@ export function CanvasNodeUpscaleDialog({ dataUrl, open, onClose, onConfirm }: {
         setParams((current) => ({ ...current, targetLongEdge: nextTarget }));
     }, [image, sourceLongEdge]);
 
+    useEffect(() => {
+        if (!open) return;
+        const blockShortcuts = (event: KeyboardEvent) => {
+            if (!runningRef.current || event.key === "Tab") return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        };
+        window.addEventListener("keydown", blockShortcuts, true);
+        return () => window.removeEventListener("keydown", blockShortcuts, true);
+    }, [open]);
+
+    const confirm = async () => {
+        if (runningRef.current) return;
+        runningRef.current = true;
+        setRunning(true);
+        setError("");
+        try {
+            await onConfirm(params);
+        } catch (error) {
+            setError(error instanceof Error ? error.message : t("errors.upload.failed"));
+        } finally {
+            runningRef.current = false;
+            setRunning(false);
+        }
+    };
+
     return (
-        <Modal title={null} open={open && Boolean(dataUrl)} onCancel={onClose} footer={null} width={820} centered destroyOnHidden>
-            <div className="space-y-5">
+        <Modal
+            title={null}
+            open={open && Boolean(dataUrl)}
+            onCancel={() => {
+                if (!runningRef.current) onClose();
+            }}
+            closable={!running}
+            keyboard={!running}
+            mask={{ closable: !running }}
+            footer={null}
+            width={820}
+            centered
+            destroyOnHidden
+        >
+            <div className="space-y-5" aria-busy={running}>
+                {error && <Alert type="error" showIcon title={error} />}
                 <div>
                     <h2 className="text-xl font-semibold">{t("canvas.upscale.title")}</h2>
                 </div>
@@ -74,6 +118,7 @@ export function CanvasNodeUpscaleDialog({ dataUrl, open, onClose, onConfirm }: {
                         <div className="space-y-2">
                             <div className="font-medium opacity-75">{t("canvas.upscale.targetPixels")}</div>
                             <Segmented
+                                disabled={running}
                                 block
                                 value={params.targetLongEdge}
                                 options={targetOptions.map((option) => ({
@@ -88,6 +133,7 @@ export function CanvasNodeUpscaleDialog({ dataUrl, open, onClose, onConfirm }: {
                         <div className="space-y-2">
                             <div className="font-medium opacity-75">{t("canvas.upscale.algorithm")}</div>
                             <Segmented
+                                disabled={running}
                                 block
                                 value={params.algorithm}
                                 options={algorithms.map((item) => ({
@@ -111,7 +157,7 @@ export function CanvasNodeUpscaleDialog({ dataUrl, open, onClose, onConfirm }: {
                     </div>
                 </div>
                 <div className="flex justify-end">
-                    <Button type="primary" size="large" icon={<ImagePlus className="size-4" />} disabled={!canUpscale} onClick={() => onConfirm(params)}>
+                    <Button type="primary" size="large" icon={<ImagePlus className="size-4" />} disabled={running || !canUpscale} loading={running} onClick={() => void confirm()}>
                         {t("canvas.upscale.generate")}
                     </Button>
                 </div>

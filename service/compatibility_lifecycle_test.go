@@ -174,3 +174,81 @@ func TestAcceptedCompatibilityWorkerPollsWithoutCreating(t *testing.T) {
 		t.Fatalf("stored=%#v creates=%d polls=%d err=%v", stored, creates.Load(), polls.Load(), err)
 	}
 }
+
+func TestAcceptedCompatibilityConfigurationFailureRefundsOnce(t *testing.T) {
+	for _, testCase := range []struct {
+		name        string
+		unavailable string
+		credits     int64
+	}{
+		{"channel", "channel", 3},
+		{"profile", "profile", 3},
+		{"without precharge", "channel", 0},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			key := uuid.NewString()
+			profile := lifecycleProfile("compat-configuration-"+key, []string{"poll"}, false)
+			restore := useLifecycleTestAdapter(profile, lifecycleFakeAdapter{})
+			defer restore()
+			if testCase.unavailable == "profile" {
+				generationProfiles = func() []model.GenerationProfile { return nil }
+			} else {
+				generationRouteChannel = SelectModelChannelByName
+			}
+
+			user, err := SaveUser(model.User{Username: "compat-configuration-" + key, Credits: credit(3)}, "password")
+			if err != nil {
+				t.Fatal(err)
+			}
+			session, err := Login(user.Username, "password")
+			if err != nil {
+				t.Fatal(err)
+			}
+			now := time.Now().UTC()
+			task := model.GenerationTask{
+				ID: "compat-configuration-task-" + key, UserID: user.ID, TaskType: model.TaskTypeVideo,
+				Model: profile.UpstreamModel, Status: model.TaskStatusRunning, Credits: credit(testCase.credits),
+				CreatedAt: now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano),
+			}
+			if err := repository.CreateGenerationTask(task, model.GenerationPayload{ID: "compat-configuration-payload-" + key, CreatedAt: task.CreatedAt}); err != nil {
+				t.Fatal(err)
+			}
+			if err := ConsumeUserCreditsWithTask(user.ID, task.Model, task.Credits, "/api/v1/contents/generations/tasks", task.ID); err != nil {
+				t.Fatal(err)
+			}
+			if current, ok := CurrentAuthUser(session.Token); !ok || !current.Credits.Equal(credit(3-testCase.credits)) {
+				t.Fatalf("precharged user=%#v authenticated=%v", current, ok)
+			}
+			if err := repository.QueueAcceptedCompatibilityTask(task.ID, "compat-upstream-"+key, "removed-channel-"+key, profile.AdapterKey, profile.ID, profile.Version, profile.UpstreamModel, "{}", "{}", 0, now); err != nil {
+				t.Fatal(err)
+			}
+			if !processGenerationTask(context.Background(), task.ID, "compat-worker-"+key) {
+				t.Fatal("accepted compatibility task was not claimed")
+			}
+			result, err := GetGeneration(user.ID, task.ID)
+			if err != nil || result.Status != model.TaskStatusFailed || result.Error == nil || result.Error.Code != "MODEL_CONFIGURATION_INVALID" {
+				t.Fatalf("configuration failure: result=%#v err=%v", result, err)
+			}
+			if processGenerationTask(context.Background(), task.ID, "second-worker-"+key) {
+				t.Fatal("terminal compatibility task was claimed again")
+			}
+			if current, ok := CurrentAuthUser(session.Token); !ok || !current.Credits.Equal(credit(3)) {
+				t.Errorf("configuration failure must refund precharge: user=%#v authenticated=%v", current, ok)
+			}
+			logs, err := ListUserCreditLogs(user.ID, model.Query{PageSize: 20})
+			refunds := 0
+			for _, log := range logs.Items {
+				if log.Type == model.CreditLogTypeAIRefund {
+					refunds++
+				}
+			}
+			wantLogs, wantRefunds := 0, 0
+			if testCase.credits > 0 {
+				wantLogs, wantRefunds = 2, 1
+			}
+			if err != nil || logs.Total != wantLogs || refunds != wantRefunds {
+				t.Errorf("credit logs=%#v refunds=%d err=%v, want logs=%d refunds=%d", logs, refunds, err, wantLogs, wantRefunds)
+			}
+		})
+	}
+}

@@ -7,7 +7,7 @@ import { App } from "antd";
 
 import AdminCanvasNodesPage from "../src/pages/admin/canvas-nodes/index.tsx";
 
-test("画布节点结果 URL 仅以文本展示", () => {
+test("画布节点信息显示节点标识并隐藏结果 URL", () => {
     const resultUrl = "https://cdn.example.com/results/canvas-node.png";
     const queryClient = new QueryClient();
     queryClient.setQueryData(["admin", "canvas-nodes", "", "", "", "", "", undefined, undefined, 1, 10], {
@@ -26,9 +26,10 @@ test("画布节点结果 URL 仅以文本展示", () => {
 
     const html = renderToStaticMarkup(createElement(QueryClientProvider, { client: queryClient }, createElement(App, null, createElement(AdminCanvasNodesPage))));
 
-    assert.match(html, new RegExp(resultUrl));
+    assert.match(html, /node-id-456/);
+    assert.doesNotMatch(html, new RegExp(resultUrl));
     assert.doesNotMatch(html, /<a\b[^>]*\bhref=/);
-    assert.match(html, /ant-typography-copy/);
+    assert.doesNotMatch(html, /ant-typography-copy/);
     assert.match(html, /Enter user ID/);
     assert.match(html, /Enter username/);
     assert.match(html, /Enter node ID/);

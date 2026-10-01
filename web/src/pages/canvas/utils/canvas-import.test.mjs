@@ -32,3 +32,42 @@ test("restores archived platform files into the current account and remaps the p
     assert.equal(project.nodes[0].metadata.fileId, "new-file");
     assert.equal(project.nodes[0].metadata.content, "blob:new");
 });
+
+test("validates all archived media before restoring any file", async () => {
+    const project = { nodes: [{ metadata: { fileId: "old-file" } }] };
+    const data = {
+        projects: [
+            {
+                project,
+                files: [
+                    { storageKey: "image:present", path: "files/present.png", mimeType: "image/png", bytes: 3 },
+                    { fileId: "old-file", path: "files/missing.png", mimeType: "image/png", bytes: 3 },
+                ],
+            },
+        ],
+    };
+    const restored = [];
+    await assert.rejects(
+        restoreCanvasExportFiles(data, new Map([["files/present.png", new Blob(["img"])]]), {
+            setImageBlob: async () => {
+                restored.push("local");
+            },
+            setMediaBlob: async () => {
+                restored.push("media");
+            },
+            uploadBlob: async () => {
+                restored.push("platform");
+            },
+        }),
+        /files\/missing.png/,
+    );
+    assert.deepEqual(restored, []);
+    assert.equal(project.nodes[0].metadata.fileId, "old-file");
+});
+
+test("rejects project media omitted from the archive manifest", async () => {
+    for (const metadata of [{ storageKey: "image:lost" }, { fileId: "file-lost" }]) {
+        const data = { projects: [{ project: { nodes: [{ metadata }] }, files: [] }] };
+        await assert.rejects(restoreCanvasExportFiles(data, new Map()), /image:lost|file-lost/);
+    }
+});

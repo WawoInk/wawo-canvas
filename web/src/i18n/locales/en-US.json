@@ -3149,7 +3149,8 @@
         "export": {
             "defaultFileName": "Infinite Canvas",
             "defaultNodesName": "Canvas elements",
-            "item": "Item"
+            "item": "Item",
+            "missingMedia": "Cannot read Canvas media: {{reference}}. Restore the file and try again."
         },
         "agent": {
             "title": "Agent",

@@ -62,8 +62,8 @@ function CanvasPage() {
             await restoreCanvasExportFiles(data, zip);
             data.projects.forEach((item) => importProject(item.project));
             message.success(t("canvas.library.messages.importSuccess", { count: data.projects.length, value: formatNumber(data.projects.length) }));
-        } catch {
-            message.error(t("canvas.library.errors.importFailed"));
+        } catch (error) {
+            message.error(`${t("canvas.library.errors.importFailed")}${error instanceof Error ? `：${error.message}` : ""}`);
         } finally {
             if (inputRef.current) inputRef.current.value = "";
         }
@@ -103,7 +103,7 @@ function CanvasPage() {
                                         void exportCanvasProjects(
                                             projects.filter((project) => selectedIds.includes(project.id)),
                                             t("canvas.library.project.selectedExportFileName", { count: selectedIds.length, value: formatNumber(selectedIds.length) }),
-                                        )
+                                        ).catch((error) => message.error(error instanceof Error ? error.message : t("canvas.overview.exportFailed")))
                                     }
                                 >
                                     {t("canvas.library.actions.exportSelected")}

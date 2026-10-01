@@ -101,7 +101,7 @@ async function renderDialog(onConfirm: (crop: { x: number; y: number; width: num
     document.body.append(container);
     const root = createRoot(container);
     await act(async () => {
-        root.render(<CanvasNodeCropDialog dataUrl="data:image/png;base64,source" open onClose={() => {}} onConfirm={onConfirm} />);
+        root.render(<CanvasNodeCropDialog dataUrl="data:image/png;base64,source" open onClose={() => {}} onConfirm={async (crop) => onConfirm(crop)} />);
         await Promise.resolve();
     });
     return {

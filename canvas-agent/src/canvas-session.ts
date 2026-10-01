@@ -49,7 +49,9 @@ export class CanvasSession {
             this.replicas.set(projectId, legacy);
             id = projectId;
         }
-        this.getReplica(id).canvasState = { ...snapshot, clientId } as CanvasSnapshot;
+        const replica = this.replicas.get(id);
+        if (!clientId || !replica?.clients.has(clientId)) throw new Error("当前没有已连接画布客户端");
+        replica.canvasState = { ...snapshot, clientId } as CanvasSnapshot;
     }
 
     resolveResult(body: { requestId?: string; error?: string; result?: unknown }, replicaId?: string) {

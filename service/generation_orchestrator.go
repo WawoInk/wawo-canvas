@@ -482,11 +482,6 @@ func executeGeneration(ctx context.Context, task model.GenerationTask, profile m
 	if err == nil && isTerminalGenerationStatus(stored.Status) {
 		return
 	}
-	intent, references, metadata, err := generationIntentFromTask(ctx, task)
-	if err != nil {
-		failGenerationTask(task, profile, "MEDIA_REFERENCE_UNAVAILABLE", err)
-		return
-	}
 	adapter, ok := generationAdapterFor(task.AdapterKey)
 	if !ok {
 		failGenerationTask(task, profile, "MODEL_CONFIGURATION_INVALID", fmt.Errorf("unsupported adapter %q", task.AdapterKey))
@@ -496,6 +491,11 @@ func executeGeneration(ctx context.Context, task model.GenerationTask, profile m
 	if task.UpstreamTaskID != "" {
 		ref, err = adapter.Poll(ctx, channel, task.UpstreamTaskID)
 	} else {
+		intent, references, metadata, loadErr := generationIntentFromTask(ctx, task)
+		if loadErr != nil {
+			failGenerationTask(task, profile, "MEDIA_REFERENCE_UNAVAILABLE", loadErr)
+			return
+		}
 		callbackURL := ""
 		if task.CallbackToken != "" && strings.TrimSpace(config.Cfg.PublicBaseURL) != "" {
 			callbackURL = strings.TrimRight(config.Cfg.PublicBaseURL, "/") + "/api/v1/generations/callback?token=" + task.CallbackToken

@@ -1,13 +1,14 @@
 import "./register-dom";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "antd";
 import { afterEach, expect, mock, test } from "bun:test";
 import axios from "axios";
 import type { CanvasProject } from "../src/pages/canvas/stores/use-canvas-store";
 import type { StateStorage } from "zustand/middleware";
+import type { PublicSettings } from "../src/services/api/settings";
 
 const values = new Map<string, string>();
 const storage: StateStorage = {
@@ -36,6 +37,17 @@ const originalAdapter = axios.defaults.adapter;
 let queryClient: QueryClient;
 let polls = 0;
 let submitted: unknown;
+let savedProjects: CanvasProject[] = [];
+let remoteProject: CanvasProject;
+
+function SwitchCanvas() {
+    const navigate = useNavigate();
+    return (
+        <button data-test-switch-canvas onClick={() => navigate("/canvas/other")}>
+            切换画布
+        </button>
+    );
+}
 
 async function settleUntil(check: () => boolean) {
     const deadline = Date.now() + 1000;
@@ -67,6 +79,26 @@ const profile = {
         },
     },
 };
+const publicSettings: PublicSettings = {
+    auth: { allowRegister: false, linuxDo: { enabled: false } },
+    modelChannel: {
+        availableModels: ["profile", "gpt-image-1"],
+        modelCosts: [],
+        imageRequestFormats: [],
+        defaultModel: "gpt-image-1",
+        defaultImageModel: "gpt-image-1",
+        defaultVideoModel: "profile",
+        defaultTextModel: "",
+        defaultAudioModel: "",
+        imageModels: ["gpt-image-1"],
+        videoModels: ["profile"],
+        textModels: [],
+        textModelProtocols: {},
+        audioModels: [],
+        systemPrompt: "",
+        allowCustomChannel: false,
+    },
+};
 const project: CanvasProject = {
     id: "project",
     title: "画布",
@@ -87,7 +119,7 @@ const project: CanvasProject = {
     showImageInfo: false,
     viewport: { x: 0, y: 0, k: 1 },
 };
-async function setup(mode: "video" | "image" = "video", firstParty = false, retry = false, savedVideoMode?: "frames", savedMetadata: CanvasProject["nodes"][number]["metadata"] = {}) {
+async function setup(mode: "video" | "image" = "video", successfulVideo = false, retry = false, savedVideoMode?: "frames", savedMetadata: CanvasProject["nodes"][number]["metadata"] = {}) {
     const currentProject = structuredClone(project);
     currentProject.nodes[1].type = mode as CanvasProject["nodes"][number]["type"];
     if (retry) currentProject.nodes[1].metadata = { ...currentProject.nodes[1].metadata, status: "error", ...(mode === "image" ? { generationType: "edit", references: ["https://fixture.example/reference.png"] } : {}) };
@@ -108,16 +140,14 @@ async function setup(mode: "video" | "image" = "video", firstParty = false, retr
         ];
     }
     currentProject.nodes[1].metadata = { ...currentProject.nodes[1].metadata, ...savedMetadata };
-    useUserStore.setState({ user: { id: "test-user" } as never, token: "", isReady: true });
+    remoteProject = currentProject;
+    useUserStore.setState({ user: { id: "test-user" } as never, token: "fixture-token", isReady: true });
     await useCanvasStore.persist.rehydrate();
-    useCanvasStore.setState({ projects: [currentProject], hydrated: true, synced: true, tombstones: [] });
-    useConfigStore.setState({ config: { ...defaultConfig, channelMode: "local", baseUrl: "https://fixture.example/v1", apiKey: "fixture", videoModel: "seedance", imageModel: "gpt-image-1", model: "seedance", channels: [] } });
-    if (firstParty) {
-        useConfigStore.setState({ config: { ...useConfigStore.getState().config, channelMode: "remote", videoModel: "profile", model: "profile" } });
-        useUserStore.setState({ token: "fixture-token" });
-    }
+    useCanvasStore.setState({ projects: [currentProject, { ...structuredClone(project), id: "other", title: "另一画布", nodes: [], connections: [] }], hydrated: true, synced: true, tombstones: [] });
+    useConfigStore.setState({ publicSettings, config: { ...defaultConfig, channelMode: "remote", videoModel: "profile", imageModel: "gpt-image-1", model: "profile", channels: [] } });
     polls = 0;
     submitted = undefined;
+    savedProjects = [];
     let releaseTask: () => void = () => {};
     const terminalGate = new Promise<void>((resolve) => {
         releaseTask = resolve;
@@ -137,23 +167,27 @@ async function setup(mode: "video" | "image" = "video", firstParty = false, retr
             data = { code: 0, data: { id: "run-1", status: "queued", modelProfileId: "profile" }, msg: "" };
         } else if (config.url === "/api/v1/generations/run-1") {
             polls++;
-            if (polls > 1) await terminalGate;
-            data = { code: 0, data: { id: "run-1", modelProfileId: "profile", status: polls === 1 ? "running" : "succeeded", result: { kind: "video", file: { fileId: "result-file", mimeType: "video/mp4", width: 100, height: 100 } } }, msg: "" };
+            if (successfulVideo && polls > 1) await terminalGate;
+            data = {
+                code: 0,
+                data: {
+                    id: "run-1",
+                    modelProfileId: "profile",
+                    status: !successfulVideo ? "failed" : polls === 1 ? "running" : "succeeded",
+                    ...(!successfulVideo ? { error: { code: "UPSTREAM_REJECTED", message: "fixture terminal failure" } } : { result: { kind: "video", file: { fileId: "result-file", mimeType: "video/mp4", width: 100, height: 100 } } }),
+                },
+                msg: "",
+            };
         } else if (config.url?.includes("images/edits") && config.method === "post") {
             submitted = config.data;
             data = { id: "image-task", status: "queued" };
         } else if (config.url?.includes("/tasks/image-task")) {
             polls++;
             data = { status: "failed", error: { message: "fixture terminal failure" } };
-        } else if (config.url?.endsWith("/contents/generations/tasks") && config.method === "post") {
-            submitted = JSON.parse(config.data);
-            data = { id: "task-1", status: "queued" };
-        } else if (config.url?.includes("/contents/generations/tasks/task-1")) {
-            polls++;
-            data = { id: "task-1", status: "failed", error: { message: "fixture terminal failure" } };
-        } else if (config.url?.includes("canvas/projects"))
-            data = { code: 0, data: { ...currentProject, revision: config.method === "put" ? JSON.parse(config.data).expectedRevision + 1 : currentProject.revision, projectJson: JSON.stringify(currentProject) }, msg: "" };
-        else data = { code: 0, data: [], msg: "" };
+        } else if (config.url?.includes("canvas/projects")) {
+            if (config.method === "put") savedProjects.push(JSON.parse(config.data).project);
+            data = { code: 0, data: { ...remoteProject, revision: config.method === "put" ? JSON.parse(config.data).expectedRevision + 1 : remoteProject.revision, projectJson: JSON.stringify(remoteProject) }, msg: "" };
+        } else data = { code: 0, data: [], msg: "" };
         return { config, headers: {}, status: 200, statusText: "OK", data };
     };
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -165,6 +199,7 @@ async function setup(mode: "video" | "image" = "video", firstParty = false, retr
             <QueryClientProvider client={queryClient}>
                 <App>
                     <MemoryRouter initialEntries={["/canvas/project"]}>
+                        <SwitchCanvas />
                         <Routes>
                             <Route path="/canvas/:id" element={<CanvasPage />} />
                         </Routes>
@@ -189,6 +224,145 @@ afterEach(async () => {
     axios.defaults.adapter = originalAdapter;
     globalThis.fetch = originalFetch;
     useUserStore.setState({ token: "", user: null });
+});
+
+class TransformImage {
+    width = 400;
+    height = 200;
+    naturalWidth = 400;
+    naturalHeight = 200;
+    onload?: () => void;
+    set src(_value: string) {
+        queueMicrotask(() => this.onload?.());
+    }
+}
+
+async function confirmImageTransform(kind: "crop" | "upscale", fail = false) {
+    const originalImage = globalThis.Image;
+    const originalContext = HTMLCanvasElement.prototype.getContext;
+    const originalDataUrl = HTMLCanvasElement.prototype.toDataURL;
+    globalThis.Image = TransformImage as any;
+    HTMLCanvasElement.prototype.getContext = (() => ({ drawImage() {} })) as any;
+    HTMLCanvasElement.prototype.toDataURL = () => "data:image/png;base64,aW1hZ2U=";
+    await setup("image");
+    const preparedFetch = globalThis.fetch;
+    let finishUpload!: () => void;
+    const uploadGate = new Promise<void>((resolve) => {
+        finishUpload = resolve;
+    });
+    let uploading = false;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === "/api/v1/files" && init?.method === "POST") {
+            uploading = true;
+            await uploadGate;
+            return Response.json(fail ? { code: 1, msg: "上传失败，请重试" } : { code: 0, data: { id: "transformed-file", url: "https://fixture.example/transformed.png", bytes: 5, mimeType: "image/png" } });
+        }
+        return String(input).startsWith("data:") ? originalFetch(input, init) : preparedFetch(input, init);
+    }) as typeof fetch;
+    const node = host.querySelector('[data-node-id="reference"]')!;
+    await act(async () => node.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+    const tool = host.querySelector<HTMLButtonElement>(`button[data-toolbar-action="${kind}"]`)!;
+    expect(tool).not.toBeNull();
+    await act(async () => tool.click());
+    const confirmation = [...document.querySelectorAll<HTMLButtonElement>(".ant-modal button")].find((button) => button.textContent?.includes(i18n.t(kind === "crop" ? "canvas.crop.confirm" : "canvas.upscale.generate")))!;
+    expect(confirmation).toBeDefined();
+    await act(async () => confirmation.click());
+    await settleUntil(() => uploading);
+    expect(uploading).toBe(true);
+    return {
+        confirmation,
+        finishUpload: async () => {
+            await act(async () => finishUpload());
+        },
+        cleanup: async () => {
+            await act(async () => finishUpload());
+            globalThis.Image = originalImage;
+            HTMLCanvasElement.prototype.getContext = originalContext;
+            HTMLCanvasElement.prototype.toDataURL = originalDataUrl;
+        },
+    };
+}
+
+test.each(["crop", "upscale"] as const)("confirming %s displays and saves a platform-backed image", async (kind) => {
+    const transform = await confirmImageTransform(kind);
+    try {
+        expect(transform.confirmation.disabled).toBe(true);
+        expect(host.querySelectorAll("[data-node-id]")).toHaveLength(2);
+        await transform.finishUpload();
+        await settleUntil(() => savedProjects.some((saved) => saved.nodes.some((node) => node.metadata?.fileId === "transformed-file")));
+        expect(host.querySelectorAll("[data-node-id]")).toHaveLength(3);
+        const image = savedProjects.flatMap((saved) => saved.nodes).find((node) => node.metadata?.fileId === "transformed-file");
+        expect(image?.metadata).toMatchObject({ fileId: "transformed-file", content: "https://fixture.example/transformed.png", storageKey: "" });
+        expect(image!.width / image!.height).toBe(2);
+    } finally {
+        await transform.cleanup();
+    }
+});
+
+test.each(["crop", "upscale"] as const)("failed %s upload keeps the dialog and publishes no local-only image", async (kind) => {
+    const transform = await confirmImageTransform(kind, true);
+    try {
+        await transform.finishUpload();
+        await settleUntil(() => Boolean(document.querySelector('[role="alert"]')));
+        expect(document.querySelector('[role="alert"]')?.textContent).toContain("上传失败，请重试");
+        expect(transform.confirmation.disabled).toBe(false);
+        expect(host.querySelectorAll("[data-node-id]")).toHaveLength(2);
+        expect(savedProjects.some((saved) => saved.nodes.some((node) => node.metadata?.fileId === "transformed-file"))).toBe(false);
+    } finally {
+        await transform.cleanup();
+    }
+});
+
+test.each(["crop", "upscale"] as const)("switching canvas during %s upload discards the late result", async (kind) => {
+    const transform = await confirmImageTransform(kind);
+    try {
+        await act(async () => host.querySelector<HTMLButtonElement>("[data-test-switch-canvas]")!.click());
+        await settleUntil(() => host.querySelectorAll("[data-node-id]").length === 0);
+        expect(host.querySelectorAll("[data-node-id]")).toHaveLength(0);
+        await transform.finishUpload();
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 30));
+        });
+        expect(host.querySelectorAll("[data-node-id]")).toHaveLength(0);
+        expect(savedProjects.some((saved) => saved.nodes.some((node) => node.metadata?.fileId === "transformed-file"))).toBe(false);
+    } finally {
+        await transform.cleanup();
+    }
+});
+
+test("a new account session during crop upload rejects the late result", async () => {
+    const transform = await confirmImageTransform("crop");
+    try {
+        await act(async () => useUserStore.setState({ token: "replacement-token" }));
+        await transform.finishUpload();
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 30));
+        });
+        expect(host.querySelectorAll("[data-node-id]")).toHaveLength(2);
+        expect(savedProjects.some((saved) => saved.nodes.some((node) => node.metadata?.fileId === "transformed-file"))).toBe(false);
+    } finally {
+        await transform.cleanup();
+    }
+});
+
+test("a remote revision removing the source during upscale upload rejects the late result", async () => {
+    const transform = await confirmImageTransform("upscale");
+    try {
+        remoteProject = { ...structuredClone(project), revision: 2, remoteRevision: 2, nodes: [], connections: [] };
+        await act(async () => {
+            await useCanvasStore.getState().fetchProjectFromBackend("project");
+        });
+        await settleUntil(() => host.querySelectorAll("[data-node-id]").length === 0);
+        expect(host.querySelectorAll("[data-node-id]")).toHaveLength(0);
+        await transform.finishUpload();
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 30));
+        });
+        expect(host.querySelectorAll("[data-node-id]")).toHaveLength(0);
+        expect(savedProjects.some((saved) => saved.nodes.some((node) => node.metadata?.fileId === "transformed-file"))).toBe(false);
+    } finally {
+        await transform.cleanup();
+    }
 });
 
 test.each(["video", "image"] as const)("a connected %s node leaves queued through polling without a browser refresh", async (mode) => {

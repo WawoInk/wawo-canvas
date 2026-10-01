@@ -79,3 +79,28 @@ test("resolving the last pending request removes a disconnected replica", async 
     assert.equal(await pending, "done");
     assert.equal(session.health().replicas, 0);
 });
+
+test("a disconnected client's late snapshot cannot revive or overwrite a Canvas replica", async () => {
+    const session = new CanvasSession();
+    const oldClient = new FakeResponse();
+    const newClient = new FakeResponse();
+    const stale = { projectId: "replica-a", title: "Stale", nodes: [], connections: [] };
+    try {
+        session.openEvents(new URL("http://agent/events?canvasId=replica-a&clientId=old-client"), oldClient as unknown as ServerResponse);
+        session.updateState(stale, "old-client", "replica-a");
+        oldClient.emit("close");
+        assert.throws(() => session.updateState(stale, "old-client", "replica-a"), /当前没有已连接画布客户端/);
+        assert.equal(session.health().replicas, 0);
+
+        session.openEvents(new URL("http://agent/events?canvasId=replica-a&clientId=new-client"), newClient as unknown as ServerResponse);
+        await assert.rejects(session.callTool("canvas_get_state", {}, "replica-a"), /当前没有已连接画布/);
+        session.updateState({ ...stale, title: "Current" }, "new-client", "replica-a");
+        assert.throws(() => session.updateState(stale, "old-client", "replica-a"), /当前没有已连接画布客户端/);
+        assert.equal((await session.callTool("canvas_get_state", {}, "replica-a") as { title: string }).title, "Current");
+        newClient.emit("close");
+        assert.equal(session.health().replicas, 0);
+    } finally {
+        oldClient.emit("close");
+        newClient.emit("close");
+    }
+});

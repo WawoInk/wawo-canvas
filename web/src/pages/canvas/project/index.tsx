@@ -89,7 +89,7 @@ import { CanvasLocalAgentPanel } from "../components/canvas-local-agent-panel";
 import { useCanvasAgentStore } from "../stores/use-canvas-agent-store";
 import { useCanvasStore } from "../stores/use-canvas-store";
 import { commitCanvasVideoResult } from "../stores/canvas-video-result";
-import type { CanvasReplicaBinding } from "../stores/canvas-replica";
+import { matchesCanvasReplicaBinding, type CanvasReplicaBinding } from "../stores/canvas-replica";
 import { useCanvasEditorReplica } from "./use-canvas-editor-replica";
 import { CanvasSyncConflict } from "./canvas-sync-conflict";
 import { applyCanvasAgentOps, type CanvasAgentOp, type CanvasAgentSnapshot } from "../utils/canvas-agent-ops";
@@ -2113,31 +2113,48 @@ function InfiniteCanvasPage() {
 
     const cropImageNode = useCallback(
         async (node: CanvasNodeData, crop: CanvasImageCropRect) => {
-            if (!node.metadata?.content) return;
-            const cropped = await cropDataUrl(node.metadata, crop);
-            const image = await uploadImage(cropped);
-            const width = Math.min(node.width, Math.max(220, image.width));
-            const childId = nanoid();
-            const child: CanvasNodeData = {
-                id: childId,
-                createdAt: new Date().toISOString(),
-                type: CanvasNodeType.Image,
-                title: t("canvas.editor.nodes.croppedImage"),
-                position: { x: node.position.x + node.width + 96, y: node.position.y },
-                width,
-                height: width * (image.height / image.width),
-                metadata: {
-                    ...imageMetadata(image),
-                    prompt: node.metadata?.prompt,
-                },
+            if (!node.metadata?.content || !editorBinding) return;
+            const isActive = () => {
+                const auth = useUserStore.getState();
+                return (
+                    projectIdRef.current === projectId &&
+                    matchesCanvasReplicaBinding(useCanvasStore.getState().openProject(projectId), editorBinding, { token: auth.token, userId: auth.user?.id || "" }) &&
+                    nodesRef.current.some((item) => item.id === node.id)
+                );
             };
-            setNodes((prev) => [...prev, child]);
-            setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: childId }]);
-            setSelectedNodeIds(new Set([childId]));
-            setDialogNodeId(childId);
-            setCropNodeId(null);
+            if (!isActive()) return;
+            try {
+                const cropped = await cropDataUrl(node.metadata, crop);
+                if (!isActive()) return;
+                const blob = await (await fetch(cropped)).blob();
+                if (!isActive()) return;
+                const image = await uploadBlob(blob, "images");
+                if (!isActive()) return;
+                const width = Math.min(node.width, Math.max(220, image.width));
+                const childId = nanoid();
+                const child: CanvasNodeData = {
+                    id: childId,
+                    createdAt: new Date().toISOString(),
+                    type: CanvasNodeType.Image,
+                    title: t("canvas.editor.nodes.croppedImage"),
+                    position: { x: node.position.x + node.width + 96, y: node.position.y },
+                    width,
+                    height: width * (image.height / image.width),
+                    metadata: {
+                        ...imageMetadata(image),
+                        prompt: node.metadata?.prompt,
+                    },
+                };
+                setNodes((prev) => [...prev, child]);
+                setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: childId }]);
+                setSelectedNodeIds(new Set([childId]));
+                setDialogNodeId(childId);
+                setCropNodeId(null);
+            } catch (error) {
+                if (isActive()) throw error;
+            }
         },
-        [t],
+        [editorBinding, projectId, t],
     );
 
     const splitImageNode = useCallback(
@@ -2303,31 +2320,48 @@ function InfiniteCanvasPage() {
 
     const upscaleImageNode = useCallback(
         async (node: CanvasNodeData, params: CanvasImageUpscaleParams) => {
-            if (!node.metadata?.content) return;
-            setUpscaleNodeId(null);
-            const upscaled = await upscaleDataUrl(node.metadata, params);
-            const image = await uploadImage(upscaled);
-            const size = fitNodeSize(image.width, image.height);
-            const childId = nanoid();
-            const child: CanvasNodeData = {
-                id: childId,
-                createdAt: new Date().toISOString(),
-                type: CanvasNodeType.Image,
-                title: t("canvas.editor.nodes.upscaledImage"),
-                position: { x: node.position.x + node.width + 96, y: node.position.y },
-                width: size.width,
-                height: size.height,
-                metadata: {
-                    ...imageMetadata(image),
-                    prompt: node.metadata?.prompt,
-                },
+            if (!node.metadata?.content || !editorBinding) return;
+            const isActive = () => {
+                const auth = useUserStore.getState();
+                return (
+                    projectIdRef.current === projectId &&
+                    matchesCanvasReplicaBinding(useCanvasStore.getState().openProject(projectId), editorBinding, { token: auth.token, userId: auth.user?.id || "" }) &&
+                    nodesRef.current.some((item) => item.id === node.id)
+                );
             };
-            setNodes((prev) => [...prev, child]);
-            setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: childId }]);
-            setSelectedNodeIds(new Set([childId]));
-            setDialogNodeId(childId);
+            if (!isActive()) return;
+            try {
+                const upscaled = await upscaleDataUrl(node.metadata, params);
+                if (!isActive()) return;
+                const blob = await (await fetch(upscaled)).blob();
+                if (!isActive()) return;
+                const image = await uploadBlob(blob, "images");
+                if (!isActive()) return;
+                const size = fitNodeSize(image.width, image.height);
+                const childId = nanoid();
+                const child: CanvasNodeData = {
+                    id: childId,
+                    createdAt: new Date().toISOString(),
+                    type: CanvasNodeType.Image,
+                    title: t("canvas.editor.nodes.upscaledImage"),
+                    position: { x: node.position.x + node.width + 96, y: node.position.y },
+                    width: size.width,
+                    height: size.height,
+                    metadata: {
+                        ...imageMetadata(image),
+                        prompt: node.metadata?.prompt,
+                    },
+                };
+                setNodes((prev) => [...prev, child]);
+                setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: childId }]);
+                setSelectedNodeIds(new Set([childId]));
+                setDialogNodeId(childId);
+                setUpscaleNodeId(null);
+            } catch (error) {
+                if (isActive()) throw error;
+            }
         },
-        [t],
+        [editorBinding, projectId, t],
     );
 
     const generateAngleNode = useCallback(
@@ -3501,8 +3535,12 @@ function InfiniteCanvasPage() {
     };
     const exportCurrentCanvas = useCallback(async () => {
         if (!currentProject) return;
-        await exportCanvasProjects([{ ...currentProject, nodes, connections, chatSessions, activeChatId, backgroundMode, showImageInfo, viewport }], currentProject.title || t("canvas.export.defaultFileName"));
-    }, [activeChatId, backgroundMode, chatSessions, connections, currentProject, nodes, showImageInfo, t, viewport]);
+        try {
+            await exportCanvasProjects([{ ...currentProject, nodes, connections, chatSessions, activeChatId, backgroundMode, showImageInfo, viewport }], currentProject.title || t("canvas.export.defaultFileName"));
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("canvas.overview.exportFailed"));
+        }
+    }, [activeChatId, backgroundMode, chatSessions, connections, currentProject, message, nodes, showImageInfo, t, viewport]);
 
     if (!projectLoaded) return <CanvasRefreshShell />;
 
@@ -3847,7 +3885,7 @@ function InfiniteCanvasPage() {
 
                 <CanvasNodeInfoModal node={infoNode} open={Boolean(infoNode)} onClose={() => setInfoNodeId(null)} />
 
-                {cropNode?.metadata?.content ? <CanvasNodeCropDialog dataUrl={cropNode.metadata.content} open={Boolean(cropNode)} onClose={() => setCropNodeId(null)} onConfirm={(crop) => void cropImageNode(cropNode!, crop)} /> : null}
+                {cropNode?.metadata?.content ? <CanvasNodeCropDialog dataUrl={cropNode.metadata.content} open={Boolean(cropNode)} onClose={() => setCropNodeId(null)} onConfirm={(crop) => cropImageNode(cropNode!, crop)} /> : null}
 
                 {maskEditNode?.metadata?.content && maskEditDataUrl ? <CanvasNodeMaskEditDialog dataUrl={maskEditDataUrl} open onClose={() => setMaskEditNodeId(null)} onConfirm={(payload) => void maskEditImageNode(maskEditNode, payload)} /> : null}
 
@@ -3855,9 +3893,7 @@ function InfiniteCanvasPage() {
                     <CanvasNodeSplitDialog dataUrl={splitNode.metadata.content} open={Boolean(splitNode)} onClose={() => setSplitNodeId(null)} onConfirm={(params, onProgress) => splitImageNode(splitNode!, params, onProgress)} />
                 ) : null}
 
-                {upscaleNode?.metadata?.content ? (
-                    <CanvasNodeUpscaleDialog dataUrl={upscaleNode.metadata.content} open={Boolean(upscaleNode)} onClose={() => setUpscaleNodeId(null)} onConfirm={(params) => void upscaleImageNode(upscaleNode!, params)} />
-                ) : null}
+                {upscaleNode?.metadata?.content ? <CanvasNodeUpscaleDialog dataUrl={upscaleNode.metadata.content} open={Boolean(upscaleNode)} onClose={() => setUpscaleNodeId(null)} onConfirm={(params) => upscaleImageNode(upscaleNode!, params)} /> : null}
 
                 <Modal title={t("canvas.editor.modals.superResolution.title")} open={Boolean(superResolveNode?.metadata?.content)} centered footer={null} onCancel={() => setSuperResolveNodeId(null)}>
                     <div className="py-8 text-center text-base font-medium">{t("canvas.editor.modals.superResolution.unavailable")}</div>

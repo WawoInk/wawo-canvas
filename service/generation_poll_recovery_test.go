@@ -2,13 +2,86 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/basketikun/infinite-canvas/model"
 	"github.com/basketikun/infinite-canvas/repository"
+	"github.com/google/uuid"
 )
+
+func TestCanvasVideoRecoveryDoesNotRequireSubmittedInputs(t *testing.T) {
+	profile := lifecycleProfile("submitted-input-recovery", []string{"poll"}, false)
+	adapter := lifecycleFakeAdapter{
+		create: func(context.Context, AdapterCreateRequest) (ProviderTaskRef, error) {
+			return ProviderTaskRef{}, fmt.Errorf("submitted generation must not be recreated")
+		},
+		poll: func(_ context.Context, _ model.ModelChannel, id string) (ProviderTaskRef, error) {
+			if id != "provider-submitted" {
+				return ProviderTaskRef{}, fmt.Errorf("unexpected upstream identity %q", id)
+			}
+			return ProviderTaskRef{ID: id, Status: model.TaskStatusSucceeded, VideoURL: "https://example.invalid/video.mp4"}, nil
+		},
+	}
+	restore := useLifecycleTestAdapter(profile, adapter)
+	defer restore()
+	previousPersist := generationPersistVideo
+	defer func() { generationPersistVideo = previousPersist }()
+	generationPersistVideo = func(context.Context, model.GenerationTask, string) (*model.UserFile, error) {
+		return &model.UserFile{ID: "recovered-video", MimeType: "video/mp4"}, nil
+	}
+
+	for _, unavailable := range []string{"deleted reference", "expired audit payload"} {
+		t.Run(unavailable, func(t *testing.T) {
+			key := uuid.NewString()
+			now := time.Now().UTC()
+			task := model.GenerationTask{
+				ID: "submitted-input-task-" + key, UserID: "submitted-input-user-" + key,
+				TaskType: model.TaskTypeVideo, Source: string(model.SourceCanvas), Status: model.TaskStatusRunning,
+				CommandVersion: 1, IntentKind: string(model.IntentVideoGenerate), ModelProfileID: profile.ID,
+				AdapterKey: profile.AdapterKey, UpstreamModel: profile.UpstreamModel, UpstreamTaskID: "provider-submitted",
+				WorkerLeaseOwner: "expired-worker", WorkerLeaseExpiresAt: now.Add(-time.Minute).Format(time.RFC3339Nano),
+				CreatedAt: now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano),
+			}
+			fileID := "submitted-input-file-" + key
+			command, err := json.Marshal(model.GenerationCommand{CommandVersion: 1, Intent: model.GenerationIntent{
+				Kind: model.IntentVideoGenerate, Prompt: "continue submitted generation",
+				References: model.GenerationReferences{Images: []model.MediaReference{{FileID: fileID}}},
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := repository.CreateGenerationTask(task, model.GenerationPayload{ID: "submitted-input-payload-" + key, CommandBody: string(command), CreatedAt: task.CreatedAt}); err != nil {
+				t.Fatal(err)
+			}
+			if unavailable == "deleted reference" {
+				if err := repository.CreateUserFile(model.UserFile{ID: fileID, UserID: task.UserID, FileType: "images"}); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := repository.DeleteUserFile(fileID, task.UserID); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				db, err := repository.DB()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := db.Where("task_id = ?", task.ID).Delete(&model.GenerationPayload{}).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			if !processGenerationTask(context.Background(), task.ID, "recovery-worker-"+key) {
+				t.Fatal("expired generation lease was not recovered")
+			}
+			result, err := GetGeneration(task.UserID, task.ID)
+			if err != nil || result.Status != model.TaskStatusSucceeded || result.Result == nil || result.Result.File.FileID != "recovered-video" {
+				t.Fatalf("recovery with %s: result=%#v err=%v", unavailable, result, err)
+			}
+		})
+	}
+}
 
 func TestCanvasVideoTransientPollKeepsTaskIdentity(t *testing.T) {
 	runCanvasVideoTransientPoll(t, false, false)

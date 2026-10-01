@@ -84,3 +84,29 @@ test("preserves the current Canvas project archive export", async () => {
     assert.strictEqual(zipFiles[1].data, imageBlobs.get("image:one"));
     assert.strictEqual(zipFiles[2].data, platformBlobs.get("file-1"));
 });
+
+test("refuses to save a project archive when a required local image is missing", async () => {
+    saved = [];
+    const { exportCanvasProjects } = await import("./canvas-export.ts");
+    await assert.rejects(exportCanvasProjects([{ id: "missing-local", nodes: [{ metadata: { storageKey: "image:gone" } }] }]), /image:gone/);
+    assert.deepEqual(saved, []);
+});
+
+test("refuses to save a project archive when its platform file cannot be read", async () => {
+    saved = [];
+    const { exportCanvasProjects } = await import("./canvas-export.ts");
+    await assert.rejects(exportCanvasProjects([{ id: "missing-platform", nodes: [{ metadata: { fileId: "file-gone" } }] }]), /file-gone/);
+    assert.deepEqual(saved, []);
+});
+
+test("exports platform-backed media even when its optional local cache is absent", async () => {
+    saved = [];
+    const { exportCanvasProjects } = await import("./canvas-export.ts");
+    await exportCanvasProjects([{ id: "platform-cache", nodes: [{ metadata: { fileId: "file-1", storageKey: "media:expired-cache" } }] }]);
+    assert.equal(saved[0], zipBlob);
+    const manifest = JSON.parse(zipFiles[0].data);
+    assert.deepEqual(
+        manifest.projects[0].files.map((file) => file.fileId),
+        ["file-1"],
+    );
+});

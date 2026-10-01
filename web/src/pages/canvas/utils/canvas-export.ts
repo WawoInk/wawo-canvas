@@ -7,25 +7,29 @@ import { readPlatformFileBlob } from "@/services/api/files";
 import type { CanvasExportAsset, CanvasExportFile } from "../export-types";
 import type { CanvasProject } from "../stores/use-canvas-store";
 import { CanvasNodeType, type CanvasNodeData } from "../types";
+import { collectCanvasExportReferences } from "./canvas-export-references";
 
 export async function exportCanvasProjects(projects: CanvasProject[], fileName = i18n.t("canvas.export.defaultFileName")) {
     const zipFiles: { name: string; data: BlobPart }[] = [];
     const exportedProjects = await Promise.all(
         projects.map(async (project) => {
             const files: CanvasExportAsset[] = [];
+            const references = collectCanvasExportReferences(project);
             await Promise.all(
-                collectStorageKeys(project).map(async (storageKey) => {
+                [...references.storageKeys].map(async (storageKey) => {
                     const blob = storageKey.startsWith("image:") ? await getImageBlob(storageKey) : await getMediaBlob(storageKey);
-                    if (!blob) return;
+                    if (!blob) throw new Error(i18n.t("canvas.export.missingMedia", { reference: storageKey }));
                     const path = `projects/${project.id}/files/${safeFileName(storageKey)}.${fileExtension(blob.type, storageKey)}`;
                     files.push({ storageKey, path, mimeType: blob.type || "application/octet-stream", bytes: blob.size });
                     zipFiles.push({ name: path, data: blob });
                 }),
             );
             await Promise.all(
-                collectFileIds(project).map(async (fileId) => {
-                    const blob = await readPlatformFileBlob(fileId).catch(() => null);
-                    if (!blob) return;
+                [...references.fileIds].map(async (fileId) => {
+                    const blob = await readPlatformFileBlob(fileId).catch(() => {
+                        throw new Error(i18n.t("canvas.export.missingMedia", { reference: fileId }));
+                    });
+                    if (!blob) throw new Error(i18n.t("canvas.export.missingMedia", { reference: fileId }));
                     const path = `projects/${project.id}/files/platform-${safeFileName(fileId)}.${fileExtension(blob.type, "")}`;
                     files.push({ fileId, path, mimeType: blob.type || "application/octet-stream", bytes: blob.size });
                     zipFiles.push({ name: path, data: blob });
@@ -75,20 +79,6 @@ export async function exportCanvasNodes(nodes: CanvasNodeData[], fileName = i18n
 
     const zip = await createZip(files);
     saveAs(zip, `${safeFileName(fileName)}.zip`);
-}
-
-function collectStorageKeys(value: unknown, keys = new Set<string>()) {
-    if (!value || typeof value !== "object") return [...keys];
-    if ("storageKey" in value && typeof value.storageKey === "string" && value.storageKey.includes(":")) keys.add(value.storageKey);
-    Object.values(value).forEach((item) => (Array.isArray(item) ? item.forEach((child) => collectStorageKeys(child, keys)) : collectStorageKeys(item, keys)));
-    return [...keys];
-}
-
-function collectFileIds(value: unknown, ids = new Set<string>()) {
-    if (!value || typeof value !== "object") return [...ids];
-    if ("fileId" in value && typeof value.fileId === "string" && value.fileId) ids.add(value.fileId);
-    Object.values(value).forEach((item) => (Array.isArray(item) ? item.forEach((child) => collectFileIds(child, ids)) : collectFileIds(item, ids)));
-    return [...ids];
 }
 
 function safeFileName(value: string) {

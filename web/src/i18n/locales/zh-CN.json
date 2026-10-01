@@ -3149,7 +3149,8 @@
         "export": {
             "defaultFileName": "无限画布",
             "defaultNodesName": "画布元素",
-            "item": "元素"
+            "item": "元素",
+            "missingMedia": "无法读取画布媒体：{{reference}}，请恢复文件后重试"
         },
         "agent": {
             "title": "Agent",

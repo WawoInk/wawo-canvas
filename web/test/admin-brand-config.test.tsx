@@ -28,6 +28,7 @@ test("分镜创作室关闭时子项归零、禁用并在父项内弱化展示",
             navigation: {
                 enabled: true,
                 canvas: true,
+                canvasLocalAgent: false,
                 storyboard: true,
                 image: true,
                 video: false,
@@ -61,10 +62,11 @@ test("分镜创作室关闭时子项归零、禁用并在父项内弱化展示",
         await act(async () => {
             root.render(react.createElement(ConfigProvider, null, react.createElement(App, null, react.createElement(AdminBrandConfigPage))));
         });
-        await waitFor(() => settingsLoaded && container.querySelectorAll('[role="switch"]').length === 11);
+        await waitFor(() => settingsLoaded && container.querySelectorAll('[role="switch"]').length === 12);
 
         const enabled = getSwitch(container, i18n.t("admin.brandConfig.fields.enabled"));
         const canvas = getSwitch(container, i18n.t("admin.brandConfig.fields.canvas"));
+        const canvasLocalAgent = getSwitch(container, i18n.t("admin.brandConfig.fields.canvasLocalAgent"));
         const storyboard = getSwitch(container, i18n.t("admin.brandConfig.fields.storyboard"));
         const video = getSwitch(container, i18n.t("admin.brandConfig.fields.video"));
         const storyboardItem = required(container.querySelector<HTMLElement>('[data-navigation-item="storyboard"]'));
@@ -77,6 +79,8 @@ test("分镜创作室关闭时子项归零、禁用并在父项内弱化展示",
         await act(async () => click(enabled));
         await waitFor(() => enabled.getAttribute("aria-checked") === "false" && canvas.hasAttribute("disabled"));
         assert.equal(canvas.getAttribute("aria-checked"), "true");
+        assert.equal(canvasLocalAgent.getAttribute("aria-checked"), "false");
+        assert.ok(canvasLocalAgent.hasAttribute("disabled"));
         assert.equal(brainstormAgent.getAttribute("aria-checked"), "true");
         assert.ok(brainstormAgent.hasAttribute("disabled"));
 

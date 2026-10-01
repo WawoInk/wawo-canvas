@@ -187,6 +187,7 @@ test("保存图片请求格式时过滤非法分辨率并去重", async () => {
         assert.deepEqual(postedSettings.public.navigation, {
             enabled: true,
             canvas: true,
+            canvasLocalAgent: false,
             storyboard: true,
             image: true,
             video: false,

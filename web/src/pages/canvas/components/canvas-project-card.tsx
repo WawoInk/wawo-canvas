@@ -2,7 +2,7 @@
 
 import { Check, Download, Pencil, Trash2, X } from "lucide-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { Button, Input } from "antd";
+import { App, Button, Input } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { formatDateTime, formatNumber } from "@/i18n/formatters";
@@ -13,6 +13,7 @@ import { hasAgentUrlBootstrap } from "./canvas-agent-url-bootstrap";
 
 export function CanvasProjectCard({ project }: { project: CanvasProject }) {
     const { t } = useTranslation();
+    const { message } = App.useApp();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const { hash } = useLocation();
@@ -83,7 +84,7 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
                                 size="small"
                                 shape="circle"
                                 icon={<Download className="size-4" />}
-                                onClick={() => void exportCanvasProjects([project], project.title || t("canvas.library.header.title"))}
+                                onClick={() => void exportCanvasProjects([project], project.title || t("canvas.library.header.title")).catch((error) => message.error(error instanceof Error ? error.message : t("canvas.overview.exportFailed")))}
                                 aria-label={t("canvas.library.project.actions.export")}
                             />
                             <Button type="text" size="small" shape="circle" icon={<Pencil className="size-4" />} onClick={() => startEditing(project.id, project.title)} aria-label={t("canvas.library.project.actions.rename")} />
