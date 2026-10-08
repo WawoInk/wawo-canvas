@@ -368,7 +368,7 @@ function NodeContent(props: NodeContentRendererProps) {
     const { node, theme } = props;
     if (node.type === CanvasNodeType.Group) return <GroupContent node={node} theme={theme} childCount={props.groupChildCount} t={props.t} />;
     if (node.type === CanvasNodeType.Config && props.renderNodeContent) return props.renderNodeContent(node);
-    if (node.type === CanvasNodeType.Video && node.metadata?.generationPollingPaused && (node.metadata.status === "loading" || node.metadata.status === "error")) {
+    if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Image) && node.metadata?.generationPollingPaused && (node.metadata.status === "loading" || node.metadata.status === "error")) {
         return (
             <div className="flex max-w-[260px] flex-col items-center gap-3 px-5 text-center" style={{ color: theme.node.muted }}>
                 <Pause className="size-6" />

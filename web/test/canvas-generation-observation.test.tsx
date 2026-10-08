@@ -613,3 +613,150 @@ test("manual resume observes the original task after editor initialization", asy
             ?.nodes.find((node) => node.id === "output")?.metadata?.fileId,
     ).toBe("result-file");
 });
+
+async function checkCanvasImageResult(responseKind: "immediate-b64" | "immediate-url" | "polled-url" | "delayed-submit", count: number, failMetadata = false) {
+    const originalImage = globalThis.Image;
+    globalThis.Image = TransformImage as any;
+    await setup("image");
+    const preparedFetch = globalThis.fetch;
+    const preparedAdapter = axios.defaults.adapter;
+    const requests: { url: string; body: FormData; source: unknown }[] = [];
+    const uploads: { url: string; body: FormData | { url: string; fileType: string } }[] = [];
+    const patches: { metadata: string }[] = [];
+    let releaseResult!: () => void;
+    const resultGate = new Promise<void>((resolve) => (releaseResult = resolve));
+    const isPolled = responseKind === "polled-url" || responseKind === "delayed-submit";
+    const hasPlatformTask = responseKind !== "immediate-b64";
+    const resultUrl = "https://fixture.example/generated.png";
+    const b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jkXcAAAAASUVORK5CYII=";
+    const terminalPayload =
+        responseKind === "immediate-b64"
+            ? { id: "task_fixture", object: "task", result: { created: 1791430575, data: [{ b64_json: b64 }], usage: { input_tokens: 1172, output_tokens: 397, total_tokens: 1569 } }, status: "completed" }
+            : { status: "completed", result: { data: [{ url: resultUrl }] } };
+    try {
+        await act(async () => {
+            useConfigStore.setState({
+                publicSettings: { ...publicSettings, modelChannel: { ...publicSettings.modelChannel, availableModels: ["Images"], imageModels: ["Images"], defaultModel: "Images", defaultImageModel: "Images" } },
+                config: { ...defaultConfig, channelMode: "remote", model: "Images", imageModel: "Images", count: String(count), canvasImageCount: String(count), channels: [] },
+            });
+        });
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = String(input);
+            if (url.startsWith("data:")) return originalFetch(input, init);
+            if (init?.method === "POST" && (url === "/api/v1/files" || url === "/api/v1/files/proxy-upload")) {
+                uploads.push({ url, body: url.endsWith("proxy-upload") ? JSON.parse(String(init.body)) : (init.body as FormData) });
+                return Response.json({ code: 0, data: { id: `generated-file-${uploads.length}`, url: resultUrl, bytes: 68, mimeType: "image/png" } });
+            }
+            return preparedFetch(input, init);
+        }) as typeof fetch;
+        axios.defaults.adapter = async (config) => {
+            if (config.url?.includes("images/edits") && config.method === "post") {
+                requests.push({ url: config.url, body: config.data, source: config.headers.get("X-Source") });
+                const taskNumber = requests.length;
+                if (responseKind === "delayed-submit") await resultGate;
+                return { config, headers: hasPlatformTask ? { "x-generation-task-id": `platform-image-${taskNumber}` } : {}, status: 200, statusText: "OK", data: isPolled ? { id: `upstream-image-${taskNumber}`, status: "queued" } : terminalPayload };
+            }
+            if (config.url?.includes("/tasks/upstream-image-")) {
+                polls++;
+                return { config, headers: {}, status: 200, statusText: "OK", data: terminalPayload };
+            }
+            if (config.url?.match(/generation-tasks\/platform-image-\d+\/metadata$/)) {
+                patches.push(JSON.parse(config.data));
+                return { config, headers: {}, status: 200, statusText: "OK", data: failMetadata ? { code: 1, msg: "保存结果元数据失败" } : { code: 0, data: true } };
+            }
+            return (preparedAdapter as any)(config);
+        };
+        const source = host.querySelector('[data-node-id="reference"]')!;
+        await act(async () => {
+            (source.firstElementChild || source).dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 10 }));
+            window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 10 }));
+        });
+        const prompt = host.querySelector<HTMLElement>('[contenteditable="true"][role="textbox"]')!;
+        expect(prompt).not.toBeNull();
+        await act(async () => {
+            prompt.textContent = "替换背景";
+            prompt.dispatchEvent(new InputEvent("input", { bubbles: true }));
+        });
+        const generate = host.querySelector<HTMLButtonElement>('button[aria-label="生成"]')!;
+        expect(generate).not.toBeNull();
+        expect(generate.disabled).toBe(false);
+        await act(async () => generate.click());
+        const generatedNodes = () =>
+            useCanvasStore
+                .getState()
+                .openProject("project")
+                ?.nodes.filter((node) => !["reference", "output"].includes(node.id)) ?? [];
+        if (responseKind === "delayed-submit") {
+            await settleUntil(() => savedProjects.some((saved) => saved.nodes.some((node) => !["reference", "output"].includes(node.id) && node.metadata?.status === "loading")));
+            expect(savedProjects.some((saved) => saved.nodes.some((node) => !["reference", "output"].includes(node.id) && node.metadata?.status === "loading"))).toBe(true);
+            expect(requests).toHaveLength(count);
+            expect(polls).toBe(0);
+            expect(generatedNodes().every((node) => node.metadata?.status === "loading")).toBe(true);
+            await act(async () => releaseResult());
+        }
+        await settleUntil(() => generatedNodes().length === (count === 1 ? 1 : count + 1) && generatedNodes().every((node) => node.metadata?.status === (failMetadata ? "error" : "success")));
+        expect(requests).toHaveLength(count);
+        for (const request of requests) {
+            expect(request.url).toBe("/api/v1/async/images/edits");
+            expect(request.source).toBe("canvas");
+            expect(request.body).toBeInstanceOf(FormData);
+            expect(request.body.get("model")).toBe("Images");
+            expect(request.body.get("image")).toBeInstanceOf(File);
+        }
+        expect(uploads).toHaveLength(count);
+        expect(patches).toHaveLength(hasPlatformTask ? count : 0);
+        expect(uploads.every(({ body }) => (body instanceof FormData ? body.get("fileType") : body.fileType) === "results/images")).toBe(true);
+        expect(patches.map(({ metadata }) => JSON.parse(metadata).fileIds[0]).sort()).toEqual(hasPlatformTask ? uploads.map((_, index) => `generated-file-${index + 1}`) : []);
+        expect(polls).toBe(isPolled ? count : 0);
+        expect(generatedNodes()).toHaveLength(count === 1 ? 1 : count + 1);
+        if (failMetadata) {
+            const result = generatedNodes()[0];
+            expect(result.metadata).toMatchObject({ status: "error", generationPollingPaused: true, errorDetails: "保存结果元数据失败", upstreamTaskId: "upstream-image-1", platformTaskId: "platform-image-1" });
+            expect(result.metadata?.content).toBeUndefined();
+            expect(result.metadata?.fileId).toBeUndefined();
+            expect(host.textContent).toContain("保存结果元数据失败");
+            const resultNode = host.querySelector(`[data-node-id="${result.id}"]`)!;
+            await act(async () => {
+                (resultNode.firstElementChild || resultNode).dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 250 }));
+                window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 250 }));
+            });
+            const resume = host.querySelector<HTMLButtonElement>('button[aria-label="恢复查询"]')!;
+            expect(resume).not.toBeNull();
+            failMetadata = false;
+            await act(async () => resume.click());
+            await settleUntil(() => generatedNodes()[0].metadata?.status === "success");
+            expect(generatedNodes()[0].metadata).toMatchObject({ status: "success", fileId: "generated-file-2", upstreamTaskId: "upstream-image-1", platformTaskId: "platform-image-1" });
+            expect(requests).toHaveLength(1);
+            expect(polls).toBe(2);
+            expect(patches).toHaveLength(2);
+        }
+        if (count > 1) {
+            const toggle = host.querySelector<HTMLButtonElement>("[data-batch-toggle]")!;
+            expect(toggle).not.toBeNull();
+            await act(async () => toggle.click());
+            await settleUntil(() => generatedNodes().every((node) => host.querySelector(`[data-node-id="${node.id}"] img`)));
+        }
+        for (const node of generatedNodes()) {
+            expect(node.metadata).toMatchObject({ status: "success", content: resultUrl, mimeType: "image/png" });
+            expect(node.metadata?.fileId).toMatch(/^generated-file-/);
+            expect(node.width / node.height).toBe(2);
+            const image = host.querySelector<HTMLImageElement>(`[data-node-id="${node.id}"] img`);
+            expect(image?.getAttribute("src")).toBe(resultUrl);
+        }
+    } finally {
+        releaseResult();
+        globalThis.Image = originalImage;
+    }
+}
+
+test.each([
+    ["immediate-b64", 1],
+    ["immediate-url", 1],
+    ["polled-url", 1],
+    ["immediate-b64", 2],
+    ["immediate-url", 2],
+    ["polled-url", 2],
+    ["delayed-submit", 2],
+] as const)("Images editing an uploaded source materializes and displays every result (%s, count=%s)", async (responseKind, count) => checkCanvasImageResult(responseKind, count));
+
+test("metadata failure after a successful Images upload pauses the result and resumes its original task", async () => checkCanvasImageResult("polled-url", 1, true));

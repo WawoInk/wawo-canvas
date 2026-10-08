@@ -254,7 +254,7 @@ original credits * enterprise.discount_rate
 4. 按 `openai/gemini/xvanai` 构造上游 URL/auth/body。
 5. 建立 generation task 和 payload 审计。
 6. 扣积分。
-7. 转发上游响应，设置 `X-Generation-Task-Id`。
+7. 设置 `X-Generation-Task-Id`；非流式结果先完成任务状态及审计写入，再转发上游响应，避免客户端 `fileIds` 回写早于任务进入 pending。
 8. 成功记录或失败退款。
 
 兼容 body 基本透明转发，这允许供应商扩展字段继续工作。新增兼容协议时优先在 channel/request builder 中集中处理，不要在每个前端页面复制 URL 和鉴权分支。
@@ -303,7 +303,7 @@ Canvas metadata 持久化：
 - `taskModel`
 - 当前 status/error
 
-远程视频工作台本地日志保存 first-party task ID、Profile ID 和短剧标题/资产角色，用于刷新后继续观察同一任务；服务端视频历史从 command/result 投影 Profile settings、短剧标题/脚本和 Materialized Result `fileId`。远程图片工作台与 Canvas 图片节点共用异步 task 完成器：上传结果后将同一平台 task 的 metadata 写为 `fileIds`，由服务端把图片任务从内部 `pending` 结算为成功。
+远程视频工作台本地日志保存 first-party task ID、Profile ID 和短剧标题/资产角色，用于刷新后继续观察同一任务；服务端视频历史从 command/result 投影 Profile settings、短剧标题/脚本和 Materialized Result `fileId`。远程图片工作台与 Canvas 图片节点共用异步 task 完成器：上传结果后将同一平台 task 的 metadata 写为 `fileIds`，由服务端把图片任务从内部 `pending` 结算为成功。metadata 写入失败会抛可恢复错误，调用方展示原因并保留原任务，不能提前发布成功。
 
 视频 Materialized Result 通过 `commitCanvasVideoResult` 写回节点；页面只有在账号隔离 Canvas Replica durable commit 完成后才发布成功状态。等待期间若有更晚的节点编辑，结果会重新应用到最新 accepted nodes；服务端 Canvas PUT 也只消费已本地持久化的项目快照。
 

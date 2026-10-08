@@ -56,7 +56,9 @@ export async function completeAsyncImageTask(task: AsyncImagePlatformTask, depen
             throw new DOMException("Aborted", "AbortError");
         }
         if (task.platformTaskId) {
-            await dependencies.patchMetadata(task.platformTaskId, JSON.stringify({ fileIds: [stored.fileId] })).catch(() => {});
+            await dependencies.patchMetadata(task.platformTaskId, JSON.stringify({ fileIds: [stored.fileId] })).catch((error) => {
+                if (!dependencies.signal?.aborted) throw new AsyncImageTaskRetryableError(error);
+            });
             if (dependencies.signal?.aborted) {
                 await requestCancellation();
                 throw new DOMException("Aborted", "AbortError");

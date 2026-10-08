@@ -783,12 +783,11 @@ func proxyCopyAIResponse(w http.ResponseWriter, request *http.Request, onFailure
 	if len(normalizeResponse) > 0 && normalizeResponse[0] != nil {
 		respBody = normalizeResponse[0](respBody)
 	}
-	w.WriteHeader(response.StatusCode)
-	_, _ = w.Write(respBody)
-
 	if onSuccess != nil {
 		onSuccess(respBody, respHeaders)
 	}
+	w.WriteHeader(response.StatusCode)
+	_, _ = w.Write(respBody)
 }
 
 func readAIRequest(r *http.Request) ([]byte, string, string, error) {

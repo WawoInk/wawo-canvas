@@ -289,6 +289,32 @@ test("canvas accepts completed b64_json responses from async image edits", async
     }
 });
 
+test("Images edits materialize the reported completed task result without a platform header or polling", async () => {
+    const previousPost = axios.post;
+    const previousGet = axios.get;
+    const b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jkXcAAAAASUVORK5CYII=";
+    let request;
+    axios.post = async (url, body, options) => {
+        request = { url, body, options };
+        return {
+            data: { id: "task_fixture", object: "task", result: { created: 1791430575, data: [{ b64_json: b64 }], usage: { input_tokens: 1172, output_tokens: 397, total_tokens: 1569 } }, status: "completed" },
+        };
+    };
+    axios.get = async () => assert.fail("the reported completed image must not remain waiting on a poll");
+    try {
+        const config = { ...defaultConfig, channelMode: "remote", model: "Images", imageModel: "Images" };
+        const task = await createAsyncImageEditTask(config, "替换背景", [{ id: "reference", name: "reference.png", type: "image/png", dataUrl: `data:image/png;base64,${b64}` }]);
+        assert.equal(request.url, "/api/v1/async/images/edits");
+        assert.ok(request.body.get("image") instanceof File);
+        assert.equal(request.options.headers["X-Source"], "canvas");
+        assert.deepEqual(task, { id: "task_fixture", model: "Images", images: [{ dataUrl: `data:image/png;base64,${b64}` }] });
+        assert.deepEqual(await pollAsyncImageTask(config, task), { status: "succeeded", images: task.images });
+    } finally {
+        axios.post = previousPost;
+        axios.get = previousGet;
+    }
+});
+
 test("canvas accepts completed result.data url responses from async image edits", async () => {
     const previousPost = axios.post;
     const previousGet = axios.get;

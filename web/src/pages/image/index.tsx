@@ -884,7 +884,7 @@ export default function ImagePage() {
                                     ) : result.status === "failed" ? (
                                         <FailedImageCard key={result.id} error={result.error || t("errors.image.generationFailed")} onRetry={() => retryResult(index)} />
                                     ) : (
-                                        <PendingImageCard key={result.id} />
+                                        <PendingImageCard key={result.id} error={result.error} />
                                     ),
                                 )}
                             </div>
@@ -1004,7 +1004,7 @@ function ResultImageCard({
     );
 }
 
-function PendingImageCard() {
+function PendingImageCard({ error }: { error?: string }) {
     const { t } = useTranslation();
 
     return (
@@ -1018,8 +1018,10 @@ function PendingImageCard() {
                 }}
             />
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-                <LoaderCircle className="size-6 animate-spin" />
-                <span>{t("imageWorkbench.results.pending")}</span>
+                {error ? null : <LoaderCircle className="size-6 animate-spin" />}
+                <span role={error ? "alert" : undefined} className="px-4 text-center">
+                    {error || t("imageWorkbench.results.pending")}
+                </span>
             </div>
         </div>
     );

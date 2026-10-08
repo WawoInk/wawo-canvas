@@ -215,30 +215,34 @@ test("image workbench keeps provider failures as terminal errors", async () => {
     assert.equal(materialized, false);
 });
 
-test("image workbench keeps a materialized result when metadata patching fails", async () => {
-    const image = await completeImageWorkbenchTask(
-        {
-            source: "image_workbench",
-            platformTaskId: "platform-task-42",
-            upstreamTask: { id: "upstream-task-7", model: "Images" },
+test("image workbench pauses metadata failure and resumes the same task", async () => {
+    const task = { source: "image_workbench", platformTaskId: "platform-task-42", upstreamTask: { id: "upstream-task-7", model: "Images" } };
+    const patched = [];
+    let failMetadata = true;
+    let restoredTask;
+    const dependencies = {
+        poll: async () => ({ status: "succeeded", images: [{ dataUrl: "data:image/png;base64,aW1hZ2U=" }] }),
+        materialize: async () => ({ fileId: "file-final-9", url: "https://files.test/file-final-9", width: 1024, height: 1024, bytes: 321, mimeType: "image/png" }),
+        patchMetadata: async (taskId, metadata) => {
+            patched.push({ taskId, metadata });
+            if (failMetadata) throw new Error("history is temporarily unavailable");
         },
-        {
-            poll: async () => ({ status: "succeeded", images: [{ dataUrl: "data:image/png;base64,aW1hZ2U=" }] }),
-            materialize: async () => ({
-                fileId: "file-final-9",
-                url: "https://files.test/file-final-9",
-                width: 1024,
-                height: 1024,
-                bytes: 321,
-                mimeType: "image/png",
-            }),
-            patchMetadata: async () => {
-                throw new Error("history is temporarily unavailable");
-            },
-        },
-    );
-
+    };
+    await assert.rejects(completeImageWorkbenchTask(task, dependencies), (error) => {
+        assert.equal(error.message, "history is temporarily unavailable");
+        assert.ok(isImageWorkbenchTaskRetryableError(error));
+        const record = imageWorkbenchTaskRecord(0, task, imageWorkbenchTaskStatusForError(error));
+        const restored = resumableImageWorkbenchTasks([record]);
+        assert.deepEqual(restored, [{ record, task }]);
+        restoredTask = restored[0].task;
+        assert.equal(record.upstreamTaskId, "upstream-task-7");
+        assert.equal(record.platformTaskId, "platform-task-42");
+        return true;
+    });
+    failMetadata = false;
+    const image = await completeImageWorkbenchTask(restoredTask, dependencies);
     assert.equal(image.fileId, "file-final-9");
+    assert.deepEqual(patched, Array(2).fill({ taskId: "platform-task-42", metadata: JSON.stringify({ fileIds: ["file-final-9"] }) }));
 });
 
 test("image workbench pauses on temporary query and upload errors without terminal failure", async () => {
