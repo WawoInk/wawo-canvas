@@ -13,6 +13,48 @@ const { CanvasNodeHoverToolbar } = await import("./canvas-node-hover-toolbar");
 const { CanvasNodeType } = await import("../types");
 await i18n.changeLanguage("zh-CN");
 
+test("node prompt panels stay the same screen size when the canvas zoom changes", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const node = { id: "image-zoom", type: CanvasNodeType.Image, title: "参考图", position: { x: 20, y: 30 }, width: 340, height: 240 };
+    const render = (scale: number) =>
+        root.render(
+            <App>
+                <CanvasNode
+                    data={node}
+                    scale={scale}
+                    isSelected
+                    isRelated={false}
+                    isFocusRelated={false}
+                    isConnectionTarget={false}
+                    isConnecting={false}
+                    showPanel
+                    showImageInfo={false}
+                    renderPanel={() => <div data-generation-panel>生成面板</div>}
+                    onMouseDown={() => {}}
+                    onHoverStart={() => {}}
+                    onHoverEnd={() => {}}
+                    onConnectStart={() => {}}
+                    onResize={() => {}}
+                    onContentChange={() => {}}
+                    onContextMenu={() => {}}
+                />
+            </App>,
+        );
+    try {
+        await act(async () => render(0.5));
+        let panel = required(container.querySelector<HTMLElement>("[data-generation-panel]")?.parentElement || null);
+        assert.equal(panel.style.transform, "translateX(-50%) scale(2)");
+        await act(async () => render(2));
+        panel = required(container.querySelector<HTMLElement>("[data-generation-panel]")?.parentElement || null);
+        assert.equal(panel.style.transform, "translateX(-50%) scale(0.5)");
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+    }
+});
+
 test("group nodes render as non-generating containers and expose ungroup", async () => {
     const container = document.createElement("div");
     document.body.append(container);

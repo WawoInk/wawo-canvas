@@ -479,7 +479,7 @@ test("direct image edits submit multiple references as image[] and keep single i
     };
     const refs = ["first", "second"].map((id) => ({ id, name: `${id}.png`, type: "image/png", dataUrl: "data:image/png;base64,aW1hZ2U=" }));
     try {
-        const config = { ...defaultConfig, model: "edit-image", size: "1024x1024", quality: "auto" };
+        const config = { ...defaultConfig, model: defaultConfig.imageModel, size: "1024x1024", quality: "auto" };
         await requestEdit(config, "combine", refs, refs[0]);
         assert.equal(body.getAll("image").length, 0);
         assert.equal(body.getAll("image[]").length, 2);
@@ -517,7 +517,7 @@ test("Gemini image generation sends imageConfig while preserving local transport
             "draw",
             { signal },
         );
-        assert.deepEqual(request.body.generationConfig.imageConfig, { aspectRatio: "16:9", imageSize: "4K" });
+        assert.deepEqual(request.body.generationConfig.imageConfig, { aspectRatio: "16:9" });
         assert.equal(request.body.generationConfig.responseFormat, undefined);
         assert.deepEqual(request.body.generationConfig.responseModalities, ["TEXT", "IMAGE"]);
         assert.equal(request.options.signal, signal);
@@ -541,10 +541,10 @@ test("image generation resolves ratio selections through the upstream fixed size
     try {
         for (const [quality, size, expected] of [
             ["auto", "4:3", "1024x768"],
-            ["medium", "16:9", "2048x1152"],
-            ["high", "3:2", "3520x2336"],
+            ["medium", "16:9", "1536x864"],
+            ["high", "3:2", "1536x1024"],
         ]) {
-            await requestGeneration({ ...defaultConfig, model: "image", size, quality, count: "1" }, "draw");
+            await requestGeneration({ ...defaultConfig, size, quality, count: "1" }, "draw");
             assert.equal(body.size, expected);
         }
     } finally {
@@ -552,7 +552,7 @@ test("image generation resolves ratio selections through the upstream fixed size
     }
 });
 
-test("Gemini image edits honor explicit preset resolution independently of quality and omit unsupported imageSize", async () => {
+test("Gemini image edits honor explicit preset resolution independently of quality and model name", async () => {
     const { requestEdit } = await import("./image.ts");
     const previousPost = axios.post;
     let body;
@@ -564,7 +564,7 @@ test("Gemini image edits honor explicit preset resolution independently of quali
         for (const [model, size, quality, expected] of [
             ["gemini-3-pro-image", "2880x2880", "auto", { aspectRatio: "1:1", imageSize: "4K" }],
             ["gemini-3-pro-image", "1536x1024", "high", { aspectRatio: "3:2", imageSize: "1K" }],
-            ["gemini-2.5-flash-image", "2048x1152", "high", { aspectRatio: "16:9" }],
+            ["gemini-2.5-flash-image", "2048x1152", "high", { aspectRatio: "16:9", imageSize: "2K" }],
             ["gemini-3-pro-image", "auto", "auto", undefined],
         ]) {
             await requestEdit(
@@ -628,6 +628,7 @@ test("all image request boundaries normalize disabled remote resolutions without
                         channelMode,
                         model: "image-1k",
                         imageModel: "other-4k",
+                        channels: [{ ...defaultConfig.channels[0], models: ["image-1k"] }],
                         size,
                         quality: "high",
                         count: "1",
@@ -667,6 +668,7 @@ test("history retries use current published model resolutions rather than saved 
                     channelMode,
                     model: "image",
                     imageModel: "other",
+                    channels: [{ ...defaultConfig.channels[0], models: ["image"] }],
                     size: "3840x2160",
                     quality: "high",
                     count: "1",

@@ -1,6 +1,6 @@
 "use client";
 
-import { App, Button, Form, Input, Modal, Progress, Segmented, Select, Tabs } from "antd";
+import { App, Button, Form, Input, Modal, Progress, Segmented, Select, Switch, Tabs } from "antd";
 import { CircleAlert, Cloud, Plus, RefreshCw, Trash2, Wifi } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -358,6 +358,9 @@ export function AppConfigModal() {
                                     onBlur={(event) => updateConfig("canvasImageCount", normalizeImageCount(event.target.value))}
                                 />
                             </Form.Item>
+                            <Form.Item label={t("config.preferences.autoFocusOnSelect")} extra={t("config.preferences.autoFocusOnSelectHint")} className="mb-4">
+                                <Switch checked={config.autoFocusOnSelect} onChange={(checked) => updateConfig("autoFocusOnSelect", checked)} />
+                            </Form.Item>
                             <Form.Item label={t("config.preferences.audioVoice")} className="mb-4">
                                 <Select value={config.audioVoice} options={audioVoiceOptions} onChange={(value) => updateConfig("audioVoice", value)} />
                             </Form.Item>
@@ -510,8 +513,7 @@ function keepOrSuggest(current: string[], suggested: string[], allModels: string
 }
 
 function normalizeDefaultModel(value: string, options: string[]) {
-    if (options.includes(value)) return value;
-    return options[0] || value;
+    return value || options[0] || "";
 }
 
 function normalizeImageCount(value: string) {

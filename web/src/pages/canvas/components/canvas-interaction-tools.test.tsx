@@ -128,6 +128,7 @@ test("canvas toolbar exposes the current tool and requests explicit tool changes
     const root = createRoot(host);
     const requested: Array<"select" | "pan"> = [];
     let deselects = 0;
+    let focuses = 0;
     const baseProps = {
         selectedCount: 0,
         canUndo: false,
@@ -149,6 +150,7 @@ test("canvas toolbar exposes the current tool and requests explicit tool changes
         onBackgroundModeChange: () => {},
         onShowImageInfoChange: () => {},
         onOpenMyAssets: () => {},
+        onFocusSelected: () => focuses++,
     };
 
     try {
@@ -160,6 +162,10 @@ test("canvas toolbar exposes the current tool and requests explicit tool changes
         await act(async () => root.render(<CanvasToolbar {...baseProps} canvasTool="pan" onCanvasToolChange={(tool) => requested.push(tool)} />));
         await act(async () => click(required(host.querySelector<HTMLButtonElement>('[data-canvas-tool="pan"]'))));
         assert.deepEqual(requested, ["pan", "select"]);
+
+        await act(async () => root.render(<CanvasToolbar {...baseProps} selectedCount={1} />));
+        await act(async () => click(required(host.querySelector<HTMLButtonElement>('[aria-label="居中选中节点"]'))));
+        assert.equal(focuses, 1);
     } finally {
         await act(async () => root.unmount());
         host.remove();

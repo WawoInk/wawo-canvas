@@ -269,18 +269,7 @@ function responseHeader(headers: unknown, name: string) {
     return typeof value === "string" ? value : "";
 }
 
-const QUALITY_BASE: Record<string, number> = {
-    low: 1024,
-    medium: 2048,
-    high: 2880,
-    standard: 1024,
-    hd: 2048,
-};
-const QUALITY_ALIASES: Record<string, string> = {
-    "1k": "low",
-    "2k": "medium",
-    "4k": "high",
-};
+const IMAGE_QUALITY_VALUES = ["low", "medium", "high", "xhigh", "max"];
 const DEFAULT_IMAGE_SHORT_SIDE = 1024;
 const IMAGE_SIZE_STEP = 16;
 const IMAGE_MIN_PIXELS = 655360;
@@ -288,35 +277,22 @@ const IMAGE_MAX_PIXELS = 8294400;
 const IMAGE_MAX_EDGE = 3840;
 const IMAGE_MAX_RATIO = 3;
 const IMAGE_OUTPUT_FORMAT = "png";
+const IMAGE_REQUEST_TIMEOUT_MS = 10 * 60_000;
 
 function normalizeQuality(quality: string) {
     const value = quality.trim().toLowerCase();
-    const normalized = QUALITY_ALIASES[value] || value;
-    return QUALITY_BASE[normalized] ? normalized : undefined;
+    return IMAGE_QUALITY_VALUES.includes(value) ? value : undefined;
 }
 
-/** Map "quality + ratio" to an explicit pixel dimension like "3840x2160". */
-function resolveSize(quality: string | undefined, ratio: string): string {
+/** A bare ratio uses the default resolution; quality never changes image dimensions. */
+function resolveSize(ratio: string): string {
     const parsedRatio = parseImageRatio(ratio);
-    const resolution = quality === "high" ? "4k" : quality === "medium" || quality === "hd" ? "2k" : "1k";
-    const preset = imageSizePresets[resolution][ratio];
+    const preset = imageSizePresets["1k"][ratio];
     if (preset) return preset;
-    const basePixels = quality ? QUALITY_BASE[quality] : undefined;
     const isLandscape = parsedRatio.width >= parsedRatio.height;
     const longRatio = isLandscape ? parsedRatio.width / parsedRatio.height : parsedRatio.height / parsedRatio.width;
-    let longSide: number;
-    let shortSide: number;
-
-    if (basePixels) {
-        const targetPixels = basePixels * basePixels;
-        const longSideRaw = Math.sqrt(targetPixels * longRatio);
-        longSide = Math.floor(longSideRaw / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP;
-        shortSide = Math.round(longSide / longRatio / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP;
-    } else {
-        shortSide = DEFAULT_IMAGE_SHORT_SIDE;
-        longSide = Math.round((shortSide * longRatio) / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP;
-    }
-
+    const shortSide = DEFAULT_IMAGE_SHORT_SIDE;
+    const longSide = Math.round((shortSide * longRatio) / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP;
     const width = isLandscape ? longSide : shortSide;
     const height = isLandscape ? shortSide : longSide;
     validateImageSize(width, height);
@@ -348,7 +324,7 @@ function validateImageSize(width: number, height: number) {
     if (pixels < IMAGE_MIN_PIXELS || pixels > IMAGE_MAX_PIXELS) throw new Error(i18n.t("errors.image.pixelRange"));
 }
 
-function resolveRequestSize(quality: string | undefined, size: string) {
+function resolveRequestSize(size: string) {
     const value = size.trim();
     if (!value || value.toLowerCase() === "auto") return undefined;
     const dimensions = parseImageDimensions(value);
@@ -356,7 +332,7 @@ function resolveRequestSize(quality: string | undefined, size: string) {
         validateImageSize(dimensions.width, dimensions.height);
         return `${dimensions.width}x${dimensions.height}`;
     }
-    if (value.includes(":")) return resolveSize(quality, value);
+    if (value.includes(":")) return resolveSize(value);
     throw new Error(i18n.t("errors.image.invalidSizeFormat"));
 }
 
@@ -390,10 +366,12 @@ function parseImagePayload(payload: ImageApiResponse) {
 function readAxiosError(error: unknown, fallback: string) {
     if (axios.isCancel(error)) return i18n.t("errors.requestCancelled");
     if (axios.isAxiosError<{ error?: { message?: string }; msg?: string; code?: number }>(error)) {
+        if (error.code === "ECONNABORTED" || error.code === "ETIMEDOUT") return i18n.t("errors.image.timeout");
         const responseData = error.response?.data;
         return responseData?.msg || responseData?.error?.message || readStatusError(error.response?.status, fallback);
     }
     if (error instanceof DOMException && error.name === "AbortError") return i18n.t("errors.requestCancelled");
+    if (error instanceof DOMException && error.name === "TimeoutError") return i18n.t("errors.image.timeout");
     return error instanceof Error ? error.message : fallback;
 }
 
@@ -896,7 +874,7 @@ async function postGeminiViaBackend(config: AiConfig, path: string, geminiBody: 
         method: "POST",
         headers,
         body: JSON.stringify({ model: config.model, ...geminiBody }),
-        signal: options?.signal,
+        signal: path === "/images/generations" ? AbortSignal.any([AbortSignal.timeout(IMAGE_REQUEST_TIMEOUT_MS), ...(options?.signal ? [options.signal] : [])]) : options?.signal,
     });
     if (!response.ok) throw new Error(await readFetchError(response, i18n.t("errors.backendProxyFailed")));
     return (await response.json()) as GeminiPayload;
@@ -1047,14 +1025,11 @@ function resolveGeminiImageConfig(config: AiConfig) {
         if (unsupported) throw new Error(i18n.t("errors.image.geminiUnsupportedRatio", { defaultValue: "Gemini 不支持所选图片比例，请更换比例" }));
     }
     let imageSize: string | undefined;
-    if (/gemini-3|3\.1|3-pro/i.test(config.model)) {
-        const quality = normalizeQuality(config.quality);
-        if (dimensions) {
-            const { resolution } = parseImageSize(value);
-            const preset = Object.values(imageSizePresets[resolution] || {}).includes(value);
-            const edge = Math.max(dimensions.width, dimensions.height);
-            imageSize = preset ? resolution.toUpperCase() : edge <= 768 ? "512" : edge <= 1536 ? "1K" : edge <= 3072 ? "2K" : "4K";
-        } else if (quality) imageSize = ({ low: "1K", medium: "2K", high: "4K", standard: "1K", hd: "2K" } as Record<string, string>)[quality];
+    if (dimensions) {
+        const { resolution } = parseImageSize(value);
+        const preset = Object.values(imageSizePresets[resolution] || {}).includes(value);
+        const edge = Math.max(dimensions.width, dimensions.height);
+        imageSize = preset ? resolution.toUpperCase() : edge <= 768 ? "512" : edge <= 1536 ? "1K" : edge <= 3072 ? "2K" : "4K";
     }
     const imageConfig = { ...(aspectRatio ? { aspectRatio } : {}), ...(imageSize ? { imageSize } : {}) };
     return Object.keys(imageConfig).length ? { imageConfig } : {};
@@ -1079,7 +1054,7 @@ async function requestGeminiImagesOnce(config: AiConfig, prompt: string, referen
             ...toGeminiBody(config, [{ role: "user", content: prompt }], { generationConfig: { responseModalities: ["TEXT", "IMAGE"], ...resolveGeminiImageConfig(config) } }),
             contents: [{ role: "user", parts }],
         },
-        { headers: geminiHeaders(config), signal: options?.signal },
+        { headers: geminiHeaders(config), signal: options?.signal, timeout: IMAGE_REQUEST_TIMEOUT_MS },
     );
     return parseGeminiImagePayload(response.data);
 }
@@ -1118,7 +1093,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
         }
     }
     const quality = normalizeQuality(config.quality);
-    const requestSize = resolveRequestSize(quality, requestConfig.size);
+    const requestSize = resolveRequestSize(requestConfig.size);
     const format = configuredImageRequestFormat(requestConfig, "application/json");
     const body = {
         model: requestConfig.model,
@@ -1133,6 +1108,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
         const response = await axios.post<ImageApiResponse>(aiApiUrl(requestConfig, "/images/generations"), imageRequestBody(body, format), {
             headers: imageRequestHeaders(requestConfig, format, options?.source),
             signal: options?.signal,
+            timeout: IMAGE_REQUEST_TIMEOUT_MS,
         });
         const images = parseImagePayload(response.data);
         return images;
@@ -1154,7 +1130,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
         }
     }
     const quality = normalizeQuality(config.quality);
-    const requestSize = resolveRequestSize(quality, requestConfig.size);
+    const requestSize = resolveRequestSize(requestConfig.size);
     const format = configuredImageRequestFormat(requestConfig, "multipart/form-data");
     const fields = {
         model: requestConfig.model,
@@ -1185,6 +1161,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
         const response = await axios.post<ImageApiResponse>(aiApiUrl(requestConfig, "/images/edits"), body, {
             headers: imageRequestHeaders(requestConfig, format, options?.source),
             signal: options?.signal,
+            timeout: IMAGE_REQUEST_TIMEOUT_MS,
         });
         const images = parseImagePayload(response.data);
         return images;
@@ -1234,7 +1211,7 @@ export async function createAsyncImageTask(config: AiConfig, prompt: string, cou
     const requestConfig = resolveImageRequestConfig(config);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
     const quality = normalizeQuality(config.quality);
-    const requestSize = resolveRequestSize(quality, requestConfig.size);
+    const requestSize = resolveRequestSize(requestConfig.size);
     const format = configuredImageRequestFormat(requestConfig, "application/json");
     const body = {
         model: requestConfig.model,
@@ -1249,6 +1226,7 @@ export async function createAsyncImageTask(config: AiConfig, prompt: string, cou
     try {
         const response = await axios.post<ImageApiResponse & { id?: string; status?: string }>(aiApiUrl(requestConfig, "/async/images/generations"), imageRequestBody(body, format), {
             headers: { ...imageRequestHeaders(requestConfig, format), "X-Source": source },
+            timeout: IMAGE_REQUEST_TIMEOUT_MS,
         });
         const task = readAsyncImageTask(response.data, response.headers, requestConfig.model, i18n.t("errors.image.asyncCreateMissingTaskId"));
         const platformTaskId = responseHeader(response.headers, "x-generation-task-id");
@@ -1262,7 +1240,8 @@ export async function createAsyncImageEditTask(config: AiConfig, prompt: string,
     if (references.length > MAX_ASYNC_IMAGE_REFERENCES) throw new Error(i18n.t("errors.image.tooManyReferences", { max: MAX_ASYNC_IMAGE_REFERENCES }));
     const requestConfig = resolveImageRequestConfig(config);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
-    const requestSize = resolveRequestSize(normalizeQuality(config.quality), requestConfig.size);
+    const quality = normalizeQuality(config.quality);
+    const requestSize = resolveRequestSize(requestConfig.size);
     const format = configuredImageRequestFormat(requestConfig, "multipart/form-data");
     const images = format === "application/json" ? await Promise.all(references.map(imageToDataUrl)) : [];
     const files = format === "multipart/form-data" ? await Promise.all(references.map(referenceImageToFile)) : [];
@@ -1272,6 +1251,7 @@ export async function createAsyncImageEditTask(config: AiConfig, prompt: string,
             prompt: withSystemPrompt(requestConfig, prompt),
             image: files,
             n,
+            ...(quality ? { quality } : {}),
             ...(requestSize ? { size: requestSize } : {}),
             ...imageBackgroundFields(requestConfig.background),
             output_format: IMAGE_OUTPUT_FORMAT,
@@ -1287,6 +1267,7 @@ export async function createAsyncImageEditTask(config: AiConfig, prompt: string,
     try {
         const response = await axios.post<ImageApiResponse & { id?: string; status?: string }>(aiApiUrl(requestConfig, configuredCanvasImageEditPath(requestConfig)), request.body, {
             headers: { ...aiHeaders(requestConfig, request.contentType), "X-Source": source },
+            timeout: IMAGE_REQUEST_TIMEOUT_MS,
         });
         const task = readAsyncImageTask(response.data, response.headers, requestConfig.model, i18n.t("errors.image.asyncEditMissingTaskId"));
         const platformTaskId = responseHeader(response.headers, "x-generation-task-id");

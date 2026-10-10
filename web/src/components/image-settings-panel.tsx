@@ -13,9 +13,11 @@ export { normalizeImageSizeForResolutions, imageResolutionsForConfig } from "@/l
 
 const qualityOptions = [
     { value: "auto", labelKey: "imageSettings.quality.options.auto" },
-    { value: "high", labelKey: "imageSettings.quality.options.high" },
-    { value: "medium", labelKey: "imageSettings.quality.options.medium" },
     { value: "low", labelKey: "imageSettings.quality.options.low" },
+    { value: "medium", labelKey: "imageSettings.quality.options.medium" },
+    { value: "high", labelKey: "imageSettings.quality.options.high" },
+    { value: "xhigh", labelKey: "imageSettings.quality.options.xhigh" },
+    { value: "max", labelKey: "imageSettings.quality.options.max" },
 ] as const;
 const DIMENSION_STEP = 16;
 
@@ -92,7 +94,7 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 {showTitle ? <div className="text-lg font-semibold">{t("imageSettings.title")}</div> : null}
                 <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>{t("imageSettings.quality.label")}</SettingTitle>
-                    <div className="grid grid-cols-4 gap-2.5">
+                    <div className="grid grid-cols-3 gap-2.5">
                         {qualityOptions.map((item) => (
                             <OptionPill key={item.value} selected={quality === item.value} theme={theme} onClick={() => onConfigChange("quality", item.value)}>
                                 {t(item.labelKey)}

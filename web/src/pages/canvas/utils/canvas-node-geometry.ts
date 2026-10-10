@@ -1,7 +1,26 @@
+import { nanoid } from "nanoid";
 import { CanvasNodeType, type CanvasConnection, type CanvasNodeData } from "../types";
 
 export const GROUP_WRAP_PADDING = 24;
 export const GROUP_WRAP_TOP_PADDING = 52;
+
+export function copyCanvasReferenceConnections(connections: CanvasConnection[], idMap: ReadonlyMap<string, string>, existingIds: ReadonlySet<string>) {
+    return connections.flatMap((connection) => {
+        const toNodeId = idMap.get(connection.toNodeId);
+        if (!toNodeId || (!idMap.has(connection.fromNodeId) && !existingIds.has(connection.fromNodeId))) return [];
+        return [{ ...connection, id: nanoid(), fromNodeId: idMap.get(connection.fromNodeId) ?? connection.fromNodeId, toNodeId }];
+    });
+}
+
+export function focusViewportForNode(node: Pick<CanvasNodeData, "position" | "width" | "height">, size: { width: number; height: number }, frame: { above?: number; below?: number; bottomInset?: number } = {}) {
+    const above = frame.above ?? 0;
+    const below = frame.below ?? 0;
+    const usableBottom = Math.max(0, size.height - (frame.bottomInset ?? 0));
+    const k = Math.min(Math.max(Math.min((size.width * 0.6) / node.width, (size.height * 0.6) / node.height, (usableBottom * 0.92 - above - below) / node.height), 0.05), 1);
+    const slack = usableBottom - above - node.height * k - below;
+    const top = slack * (below > 0 && slack > 0 ? 0.75 : 0.5);
+    return { x: size.width / 2 - (node.position.x + node.width / 2) * k, y: top + above - node.position.y * k, k };
+}
 
 export function nodeBounds(nodes: CanvasNodeData[]) {
     return nodes.reduce(

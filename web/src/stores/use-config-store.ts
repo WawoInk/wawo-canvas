@@ -54,6 +54,7 @@ export type AiConfig = {
     background: "" | "transparent";
     count: string;
     canvasImageCount: string;
+    autoFocusOnSelect: boolean;
 };
 
 export type WebdavSyncConfig = {
@@ -115,6 +116,7 @@ export const defaultConfig: AiConfig = {
     background: "",
     count: "1",
     canvasImageCount: "3",
+    autoFocusOnSelect: false,
 };
 
 export const defaultWebdavSyncConfig: WebdavSyncConfig = {
@@ -198,8 +200,8 @@ function modelListKey(capability: ModelCapability) {
 function isAiConfigReady(config: AiConfig, model: string) {
     // 远程模式下渠道凭证由后台持有，前端只需确认已选择模型即可；本地模式才校验渠道 baseUrl/apiKey。
     if (config.channelMode === "remote") return Boolean(model.trim());
-    const channel = resolveModelChannel(config, model);
-    return Boolean(model.trim() && channel.baseUrl.trim() && channel.apiKey.trim());
+    const channel = configuredModelChannel(config, model);
+    return Boolean(model.trim() && channel?.baseUrl.trim() && channel.apiKey.trim());
 }
 
 export const useConfigStore = create<ConfigStore>()(
@@ -399,13 +401,9 @@ export function normalizeModelOptionValue(value: string | undefined, channels: M
     const model = (value || "").trim();
     if (!model) return "";
     const decoded = decodeChannelModel(model);
-    if (decoded) {
-        const channel = channels.find((item) => item.id === decoded.channelId);
-        return channel && channel.models.includes(decoded.model) ? model : "";
-    }
-    const channel = channels.find((item) => item.models.includes(model)) || channels[0];
-    // @ts-expect-error -- decoded is never in this else branch; runtime value is from decodeChannelModel
-    return channel && channel.models.includes(decoded?.model || model) ? encodeChannelModel(channel.id, decoded?.model || model) : model;
+    if (decoded) return model;
+    const channel = channels.find((item) => item.models.includes(model));
+    return channel ? encodeChannelModel(channel.id, model) : model;
 }
 
 export function resolveModelChannel(config: AiConfig, value: string) {
@@ -415,11 +413,19 @@ export function resolveModelChannel(config: AiConfig, value: string) {
     return matched || config.channels[0] || createModelChannel({ id: "default", name: i18n.t("config.channels.defaultName"), baseUrl: config.baseUrl, apiKey: config.apiKey, apiFormat: config.apiFormat, models: config.models.map(modelOptionName) });
 }
 
+function configuredModelChannel(config: AiConfig, value: string) {
+    const decoded = decodeChannelModel(value);
+    const model = decoded?.model || value;
+    return config.channels.find((channel) => (!decoded || channel.id === decoded.channelId) && channel.models.includes(model));
+}
+
 export function resolveModelRequestConfig(config: AiConfig, value: string) {
-    const channel = resolveModelChannel(config, value);
+    const selectedModel = value || config.model;
+    const channel = config.channelMode === "remote" ? resolveModelChannel(config, selectedModel) : configuredModelChannel(config, selectedModel);
+    if (!channel) throw new Error(i18n.t("errors.config.modelUnavailable"));
     return {
         ...config,
-        model: modelOptionName(value || config.model),
+        model: modelOptionName(selectedModel),
         baseUrl: channel.baseUrl,
         apiKey: channel.apiKey,
         apiFormat: channel.apiFormat,

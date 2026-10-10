@@ -873,7 +873,9 @@
                 "auto": "自动",
                 "high": "高",
                 "medium": "中",
-                "low": "低"
+                "low": "低",
+                "xhigh": "超高",
+                "max": "最高"
             }
         },
         "size": {
@@ -1115,6 +1117,8 @@
         "preferences": {
             "canvasImageCount": "画布默认生图张数",
             "canvasImageCountHint": "新建画布生图和配置节点默认使用，单个节点仍可单独覆盖。",
+            "autoFocusOnSelect": "选中节点时自动居中",
+            "autoFocusOnSelectHint": "选中单个节点时将它居中显示，并自动调整缩放以适应视口。",
             "audioVoice": "默认音频声音",
             "audioFormat": "默认音频格式",
             "audioSpeed": "默认音频语速",
@@ -2114,12 +2118,14 @@
         "noContentReturned": "没有返回内容",
         "authRequired": "请先登录",
         "config": {
+            "modelUnavailable": "所选模型不可用，请重新选择模型或检查渠道配置",
             "baseUrlRequired": "请先配置 Base URL",
             "apiKeyRequired": "请先配置 API Key",
             "videoModelRequired": "请先配置视频模型",
             "audioModelRequired": "请先配置音频模型"
         },
         "image": {
+            "timeout": "图片生成超时，请稍后重试",
             "invalidSizeFormat": "图像尺寸格式不支持，请使用 auto、9:16 或 1024x1024",
             "invalidRatio": "图像比例必须是正数，例如 9:16",
             "invalidDimensions": "图像尺寸必须是正整数，例如 1024x1024",
@@ -2472,6 +2478,7 @@
                 "assets": "我的素材",
                 "appearance": "画布外观",
                 "deleteSelected": "删除选中",
+                "focusSelected": "居中选中节点",
                 "clear": "清空画布",
                 "select": "选择",
                 "pan": "移动"

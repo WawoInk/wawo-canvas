@@ -873,7 +873,9 @@
                 "auto": "Auto",
                 "high": "High",
                 "medium": "Medium",
-                "low": "Low"
+                "low": "Low",
+                "xhigh": "Extra High",
+                "max": "Maximum"
             }
         },
         "size": {
@@ -1115,6 +1117,8 @@
         "preferences": {
             "canvasImageCount": "Default Canvas Image Count",
             "canvasImageCountHint": "Used by new canvas image and configuration nodes. Individual nodes can override it.",
+            "autoFocusOnSelect": "Center nodes on selection",
+            "autoFocusOnSelectHint": "Center the selected node and adjust zoom to fit the viewport.",
             "audioVoice": "Default Audio Voice",
             "audioFormat": "Default Audio Format",
             "audioSpeed": "Default Audio Speed",
@@ -2114,12 +2118,14 @@
         "noContentReturned": "No content was returned",
         "authRequired": "Log in first",
         "config": {
+            "modelUnavailable": "The selected model is unavailable. Select a model or check the channel configuration.",
             "baseUrlRequired": "Configure the Base URL first",
             "apiKeyRequired": "Configure the API key first",
             "videoModelRequired": "Configure a video model first",
             "audioModelRequired": "Configure an audio model first"
         },
         "image": {
+            "timeout": "Image generation timed out. Try again later.",
             "invalidSizeFormat": "Unsupported image size. Use auto, 9:16, or 1024x1024.",
             "invalidRatio": "The image ratio must use positive numbers, for example 9:16.",
             "invalidDimensions": "Image dimensions must be positive integers, for example 1024x1024.",
@@ -2472,6 +2478,7 @@
                 "assets": "My assets",
                 "appearance": "Canvas appearance",
                 "deleteSelected": "Delete selected",
+                "focusSelected": "Center selected node",
                 "clear": "Clear canvas",
                 "select": "Select",
                 "pan": "Move"

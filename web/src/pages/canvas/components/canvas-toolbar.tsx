@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useRef, useState } from "react";
 import { Button, Segmented, Switch } from "antd";
-import { CircleDot, Eraser, FolderOpen, Grid2x2, Group, Hand, Image as ImageIcon, Info, Moon, MousePointer2, Music2, Palette, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
+import { CircleDot, Eraser, FolderOpen, Grid2x2, Group, Hand, Image as ImageIcon, Info, LocateFixed, Moon, MousePointer2, Music2, Palette, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes, type CanvasBackgroundMode, type CanvasColorTheme, type CanvasTheme } from "@/lib/canvas-theme";
@@ -32,6 +32,7 @@ export function CanvasToolbar({
     onBackgroundModeChange,
     onShowImageInfoChange,
     onOpenMyAssets,
+    onFocusSelected,
 }: {
     selectedCount: number;
     canvasTool?: CanvasTool;
@@ -55,6 +56,7 @@ export function CanvasToolbar({
     onBackgroundModeChange: (mode: CanvasBackgroundMode) => void;
     onShowImageInfoChange: (show: boolean) => void;
     onOpenMyAssets: () => void;
+    onFocusSelected?: () => void;
 }) {
     const { t } = useTranslation();
     const wrapRef = useRef<HTMLDivElement>(null);
@@ -83,12 +85,13 @@ export function CanvasToolbar({
         "tool-assets": t("canvas.toolbar.tools.assets"),
         "tool-style": t("canvas.toolbar.tools.appearance"),
         "tool-delete": t("canvas.toolbar.tools.deleteSelected"),
+        "tool-focus": t("canvas.toolbar.tools.focusSelected", { defaultValue: "居中选中节点" }),
         "tool-clear": t("canvas.toolbar.tools.clear"),
     };
     const tip = hovered ? toolLabels[hovered] || "" : "";
 
     return (
-        <div className="pointer-events-none absolute bottom-5 z-50 flex justify-center" style={{ left: 300, right: 16 }}>
+        <div className="pointer-events-none absolute bottom-5 z-50 flex justify-center" style={{ left: 300, right: 16 }} data-canvas-bottom-toolbar>
             {tip ? <DockTip label={tip} x={tipX} theme={theme} /> : null}
             <div ref={wrapRef} className="thin-scrollbar pointer-events-auto flex h-14 max-w-full items-center gap-1 overflow-x-auto rounded-xl border px-2 shadow-lg backdrop-blur [&>*]:shrink-0" style={dockStyle}>
                 <ToolbarButton
@@ -160,6 +163,11 @@ export function CanvasToolbar({
                 {selectedCount ? (
                     <>
                         <Divider theme={theme} />
+                        {onFocusSelected ? (
+                            <ToolbarButton id="tool-focus" label={toolLabels["tool-focus"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onFocusSelected}>
+                                <LocateFixed className="size-4.5" />
+                            </ToolbarButton>
+                        ) : null}
                         <ToolbarButton id="tool-delete" label={toolLabels["tool-delete"]} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onDelete} danger>
                             <Trash2 className="size-4.5" />
                         </ToolbarButton>

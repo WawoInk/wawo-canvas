@@ -34,6 +34,7 @@ await i18n.changeLanguage("zh-CN");
 let root: Root | undefined;
 let host: HTMLDivElement;
 const originalAdapter = axios.defaults.adapter;
+const originalRect = HTMLElement.prototype.getBoundingClientRect;
 let queryClient: QueryClient;
 let polls = 0;
 let submitted: unknown;
@@ -120,6 +121,10 @@ const project: CanvasProject = {
     viewport: { x: 0, y: 0, k: 1 },
 };
 async function setup(mode: "video" | "image" = "video", successfulVideo = false, retry = false, savedVideoMode?: "frames", savedMetadata: CanvasProject["nodes"][number]["metadata"] = {}) {
+    // Happy DOM has no layout; canvas visibility and placement need an explicit viewport.
+    HTMLElement.prototype.getBoundingClientRect = function () {
+        return this.matches(".relative.h-full.w-full.select-none.overflow-hidden") ? new DOMRect(0, 0, 1200, 720) : originalRect.call(this);
+    };
     const currentProject = structuredClone(project);
     currentProject.nodes[1].type = mode as CanvasProject["nodes"][number]["type"];
     if (retry) currentProject.nodes[1].metadata = { ...currentProject.nodes[1].metadata, status: "error", ...(mode === "image" ? { generationType: "edit", references: ["https://fixture.example/reference.png"] } : {}) };
@@ -223,6 +228,7 @@ afterEach(async () => {
     clearSyncTimers();
     axios.defaults.adapter = originalAdapter;
     globalThis.fetch = originalFetch;
+    HTMLElement.prototype.getBoundingClientRect = originalRect;
     useUserStore.setState({ token: "", user: null });
 });
 

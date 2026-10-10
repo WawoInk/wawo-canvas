@@ -5,6 +5,7 @@ export type AsyncImageEditFields = {
     prompt: string;
     image: File | File[];
     n: number;
+    quality?: string;
     size?: string;
     background?: string;
     output_format: string;
@@ -21,6 +22,7 @@ export function buildAsyncImageEditFormData(fields: AsyncImageEditFields) {
     const images = Array.isArray(fields.image) ? fields.image : [fields.image];
     images.forEach((image) => formData.append("image", image));
     formData.set("n", String(fields.n));
+    if (fields.quality) formData.set("quality", fields.quality);
     if (fields.size) formData.set("size", fields.size);
     applyImageBackground(formData, fields.background);
     formData.set("output_format", fields.output_format);

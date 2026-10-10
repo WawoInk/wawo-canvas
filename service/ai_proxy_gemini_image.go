@@ -31,7 +31,7 @@ func geminiImageRequest(body []byte, modelName, contentType string) ([]byte, err
 			return nil, fmt.Errorf("Gemini 图片不支持蒙版编辑")
 		}
 		fields := map[string]any{}
-		for _, key := range []string{"prompt", "size", "quality", "background"} {
+		for _, key := range []string{"prompt", "size", "background"} {
 			if values := form.Value[key]; len(values) > 0 {
 				fields[key] = values[0]
 			}
@@ -60,7 +60,6 @@ func geminiImageRequest(body []byte, modelName, contentType string) ([]byte, err
 	var input struct {
 		Prompt     string          `json:"prompt"`
 		Size       string          `json:"size"`
-		Quality    string          `json:"quality"`
 		Mask       json.RawMessage `json:"mask"`
 		Background string          `json:"background"`
 		Contents   json.RawMessage `json:"contents"`
@@ -149,15 +148,6 @@ func geminiImageRequest(body []byte, modelName, contentType string) ([]byte, err
 				imageConfig["imageSize"] = "2K"
 			}
 		}
-	}
-	if imageConfig["imageSize"] == "" {
-		if quality := map[string]string{"low": "1K", "standard": "1K", "1k": "1K", "medium": "2K", "hd": "2K", "2k": "2K", "high": "4K", "4k": "4K"}[strings.ToLower(input.Quality)]; quality != "" {
-			imageConfig["imageSize"] = quality
-		}
-	}
-	name := strings.ToLower(modelName)
-	if !strings.Contains(name, "gemini-3") && !strings.Contains(name, "3.1") && !strings.Contains(name, "3-pro") {
-		delete(imageConfig, "imageSize")
 	}
 	generationConfig := map[string]any{"responseModalities": []string{"TEXT", "IMAGE"}}
 	if len(imageConfig) > 0 {

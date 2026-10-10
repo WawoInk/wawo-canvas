@@ -39,6 +39,7 @@ const defaults: AiConfig = {
     size: "auto",
     count: "1",
     canvasImageCount: "4",
+    autoFocusOnSelect: false,
 };
 
 const node = (metadata: CanvasNodeData["metadata"] = {}): CanvasNodeData => ({

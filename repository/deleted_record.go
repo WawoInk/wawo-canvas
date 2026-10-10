@@ -27,8 +27,11 @@ func ListDeletedRecords(userID, cursor string) ([]model.DeletedRecord, error) {
 		return nil, err
 	}
 	var records []model.DeletedRecord
-	err = db.
-		Where("user_id = ? AND deleted_at > ?", userID, cursor).
+	query := db.Where("user_id = ?", userID)
+	if cursor != "" {
+		query = query.Where("deleted_at > ?", cursor)
+	}
+	err = query.
 		Order("deleted_at asc").
 		Find(&records).Error
 	return records, err

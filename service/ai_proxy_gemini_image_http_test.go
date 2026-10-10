@@ -21,11 +21,83 @@ import (
 	"github.com/google/uuid"
 )
 
+func TestGeminiImageHTTPSizeIsIndependentOfQuality(t *testing.T) {
+	var imageConfig map[string]string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			GenerationConfig struct {
+				ImageConfig map[string]string `json:"imageConfig"`
+			} `json:"generationConfig"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+		}
+		imageConfig = request.GenerationConfig.ImageConfig
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"aW1hZ2U="}}]}}]}`))
+	}))
+	defer upstream.Close()
+	settings, err := repository.GetSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousSettings := settings
+	t.Cleanup(func() { _, _ = repository.SaveSettings(previousSettings, time.Now().UTC().Format(time.RFC3339Nano)) })
+	key := uuid.NewString()
+	modelName, userID := "custom-image-"+key, "gemini-size-user-"+key
+	settings.Private.Channels = append(settings.Private.Channels, model.ModelChannel{Name: key, Protocol: "gemini", BaseURL: upstream.URL, APIKey: "test", Enabled: true, Weight: 1, Models: []string{modelName}})
+	settings.Public.ModelChannel.ImageModels = append(settings.Public.ModelChannel.ImageModels, modelName)
+	settings.Public.ModelChannel.ModelCosts = append(settings.Public.ModelChannel.ModelCosts, model.ModelCost{Model: modelName, Credits: model.NewDecimal(2)})
+	if _, err := repository.SaveSettings(settings, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.SaveUser(model.User{ID: userID, Username: userID, AffCode: key, Role: model.UserRoleUser, Credits: model.NewDecimal(20), CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}); err != nil {
+		t.Fatal(err)
+	}
+	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		service.ProxyAIRequest(w, r.WithContext(service.WithUser(r.Context(), model.AuthUser{ID: userID})), "/async/images/generations")
+	}))
+	defer app.Close()
+	for _, testCase := range []struct{ size, quality, wantSize string }{
+		{"3840x2160", "low", "4K"},
+		{"auto", "high", ""},
+		{"auto", "xhigh", ""},
+		{"auto", "max", ""},
+		{"", "high", ""},
+	} {
+		t.Run(testCase.size+"/"+testCase.quality, func(t *testing.T) {
+			body, _ := json.Marshal(map[string]any{"model": modelName, "prompt": "draw", "size": testCase.size, "quality": testCase.quality, "n": 1})
+			response, err := app.Client().Post(app.URL+"/api/v1/async/images/generations", "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			result, err := io.ReadAll(response.Body)
+			if err != nil || response.StatusCode != http.StatusOK || !strings.Contains(string(result), `"b64_json":"aW1hZ2U="`) {
+				t.Fatalf("image request failed: status=%d body=%s err=%v", response.StatusCode, result, err)
+			}
+			if imageConfig["imageSize"] != testCase.wantSize || (testCase.wantSize == "" && len(imageConfig) != 0) {
+				t.Fatalf("quality changed requested size: %#v", imageConfig)
+			}
+		})
+	}
+}
+
 func TestGeminiImageHTTPQueryUploadAndBilling(t *testing.T) {
 	const image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jP1sAAAAASUVORK5CYII="
 	const apiKey = "gemini-image-http-private-key"
 	pixels, _ := base64.StdEncoding.DecodeString(image)
+	var imageConfig map[string]string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			GenerationConfig struct {
+				ImageConfig map[string]string `json:"imageConfig"`
+			} `json:"generationConfig"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+		}
+		imageConfig = request.GenerationConfig.ImageConfig
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"` + image + `"}}]}}]}`))
 	}))
@@ -51,7 +123,7 @@ func TestGeminiImageHTTPQueryUploadAndBilling(t *testing.T) {
 	}
 	t.Cleanup(func() { _, _ = repository.SaveSettings(previousSettings, time.Now().UTC().Format(time.RFC3339Nano)) })
 	key := uuid.NewString()
-	modelName, userID := "gemini-3-pro-image-http-"+key, "gemini-http-user-"+key
+	modelName, userID := "image-http-"+key, "gemini-http-user-"+key
 	settings := previousSettings
 	settings.Private.Channels = append(settings.Private.Channels, model.ModelChannel{Name: "gemini-http-" + key, Protocol: "gemini", BaseURL: upstream.URL, APIKey: apiKey, Enabled: true, Weight: 1, Models: []string{modelName}})
 	settings.Public.ModelChannel.ImageModels = append(settings.Public.ModelChannel.ImageModels, modelName)
@@ -103,6 +175,9 @@ func TestGeminiImageHTTPQueryUploadAndBilling(t *testing.T) {
 	}
 	if err := json.Unmarshal(result, &generated); err != nil || len(generated.Data) != 1 || generated.Data[0].Image != image {
 		t.Fatal("missing generated image")
+	}
+	if imageConfig["aspectRatio"] != "16:9" || imageConfig["imageSize"] != "2K" {
+		t.Fatalf("explicit size changed for custom model: %#v", imageConfig)
 	}
 	taskID := headers.Get("X-Generation-Task-Id")
 	if taskID == "" {
