@@ -53,6 +53,8 @@ description: 核心数据表、Storyboard Brainstorm 和第一方生成事务约
 
 企业素材复制不复用源 `assets.id` 或 `user_files.id`。文本复制直接创建 `enterprise_id IS NULL` 的个人素材；媒体复制先由对象存储服务端生成个人对象，再在一个 PostgreSQL 事务中写入个人 `user_files` 和 `assets`，两条记录的 `user_id` 都是当前认证账号。事务失败时回滚数据库记录并删除新对象；源企业素材或企业文件删除后，个人副本仍按个人文件和个人素材权限读取。
 
+素材和任务的增量同步保持 `assets.updated_at`、`generation_tasks.updated_at` 的时间字符串字段，查询按 PostgreSQL `timestamptz` 比较和排序。删除事实的 `deleted_records.deleted_at` 保持时间字段，响应游标保留其小数秒精度；不改表结构，Canvas 的独立 revision 游标保持不变。
+
 ## storyboard_projects 与可变 Storyboard Workspace
 
 `storyboard_projects` 是可变 Storyboard Workspace 的聚合根，保存当前账号所有权、标题、原始剧本、生成选项、模型、`source_hash`、`draft/ready` 状态、验证摘要、场景/镜头计数、项目级 `revision`，以及由 `artifact_file_id` 指向 `user_files` 的私有 JSON artifact 引用；`artifact_hash` 保存规范化 artifact 的 SHA-256，用于内容未变化时复用已有文件。项目创建时 `revision=1`；更新必须提交当前 `expectedRevision`，成功后 revision 加 1，旧 revision 返回 HTTP 409 和最新完整项目，不做字段级自动合并。更新和重新生成保留 Project ID 与原始 `created_at`。

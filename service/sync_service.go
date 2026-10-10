@@ -108,10 +108,7 @@ func fetchDeletes(userID, cursor, tableName string) ([]string, string, error) {
 			continue
 		}
 		ids = append(ids, r.RecordID)
-		rs := r.DeletedAt.Format(time.RFC3339)
-		if rs > latest {
-			latest = rs
-		}
+		latest = maxTime(latest, r.DeletedAt.UTC().Format(time.RFC3339Nano))
 	}
 	return ids, latest, nil
 }
@@ -128,13 +125,17 @@ func containsDomain(domains, target string) bool {
 
 // maxTime returns the latest of the given RFC3339 timestamps.
 func maxTime(values ...string) string {
-	var max string
+	var latest time.Time
 	for _, v := range values {
-		if v > max {
-			max = v
+		parsed, err := time.Parse(time.RFC3339Nano, v)
+		if err == nil && parsed.After(latest) {
+			latest = parsed
 		}
 	}
-	return max
+	if latest.IsZero() {
+		return ""
+	}
+	return latest.UTC().Format(time.RFC3339Nano)
 }
 
 // maxField returns the max of fn(item) over all items — generic over the item
@@ -142,9 +143,7 @@ func maxTime(values ...string) string {
 func maxField[T any](items []T, fn func(T) string) string {
 	var max string
 	for _, i := range items {
-		if v := fn(i); v > max {
-			max = v
-		}
+		max = maxTime(max, fn(i))
 	}
 	return max
 }

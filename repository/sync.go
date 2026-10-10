@@ -52,9 +52,12 @@ func ListUpdatedAssets(userID, cursor string) ([]model.Asset, error) {
 	if err != nil {
 		return nil, err
 	}
+	tx := db.Where("user_id = ? AND enterprise_id IS NULL", userID)
+	if cursor != "" {
+		tx = tx.Where("updated_at::timestamptz > ?::timestamptz", cursor)
+	}
 	var items []model.Asset
-	err = db.Where("user_id = ? AND enterprise_id IS NULL AND updated_at > ?", userID, cursor).
-		Order("updated_at asc").
+	err = tx.Order("updated_at::timestamptz asc").
 		Limit(syncLimit).
 		Find(&items).Error
 	return items, err
@@ -80,9 +83,12 @@ func ListUpdatedGenerationTasks(userID, cursor string) ([]model.GenerationTask, 
 	if err != nil {
 		return nil, err
 	}
+	tx := db.Where("user_id = ?", userID)
+	if cursor != "" {
+		tx = tx.Where("updated_at::timestamptz > ?::timestamptz", cursor)
+	}
 	var items []model.GenerationTask
-	err = db.Where("user_id = ? AND updated_at > ?", userID, cursor).
-		Order("updated_at asc").
+	err = tx.Order("updated_at::timestamptz asc").
 		Limit(syncLimit).
 		Find(&items).Error
 	return items, err
