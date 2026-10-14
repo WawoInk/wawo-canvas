@@ -70,6 +70,10 @@ jobs:
         working-directory: web
         run: bun test test/session-monitor.test.ts test/user-session-hydration.test.ts
 
+      - name: Video resolution tests
+        working-directory: web
+        run: bun test src/components/video-settings-resolution.test.tsx
+
   deploy-check:
     runs-on: ubuntu-latest
     steps:

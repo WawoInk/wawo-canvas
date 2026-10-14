@@ -77,8 +77,9 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
             : null;
     const videoSettings = profile && !isDrama ? buildVideoGenerationSettings(profile, provided) : provided;
     const settings = dramaSettings || videoSettings;
-    const supportedResolutions = definitions?.resolution.values ? new Set(definitions.resolution.values) : null;
-    const resolutionOptions = [...seedanceResolutionOptions, ...(definitions?.resolution.values || []).filter((value) => !seedanceResolutionOptions.some((item) => item.value === value)).map((value) => ({ value, label: value }))];
+    const resolutionOptions = (definitions?.resolution.values ?? seedanceResolutionOptions.map((item) => item.value))
+        .map((value) => ({ value, label: value }))
+        .sort((a, b) => Number(a.value.endsWith("k")) - Number(b.value.endsWith("k")) || Number.parseInt(a.value, 10) - Number.parseInt(b.value, 10));
     const ratioOptions = (definitions?.aspectRatio.values || seedanceRatioOptions.map((item) => item.value)).map((value) => ({ value, label: seedanceRatioLabel(value) }));
     const durationValue = settings.durationSeconds;
     const minDuration = durationDefinition?.min ?? 4;
@@ -101,13 +102,7 @@ function ProfileVideoSettingsPanel({ config, onConfigChange, theme, allowAutoDur
                     <SettingGroup title={t("videoSettings.resolution")} color={theme.node.muted}>
                         <div className="grid grid-cols-3 gap-2.5">
                             {resolutionOptions.map((item) => (
-                                <OptionPill
-                                    key={item.value}
-                                    selected={settings.resolution === item.value}
-                                    disabled={supportedResolutions != null && !supportedResolutions.has(item.value)}
-                                    theme={theme}
-                                    onClick={() => onConfigChange("vquality", item.value)}
-                                >
+                                <OptionPill key={item.value} selected={settings.resolution === item.value} theme={theme} onClick={() => onConfigChange("vquality", item.value)}>
                                     {item.label}
                                 </OptionPill>
                             ))}
