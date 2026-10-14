@@ -2520,7 +2520,8 @@ function InfiniteCanvasPage() {
 
     const handleImageInputChange = useCallback(
         async (event: ReactChangeEvent<HTMLInputElement>) => {
-            const file = event.target.files?.[0];
+            const pickedFile = event.target.files?.[0];
+            const file = pickedFile && normalizeCanvasFile(pickedFile);
             const target = uploadTargetRef.current;
             if (!file || (!file.type.startsWith("image/") && !file.type.startsWith("video/") && !isAudioFile(file))) return;
 
@@ -2622,11 +2623,14 @@ function InfiniteCanvasPage() {
     const handleDrop = useCallback(
         (event: ReactDragEvent<HTMLDivElement>) => {
             event.preventDefault();
-            const file = Array.from(event.dataTransfer.files).find((item) => item.type.startsWith("image/") || item.type.startsWith("video/") || isAudioFile(item));
-            if (!file) return;
+            const files = Array.from(event.dataTransfer.files, normalizeCanvasFile).filter((file) => file.type.startsWith("image/") || file.type.startsWith("video/") || isAudioFile(file));
+            if (!files.length) return;
 
-            const pos = screenToCanvas(event.clientX, event.clientY);
-            void (isAudioFile(file) ? createAudioFileNode(file, pos) : file.type.startsWith("video/") ? createVideoFileNode(file, pos) : createImageFileNode(file, pos));
+            const position = screenToCanvas(event.clientX, event.clientY);
+            files.forEach((file, index) => {
+                const pos = { x: position.x + index * 32, y: position.y + index * 32 };
+                void (isAudioFile(file) ? createAudioFileNode(file, pos) : file.type.startsWith("video/") ? createVideoFileNode(file, pos) : createImageFileNode(file, pos));
+            });
         },
         [createAudioFileNode, createImageFileNode, createVideoFileNode, screenToCanvas],
     );
@@ -4397,6 +4401,14 @@ function sourceNodeReferenceImages(node: CanvasNodeData | null) {
             fileId: node.metadata.fileId,
         },
     ];
+}
+
+const imageFileMimeTypes: Record<string, string> = { avif: "image/avif", bmp: "image/bmp", gif: "image/gif", jpeg: "image/jpeg", jpg: "image/jpeg", png: "image/png", svg: "image/svg+xml", webp: "image/webp" };
+
+function normalizeCanvasFile(file: File) {
+    if (file.type && file.type !== "application/octet-stream") return file;
+    const mimeType = imageFileMimeTypes[file.name.match(/\.([^.]+)$/)?.[1].toLowerCase() || ""];
+    return mimeType ? new File([file], file.name, { type: mimeType, lastModified: file.lastModified }) : file;
 }
 
 function isAudioFile(file: File) {
