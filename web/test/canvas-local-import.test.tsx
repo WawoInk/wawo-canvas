@@ -18,6 +18,211 @@ const { default: CanvasPage } = await import("@/pages/canvas/project/index");
 await i18n.changeLanguage("zh-CN");
 
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aT9sAAAAASUVORK5CYII=", "base64");
+const mediaFormats = [
+    {
+        kind: "images",
+        nodeType: CanvasNodeType.Image,
+        extensions: {
+            apng: "image/apng",
+            avif: "image/avif",
+            bmp: "image/bmp",
+            gif: "image/gif",
+            heic: "image/heic",
+            heif: "image/heif",
+            ico: "image/vnd.microsoft.icon",
+            jfif: "image/jpeg",
+            jpe: "image/jpeg",
+            jpeg: "image/jpeg",
+            jpg: "image/jpeg",
+            png: "image/png",
+            svg: "image/svg+xml",
+            tif: "image/tiff",
+            tiff: "image/tiff",
+            webp: "image/webp",
+        },
+    },
+    {
+        kind: "videos",
+        nodeType: CanvasNodeType.Video,
+        extensions: {
+            mp4: "video/mp4",
+            m4v: "video/mp4",
+            webm: "video/webm",
+            mov: "video/quicktime",
+            qt: "video/quicktime",
+            mkv: "video/x-matroska",
+            avi: "video/x-msvideo",
+            mpeg: "video/mpeg",
+            mpg: "video/mpeg",
+            ogv: "video/ogg",
+            wmv: "video/x-ms-wmv",
+            flv: "video/x-flv",
+            "3gp": "video/3gpp",
+            "3g2": "video/3gpp2",
+            ts: "video/mp2t",
+            mts: "video/mp2t",
+            m2ts: "video/mp2t",
+        },
+    },
+    {
+        kind: "audios",
+        nodeType: CanvasNodeType.Audio,
+        extensions: {
+            mp3: "audio/mpeg",
+            wav: "audio/wav",
+            m4a: "audio/mp4",
+            m4b: "audio/mp4",
+            aac: "audio/aac",
+            ogg: "audio/ogg",
+            oga: "audio/ogg",
+            opus: "audio/ogg",
+            flac: "audio/flac",
+            aif: "audio/x-aiff",
+            aiff: "audio/x-aiff",
+            aifc: "audio/x-aiff",
+            wma: "audio/x-ms-wma",
+            amr: "audio/amr",
+            weba: "audio/webm",
+            au: "audio/basic",
+            snd: "audio/basic",
+            caf: "audio/x-caf",
+        },
+    },
+] as const;
+
+for (const { kind, nodeType, extensions } of mediaFormats) {
+    for (const sourceMime of ["", "application/octet-stream", "binary/octet-stream"]) {
+        test(`common ${kind} extensions with ${sourceMime || "empty MIME"} upload and persist as ${kind}`, async () => {
+            await withCanvas(async ({ drop, uploads, uploadTypes }) => {
+                const formats = Object.entries(extensions);
+                const files = formats.map(([extension]) => new File([`bytes:${extension}`], `local.${extension.toUpperCase()}`, { type: sourceMime, lastModified: 123456789 }));
+                await drop(files);
+                await waitFor(() => useCanvasStore.getState().openProject("import-project")?.nodes.length === files.length + 1);
+                assert.deepEqual(
+                    uploadTypes,
+                    files.map(() => kind),
+                );
+                await useCanvasStore.getState().waitForLocalPersistence();
+                const saved = await useCanvasStore.persist.getOptions().storage!.getItem("infinite-canvas:canvas_store");
+                const nodes = saved?.state.projects.find((project) => project.id === "import-project")?.nodes || [];
+                for (let index = 0; index < files.length; index++) {
+                    assert.equal(uploads[index].name, files[index].name);
+                    assert.equal(uploads[index].type, formats[index][1]);
+                    assert.deepEqual(await uploads[index].arrayBuffer(), await files[index].arrayBuffer());
+                    const node = nodes.find((node) => node.title === files[index].name);
+                    assert.equal(node?.type, nodeType);
+                    assert.equal(node?.metadata?.fileId, `imported-${index + 1}`);
+                    assert.equal(node?.metadata?.mimeType, formats[index][1]);
+                    assert.equal(node?.metadata?.bytes, files[index].size);
+                }
+            });
+        });
+    }
+}
+
+test("generic container MIME uses OGG and MP4 family extensions to distinguish audio and video", async () => {
+    await withCanvas(async ({ drop, uploads, uploadTypes }) => {
+        const containers = [
+            ["ogv", "application/ogg", "video/ogg", CanvasNodeType.Video],
+            ["ogg", "application/ogg", "audio/ogg", CanvasNodeType.Audio],
+            ["oga", "application/ogg", "audio/ogg", CanvasNodeType.Audio],
+            ["opus", "application/ogg", "audio/ogg", CanvasNodeType.Audio],
+            ["mp4", "application/mp4", "video/mp4", CanvasNodeType.Video],
+            ["m4v", "application/mp4", "video/mp4", CanvasNodeType.Video],
+            ["m4a", "application/mp4", "audio/mp4", CanvasNodeType.Audio],
+            ["m4b", "application/mp4", "audio/mp4", CanvasNodeType.Audio],
+        ] as const;
+        const files = containers.map(([extension, type]) => new File([`container:${extension}`], `local.${extension.toUpperCase()}`, { type }));
+        await drop(files);
+        await waitFor(() => useCanvasStore.getState().openProject("import-project")?.nodes.length === files.length + 1);
+        assert.deepEqual(
+            uploadTypes,
+            containers.map((item) => (item[3] === CanvasNodeType.Video ? "videos" : "audios")),
+        );
+        for (let index = 0; index < files.length; index++) {
+            assert.equal(uploads[index].name, files[index].name);
+            assert.equal(uploads[index].type, containers[index][2]);
+            assert.deepEqual(await uploads[index].arrayBuffer(), await files[index].arrayBuffer());
+            const node = useCanvasStore
+                .getState()
+                .openProject("import-project")
+                ?.nodes.find((node) => node.title === files[index].name);
+            assert.equal(node?.type, containers[index][3]);
+            assert.equal(node?.metadata?.fileId, `imported-${index + 1}`);
+        }
+    });
+});
+
+test("an explicit media MIME overrides a misleading extension while a non-media MIME is rejected", async () => {
+    await withCanvas(async ({ drop, uploads, uploadTypes }) => {
+        await drop([new File([png], "picture.MP3", { type: "image/png" }), new File(["video"], "video.WAV", { type: "video/mp2t" }), new File(["audio"], "audio.PNG", { type: "audio/ogg" }), new File(["notes"], "notes.MP3", { type: "text/plain" })]);
+        await waitFor(() => useCanvasStore.getState().openProject("import-project")?.nodes.length === 4);
+        assert.deepEqual(uploadTypes, ["images", "videos", "audios"]);
+        assert.deepEqual(
+            uploads.map((file) => file.type),
+            ["image/png", "video/mp2t", "audio/ogg"],
+        );
+        assert.deepEqual(
+            uploads.map((file) => file.name),
+            ["picture.MP3", "video.WAV", "audio.PNG"],
+        );
+    });
+});
+
+test("unrecognized extensions, explicit non-media MIME and mismatched container families are rejected", async () => {
+    await withCanvas(async ({ drop, choose, uploads }) => {
+        const files = [
+            new File(["unknown"], "media.bin"),
+            new File(["unknown"], "mp4", { type: "binary/octet-stream" }),
+            new File(["notes"], "notes.WAV", { type: "text/plain" }),
+            new File(["notes"], "notes.PNG", { type: "application/pdf" }),
+            new File(["ogg"], "media.MP4", { type: "application/ogg" }),
+            new File(["mp4"], "media.OPUS", { type: "application/mp4" }),
+            new File(["ogg"], "media.bin", { type: "application/ogg" }),
+        ];
+        await drop(files);
+        for (const file of files) await choose(file);
+        assert.equal(uploads.length, 0);
+        assert.equal(useCanvasStore.getState().openProject("import-project")?.nodes.length, 1);
+    });
+});
+
+test("the file picker exposes all common extensions and uses their normalized upload types", async () => {
+    await withCanvas(async ({ host, choose, uploads, uploadTypes }) => {
+        const accepted = host.querySelector<HTMLInputElement>('input[type="file"]')?.accept.split(",");
+        assert.ok(accepted?.includes("audio/*"));
+        for (const { extensions } of mediaFormats) for (const extension of Object.keys(extensions)) assert.ok(accepted?.includes(`.${extension}`), `the picker accepts .${extension}`);
+        const files = [new File(["video"], "video.MOV"), new File(["audio"], "voice.AMR", { type: "application/octet-stream" }), new File(["audio"], "voice.OPUS", { type: "application/ogg" }), new File(["audio"], "book.M4B", { type: "application/mp4" })];
+        for (const file of files) await choose(file);
+        await waitFor(() => useCanvasStore.getState().openProject("import-project")?.nodes.length === files.length + 1);
+        assert.deepEqual(uploadTypes, ["videos", "audios", "audios", "audios"]);
+        assert.deepEqual(
+            uploads.map((file) => file.type),
+            ["video/quicktime", "audio/amr", "audio/ogg", "audio/mp4"],
+        );
+        for (let index = 0; index < files.length; index++) {
+            assert.equal(uploads[index].name, files[index].name);
+            assert.deepEqual(await uploads[index].arrayBuffer(), await files[index].arrayBuffer());
+            assert.equal(
+                useCanvasStore
+                    .getState()
+                    .openProject("import-project")
+                    ?.nodes.find((node) => node.title === files[index].name)?.metadata?.fileId,
+                `imported-${index + 1}`,
+            );
+        }
+    });
+});
+
+test("failed video and audio uploads do not persist local-path-only nodes", async () => {
+    await withCanvas(async ({ drop, uploads }) => {
+        await drop([new File(["video"], "failed.MP4"), new File(["audio"], "failed.M4A", { type: "application/mp4" })]);
+        await waitFor(() => uploads.length === 2 && Boolean(document.body.textContent?.includes("storage unavailable")));
+        await useCanvasStore.getState().waitForLocalPersistence();
+        const saved = await useCanvasStore.persist.getOptions().storage!.getItem("infinite-canvas:canvas_store");
+        assert.equal(saved?.state.projects.find((project) => project.id === "import-project")?.nodes.length, 1);
+    }, true);
+});
 
 for (const mimeType of ["image/png", "", "application/octet-stream"]) {
     test(`a local PNG drop (MIME=${mimeType || "empty"}) uploads bytes and restores the persisted fileId`, async () => {
@@ -212,7 +417,7 @@ async function withCanvas(
             const uploaded = uploads.at(-1)!;
             const id = `imported-${uploads.length}`;
             await uploadGate;
-            return Response.json(failUpload && uploaded.name === "failed.png" ? { code: 1, msg: "storage unavailable" } : { code: 0, data: { id, url: `https://media.example/${id}.png`, mimeType: uploaded.type, bytes: uploaded.size } });
+            return Response.json(failUpload && uploaded.name.startsWith("failed.") ? { code: 1, msg: "storage unavailable" } : { code: 0, data: { id, url: `https://media.example/${id}.png`, mimeType: uploaded.type, bytes: uploaded.size } });
         }
         if (url.startsWith("/api/v1/files/imported-")) return Response.json({ code: 0, data: { url: `https://media.example/refreshed-${url.split("/").pop()}.png` } });
         return Response.json({ code: 0, data: { items: [], total: 0 } });

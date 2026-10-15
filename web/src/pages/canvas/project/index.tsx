@@ -3927,7 +3927,7 @@ function InfiniteCanvasPage() {
                     />
                 ) : null}
 
-                <input ref={imageInputRef} type="file" accept="image/*,video/*,audio/mpeg,audio/wav,audio/x-wav,.mp3,.wav" className="hidden" onChange={handleImageInputChange} />
+                <input ref={imageInputRef} type="file" accept={canvasFileAccept} className="hidden" onChange={handleImageInputChange} />
                 <VolcengineAssetImportModal
                     open={materialImportOpen}
                     targetNode={uploadTargetRef.current?.nodeId ? nodes.find((node) => node.id === uploadTargetRef.current?.nodeId) : undefined}
@@ -4403,16 +4403,70 @@ function sourceNodeReferenceImages(node: CanvasNodeData | null) {
     ];
 }
 
-const imageFileMimeTypes: Record<string, string> = { avif: "image/avif", bmp: "image/bmp", gif: "image/gif", jpeg: "image/jpeg", jpg: "image/jpeg", png: "image/png", svg: "image/svg+xml", webp: "image/webp" };
+const canvasFileMimeTypes: Record<string, string> = {
+    apng: "image/apng",
+    avif: "image/avif",
+    bmp: "image/bmp",
+    gif: "image/gif",
+    heic: "image/heic",
+    heif: "image/heif",
+    ico: "image/vnd.microsoft.icon",
+    jfif: "image/jpeg",
+    jpe: "image/jpeg",
+    jpeg: "image/jpeg",
+    jpg: "image/jpeg",
+    png: "image/png",
+    svg: "image/svg+xml",
+    tif: "image/tiff",
+    tiff: "image/tiff",
+    webp: "image/webp",
+    mp4: "video/mp4",
+    m4v: "video/mp4",
+    webm: "video/webm",
+    mov: "video/quicktime",
+    qt: "video/quicktime",
+    mkv: "video/x-matroska",
+    avi: "video/x-msvideo",
+    mpeg: "video/mpeg",
+    mpg: "video/mpeg",
+    ogv: "video/ogg",
+    wmv: "video/x-ms-wmv",
+    flv: "video/x-flv",
+    "3gp": "video/3gpp",
+    "3g2": "video/3gpp2",
+    ts: "video/mp2t",
+    mts: "video/mp2t",
+    m2ts: "video/mp2t",
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    m4a: "audio/mp4",
+    m4b: "audio/mp4",
+    aac: "audio/aac",
+    ogg: "audio/ogg",
+    oga: "audio/ogg",
+    opus: "audio/ogg",
+    flac: "audio/flac",
+    aif: "audio/x-aiff",
+    aiff: "audio/x-aiff",
+    aifc: "audio/x-aiff",
+    wma: "audio/x-ms-wma",
+    amr: "audio/amr",
+    weba: "audio/webm",
+    au: "audio/basic",
+    snd: "audio/basic",
+    caf: "audio/x-caf",
+};
+const canvasFileAccept = ["image/*", "video/*", "audio/*", ...Object.keys(canvasFileMimeTypes).map((extension) => `.${extension}`)].join(",");
 
 function normalizeCanvasFile(file: File) {
-    if (file.type && file.type !== "application/octet-stream") return file;
-    const mimeType = imageFileMimeTypes[file.name.match(/\.([^.]+)$/)?.[1].toLowerCase() || ""];
-    return mimeType ? new File([file], file.name, { type: mimeType, lastModified: file.lastModified }) : file;
+    if (file.type && !["application/octet-stream", "binary/octet-stream", "application/ogg", "application/mp4"].includes(file.type)) return file;
+    const mimeType = canvasFileMimeTypes[file.name.match(/\.([^.]+)$/)?.[1].toLowerCase() || ""];
+    if (typeof mimeType !== "string" || (file.type === "application/ogg" && !mimeType.endsWith("/ogg")) || (file.type === "application/mp4" && !mimeType.endsWith("/mp4"))) return file;
+    return new File([file], file.name, { type: mimeType, lastModified: file.lastModified });
 }
 
 function isAudioFile(file: File) {
-    return file.type.startsWith("audio/") || /\.(mp3|wav)$/i.test(file.name);
+    return file.type.startsWith("audio/");
 }
 
 function isHiddenBatchChild(node: CanvasNodeData, nodes: CanvasNodeData[], collapsingBatchIds?: Set<string>) {
