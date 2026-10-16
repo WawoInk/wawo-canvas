@@ -334,6 +334,9 @@ func New() *gin.Engine {
 	})
 	admin.GET("/settings", gin.WrapF(handler.AdminSettings))
 	admin.POST("/settings", gin.WrapF(handler.AdminSaveSettings))
+	admin.GET("/settings/admin-key", gin.WrapF(handler.AdminKeyStatus))
+	admin.POST("/settings/admin-key", gin.WrapF(handler.GenerateAdminKey))
+	admin.DELETE("/settings/admin-key", gin.WrapF(handler.RevokeAdminKey))
 	admin.POST("/settings/channel-models", gin.WrapF(handler.AdminChannelModels))
 	admin.POST("/settings/channel-test", gin.WrapF(handler.AdminTestChannelModel))
 	admin.GET("/volcengine-assets/config", gin.WrapF(handler.AdminVolcengineAssetConfig))
@@ -364,6 +367,36 @@ func New() *gin.Engine {
 		handler.AdminDeleteGenerationTask(c.Writer, c.Request, c.Param("id"))
 	})
 	admin.POST("/generation-tasks/batch-delete", gin.WrapF(handler.AdminBatchDeleteGenerationTasks))
+
+	externalAdmin := api.Group("/v1/admin", middleware.AdminKeyAuth)
+	externalAdmin.GET("/enterprises", gin.WrapF(handler.AdminExternalEnterprises))
+	externalAdmin.POST("/enterprises", gin.WrapF(handler.AdminExternalCreateEnterprise))
+	externalAdmin.GET("/enterprises/:id", func(c *gin.Context) {
+		handler.AdminExternalEnterprise(c.Writer, c.Request, c.Param("id"))
+	})
+	externalAdmin.PUT("/enterprises/:id", func(c *gin.Context) {
+		handler.AdminExternalUpdateEnterprise(c.Writer, c.Request, c.Param("id"))
+	})
+	externalAdmin.DELETE("/enterprises/:id", func(c *gin.Context) {
+		handler.AdminExternalDeleteEnterprise(c.Writer, c.Request, c.Param("id"))
+	})
+	externalAdmin.POST("/enterprises/:id/credits", func(c *gin.Context) {
+		handler.AdminExternalAdjustEnterpriseCredits(c.Writer, c.Request, c.Param("id"))
+	})
+	externalAdmin.GET("/users", gin.WrapF(handler.AdminExternalUsers))
+	externalAdmin.POST("/users", gin.WrapF(handler.AdminExternalCreateUser))
+	externalAdmin.GET("/users/:id", func(c *gin.Context) {
+		handler.AdminExternalUser(c.Writer, c.Request, c.Param("id"))
+	})
+	externalAdmin.PUT("/users/:id", func(c *gin.Context) {
+		handler.AdminExternalUpdateUser(c.Writer, c.Request, c.Param("id"))
+	})
+	externalAdmin.DELETE("/users/:id", func(c *gin.Context) {
+		handler.AdminExternalDeleteUser(c.Writer, c.Request, c.Param("id"))
+	})
+	externalAdmin.POST("/users/:id/credits", func(c *gin.Context) {
+		handler.AdminExternalAdjustUserCredits(c.Writer, c.Request, c.Param("id"))
+	})
 
 	router.NoRoute(middleware.NotFoundJSON)
 

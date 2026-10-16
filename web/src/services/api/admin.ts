@@ -469,6 +469,24 @@ export async function saveAdminSettings(token: string, settings: AdminSettings) 
     return apiPost<AdminSettings>("/api/admin/settings", settings, token);
 }
 
+export type AdminKeyStatus = {
+    enabled: boolean;
+    createdAt?: string;
+    key?: string;
+};
+
+export async function fetchAdminKeyStatus(token: string) {
+    return apiGet<AdminKeyStatus>("/api/admin/settings/admin-key", undefined, token);
+}
+
+export async function generateAdminKey(token: string) {
+    return apiPost<AdminKeyStatus>("/api/admin/settings/admin-key", {}, token);
+}
+
+export async function revokeAdminKey(token: string) {
+    return apiDelete<boolean>("/api/admin/settings/admin-key", token);
+}
+
 export type AdminVolcengineAssetsConfig = {
     config: string;
 };

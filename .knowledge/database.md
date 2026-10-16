@@ -63,6 +63,8 @@ erDiagram
 
 - `enterprises.owner_id -> users.id`
 - `users.enterprise_id -> enterprises.id`
+- `assets.enterprise_id -> enterprises.id`
+- `user_files.enterprise_id -> enterprises.id`
 
 其他引用没有外键和级联。
 
@@ -119,6 +121,7 @@ erDiagram
 | `amount` | `numeric`，当前账号视角的正负变动 |
 | `balance` | `numeric`，变动后余额 |
 | `related_id` | 管理员 ID 或企业 request ID |
+| `request_id` | 外部管理员积分调整全局幂等 ID，JSON 通用入参不暴露 |
 | `counterparty_id` | 划拨对方账号 |
 | `remark/extra` | 说明和扩展数据 |
 
@@ -126,6 +129,7 @@ erDiagram
 
 - 非空 `(task_id, type)` 唯一，防止任务重复消费/退款。
 - 对 enterprise allocate/reclaim，非空 `(user_id, type, related_id)` 唯一。
+- 对 `admin_adjust`，非空 `request_id` 全局唯一；目标/金额/原因相同的重放返回首笔回执。通用流水保存/删除接口拒绝改写这些记录。
 
 没有到 users/generation_tasks 的外键。
 
@@ -171,9 +175,11 @@ erDiagram
 
 | 字段 | 语义 |
 | --- | --- |
-| `key` | 主键，约定 `public/private` |
+| `key` | 主键，包含 `public/private`、`VolcAssetConfig` 与 `AdminKey` 独立配置行 |
 | `value` | JSON serializer |
 | `created_at/updated_at` | 字符串时间 |
+
+`AdminKey` 独立行保存 `{hash,userId,createdAt}`；不保存明文，不受普通设置读写覆盖，不进入 private JSON。
 
 private value 包含：
 

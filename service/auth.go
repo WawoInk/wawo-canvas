@@ -22,6 +22,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var errUsernameExists = &safeMessageError{message: "用户名已存在"}
+
 type TokenClaims struct {
 	UserID         string         `json:"userId"`
 	Username       string         `json:"username"`
@@ -80,7 +82,7 @@ func Register(username string, password string) (model.AuthSession, error) {
 		if err != nil {
 			return model.AuthSession{}, err
 		}
-		return model.AuthSession{}, safeMessageError{message: "用户名已存在"}
+		return model.AuthSession{}, errUsernameExists
 	}
 	hash, err := hashPassword(password)
 	if err != nil {
@@ -116,12 +118,13 @@ func Login(username string, password string) (model.AuthSession, error) {
 	if _, err := publicUser(user); err != nil {
 		return model.AuthSession{}, err
 	}
-	normalizeUserDefaults(&user)
-	user.LastLoginAt = now()
-	user.UpdatedAt = now()
-	user, err = repository.SaveUser(user)
+	loggedInAt := now()
+	user, err = updateExistingUser(user, map[string]any{"last_login_at": loggedInAt, "updated_at": loggedInAt})
 	if err != nil {
 		return model.AuthSession{}, err
+	}
+	if user.Status == model.UserStatusBan {
+		return model.AuthSession{}, safeMessageError{message: "账号已被禁用"}
 	}
 	return newSession(user)
 }
@@ -193,15 +196,26 @@ func LoginWithLinuxDo(r *http.Request, code string, state string) (model.AuthSes
 	} else if user.Status == model.UserStatusBan {
 		return model.AuthSession{}, redirect, safeMessageError{message: "账号已被禁用"}
 	}
-	user.DisplayName = firstNonEmpty(profile.Name, user.DisplayName)
-	user.AvatarURL = firstNonEmpty(linuxDoAvatar(profile.AvatarTemplate), user.AvatarURL)
-	user.LastLoginAt = now()
-	user.UpdatedAt = now()
 	extra, _ := json.Marshal(userExtra{LinuxDo: profile})
-	user.Extra = string(extra)
-	user, err = repository.SaveUser(user)
+	loggedInAt := now()
+	if !ok {
+		user.LastLoginAt, user.UpdatedAt, user.Extra = loggedInAt, loggedInAt, string(extra)
+		user, err = repository.CreateUser(user)
+	} else {
+		updates := map[string]any{"last_login_at": loggedInAt, "updated_at": loggedInAt, "extra": string(extra)}
+		if name := firstNonEmpty(profile.Name, ""); name != "" {
+			updates["display_name"] = name
+		}
+		if avatar := linuxDoAvatar(profile.AvatarTemplate); avatar != "" {
+			updates["avatar_url"] = avatar
+		}
+		user, err = updateExistingUser(user, updates)
+	}
 	if err != nil {
 		return model.AuthSession{}, redirect, err
+	}
+	if user.Status == model.UserStatusBan {
+		return model.AuthSession{}, redirect, safeMessageError{message: "账号已被禁用"}
 	}
 	session, err := newSession(user)
 	return session, redirect, err
@@ -266,7 +280,7 @@ func SaveUser(user model.User, password string) (model.User, error) {
 	if saved, ok, err := repository.GetUserByUsername(user.Username); err != nil {
 		return user, err
 	} else if ok && saved.ID != user.ID {
-		return user, safeMessageError{message: "用户名已存在"}
+		return user, errUsernameExists
 	}
 	isCreate := user.ID == ""
 	if isCreate {
@@ -326,10 +340,7 @@ func UpdateAccountProfile(userID, displayName, email string) (model.AuthUser, er
 			return model.AuthUser{}, safeMessageError{message: "邮箱格式不正确"}
 		}
 	}
-	user.DisplayName = strings.TrimSpace(displayName)
-	user.Email = email
-	user.UpdatedAt = now()
-	user, err = repository.SaveUser(user)
+	user, err = updateExistingUser(user, map[string]any{"display_name": strings.TrimSpace(displayName), "email": email, "updated_at": now()})
 	if err != nil {
 		return model.AuthUser{}, err
 	}
@@ -347,13 +358,11 @@ func ChangeAccountPassword(userID, currentPassword, newPassword string) error {
 	if user.Password != "" && bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(currentPassword)) != nil {
 		return safeMessageError{message: "当前密码错误"}
 	}
-	user.Password, err = hashPassword(newPassword)
+	hash, err := hashPassword(newPassword)
 	if err != nil {
 		return err
 	}
-	user.SessionVersion++
-	user.UpdatedAt = now()
-	_, err = repository.SaveUser(user)
+	_, err = updateExistingUser(user, map[string]any{"password": hash, "updated_at": now()})
 	return err
 }
 
@@ -398,10 +407,24 @@ func RenameAccountEnterprise(userID, name string) (model.EnterpriseAccountSummar
 
 func accountUser(userID string) (model.User, error) {
 	user, ok, err := repository.GetUserByID(userID)
-	if err != nil || ok {
+	if err != nil {
 		return user, err
 	}
-	return user, safeMessageError{message: "用户不存在"}
+	if !ok {
+		return user, safeMessageError{message: "用户不存在"}
+	}
+	if user.Status == model.UserStatusBan {
+		return user, safeMessageError{message: "账号已被禁用"}
+	}
+	return user, nil
+}
+
+func updateExistingUser(verified model.User, updates map[string]any) (model.User, error) {
+	user, matched, err := repository.UpdateExistingUser(verified, updates)
+	if err == nil && !matched {
+		err = safeMessageError{message: "账号状态已变更或用户已删除，请重试"}
+	}
+	return user, err
 }
 
 func AdjustUserCredits(id string, credits model.Decimal) (model.User, error) {
@@ -523,11 +546,12 @@ func SaveCreditLog(log model.CreditLog) (model.CreditLog, error) {
 		log.ID = newID("credit")
 		log.CreatedAt = now()
 	}
-	return repository.SaveCreditLog(log)
+	result, err := repository.SaveCreditLog(log)
+	return result, adminExternalError(err)
 }
 
 func DeleteCreditLog(id string) error {
-	return repository.DeleteCreditLog(id)
+	return adminExternalError(repository.DeleteCreditLog(id))
 }
 
 func DeleteUser(id string) error {

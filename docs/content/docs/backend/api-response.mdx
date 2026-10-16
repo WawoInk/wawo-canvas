@@ -20,6 +20,8 @@ description: 后端统一响应信封与结构化生成错误
 - `msg` 是可以展示给用户的安全消息；未声明为安全的内部错误统一显示“操作失败”。
 - 乐观锁冲突使用 HTTP 409 和 `code: -1`。
 
+管理员外部接口使用 `X-Admin-Key` 请求头，路径前缀为 `/api/v1/admin`；成功仍为 `{code:0,data,msg}`，失败使用 `{code:1,data:null,msg}` 并设置对应 HTTP 状态。参数错误或余额不足为 400、鉴权失败为 401、资源不存在为 404、唯一值/积分请求幂等/删除依赖关系冲突为 409、内部错误为 500。密钥生成、完整 CRUD、积分增减及重试合同见[管理员外部接口](/docs/backend/admin-api)。
+
 ## 公开 Settings 响应
 
 `GET /api/settings` 的统一响应信封中，`data.navigation` 控制前端导航入口展示：

@@ -66,17 +66,9 @@ jobs:
         working-directory: web
         run: bun run format:check
 
-      - name: Session continuity tests
+      - name: Frontend tests
         working-directory: web
-        run: bun test test/session-monitor.test.ts test/user-session-hydration.test.ts
-
-      - name: Video resolution tests
-        working-directory: web
-        run: bun test src/components/video-settings-resolution.test.tsx
-
-      - name: Canvas local import tests
-        working-directory: web
-        run: bun test test/canvas-local-import.test.tsx
+        run: bun run test
 
   deploy-check:
     runs-on: ubuntu-latest
@@ -99,6 +91,10 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve image owner
+        id: images
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -126,9 +122,9 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: |
-            ghcr.io/eldenpdx/infinite-canvas-api:latest
-            ghcr.io/eldenpdx/infinite-canvas-api:candidate-arm64
-            ghcr.io/eldenpdx/infinite-canvas-api:${{ github.sha }}
+            ghcr.io/${{ steps.images.outputs.owner }}/infinite-canvas-api:latest
+            ghcr.io/${{ steps.images.outputs.owner }}/infinite-canvas-api:candidate-arm64
+            ghcr.io/${{ steps.images.outputs.owner }}/infinite-canvas-api:${{ github.sha }}
           cache-from: type=gha,scope=api-arm64
           cache-to: type=gha,mode=max,scope=api-arm64
 
@@ -141,9 +137,9 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: |
-            ghcr.io/eldenpdx/infinite-canvas:latest
-            ghcr.io/eldenpdx/infinite-canvas:candidate-arm64
-            ghcr.io/eldenpdx/infinite-canvas:${{ github.sha }}
+            ghcr.io/${{ steps.images.outputs.owner }}/infinite-canvas:latest
+            ghcr.io/${{ steps.images.outputs.owner }}/infinite-canvas:candidate-arm64
+            ghcr.io/${{ steps.images.outputs.owner }}/infinite-canvas:${{ github.sha }}
           build-args: BUILD_SHA=${{ github.sha }}
           cache-from: type=gha,scope=web-arm64
           cache-to: type=gha,mode=max,scope=web-arm64

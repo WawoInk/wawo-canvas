@@ -21,6 +21,29 @@ func AdminAuth(c *gin.Context) {
 	c.Next()
 }
 
+func AdminKeyAuth(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	key := ""
+	if values := c.Request.Header.Values("X-Admin-Key"); len(values) == 1 {
+		key = values[0]
+	}
+	user, ok, err := service.CurrentAdminKeyUser(key)
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		handler.FailError(c.Writer, err)
+		c.Abort()
+		return
+	}
+	if !ok {
+		c.Status(http.StatusUnauthorized)
+		handler.Fail(c.Writer, "Admin Key 无效或已失效")
+		c.Abort()
+		return
+	}
+	c.Request = c.Request.WithContext(service.WithUser(c.Request.Context(), user))
+	c.Next()
+}
+
 func UserAuth(c *gin.Context) {
 	user, ok := authUser(c)
 	if !ok || user.Role == model.UserRoleGuest {

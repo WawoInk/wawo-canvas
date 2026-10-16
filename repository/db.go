@@ -150,6 +150,9 @@ func DB() (*gorm.DB, error) {
 			dbErr = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_logs_transfer_request ON credit_logs (user_id, type, related_id) WHERE related_id <> '' AND type IN ('enterprise_allocate', 'enterprise_reclaim')").Error
 		}
 		if dbErr == nil {
+			dbErr = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_logs_admin_request ON credit_logs (request_id) WHERE request_id <> '' AND type = 'admin_adjust'").Error
+		}
+		if dbErr == nil {
 			dbErr = db.Exec(`DO $$ BEGIN
 				ALTER TABLE enterprises ADD CONSTRAINT fk_enterprises_owner FOREIGN KEY (owner_id) REFERENCES users(id) DEFERRABLE INITIALLY DEFERRED;
 			EXCEPTION WHEN duplicate_object THEN NULL; END $$`).Error
@@ -157,6 +160,16 @@ func DB() (*gorm.DB, error) {
 		if dbErr == nil {
 			dbErr = db.Exec(`DO $$ BEGIN
 				ALTER TABLE users ADD CONSTRAINT fk_users_enterprise FOREIGN KEY (enterprise_id) REFERENCES enterprises(id) DEFERRABLE INITIALLY DEFERRED;
+			EXCEPTION WHEN duplicate_object THEN NULL; END $$`).Error
+		}
+		if dbErr == nil {
+			dbErr = db.Exec(`DO $$ BEGIN
+				ALTER TABLE assets ADD CONSTRAINT fk_assets_enterprise FOREIGN KEY (enterprise_id) REFERENCES enterprises(id) DEFERRABLE INITIALLY DEFERRED;
+			EXCEPTION WHEN duplicate_object THEN NULL; END $$`).Error
+		}
+		if dbErr == nil {
+			dbErr = db.Exec(`DO $$ BEGIN
+				ALTER TABLE user_files ADD CONSTRAINT fk_user_files_enterprise FOREIGN KEY (enterprise_id) REFERENCES enterprises(id) DEFERRABLE INITIALLY DEFERRED;
 			EXCEPTION WHEN duplicate_object THEN NULL; END $$`).Error
 		}
 		if dbErr == nil {

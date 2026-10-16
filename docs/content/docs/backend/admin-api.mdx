@@ -1,0 +1,108 @@
+---
+title: 管理员外部接口
+description: Admin Key 鉴权、企业与用户管理、积分充值和扣除
+---
+
+# 管理员外部接口
+
+管理员在后台“系统设置”的“管理员接口鉴权”中生成 Admin Key。每个系统同时保留一个密钥，重新生成会立即替换旧密钥，撤销后立即停止授权。明文仅在生成响应中返回一次，请立即复制保存；服务端仅保存 SHA-256 哈希。
+
+Admin Key 代表签发管理员，具有本页接口的系统管理员权限，可操作不同企业及用户。签发管理员被禁用、降权、删除，或所属企业失效时，密钥失效。仅通过 HTTPS 调用，并在服务端保存密钥；不要放入 URL、浏览器业务存储或客户端公开代码。
+
+## 密钥管理
+
+这些后台接口使用管理员登录后的 `Authorization: Bearer <JWT>`，返回现有 `{code,data,msg}` 信封，响应带 `Cache-Control: no-store`。
+
+| 方法 | 路径 | data |
+| --- | --- | --- |
+| GET | `/api/admin/settings/admin-key` | `{enabled,createdAt?}`，不返回密钥或哈希 |
+| POST | `/api/admin/settings/admin-key` | `{enabled:true,key,createdAt}`，生成或轮换 |
+| DELETE | `/api/admin/settings/admin-key` | `true`，撤销 |
+
+## 外部鉴权与响应
+
+所有下列接口都要求独立的请求 Header：
+
+```http
+X-Admin-Key: <Admin Key>
+Content-Type: application/json
+```
+
+外部接口不接受 JWT、URL 参数或请求体中的密钥。Admin Key 不能代替后台登录，也不能调用普通用户生成接口或管理密钥本身。
+
+成功返回 HTTP 200、`code:0`；失败返回 `code:1` 和安全的中文 `msg`。HTTP 400 表示参数无效或余额不足，401 表示密钥缺失/失效，404 表示资源不存在，409 表示唯一值、请求幂等语义或删除依赖关系冲突，500 表示服务端错误。调用方必须同时检查 HTTP 状态和信封的 `code`。写请求仅接受一个 JSON 对象，未知字段会被拒绝。
+
+## 企业 CRUD
+
+路径前缀为 `/api/v1/admin/enterprises`。
+
+| 方法 | 路径 | 请求 | data |
+| --- | --- | --- | --- |
+| GET | `/` | `keyword/page/pageSize` 查询参数 | `{items,total}` |
+| POST | `/` | `{name,ownerUsername,ownerPassword,ownerDisplayName?}` | 新企业及主账号摘要 |
+| GET | `/{id}` | 无 | 企业及主账号摘要 |
+| PUT | `/{id}` | `{name?,status?,discountRate?}`，至少一项 | 更新后的企业摘要 |
+| DELETE | `/{id}` | 无 | `true` |
+
+集合路径直接使用前缀，不追加末尾 `/`。企业摘要包含 `id/name/status/ownerId/ownerName/ownerStatus/ownerCredits/discountRate/memberCount/createdAt/updatedAt`。企业状态为 `active/disabled`，折扣倍率使用十进制字符串，范围 `"0.1"` 至 `"1"`。
+
+创建企业会在同一事务创建普通平台用户角色的主账号。删除企业会解除主账号和成员的企业归属，并使其旧登录会话失效；保留账号、余额和历史。仍有关联企业共享素材或文件时拒绝删除，应先通过现有企业素材和文件接口清理。
+
+## 用户 CRUD
+
+路径前缀为 `/api/v1/admin/users`。
+
+| 方法 | 路径 | 请求 | data |
+| --- | --- | --- | --- |
+| GET | `/` | `keyword/page/pageSize` 查询参数 | `{items,total}` |
+| POST | `/` | `{username,password,displayName?,email?,role?,status?,enterpriseId?}` | 新用户 |
+| GET | `/{id}` | 无 | 用户详情 |
+| PUT | `/{id}` | `{username?,password?,displayName?,email?,role?,status?}`，至少一项 | 更新后的用户 |
+| DELETE | `/{id}` | 无 | `true` |
+
+集合路径直接使用前缀。平台角色为 `user/admin`，默认 `user`；状态为 `active/ban`，默认 `active`。新用户初始积分为 `"0"`，需通过积分接口调整。提供 `enterpriseId` 时创建该企业的 `member`，平台角色必须为 `user`；主账号由企业创建接口生成。
+
+PUT 只修改提供的字段，目标不存在时返回 404，不创建新用户；不能修改企业归属或直接覆盖积分。重置密码会使旧 JWT 失效。企业账号不能升级为平台管理员。用户响应包含公开身份、企业身份、余额和时间，不包含密码哈希、会话版本或 OAuth 扩展资料。企业主账号不能直接删除，应先删除企业解除身份；仍创建有关联企业共享素材或文件的用户也应先清理内容。这两类删除保护均返回 409。
+
+## 积分充值与扣除
+
+| 方法 | 路径 | 目标余额 |
+| --- | --- | --- |
+| POST | `/api/v1/admin/enterprises/{id}/credits` | 企业主账号 |
+| POST | `/api/v1/admin/users/{id}/credits` | 指定用户，包括企业成员 |
+
+```json
+{
+  "delta": "100.25",
+  "reason": "订单充值",
+  "requestId": "order-unique-id"
+}
+```
+
+`delta` 必须是非零十进制字符串，正数充值、负数扣除。`reason` 必填，`requestId` 必填且最长 128 字节。请求 ID 在系统管理员积分调整范围全局唯一：相同 ID、目标类型/ID、金额和原因的重试返回首笔回执，不重复调整；任何语义差异返回 409。企业接口和该企业主账号的用户接口属于不同目标类型，不可混用同一请求 ID。
+
+余额不足时返回 400，不会部分扣除。余额、流水和请求 ID 在持有用户行锁的同一事务中提交；并发请求不能使余额为负数。幂等流水不能通过既有后台流水编辑或删除接口修改，以保留重试防重依据。
+
+```json
+{
+  "code": 0,
+  "data": {
+    "requestId": "order-unique-id",
+    "userId": "user-example",
+    "delta": "100.25",
+    "balance": "100.25",
+    "reason": "订单充值",
+    "createdAt": "<服务端时间>"
+  },
+  "msg": "ok"
+}
+```
+
+企业目标的回执另含 `enterpriseId`。重试回执中的 `balance` 是首笔操作完成时的余额，可能与账户当前余额不同；需要当前余额时重新查询用户或企业详情。响应丢失或网络失败后应使用原 `requestId` 重试；新的充值/扣除应使用新的 ID。
+
+```sh
+curl --request POST 'https://canvas.example/api/v1/admin/users/user-example/credits' \
+  --header "X-Admin-Key: $ADMIN_KEY" \
+  --header 'Content-Type: application/json' \
+  --data '{"delta":"-5.5","reason":"订单退款扣回","requestId":"refund-unique-id"}'
+```

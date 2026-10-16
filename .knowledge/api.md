@@ -8,6 +8,7 @@
 - `O`：OptionalAuth；有效 JWT 时注入用户。
 - `U`：`UserAuth`；拒绝 guest。
 - `A`：`AdminAuth`；要求平台 `admin`。
+- `K`：`AdminKeyAuth`；仅接受 `X-Admin-Key`，检查签发管理员及企业当前有效状态。
 - `W`：外部 webhook，不用 JWT，使用 callback token。
 
 普通业务响应：
@@ -46,6 +47,24 @@ pageSize
 ```
 
 默认 `page=1/pageSize=20`，通用上限 500。
+
+## 管理员外部接口
+
+| Method / Path | Auth | 输入 | 输出/行为 |
+| --- | --- | --- | --- |
+| `GET /api/admin/settings/admin-key` | A | 无 | `{enabled,createdAt?}`，不返回密钥/哈希 |
+| `POST /api/admin/settings/admin-key` | A | 无 | 生成/轮换 `{enabled,key,createdAt}`；明文仅本次返回 |
+| `DELETE /api/admin/settings/admin-key` | A | 无 | 撤销，返回 `true` |
+| `GET /api/v1/admin/enterprises` | K | `keyword/page/pageSize` | `EnterpriseList` |
+| `POST /api/v1/admin/enterprises` | K | `{name,ownerUsername,ownerPassword,ownerDisplayName?}` | 企业与主账号摘要 |
+| `GET/PUT/DELETE /api/v1/admin/enterprises/:id` | K | PUT `{name?,status?,discountRate?}` | 查询/更新摘要；删除保留用户及余额、解除企业身份 |
+| `GET /api/v1/admin/users` | K | `keyword/page/pageSize` | 安全用户投影 `{items,total}` |
+| `POST /api/v1/admin/users` | K | `{username,password,email?,displayName?,role?,status?,enterpriseId?}` | 新用户，可指定企业创建 member |
+| `GET/PUT/DELETE /api/v1/admin/users/:id` | K | PUT `{username?,password?,email?,displayName?,role?,status?}` | 查询/更新用户或删除；不允许 PUT 创建或直接改积分/归属 |
+| `POST /api/v1/admin/enterprises/:id/credits` | K | `{delta,reason,requestId}` | 主账号积分增减回执 |
+| `POST /api/v1/admin/users/:id/credits` | K | `{delta,reason,requestId}` | 指定用户积分增减回执，包含企业成员 |
+
+外部接口成功 HTTP 200/code=0，失败 code=1；参数/余额不足400、鉴权401、不存在404、唯一值/幂等/删除依赖冲突409、内部错误500。金额为十进制字符串，requestId 全局唯一；相同目标类型/ID、金额、原因重试返回首笔回执，语义冲突409。幂等流水禁止被旧后台改写或删除。删除 owner 用户或仍有企业共享内容的企业/创建者用户返回409。所有 Key 鉴权与密钥管理响应 no-store。完整调用示例见 `docs/content/docs/backend/admin-api.mdx`。
 
 生成任务过滤：
 

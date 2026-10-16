@@ -21,6 +21,10 @@ description: 核心数据表、Storyboard Brainstorm 和第一方生成事务约
 
 企业或成员禁用不删除数据。认证中间件每次从数据库读取当前用户和企业状态，因此禁用会立即拒绝已有会话和新登录；成员密码重置会递增 `session_version`。
 
+登录和普通账号更新使用现存记录的条件 UPDATE，核对读取时的密码、会话版本、平台角色、状态及企业身份，只更新登录资料、个人资料、成员状态或密码等指定字段；删除或管理员变更已提交时旧快照不能更新，也不会重新插入账号。改密在数据库中递增 `session_version`，不覆盖并发积分变动。
+
+管理员外部接口删除企业时，在一个事务中解除主账号和成员的企业身份并递增 `session_version`，保留用户、余额和历史，再删除企业。`assets.enterprise_id` 和 `user_files.enterprise_id` 通过不级联的延迟外键引用 `enterprises.id`，有企业共享内容时必须先清理，防止删除与并发上传产生孤立记录。
+
 ## credit_logs 与企业积分
 
 `users.credits`、`credit_logs.amount/balance`、`generation_tasks.credits/upstream_credits/billing_rate` 和 `enterprises.discount_rate` 均使用 PostgreSQL `numeric` 保存完整小数精度。数据库启动初始化会在 `AutoMigrate` 前显式、可重复地把已有非 `numeric` 计费列转换为 `numeric`。
@@ -28,6 +32,8 @@ description: 核心数据表、Storyboard Brainstorm 和第一方生成事务约
 平台管理员调整企业主账号积分时，`users.credits` 更新与一条 `credit_logs` 记录在同一个 PostgreSQL 事务中完成。事务会锁定目标主账号行，按 `delta` 增减余额，并在扣减后余额小于 0 时整体失败，因此并发调整不会覆盖其他请求的结果。
 
 平台调整流水使用 `admin_adjust` 类型：`user_id` 记录目标主账号，`related_id` 记录操作的平台管理员，`amount` 记录增量，`balance` 记录本次变动后的余额，`remark` 记录调整原因。
+
+外部用户和企业积分接口同样使用 `admin_adjust`，新增 `credit_logs.request_id` 作为全局幂等请求 ID，并对该类型的非空请求 ID 建立部分唯一索引。`extra` 记录原始目标类型与目标 ID，用于区分企业接口和主账号用户接口；重试时比对目标、金额和原因，返回首笔流水的余额。余额更新和流水写入在同一用户行锁事务内完成，带请求 ID 的流水禁止被通用流水保存/删除接口改写。
 
 企业主账号向成员分配积分使用 `enterprise_allocate`，收回积分使用 `enterprise_reclaim`。每次操作在同一个事务中锁定主账号和目标成员，更新双方 `users.credits`，并写入两条共享 `related_id` 的流水；`counterparty_id` 记录对方账号，`amount` 使用双方各自视角的正负值，`balance` 保存本次变动后的余额。
 
@@ -40,6 +46,10 @@ description: 核心数据表、Storyboard Brainstorm 和第一方生成事务约
 兼容 AI 代理的 `ai_consume/ai_refund` 也在锁定用户行后，于同一事务更新余额并写入流水；因此生成扣费、退款和企业划拨会按同一用户串行结算，普通资料或登录信息保存不会写回陈旧积分。企业主账号和成员按 `原始积分 × discount_rate` 精确扣费，不再向上取整，例如 `5 × 0.5 = 2.5`；个人用户与平台管理员等价于倍率 `1`。退款按同任务已落账的消费流水原额返还，不受后续倍率调整影响。
 
 管理员修复失败或取消任务的缺失退款时，服务端只接受已有 `ai_consume` 流水的任务，并从该流水恢复实际扣费账号（包括企业成员）的原额；操作员和原因写入 `ai_refund.related_id/remark`。任务已存在退款流水时重复请求直接幂等成功，任务处于运行中或没有消费流水时拒绝补发。该操作不经过企业主账号划拨，也不改变现有 `enterprise_allocate/enterprise_reclaim` 语义。
+
+## 管理员接口密钥
+
+`settings` 的独立 `key = AdminKey` 行保存 `{hash,userId,createdAt}`，其中 `hash` 是随机 Admin Key 的 SHA-256，`userId` 是签发管理员。该记录不属于 `public/private` 配置，普通设置读写不会暴露或覆盖它；不保存明文密钥，也不新增密钥表。每次请求检查签发账号与企业的当前有效状态，轮换替换该行，撤销删除该行。
 
 ## assets、user_files 与企业共享媒体
 

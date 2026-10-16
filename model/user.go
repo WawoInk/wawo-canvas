@@ -107,6 +107,7 @@ type CreditLog struct {
 	ID             string        `json:"id" gorm:"primaryKey"`
 	UserID         string        `json:"userId" gorm:"index"`
 	TaskID         string        `json:"taskId" gorm:"index"`
+	RequestID      string        `json:"-" gorm:"not null;default:''"`
 	Type           CreditLogType `json:"type"`
 	Amount         Decimal       `json:"amount" gorm:"type:numeric;not null;default:0"`
 	Balance        Decimal       `json:"balance" gorm:"type:numeric;not null;default:0"`

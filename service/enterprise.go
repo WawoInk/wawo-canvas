@@ -69,7 +69,7 @@ func CreateEnterprise(input CreateEnterpriseInput) (model.EnterpriseView, error)
 	if _, exists, err := repository.GetUserByUsername(input.OwnerUsername); err != nil {
 		return model.EnterpriseView{}, err
 	} else if exists {
-		return model.EnterpriseView{}, safeMessageError{message: "用户名已存在"}
+		return model.EnterpriseView{}, errUsernameExists
 	}
 	hash, err := hashPassword(input.OwnerPassword)
 	if err != nil {
@@ -157,9 +157,7 @@ func SetEnterpriseMemberStatus(current model.AuthUser, id string, status model.U
 	if !ok {
 		return model.EnterpriseMember{}, safeMessageError{message: "成员不存在或无权操作"}
 	}
-	member.Status = status
-	member.UpdatedAt = now()
-	member, err = repository.SaveUser(member)
+	member, err = updateExistingUser(member, map[string]any{"status": status, "updated_at": now()})
 	if err != nil {
 		return model.EnterpriseMember{}, err
 	}
@@ -181,7 +179,11 @@ func ResetEnterpriseMemberPassword(current model.AuthUser, id, password string) 
 	if !ok {
 		return model.EnterpriseMember{}, safeMessageError{message: "成员不存在或无权操作"}
 	}
-	member, err = SaveUser(member, password)
+	hash, err := hashPassword(password)
+	if err != nil {
+		return model.EnterpriseMember{}, err
+	}
+	member, err = updateExistingUser(member, map[string]any{"password": hash, "updated_at": now()})
 	if err != nil {
 		return model.EnterpriseMember{}, err
 	}

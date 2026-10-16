@@ -92,6 +92,42 @@ func SaveUser(user model.User) (model.User, error) {
 	return user, err
 }
 
+func CreateUser(user model.User) (model.User, error) {
+	db, err := DB()
+	if err != nil {
+		return user, err
+	}
+	err = db.Create(&user).Error
+	return user, err
+}
+
+func UpdateExistingUser(verified model.User, updates map[string]any) (model.User, bool, error) {
+	db, err := DB()
+	if err != nil {
+		return model.User{}, false, err
+	}
+	var user model.User
+	matched := false
+	err = db.Transaction(func(tx *gorm.DB) error {
+		if _, ok := updates["password"]; ok {
+			updates["session_version"] = gorm.Expr("session_version + 1")
+		}
+		result := tx.Model(&model.User{}).
+			Where("id = ? AND password = ? AND session_version = ? AND linux_do_id = ?", verified.ID, verified.Password, verified.SessionVersion, verified.LinuxDoID).
+			Where("status = ? AND role = ?", verified.Status, verified.Role).
+			Where("enterprise_id IS NOT DISTINCT FROM ? AND enterprise_role IS NOT DISTINCT FROM ?", verified.EnterpriseID, verified.EnterpriseRole).
+			Updates(updates)
+		if result.Error != nil || result.RowsAffected == 0 {
+			return result.Error
+		}
+		// Keep the update's row lock until the current account snapshot has been read.
+		var err error
+		user, matched, err = findUser(tx, "id = ?", verified.ID)
+		return err
+	})
+	return user, matched, err
+}
+
 func UpdateUserCredits(id string, credits model.Decimal, updatedAt string) (model.User, bool, error) {
 	db, err := DB()
 	if err != nil {
@@ -234,7 +270,21 @@ func SaveCreditLog(log model.CreditLog) (model.CreditLog, error) {
 	if err != nil {
 		return log, err
 	}
-	return log, db.Save(&log).Error
+	if log.RequestID != "" {
+		return log, ErrAdminCreditLogImmutable
+	}
+	err = db.Transaction(func(tx *gorm.DB) error {
+		var saved model.CreditLog
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", log.ID).Take(&saved).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if saved.RequestID != "" {
+			return ErrAdminCreditLogImmutable
+		}
+		return tx.Save(&log).Error
+	})
+	return log, err
 }
 
 type AdminCreditLogWithUser struct {
@@ -313,7 +363,20 @@ func DeleteCreditLog(id string) error {
 	if err != nil {
 		return err
 	}
-	return db.Delete(&model.CreditLog{}, "id = ?", id).Error
+	return db.Transaction(func(tx *gorm.DB) error {
+		var saved model.CreditLog
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", id).Take(&saved).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if saved.RequestID != "" {
+			return ErrAdminCreditLogImmutable
+		}
+		return tx.Delete(&saved).Error
+	})
 }
 
 // DeleteUser 删除指定用户。

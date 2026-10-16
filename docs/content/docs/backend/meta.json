@@ -5,6 +5,7 @@
   "pages": [
     "local-development",
     "api-response",
+    "admin-api",
     "backend-database",
     "canvas-data-structure"
   ]

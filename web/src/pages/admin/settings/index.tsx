@@ -14,6 +14,7 @@ import { useUserStore } from "@/stores/use-user-store";
 import { modelCostFor, normalizeModelCosts, upsertModelCost, videoBillingRule, type VideoBillingMode } from "./billing-rules";
 import { normalizeAdminImageRequestFormats, normalizeAdminImageRequestResolutionSelection } from "./image-request-formats";
 import { nonNegativeDecimal } from "@/lib/decimal";
+import AdminKeySettings from "./components/admin-key-settings";
 
 const CodeMirror = lazy(() => import("@uiw/react-codemirror"));
 const jsonEditorTheme = EditorView.theme({
@@ -484,6 +485,7 @@ export default function AdminSettingsPage() {
     return (
         <main style={{ padding: 24 }}>
             <Flex vertical gap={16}>
+                <AdminKeySettings />
                 <Card variant="borderless">
                     <Flex justify="space-between" align="center" gap={16} wrap>
                         <Tabs

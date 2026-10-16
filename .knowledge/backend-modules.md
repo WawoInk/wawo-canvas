@@ -8,6 +8,7 @@
 - **输入**：HTTP method/path、Bearer JWT、回调 token。
 - **输出**：Gin handler 调用、认证后的 `model.AuthUser` request context、404 JSON。
 - **核心文件**：`router/router.go`、`middleware/admin.go`、`service/context.go`。
+- 管理员外部接口为 `/api/v1/admin/*`，由 `AdminKeyAuth` 仅验证 `X-Admin-Key`；签发管理员和关联企业必须当前有效。JWT 只用于后台 `/api/admin/settings/admin-key` 生成/状态/撤销管理，Key 不能代替后台登录或用户生成权限。
 - **数据流**：`Authorization` -> `service.CurrentAuthUser` -> 查询当前用户/企业状态 -> `service.WithUser` -> handler。
 - **依赖关系**：依赖 auth service 和统一 response；所有业务模块依赖它暴露入口。
 - **常见修改位置**：
@@ -52,6 +53,7 @@
 - **关键不变量**：
   - `users.credits >= 0`。
   - 修改或重置密码递增 `session_version`。
+  - 登录、自助资料/密码、企业成员状态/密码更新仅写显式字段，并以读取时账号安全字段作 CAS；目标已删除或状态变更时失败，不得用旧快照重建账号或恢复管理员已收回的权限。
   - 已禁用用户或企业必须立即失效，而不是只禁止新登录。
 
 ## 企业、成员与企业积分
